@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # MAXIMO WMS
 
 Base Laravel del proyecto WMS de MAXIMO, preparada para desplegarse en Laravel Forge sobre PHP 8.4 y MySQL 8.4 LTS.
@@ -89,3 +90,7 @@ La guía de despliegue está en [docs/DEPLOY_FORGE.md](/C:/Users/jorge/Mi%20unid
 - Los cambios de base de datos deben pasar por migraciones.
 - La base principal del sistema es MySQL, no SQLite.
 - Los módulos del dominio WMS se introducirán por fases, con tests asociados.
+=======
+# WMS_LARAVEL
+sistema de gestión en Laravel
+>>>>>>> d800d7f153aea62df20860252d32b7f5e5f93f28
