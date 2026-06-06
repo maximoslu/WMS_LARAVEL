@@ -7,39 +7,30 @@
         <div>
             <span class="wms-badge">Panel inicial</span>
             <h2>Bienvenido, {{ auth()->user()->name }}</h2>
-            <p>El flujo de acceso ya esta operativo. Desde aqui creceran los modulos de recepcion, stock, pedidos y trazabilidad.</p>
+            <p>Accede a los modulos operativos habilitados para tu perfil y utiliza MAXIMO WMS desde movil, tablet o escritorio sin cambiar de flujo.</p>
         </div>
 
         <div class="wms-hero-card">
-            <strong>Estado del entorno</strong>
-            <span>Autenticacion web activa</span>
-            <span>Dashboard protegido por middleware</span>
-            <span>Recuperacion de contrasena preparada</span>
+            <strong>Estado del acceso</strong>
+            <span>Rol actual: {{ $currentRoleName }}</span>
+            <span>Autenticacion y dashboard protegidos</span>
+            <span>Jerarquia de permisos activa por nivel de rol</span>
         </div>
     </section>
 
-    <section class="wms-dashboard-grid">
-        <article class="wms-stat-card">
-            <span class="wms-stat-label">Accesos</span>
-            <strong>Operativo</strong>
-            <p>Login con email y contrasena sobre el guard web nativo de Laravel.</p>
-        </article>
-
-        <article class="wms-stat-card">
-            <span class="wms-stat-label">Clientes iniciales</span>
-            <strong>Friesland / Edelvives</strong>
-            <p>Base visual preparada para evolucionar hacia un entorno multicliente.</p>
-        </article>
-
-        <article class="wms-stat-card">
-            <span class="wms-stat-label">Solicitud de acceso</span>
-            <strong>Pendiente de revision</strong>
-            <p>Captura simple de peticiones de alta para futura aprobacion operativa.</p>
-        </article>
+    <section class="wms-dashboard-grid wms-dashboard-grid-modules">
+        @foreach ($navigationItems as $item)
+            <a href="{{ route($item['route']) }}" class="wms-module-card">
+                <span class="wms-stat-label">{{ $item['tag'] }}</span>
+                <strong>{{ $item['title'] }}</strong>
+                <p>{{ $item['summary'] }}</p>
+                <span class="wms-module-link">Abrir modulo</span>
+            </a>
+        @endforeach
     </section>
 
     <section class="wms-dashboard-note">
         <h3>Siguiente fase recomendada</h3>
-        <p>Conectar roles, permisos y primera navegacion funcional del WMS sin romper la simplicidad del monolito.</p>
+        <p>Desarrollar cada modulo sobre estas rutas protegidas, reutilizando la jerarquia `superadmin > administracion > almacen > cliente` ya integrada en la aplicacion.</p>
     </section>
 @endsection

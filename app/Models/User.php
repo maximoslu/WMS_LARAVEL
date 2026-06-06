@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -22,6 +23,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role_id',
     ];
 
     /**
@@ -45,5 +47,38 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function role(): BelongsTo
+    {
+        return $this->belongsTo(Role::class);
+    }
+
+    public function hasRole(string $slug): bool
+    {
+        return $this->role?->slug === $slug;
+    }
+
+    public function hasRoleLevel(string $slug): bool
+    {
+        return $this->canAccessRole($slug);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole(Role::SUPERADMIN);
+    }
+
+    public function canAccessRole(string $minimumRole): bool
+    {
+        if ($this->role === null || ! Role::slugExists($minimumRole)) {
+            return false;
+        }
+
+        $minimumLevel = Role::query()
+            ->where('slug', $minimumRole)
+            ->value('level') ?? Role::defaultLevelFor($minimumRole);
+
+        return $minimumLevel !== null && $this->role->level >= $minimumLevel;
     }
 }

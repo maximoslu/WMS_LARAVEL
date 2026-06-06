@@ -5,6 +5,8 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ModulePlaceholderController;
+use App\Models\Role;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -29,4 +31,49 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+
+    Route::get('/stock', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->defaults('module', 'stock')
+        ->name('modules.stock');
+
+    Route::get('/solicitudes', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->defaults('module', 'solicitudes')
+        ->name('modules.requests');
+
+    Route::get('/entradas', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->defaults('module', 'entradas')
+        ->name('modules.inbound');
+
+    Route::get('/salidas', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->defaults('module', 'salidas')
+        ->name('modules.outbound');
+
+    Route::get('/clientes', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->defaults('module', 'clientes')
+        ->name('modules.clients');
+
+    Route::get('/almacenes', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->defaults('module', 'almacenes')
+        ->name('modules.warehouses');
+
+    Route::get('/usuarios', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->defaults('module', 'usuarios')
+        ->name('modules.users');
+
+    Route::get('/auditoria', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->defaults('module', 'auditoria')
+        ->name('modules.audit');
+
+    Route::get('/backups', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->defaults('module', 'backups')
+        ->name('modules.backups');
 });
