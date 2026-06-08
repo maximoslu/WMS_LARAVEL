@@ -3,11 +3,13 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Services\BrevoMailService;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Throwable;
 
 class User extends Authenticatable
 {
@@ -80,5 +82,20 @@ class User extends Authenticatable
             ->value('level') ?? Role::defaultLevelFor($minimumRole);
 
         return $minimumLevel !== null && $this->role->level >= $minimumLevel;
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        try {
+            app(BrevoMailService::class)->sendPasswordReset(
+                $this->email,
+                route('password.reset', [
+                    'token' => (string) $token,
+                    'email' => $this->getEmailForPasswordReset(),
+                ])
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 }
