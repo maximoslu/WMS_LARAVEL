@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\AccessRequest as AccessRequestModel;
+use App\Notifications\AccessRequestSubmitted;
+use Illuminate\Support\Facades\Notification;
+use Throwable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -23,7 +26,14 @@ class AccessRequestController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        AccessRequestModel::create($payload);
+        $accessRequest = AccessRequestModel::create($payload);
+
+        try {
+            Notification::route('mail', (string) config('wms.access_request_notification_email'))
+                ->notify(new AccessRequestSubmitted($accessRequest));
+        } catch (Throwable $exception) {
+            report($exception);
+        }
 
         return redirect()
             ->route('access-requests.create')

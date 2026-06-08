@@ -112,7 +112,14 @@ return [
 
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
+        'name' => env('MAIL_FROM_NAME', 'MAXIMO WMS'),
+    ],
+
+    'markdown' => [
+        'theme' => 'maximo',
+        'paths' => [
+            resource_path('views/vendor/mail'),
+        ],
     ],
 
 ];
