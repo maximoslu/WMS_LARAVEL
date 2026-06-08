@@ -3,16 +3,17 @@
 @section('title', 'Acceso | MAXIMO WMS')
 
 @section('content')
-    <div class="wms-form-header">
-        <span class="wms-badge">Acceso operativo</span>
-        <h2>Iniciar sesion</h2>
-        <p>Accede al entorno de trabajo del WMS con tu email corporativo y tu contraseña.</p>
+    <div class="auth-header">
+        <span class="status-chip">Acceso seguro</span>
+        <h2 class="auth-form-title">Acceso a MAXIMO WMS</h2>
+        <p class="text-muted">Plataforma operativa logistica.</p>
+        <p class="text-muted">Gestion segura de almacen, stock y solicitudes.</p>
     </div>
 
-    <form method="POST" action="{{ route('login.store') }}" class="wms-form-stack">
+    <form method="POST" action="{{ route('login.store') }}" class="auth-form">
         @csrf
 
-        <label class="wms-field">
+        <label class="form-field">
             <span>Email de usuario</span>
             <input
                 type="email"
@@ -25,7 +26,7 @@
             >
         </label>
 
-        <label class="wms-field">
+        <label class="form-field">
             <span>Contrasena</span>
             <input
                 type="password"
@@ -36,11 +37,14 @@
             >
         </label>
 
-        <button type="submit" class="wms-primary-button">Iniciar sesion</button>
+        <div class="auth-actions">
+            <button type="submit" class="button-primary">Iniciar sesion</button>
+            <p class="text-muted">Usa tus credenciales corporativas para acceder al entorno interno.</p>
+        </div>
     </form>
 
-    <div class="wms-form-links">
+    <div class="auth-links">
         <a href="{{ route('access-requests.create') }}">Solicitar acceso</a>
-        <a href="{{ route('password.request') }}">Has olvidado tu contrasena?</a>
+        <a href="{{ route('password.request') }}">Recuperar contrasena</a>
     </div>
 @endsection

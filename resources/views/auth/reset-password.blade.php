@@ -3,18 +3,18 @@
 @section('title', 'Restablecer contrasena | MAXIMO WMS')
 
 @section('content')
-    <div class="wms-form-header">
-        <span class="wms-badge">Nuevo acceso</span>
-        <h2>Crear nueva contrasena</h2>
-        <p>Define una contrasena segura para recuperar el acceso a MAXIMO WMS.</p>
+    <div class="auth-header">
+        <span class="status-chip">Nuevo acceso</span>
+        <h2 class="auth-form-title">Crear nueva contrasena</h2>
+        <p class="text-muted">Define una contrasena segura para recuperar el acceso al entorno interno.</p>
     </div>
 
-    <form method="POST" action="{{ route('password.store') }}" class="wms-form-stack">
+    <form method="POST" action="{{ route('password.store') }}" class="auth-form">
         @csrf
 
         <input type="hidden" name="token" value="{{ $token }}">
 
-        <label class="wms-field">
+        <label class="form-field">
             <span>Email de usuario</span>
             <input
                 type="email"
@@ -27,7 +27,7 @@
             >
         </label>
 
-        <label class="wms-field">
+        <label class="form-field">
             <span>Nueva contrasena</span>
             <input
                 type="password"
@@ -38,7 +38,7 @@
             >
         </label>
 
-        <label class="wms-field">
+        <label class="form-field">
             <span>Confirmar contrasena</span>
             <input
                 type="password"
@@ -49,6 +49,8 @@
             >
         </label>
 
-        <button type="submit" class="wms-primary-button">Actualizar contrasena</button>
+        <div class="auth-actions">
+            <button type="submit" class="button-primary">Actualizar contrasena</button>
+        </div>
     </form>
 @endsection

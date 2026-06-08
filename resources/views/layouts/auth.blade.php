@@ -4,54 +4,55 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>@yield('title', 'MAXIMO WMS')</title>
+        <link rel="icon" type="image/png" href="{{ asset('brand/maximo-icon.png') }}">
+        <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="wms-body">
-        <div class="wms-auth-shell">
-            <section class="wms-auth-hero">
-                <div class="wms-eyebrow">Plataforma operativa</div>
-                <h1>MAXIMO WMS</h1>
-                <p class="wms-auth-subtitle">Gestion profesional de almacen multicliente</p>
+    <body class="brand-body">
+        <div class="auth-shell">
+            <aside class="auth-brand surface-card" aria-label="Identidad de plataforma">
+                <div class="auth-brand-panel">
+                    <img
+                        src="{{ asset('brand/maximo-logo-vertical.jpg') }}"
+                        alt="MAXIMO Servicios Logisticos"
+                        class="brand-logo-vertical"
+                    >
 
-                <div class="wms-auth-story">
-                    <p>Centraliza accesos, operativa y trazabilidad en un entorno preparado para despliegue profesional.</p>
+                    <div class="auth-brand-copy">
+                        <span class="status-chip">Plataforma interna</span>
+                        <h1>Acceso a MAXIMO WMS</h1>
+                        <p>Plataforma operativa logistica para gestion segura de almacen, stock y solicitudes.</p>
+                    </div>
+
+                    <div class="auth-highlight-list">
+                        <article class="auth-highlight">
+                            <strong>Acceso controlado</strong>
+                            <p>Autenticacion centralizada con recuperacion de contrasena y jerarquia de roles.</p>
+                        </article>
+
+                        <article class="auth-highlight">
+                            <strong>Operativa trazable</strong>
+                            <p>Base preparada para controlar entradas, salidas, solicitudes y seguimiento funcional.</p>
+                        </article>
+
+                        <article class="auth-highlight">
+                            <strong>Uso directo en movilidad</strong>
+                            <p>Experiencia optimizada para movil, tablet y escritorio sin depender de patrones fragiles.</p>
+                        </article>
+                    </div>
                 </div>
+            </aside>
 
-                <div class="wms-feature-list">
-                    <article>
-                        <span>01</span>
-                        <div>
-                            <strong>Acceso seguro</strong>
-                            <p>Autenticacion base con recuperacion de contraseña y sesiones protegidas.</p>
-                        </div>
-                    </article>
-                    <article>
-                        <span>02</span>
-                        <div>
-                            <strong>Preparado para Forge</strong>
-                            <p>Arquitectura limpia en Laravel 12, lista para evolucionar sin acoplamientos innecesarios.</p>
-                        </div>
-                    </article>
-                    <article>
-                        <span>03</span>
-                        <div>
-                            <strong>Visibilidad multicliente</strong>
-                            <p>Base visual corporativa para Friesland, Edelvives y futuras operaciones.</p>
-                        </div>
-                    </article>
-                </div>
-            </section>
-
-            <main class="wms-auth-panel">
-                <div class="wms-panel-card">
+            <main class="auth-stage">
+                <div class="auth-card surface-card">
                     @if (session('status'))
-                        <div class="wms-alert wms-alert-success">
+                        <div class="alert alert-success">
                             {{ session('status') }}
                         </div>
                     @endif
 
                     @if ($errors->any())
-                        <div class="wms-alert wms-alert-error">
+                        <div class="alert alert-error">
                             {{ $errors->first() }}
                         </div>
                     @endif

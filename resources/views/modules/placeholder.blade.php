@@ -3,23 +3,47 @@
 @section('title', $module['title'].' | MAXIMO WMS')
 
 @section('content')
-    <section class="wms-dashboard-hero">
-        <div>
-            <span class="wms-badge">{{ $module['tag'] }}</span>
-            <h2>{{ $module['title'] }}</h2>
-            <p>{{ $module['summary'] }}</p>
-        </div>
+    <section class="placeholder-layout">
+        <article class="placeholder-card surface-card">
+            <div class="app-copy">
+                <span class="module-tag">{{ $module['tag'] }}</span>
+                <h2 class="placeholder-title">{{ $module['title'] }}</h2>
+                <p>{{ $module['summary'] }}</p>
+                <a href="{{ route('dashboard') }}" class="back-link">Volver al dashboard</a>
+            </div>
+        </article>
 
-        <div class="wms-hero-card">
-            <strong>Modulo en preparacion</strong>
-            <span>Acceso minimo: {{ $module['minimum_role_name'] }}</span>
-            <span>Ruta prevista: {{ $module['path'] }}</span>
-            <span>La arquitectura ya esta protegida por autenticacion y rol.</span>
-        </div>
+        <aside class="placeholder-meta surface-card">
+            <span class="placeholder-state">Modulo en preparacion</span>
+            <div>
+                <strong>Acceso minimo</strong>
+                <span>{{ $module['minimum_role_name'] }}</span>
+            </div>
+            <div>
+                <strong>Ruta prevista</strong>
+                <span>{{ $module['path'] }}</span>
+            </div>
+            <div>
+                <strong>Proteccion activa</strong>
+                <span>Autenticacion y permisos por rol ya aplicados</span>
+            </div>
+        </aside>
     </section>
 
-    <section class="wms-dashboard-note">
-        <h3>Estado actual</h3>
-        <p>Este espacio ya forma parte de la navegacion real del WMS y queda listo para incorporar logica de negocio sin rehacer permisos ni layout.</p>
+    <section class="placeholder-grid" aria-label="Detalles del modulo">
+        <article class="placeholder-meta surface-card">
+            <strong>Estado actual</strong>
+            <p>La estructura visual y la ruta del modulo ya forman parte del flujo real del WMS.</p>
+        </article>
+
+        <article class="placeholder-meta surface-card">
+            <strong>Siguiente desarrollo</strong>
+            <p>Queda listo para incorporar reglas de negocio, formularios y listados sin rehacer la navegacion.</p>
+        </article>
+
+        <article class="placeholder-meta surface-card">
+            <strong>Contexto funcional</strong>
+            <p>El acceso a este espacio respeta la jerarquia existente entre superadmin, administracion, almacen y cliente.</p>
+        </article>
     </section>
 @endsection
