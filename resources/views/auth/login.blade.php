@@ -4,18 +4,18 @@
 
 @section('content')
     <div class="auth-header">
-        <span class="status-chip">Acceso seguro</span>
-        <h2 class="auth-form-title">Acceso a MAXIMO WMS</h2>
-        <p class="text-muted">Plataforma operativa logistica.</p>
-        <p class="text-muted">Gestion segura de almacen, stock y solicitudes.</p>
+        <span class="auth-eyebrow">Acceso operativo</span>
+        <h1 class="auth-title">MAXIMO WMS</h1>
+        <p class="auth-subtitle">Identificate para continuar.</p>
     </div>
 
     <form method="POST" action="{{ route('login.store') }}" class="auth-form">
         @csrf
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Email de usuario</span>
             <input
+                class="auth-input"
                 type="email"
                 name="email"
                 value="{{ old('email') }}"
@@ -26,9 +26,10 @@
             >
         </label>
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Contrasena</span>
             <input
+                class="auth-input"
                 type="password"
                 name="password"
                 autocomplete="current-password"
@@ -38,13 +39,13 @@
         </label>
 
         <div class="auth-actions">
-            <button type="submit" class="button-primary">Iniciar sesion</button>
-            <p class="text-muted">Usa tus credenciales corporativas para acceder al entorno interno.</p>
+            <button type="submit" class="auth-button button-primary">Iniciar sesion</button>
+            <p class="auth-footnote">Entorno interno protegido.</p>
         </div>
     </form>
 
     <div class="auth-links">
-        <a href="{{ route('access-requests.create') }}">Solicitar acceso</a>
-        <a href="{{ route('password.request') }}">Recuperar contrasena</a>
+        <a href="{{ route('access-requests.create') }}" class="auth-link">Solicitar acceso</a>
+        <a href="{{ route('password.request') }}" class="auth-link">Recuperar contrasena</a>
     </div>
 @endsection

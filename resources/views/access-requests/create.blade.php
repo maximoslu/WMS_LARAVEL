@@ -4,17 +4,18 @@
 
 @section('content')
     <div class="auth-header">
-        <span class="status-chip">Alta pendiente</span>
-        <h2 class="auth-form-title">Solicitud de acceso</h2>
-        <p class="text-muted">Comparte los datos operativos y prepararemos el alta para su validacion.</p>
+        <span class="auth-eyebrow">Alta pendiente</span>
+        <h1 class="auth-title">Solicitar acceso</h1>
+        <p class="auth-subtitle">Comparte tus datos para continuar.</p>
     </div>
 
     <form method="POST" action="{{ route('access-requests.store') }}" class="auth-form">
         @csrf
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Nombre y apellidos</span>
             <input
+                class="auth-input"
                 type="text"
                 name="name"
                 value="{{ old('name') }}"
@@ -24,9 +25,10 @@
             >
         </label>
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Empresa</span>
             <input
+                class="auth-input"
                 type="text"
                 name="company"
                 value="{{ old('company') }}"
@@ -34,9 +36,10 @@
             >
         </label>
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Email de contacto</span>
             <input
+                class="auth-input"
                 type="email"
                 name="email"
                 value="{{ old('email') }}"
@@ -46,9 +49,10 @@
             >
         </label>
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Observaciones</span>
             <textarea
+                class="auth-input"
                 name="notes"
                 rows="4"
                 placeholder="Operacion, centro, cliente o informacion adicional"
@@ -56,13 +60,13 @@
         </label>
 
         <div class="auth-actions">
-            <button type="submit" class="button-primary">Enviar solicitud</button>
-            <p class="text-muted">El equipo de MAXIMO revisara la peticion antes de habilitar el acceso.</p>
+            <button type="submit" class="auth-button button-primary">Enviar solicitud</button>
+            <p class="auth-footnote">Revision interna previa a la activacion.</p>
         </div>
     </form>
 
     <div class="auth-links">
-        <a href="{{ route('login') }}">Volver al acceso</a>
-        <a href="{{ route('password.request') }}">Recuperar contrasena</a>
+        <a href="{{ route('login') }}" class="auth-link">Volver al acceso</a>
+        <a href="{{ route('password.request') }}" class="auth-link">Recuperar contrasena</a>
     </div>
 @endsection

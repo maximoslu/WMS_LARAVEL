@@ -4,9 +4,9 @@
 
 @section('content')
     <div class="auth-header">
-        <span class="status-chip">Nuevo acceso</span>
-        <h2 class="auth-form-title">Crear nueva contrasena</h2>
-        <p class="text-muted">Define una contrasena segura para recuperar el acceso al entorno interno.</p>
+        <span class="auth-eyebrow">Nuevo acceso</span>
+        <h1 class="auth-title">Crear nueva contrasena</h1>
+        <p class="auth-subtitle">Actualiza tus credenciales para continuar.</p>
     </div>
 
     <form method="POST" action="{{ route('password.store') }}" class="auth-form">
@@ -14,9 +14,10 @@
 
         <input type="hidden" name="token" value="{{ $token }}">
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Email de usuario</span>
             <input
+                class="auth-input"
                 type="email"
                 name="email"
                 value="{{ old('email', $email) }}"
@@ -27,9 +28,10 @@
             >
         </label>
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Nueva contrasena</span>
             <input
+                class="auth-input"
                 type="password"
                 name="password"
                 autocomplete="new-password"
@@ -38,9 +40,10 @@
             >
         </label>
 
-        <label class="form-field">
+        <label class="auth-field">
             <span>Confirmar contrasena</span>
             <input
+                class="auth-input"
                 type="password"
                 name="password_confirmation"
                 autocomplete="new-password"
@@ -50,7 +53,7 @@
         </label>
 
         <div class="auth-actions">
-            <button type="submit" class="button-primary">Actualizar contrasena</button>
+            <button type="submit" class="auth-button button-primary">Actualizar contrasena</button>
         </div>
     </form>
 @endsection
