@@ -3,18 +3,19 @@
 @section('title', 'Acceso | MAXIMO WMS')
 
 @section('content')
-    <div class="wms-form-header">
-        <span class="wms-badge">Acceso operativo</span>
-        <h2>Iniciar sesion</h2>
-        <p>Accede al entorno de trabajo del WMS con tu email corporativo y tu contraseña.</p>
+    <div class="auth-header">
+        <span class="auth-eyebrow">Acceso operativo</span>
+        <h1 class="auth-title">MAXIMO WMS</h1>
+        <p class="auth-subtitle">Identificate para continuar.</p>
     </div>
 
-    <form method="POST" action="{{ route('login.store') }}" class="wms-form-stack">
+    <form method="POST" action="{{ route('login.store') }}" class="auth-form">
         @csrf
 
-        <label class="wms-field">
+        <label class="auth-field">
             <span>Email de usuario</span>
             <input
+                class="auth-input"
                 type="email"
                 name="email"
                 value="{{ old('email') }}"
@@ -25,9 +26,10 @@
             >
         </label>
 
-        <label class="wms-field">
+        <label class="auth-field">
             <span>Contrasena</span>
             <input
+                class="auth-input"
                 type="password"
                 name="password"
                 autocomplete="current-password"
@@ -36,11 +38,14 @@
             >
         </label>
 
-        <button type="submit" class="wms-primary-button">Iniciar sesion</button>
+        <div class="auth-actions">
+            <button type="submit" class="auth-button button-primary">Iniciar sesion</button>
+            <p class="auth-footnote">Entorno interno protegido.</p>
+        </div>
     </form>
 
-    <div class="wms-form-links">
-        <a href="{{ route('access-requests.create') }}">Solicitar acceso</a>
-        <a href="{{ route('password.request') }}">Has olvidado tu contrasena?</a>
+    <div class="auth-links">
+        <a href="{{ route('access-requests.create') }}" class="auth-link">Solicitar acceso</a>
+        <a href="{{ route('password.request') }}" class="auth-link">Recuperar contrasena</a>
     </div>
 @endsection
