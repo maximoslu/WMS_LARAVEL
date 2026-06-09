@@ -12,7 +12,13 @@ export default defineConfig({
     ],
     server: {
         watch: {
-            ignored: ['**/storage/framework/views/**'],
+            ignored: [
+                '**/storage/app/codex-edge-profile/**',
+                '**/storage/framework/**',
+                '**/storage/logs/**',
+                '**/vendor/**',
+                '**/node_modules/**',
+            ],
         },
     },
 });
