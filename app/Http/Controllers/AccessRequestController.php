@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\AccessRequest as AccessRequestModel;
+use App\Services\BrevoMailService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Throwable;
 
 class AccessRequestController extends Controller
 {
@@ -23,10 +25,20 @@ class AccessRequestController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        AccessRequestModel::create($payload);
+        $accessRequest = AccessRequestModel::create($payload);
+
+        $statusMessage = 'Solicitud enviada. El equipo de MAXIMO revisara tu peticion y te contactara.';
+
+        try {
+            app(BrevoMailService::class)->sendAccessRequestNotification($accessRequest);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $statusMessage = 'Solicitud enviada. La notificacion interna por correo no ha podido verificarse.';
+        }
 
         return redirect()
             ->route('access-requests.create')
-            ->with('status', 'Solicitud enviada. El equipo de MAXIMO revisará tu petición y te contactará.');
+            ->with('status', $statusMessage);
     }
 }
