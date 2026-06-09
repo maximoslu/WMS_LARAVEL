@@ -3,62 +3,50 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>@yield('title', 'MAXIMO WMS')</title>
+        <title>@yield('title', 'Login | MAXIMO WMS')</title>
+        <link rel="icon" type="image/png" href="{{ asset('brand/maximo-icon.png') }}">
+        <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="wms-body">
-        <div class="wms-auth-shell">
-            <section class="wms-auth-hero">
-                <div class="wms-eyebrow">Plataforma operativa</div>
-                <h1>MAXIMO WMS</h1>
-                <p class="wms-auth-subtitle">Gestion profesional de almacen multicliente</p>
-
-                <div class="wms-auth-story">
-                    <p>Centraliza accesos, operativa y trazabilidad en un entorno preparado para despliegue profesional.</p>
-                </div>
-
-                <div class="wms-feature-list">
-                    <article>
-                        <span>01</span>
-                        <div>
-                            <strong>Acceso seguro</strong>
-                            <p>Autenticacion base con recuperacion de contraseña y sesiones protegidas.</p>
-                        </div>
-                    </article>
-                    <article>
-                        <span>02</span>
-                        <div>
-                            <strong>Preparado para Forge</strong>
-                            <p>Arquitectura limpia en Laravel 12, lista para evolucionar sin acoplamientos innecesarios.</p>
-                        </div>
-                    </article>
-                    <article>
-                        <span>03</span>
-                        <div>
-                            <strong>Visibilidad multicliente</strong>
-                            <p>Base visual corporativa para Friesland, Edelvives y futuras operaciones.</p>
-                        </div>
-                    </article>
-                </div>
-            </section>
-
-            <main class="wms-auth-panel">
-                <div class="wms-panel-card">
-                    @if (session('status'))
-                        <div class="wms-alert wms-alert-success">
-                            {{ session('status') }}
-                        </div>
-                    @endif
-
-                    @if ($errors->any())
-                        <div class="wms-alert wms-alert-error">
-                            {{ $errors->first() }}
-                        </div>
-                    @endif
-
-                    @yield('content')
-                </div>
-            </main>
+    <body class="auth-page">
+        <div class="auth-background" aria-hidden="true">
+            <span class="auth-orb auth-orb--north"></span>
+            <span class="auth-orb auth-orb--south"></span>
+            <span class="auth-grid auth-grid--left"></span>
+            <span class="auth-grid auth-grid--right"></span>
+            <span class="auth-line auth-line--left"></span>
+            <span class="auth-line auth-line--right"></span>
         </div>
+
+        <main class="auth-frame">
+            <section class="auth-panel surface-card" aria-label="Acceso a MAXIMO WMS">
+                <div class="auth-logo-mark">
+                    <img
+                        src="{{ asset('brand/maximo-icon.png') }}"
+                        alt="MAXIMO WMS"
+                        class="auth-logo-icon"
+                    >
+
+                    <div class="auth-logo-copy">
+                        <span class="auth-kicker">Acceso operativo</span>
+                        <strong>MAXIMO WMS</strong>
+                    </div>
+                </div>
+
+                @if (session('status'))
+                    <div class="alert alert-success">
+                        {{ session('status') }}
+                    </div>
+                @endif
+
+                @if ($errors->any())
+                    <div class="alert alert-error">
+                        {{ $errors->first() }}
+                    </div>
+                @endif
+
+                @yield('content')
+            </section>
+        </main>
     </body>
 </html>

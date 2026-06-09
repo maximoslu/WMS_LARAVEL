@@ -3,18 +3,19 @@
 @section('title', 'Solicitar acceso | MAXIMO WMS')
 
 @section('content')
-    <div class="wms-form-header">
-        <span class="wms-badge">Alta pendiente</span>
-        <h2>Solicitar acceso</h2>
-        <p>Deja tus datos y prepararemos el alta para su validacion por parte del equipo de MAXIMO.</p>
+    <div class="auth-header">
+        <span class="auth-eyebrow">Alta pendiente</span>
+        <h1 class="auth-title">Solicitar acceso</h1>
+        <p class="auth-subtitle">Comparte tus datos para continuar.</p>
     </div>
 
-    <form method="POST" action="{{ route('access-requests.store') }}" class="wms-form-stack">
+    <form method="POST" action="{{ route('access-requests.store') }}" class="auth-form">
         @csrf
 
-        <label class="wms-field">
+        <label class="auth-field">
             <span>Nombre y apellidos</span>
             <input
+                class="auth-input"
                 type="text"
                 name="name"
                 value="{{ old('name') }}"
@@ -24,9 +25,10 @@
             >
         </label>
 
-        <label class="wms-field">
+        <label class="auth-field">
             <span>Empresa</span>
             <input
+                class="auth-input"
                 type="text"
                 name="company"
                 value="{{ old('company') }}"
@@ -34,9 +36,10 @@
             >
         </label>
 
-        <label class="wms-field">
+        <label class="auth-field">
             <span>Email de contacto</span>
             <input
+                class="auth-input"
                 type="email"
                 name="email"
                 value="{{ old('email') }}"
@@ -46,20 +49,24 @@
             >
         </label>
 
-        <label class="wms-field">
+        <label class="auth-field">
             <span>Observaciones</span>
             <textarea
+                class="auth-input"
                 name="notes"
                 rows="4"
                 placeholder="Operacion, centro, cliente o informacion adicional"
             >{{ old('notes') }}</textarea>
         </label>
 
-        <button type="submit" class="wms-primary-button">Enviar solicitud</button>
+        <div class="auth-actions">
+            <button type="submit" class="auth-button button-primary">Enviar solicitud</button>
+            <p class="auth-footnote">Revision interna previa a la activacion.</p>
+        </div>
     </form>
 
-    <div class="wms-form-links">
-        <a href="{{ route('login') }}">Volver al acceso</a>
-        <a href="{{ route('password.request') }}">Recuperar contrasena</a>
+    <div class="auth-links">
+        <a href="{{ route('login') }}" class="auth-link">Volver al acceso</a>
+        <a href="{{ route('password.request') }}" class="auth-link">Recuperar contrasena</a>
     </div>
 @endsection

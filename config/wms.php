@@ -1,6 +1,11 @@
 <?php
 
 return [
+    'access_request_notification_email' => env(
+        'WMS_ACCESS_REQUEST_NOTIFICATION_EMAIL',
+        'administracion@maximosl.com'
+    ),
+
     'modules' => [
         [
             'key' => 'stock',

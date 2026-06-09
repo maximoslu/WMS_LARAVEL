@@ -3,18 +3,19 @@
 @section('title', 'Recuperar contrasena | MAXIMO WMS')
 
 @section('content')
-    <div class="wms-form-header">
-        <span class="wms-badge">Soporte de acceso</span>
-        <h2>Recuperar contrasena</h2>
-        <p>Introduce tu email y dejaremos preparado el envio del enlace de restablecimiento.</p>
+    <div class="auth-header">
+        <span class="auth-eyebrow">Soporte de acceso</span>
+        <h1 class="auth-title">Recuperar contrasena</h1>
+        <p class="auth-subtitle">Introduce tu email para continuar.</p>
     </div>
 
-    <form method="POST" action="{{ route('password.email') }}" class="wms-form-stack">
+    <form method="POST" action="{{ route('password.email') }}" class="auth-form">
         @csrf
 
-        <label class="wms-field">
+        <label class="auth-field">
             <span>Email de usuario</span>
             <input
+                class="auth-input"
                 type="email"
                 name="email"
                 value="{{ old('email') }}"
@@ -25,11 +26,13 @@
             >
         </label>
 
-        <button type="submit" class="wms-primary-button">Enviar enlace de recuperacion</button>
+        <div class="auth-actions">
+            <button type="submit" class="auth-button button-primary">Enviar enlace</button>
+        </div>
     </form>
 
-    <div class="wms-form-links">
-        <a href="{{ route('login') }}">Volver al acceso</a>
-        <a href="{{ route('access-requests.create') }}">Solicitar acceso</a>
+    <div class="auth-links">
+        <a href="{{ route('login') }}" class="auth-link">Volver al acceso</a>
+        <a href="{{ route('access-requests.create') }}" class="auth-link">Solicitar acceso</a>
     </div>
 @endsection
