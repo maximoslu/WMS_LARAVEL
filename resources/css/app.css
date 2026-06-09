@@ -39,6 +39,7 @@
 
 html {
     font-family: var(--font-sans);
+    overflow-x: clip;
 }
 
 body.brand-body {
@@ -50,7 +51,7 @@ body.brand-body {
         radial-gradient(circle at top left, rgba(20, 184, 196, 0.18), transparent 28%),
         radial-gradient(circle at right center, rgba(53, 83, 107, 0.1), transparent 26%),
         linear-gradient(180deg, #eef5f8 0%, #f9fbfc 42%, #edf3f7 100%);
-    overflow-x: hidden;
+    overflow-x: clip;
 }
 
 body.auth-page {
@@ -62,7 +63,7 @@ body.auth-page {
         radial-gradient(circle at top left, rgba(20, 184, 196, 0.2), transparent 24%),
         radial-gradient(circle at bottom right, rgba(19, 34, 46, 0.2), transparent 26%),
         linear-gradient(135deg, #e8f1f6 0%, #f5f9fc 52%, #eef4f8 100%);
-    overflow-x: hidden;
+    overflow-x: clip;
 }
 
 img {
@@ -199,6 +200,7 @@ button {
     width: min(100% - 1rem, 1280px);
     margin: 0 auto;
     padding: 0.75rem 0 1.25rem;
+    min-width: 0;
 }
 
 .app-header,
@@ -302,6 +304,7 @@ button {
     align-items: center;
     justify-content: center;
     padding: 1.25rem 0;
+    min-width: 0;
 }
 
 .auth-panel,
@@ -345,6 +348,7 @@ button {
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
     box-shadow: 0 30px 80px rgba(9, 19, 26, 0.14);
+    min-width: 0;
 }
 
 .auth-logo-mark,
@@ -400,6 +404,7 @@ button {
 .auth-header {
     display: grid;
     gap: 0.7rem;
+    min-width: 0;
 }
 
 .auth-title {
@@ -407,6 +412,7 @@ button {
     line-height: 0.92;
     color: var(--brand-ink);
     text-wrap: balance;
+    overflow-wrap: anywhere;
 }
 
 .auth-subtitle,
@@ -544,6 +550,7 @@ button {
     z-index: 1;
     display: grid;
     gap: 1rem;
+    min-width: 0;
 }
 
 .app-brand {
@@ -596,6 +603,7 @@ button {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.75rem), 1fr));
     gap: 0.85rem;
+    min-width: 0;
 }
 
 .app-nav a {
@@ -631,6 +639,7 @@ button {
     display: grid;
     gap: 1rem;
     padding-bottom: 1rem;
+    min-width: 0;
 }
 
 .app-overview-card--stacked .app-stat-grid {
@@ -641,6 +650,7 @@ button {
 .placeholder-layout {
     display: grid;
     gap: 1rem;
+    min-width: 0;
 }
 
 .app-overview-card,
@@ -696,6 +706,7 @@ button {
 .module-grid {
     display: grid;
     gap: 1rem;
+    min-width: 0;
 }
 
 .module-card {
@@ -835,6 +846,7 @@ button {
 @media (max-width: 540px) {
     .auth-frame {
         width: min(100% - 1rem, 36rem);
+        padding-inline: 0.25rem;
     }
 
     .auth-panel {
@@ -853,7 +865,43 @@ button {
     }
 
     .auth-subtitle {
-        max-width: 16rem;
+        max-width: 100%;
+    }
+
+    .auth-title,
+    .app-page-title {
+        font-size: clamp(1.9rem, 12vw, 2.75rem);
+        text-wrap: pretty;
+    }
+
+    .auth-links {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .app-header {
+        padding: 1rem;
+    }
+
+    .app-header::after,
+    .auth-panel::after {
+        display: none;
+    }
+
+    .app-header-content,
+    .app-nav,
+    .app-overview,
+    .module-grid,
+    .placeholder-layout,
+    .app-stat-grid,
+    .placeholder-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .module-card-header,
+    .module-card-footer {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     .auth-line,
