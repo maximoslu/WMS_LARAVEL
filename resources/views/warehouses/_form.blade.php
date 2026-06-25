@@ -12,8 +12,8 @@
 
 <div class="surface-card item-form-card entity-form compact-card">
     <div class="app-copy">
-        <span class="status-chip small-badge">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
-        <h2 class="ops-page-title">{{ $isEditing ? 'Editar almacen' : 'Nuevo almacen' }}</h2>
+        <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
+        <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar almacen' : 'Nuevo almacen' }}</h2>
         <p>Define el ambito operativo y su identificacion visible.</p>
     </div>
 
@@ -63,8 +63,8 @@
         </label>
 
         <div class="item-form-actions action-buttons">
-            <a href="{{ route('warehouses.index') }}" class="button-secondary compact-button">Cancelar</a>
-            <button type="submit" class="button-primary compact-button">{{ $isEditing ? 'Guardar cambios' : 'Crear almacen' }}</button>
+            <a href="{{ route('warehouses.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
+            <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear almacen' }}</button>
         </div>
     </form>
 </div>

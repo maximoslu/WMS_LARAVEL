@@ -1,6 +1,7 @@
 @extends('layouts.dashboard')
 
 @section('title', 'Articulos | MAXIMO WMS')
+@section('topbar_title', 'Articulos')
 
 @section('content')
     @php($isCardsView = $filters['view'] === 'cards')
@@ -13,18 +14,18 @@
         <span>Articulos</span>
     </nav>
 
-    <section class="surface-card ops-page-header compact-card">
+    <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="app-copy">
-            <span class="status-chip small-badge">Articulos</span>
-            <h2 class="ops-page-title">Maestro de articulos</h2>
+            <span class="status-chip small-badge badge-compact">Articulos</span>
+            <h2 class="ops-page-title page-title-compact">Articulos</h2>
             <p>Vista lista por defecto para consulta y mantenimiento rapido.</p>
         </div>
 
-        <div class="ops-page-actions action-buttons">
+        <div class="ops-page-actions page-actions-compact action-buttons">
             @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-                <a href="{{ route('items.create') }}" class="button-primary compact-button">Nuevo articulo</a>
+                <a href="{{ route('items.create') }}" class="button-primary compact-button btn-compact">Nuevo articulo</a>
             @endif
-            <a href="{{ route('stock.index') }}" class="button-secondary compact-button">Volver a stock</a>
+            <a href="{{ route('stock.index') }}" class="button-secondary compact-button btn-compact">Volver a stock</a>
         </div>
     </section>
 
@@ -33,8 +34,8 @@
     @endif
 
     <section class="surface-card item-filter-card compact-card">
-        <div class="data-toolbar compact-toolbar">
-            <form method="GET" action="{{ route('items.index') }}" class="item-filter-form compact-filters">
+        <div class="data-toolbar compact-toolbar toolbar-compact">
+            <form method="GET" action="{{ route('items.index') }}" class="item-filter-form compact-filters filters-compact">
                 <input type="hidden" name="view" value="{{ $filters['view'] }}">
 
                 <label class="auth-field">
@@ -69,9 +70,9 @@
                     </select>
                 </label>
 
-                <div class="item-filter-actions action-buttons">
-                    <button type="submit" class="button-primary compact-button">Filtrar</button>
-                    <a href="{{ route('items.index', ['view' => $filters['view']]) }}" class="button-secondary compact-button">Limpiar</a>
+                <div class="item-filter-actions action-buttons page-actions-compact">
+                    <button type="submit" class="button-primary compact-button btn-compact">Filtrar</button>
+                    <a href="{{ route('items.index', ['view' => $filters['view']]) }}" class="button-secondary compact-button btn-compact">Limpiar</a>
                 </div>
             </form>
 
@@ -94,7 +95,7 @@
 
     @if ($items->isEmpty())
         <article class="surface-card item-empty-state compact-card">
-            <span class="status-chip small-badge">Sin resultados</span>
+            <span class="status-chip small-badge badge-compact">Sin resultados</span>
             <h3>No hay articulos con estos filtros</h3>
             <p>Ajusta cliente, estado o texto de busqueda para localizar articulos existentes.</p>
         </article>
@@ -104,7 +105,7 @@
                 <article class="surface-card item-card compact-card">
                     <div class="item-card-header">
                         <div>
-                            <span class="module-tag small-badge">{{ $item->client->name }}</span>
+                            <span class="module-tag small-badge badge-compact">{{ $item->client->name }}</span>
                             <h3>{{ $item->sku }}</h3>
                         </div>
                         <span class="item-state {{ $item->active ? 'item-state--active' : 'item-state--inactive' }}">
@@ -127,12 +128,12 @@
 
                     @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
                         <div class="item-card-actions action-buttons">
-                            <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button">Editar</a>
+                            <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button btn-table">Editar</a>
 
                             <form method="POST" action="{{ route('items.toggle-active', $item) }}">
                                 @csrf
                                 @method('PATCH')
-                                <button type="submit" class="button-secondary compact-button">
+                                <button type="submit" class="button-secondary compact-button btn-table">
                                     {{ $item->active ? 'Desactivar' : 'Activar' }}
                                 </button>
                             </form>
@@ -144,7 +145,7 @@
     @else
         <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
-                <table class="data-table" aria-label="Vista lista de articulos">
+                <table class="data-table table-compact" aria-label="Vista lista de articulos">
                     <thead>
                         <tr>
                             <th>Cliente</th>
@@ -172,12 +173,12 @@
                                 <td>
                                     @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
                                         <div class="inline-actions action-buttons">
-                                            <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button">Editar</a>
+                                            <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button btn-table">Editar</a>
 
                                             <form method="POST" action="{{ route('items.toggle-active', $item) }}">
                                                 @csrf
                                                 @method('PATCH')
-                                                <button type="submit" class="button-secondary compact-button">
+                                                <button type="submit" class="button-secondary compact-button btn-table">
                                                     {{ $item->active ? 'Desactivar' : 'Activar' }}
                                                 </button>
                                             </form>

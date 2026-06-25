@@ -2207,3 +2207,528 @@ textarea.auth-input {
         animation-duration: 0ms !important;
     }
 }
+
+body.brand-body.app-shell-body {
+    font-size: 14px;
+    line-height: 1.45;
+    background:
+        linear-gradient(180deg, #edf3f7 0%, #f6f9fb 32%, #eef3f7 100%);
+}
+
+body.brand-body.app-shell-body .surface-card {
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(9, 19, 26, 0.06);
+    backdrop-filter: blur(14px);
+}
+
+body.brand-body.app-shell-body .app-shell {
+    width: min(100% - 1.25rem, 1480px);
+    margin: 0 auto;
+    padding: 0.75rem 0 1.5rem;
+    display: grid;
+    gap: 0.9rem;
+    min-height: 100vh;
+}
+
+body.brand-body.app-shell-body .app-topbar {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3.75rem;
+    padding: 0.75rem 0.95rem;
+    overflow: visible;
+}
+
+body.brand-body.app-shell-body .app-topbar-start,
+body.brand-body.app-shell-body .app-topbar-end {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .app-topbar-copy {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .app-topbar-kicker {
+    color: var(--brand-cyan-dark);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .app-topbar-copy strong {
+    color: var(--brand-slate-dark);
+    font-size: 0.95rem;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .app-topbar-brand,
+body.brand-body.app-shell-body .app-drawer-brand {
+    display: inline-flex;
+    align-items: center;
+}
+
+body.brand-body.app-shell-body .app-topbar-logo {
+    width: clamp(7rem, 10vw, 8.5rem);
+}
+
+body.brand-body.app-shell-body .app-topbar-user,
+body.brand-body.app-shell-body .app-drawer-user-copy {
+    display: grid;
+    gap: 0.12rem;
+}
+
+body.brand-body.app-shell-body .app-topbar-user strong,
+body.brand-body.app-shell-body .app-drawer-user-copy strong {
+    color: var(--brand-slate-dark);
+    font-size: 0.88rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .app-topbar-user span,
+body.brand-body.app-shell-body .app-drawer-user-copy span {
+    color: var(--brand-soft);
+    font-size: 0.76rem;
+}
+
+body.brand-body.app-shell-body .app-topbar-logout,
+body.brand-body.app-shell-body .app-drawer-logout {
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .app-main {
+    display: block;
+    padding-bottom: 0.75rem;
+}
+
+body.brand-body.app-shell-body .ops-content {
+    display: grid;
+    gap: 0.9rem;
+}
+
+body.brand-body.app-shell-body .app-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.18rem;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0;
+    border: 1px solid rgba(53, 83, 107, 0.14);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.88);
+    color: var(--brand-slate-dark);
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .app-menu-toggle span {
+    width: 0.95rem;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+body.brand-body.app-shell-body .app-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    background: rgba(9, 19, 26, 0.32);
+}
+
+body.brand-body.app-shell-body .app-drawer {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 60;
+    width: min(21rem, calc(100vw - 1.5rem));
+    transform: translateX(calc(-100% - 1rem));
+    transition: transform 0.18s ease;
+}
+
+body.brand-body.app-shell-body.drawer-open .app-drawer,
+body.brand-body.app-shell-body .app-drawer.is-open {
+    transform: translateX(0);
+}
+
+body.brand-body.app-shell-body .app-drawer-panel {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 0.9rem;
+    height: 100%;
+    padding: 0.95rem;
+}
+
+body.brand-body.app-shell-body .app-drawer-header,
+body.brand-body.app-shell-body .app-drawer-user,
+body.brand-body.app-shell-body .app-drawer-user-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .app-drawer-user {
+    align-items: flex-start;
+    padding: 0.85rem;
+    border: 1px solid rgba(53, 83, 107, 0.12);
+    border-radius: 12px;
+    background: rgba(244, 248, 251, 0.92);
+}
+
+body.brand-body.app-shell-body .app-drawer-nav {
+    align-content: start;
+    overflow: auto;
+    min-height: 0;
+}
+
+body.brand-body.app-shell-body .ops-nav-section {
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .ops-nav-summary {
+    padding: 0.65rem 0.75rem;
+}
+
+body.brand-body.app-shell-body .ops-nav-link,
+body.brand-body.app-shell-body .ops-action-card {
+    padding: 0.62rem 0.75rem;
+    border-radius: 10px;
+}
+
+body.brand-body.app-shell-body .ops-nav-link strong,
+body.brand-body.app-shell-body .ops-action-card strong {
+    font-size: 0.88rem;
+    line-height: 1.25;
+}
+
+body.brand-body.app-shell-body .ops-status,
+body.brand-body.app-shell-body .status-chip,
+body.brand-body.app-shell-body .role-badge,
+body.brand-body.app-shell-body .module-tag,
+body.brand-body.app-shell-body .nav-tag,
+body.brand-body.app-shell-body .status-badge,
+body.brand-body.app-shell-body .item-state,
+body.brand-body.app-shell-body .stock-badge,
+body.brand-body.app-shell-body .badge-compact {
+    min-height: 1.3rem;
+    padding: 0.12rem 0.42rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+}
+
+body.brand-body.app-shell-body .button-primary,
+body.brand-body.app-shell-body .button-secondary,
+body.brand-body.app-shell-body .compact-button,
+body.brand-body.app-shell-body .btn-compact {
+    min-height: 2.35rem;
+    padding: 0.46rem 0.8rem;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .btn-table {
+    min-height: 2rem;
+    padding: 0.34rem 0.65rem;
+    font-size: 0.78rem;
+}
+
+body.brand-body.app-shell-body .auth-input {
+    min-height: 2.5rem;
+    padding: 0.52rem 0.72rem;
+    border-radius: 10px;
+    font-size: 0.86rem;
+}
+
+body.brand-body.app-shell-body .auth-field span {
+    font-size: 0.77rem;
+    font-weight: 700;
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb {
+    gap: 0.35rem;
+    font-size: 0.77rem;
+}
+
+body.brand-body.app-shell-body .ops-page-header,
+body.brand-body.app-shell-body .page-header-compact,
+body.brand-body.app-shell-body .toolbar-compact,
+body.brand-body.app-shell-body .compact-toolbar,
+body.brand-body.app-shell-body .compact-filters,
+body.brand-body.app-shell-body .filters-compact,
+body.brand-body.app-shell-body .stock-summary,
+body.brand-body.app-shell-body .kpi-strip,
+body.brand-body.app-shell-body .ops-dashboard,
+body.brand-body.app-shell-body .ops-section-grid,
+body.brand-body.app-shell-body .ops-kpi-grid,
+body.brand-body.app-shell-body .data-toolbar,
+body.brand-body.app-shell-body .item-form,
+body.brand-body.app-shell-body .item-form-grid,
+body.brand-body.app-shell-body .form-grid,
+body.brand-body.app-shell-body .items-grid,
+body.brand-body.app-shell-body .ops-action-list {
+    gap: 0.7rem;
+}
+
+body.brand-body.app-shell-body .stock-intro-card,
+body.brand-body.app-shell-body .stock-filter-card,
+body.brand-body.app-shell-body .stock-table-shell,
+body.brand-body.app-shell-body .stock-mobile-card,
+body.brand-body.app-shell-body .item-filter-card,
+body.brand-body.app-shell-body .item-form-card,
+body.brand-body.app-shell-body .pagination-card,
+body.brand-body.app-shell-body .ops-dashboard-intro,
+body.brand-body.app-shell-body .ops-section-card,
+body.brand-body.app-shell-body .placeholder-card,
+body.brand-body.app-shell-body .placeholder-meta,
+body.brand-body.app-shell-body .item-card,
+body.brand-body.app-shell-body .item-empty-state {
+    padding: 0.95rem 1rem;
+    border-radius: 14px;
+}
+
+body.brand-body.app-shell-body .ops-page-title,
+body.brand-body.app-shell-body .page-title-compact {
+    font-size: clamp(1.7rem, 2.4vw, 2.1rem);
+    line-height: 1.02;
+}
+
+body.brand-body.app-shell-body .app-copy p,
+body.brand-body.app-shell-body .ops-section-note,
+body.brand-body.app-shell-body .item-card-description,
+body.brand-body.app-shell-body .item-empty-state p,
+body.brand-body.app-shell-body .stock-cell-main span,
+body.brand-body.app-shell-body .stock-mobile-card p {
+    font-size: 0.84rem;
+    line-height: 1.42;
+}
+
+body.brand-body.app-shell-body .view-switcher {
+    gap: 0.2rem;
+    padding: 0.2rem;
+    border-radius: 10px;
+}
+
+body.brand-body.app-shell-body .view-switcher-link {
+    min-height: 2rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 8px;
+    font-size: 0.78rem;
+}
+
+body.brand-body.app-shell-body .action-buttons,
+body.brand-body.app-shell-body .page-actions-compact,
+body.brand-body.app-shell-body .inline-actions {
+    gap: 0.45rem;
+}
+
+body.brand-body.app-shell-body .data-table-wrap,
+body.brand-body.app-shell-body .stock-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 12px;
+}
+
+body.brand-body.app-shell-body .data-table,
+body.brand-body.app-shell-body .stock-table,
+body.brand-body.app-shell-body .table-compact {
+    width: max(100%, 58rem);
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+body.brand-body.app-shell-body .stock-table {
+    min-width: 74rem;
+}
+
+body.brand-body.app-shell-body .table-compact th,
+body.brand-body.app-shell-body .table-compact td,
+body.brand-body.app-shell-body .data-table th,
+body.brand-body.app-shell-body .data-table td,
+body.brand-body.app-shell-body .stock-table th,
+body.brand-body.app-shell-body .stock-table td {
+    padding: 0.48rem 0.58rem;
+    vertical-align: top;
+}
+
+body.brand-body.app-shell-body .table-compact th,
+body.brand-body.app-shell-body .data-table th,
+body.brand-body.app-shell-body .stock-table th {
+    font-size: 0.67rem;
+    letter-spacing: 0.08em;
+}
+
+body.brand-body.app-shell-body .stock-total {
+    font-size: 0.92rem;
+}
+
+body.brand-body.app-shell-body .kpi-card,
+body.brand-body.app-shell-body .stock-summary-card,
+body.brand-body.app-shell-body .app-stat,
+body.brand-body.app-shell-body .kpi-compact {
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+}
+
+body.brand-body.app-shell-body .kpi-card span,
+body.brand-body.app-shell-body .stock-summary-card span,
+body.brand-body.app-shell-body .app-stat span {
+    font-size: clamp(1rem, 1.7vw, 1.35rem);
+}
+
+body.brand-body.app-shell-body .item-card-metadata div,
+body.brand-body.app-shell-body .stock-mobile-metrics div,
+body.brand-body.app-shell-body .pico-detail-list li,
+body.brand-body.app-shell-body .item-form-hint {
+    padding: 0.65rem 0.72rem;
+    border-radius: 10px;
+}
+
+body.brand-body.app-shell-body .toggle-field {
+    font-size: 0.86rem;
+}
+
+body.brand-body.app-shell-body .alert {
+    margin-bottom: 0;
+    padding: 0.7rem 0.85rem;
+    border-radius: 10px;
+    font-size: 0.82rem;
+}
+
+body.brand-body.app-shell-body .ops-section-grid {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+body.brand-body.app-shell-body .ops-action-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+@media (min-width: 768px) {
+    body.brand-body.app-shell-body .page-header-compact,
+    body.brand-body.app-shell-body .ops-page-header,
+    body.brand-body.app-shell-body .toolbar-compact,
+    body.brand-body.app-shell-body .compact-toolbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+    }
+
+    body.brand-body.app-shell-body .stock-summary,
+    body.brand-body.app-shell-body .kpi-strip {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .stock-filters,
+    body.brand-body.app-shell-body .filters-compact {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: end;
+    }
+
+    body.brand-body.app-shell-body .item-filter-form {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto;
+        align-items: end;
+    }
+}
+
+@media (min-width: 1024px) {
+    body.brand-body.app-shell-body .app-shell {
+        width: min(100% - 2rem, 1500px);
+    }
+
+    body.brand-body.app-shell-body .stock-filters,
+    body.brand-body.app-shell-body .filters-compact {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .stock-filter-actions {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 767px) {
+    body.brand-body.app-shell-body .app-shell {
+        width: min(100% - 0.9rem, 42rem);
+        padding-top: 0.45rem;
+    }
+
+    body.brand-body.app-shell-body .app-topbar {
+        top: 0.45rem;
+        padding: 0.65rem 0.75rem;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-copy strong {
+        white-space: normal;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-end {
+        gap: 0.5rem;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-user span,
+    body.brand-body.app-shell-body .app-topbar-logo {
+        display: none;
+    }
+
+    body.brand-body.app-shell-body .page-header-compact,
+    body.brand-body.app-shell-body .ops-page-header,
+    body.brand-body.app-shell-body .toolbar-compact,
+    body.brand-body.app-shell-body .compact-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .stock-mobile-list {
+        display: grid;
+    }
+
+    body.brand-body.app-shell-body .stock-desktop-table {
+        display: none;
+    }
+
+    body.brand-body.app-shell-body .data-table,
+    body.brand-body.app-shell-body .table-compact {
+        width: max(100%, 42rem);
+    }
+}
+
+@media (max-width: 540px) {
+    body.brand-body.app-shell-body .app-topbar {
+        flex-wrap: wrap;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-start,
+    body.brand-body.app-shell-body .app-topbar-end {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-user {
+        min-width: 0;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-user strong {
+        font-size: 0.8rem;
+    }
+
+    body.brand-body.app-shell-body .action-buttons,
+    body.brand-body.app-shell-body .page-actions-compact,
+    body.brand-body.app-shell-body .inline-actions,
+    body.brand-body.app-shell-body .item-card-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

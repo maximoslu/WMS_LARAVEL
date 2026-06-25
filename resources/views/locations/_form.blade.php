@@ -12,8 +12,8 @@
 
 <div class="surface-card item-form-card entity-form compact-card">
     <div class="app-copy">
-        <span class="status-chip small-badge">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
-        <h2 class="ops-page-title">{{ $isEditing ? 'Editar ubicacion' : 'Nueva ubicacion' }}</h2>
+        <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
+        <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar ubicacion' : 'Nueva ubicacion' }}</h2>
         <p>Codigo visible con estructura opcional por zona, pasillo, rack, nivel y posicion.</p>
     </div>
 
@@ -103,8 +103,8 @@
         </label>
 
         <div class="item-form-actions action-buttons">
-            <a href="{{ route('locations.index') }}" class="button-secondary compact-button">Cancelar</a>
-            <button type="submit" class="button-primary compact-button">{{ $isEditing ? 'Guardar cambios' : 'Crear ubicacion' }}</button>
+            <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
+            <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear ubicacion' }}</button>
         </div>
     </form>
 </div>
