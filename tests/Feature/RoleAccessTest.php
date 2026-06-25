@@ -43,8 +43,8 @@ class RoleAccessTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Stock')
             ->assertSee('Solicitudes de mercancia')
+            ->assertDontSee('Stock actual')
             ->assertDontSee('Usuarios y roles')
             ->assertDontSee('Backups')
             ->assertDontSee('Auditoria y trazabilidad');

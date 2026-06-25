@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ModulePlaceholderController;
+use App\Http\Controllers\StockController;
 use App\Models\Role;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -52,10 +53,9 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('items.toggle-active');
 
-    Route::get('/stock', ModulePlaceholderController::class)
-        ->middleware('minimum.role:'.Role::CLIENTE)
-        ->defaults('module', 'stock')
-        ->name('modules.stock');
+    Route::get('/stock', [StockController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('stock.index');
     Route::get('/palets', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->defaults('module', 'pallets')

@@ -29,4 +29,9 @@ class Client extends Model
     {
         return $this->hasMany(Item::class);
     }
+
+    public function stockPallets(): HasMany
+    {
+        return $this->hasMany(StockPallet::class);
+    }
 }
