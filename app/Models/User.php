@@ -5,10 +5,12 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Services\BrevoMailService;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class User extends Authenticatable
@@ -26,6 +28,9 @@ class User extends Authenticatable
         'email',
         'password',
         'role_id',
+        'client_id',
+        'avatar_path',
+        'active',
     ];
 
     /**
@@ -48,12 +53,18 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'active' => 'boolean',
         ];
     }
 
     public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class);
+    }
+
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
     }
 
     public function hasRole(string $slug): bool
@@ -97,5 +108,12 @@ class User extends Authenticatable
         } catch (Throwable $exception) {
             report($exception);
         }
+    }
+
+    protected function avatarUrl(): Attribute
+    {
+        return Attribute::get(fn (): ?string => $this->avatar_path !== null
+            ? Storage::disk('public')->url($this->avatar_path)
+            : null);
     }
 }

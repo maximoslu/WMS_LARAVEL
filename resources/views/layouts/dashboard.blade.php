@@ -12,6 +12,7 @@
         @php($user = auth()->user())
         @php($userName = $user->name)
         @php($roleName = $user->role?->name ?? 'Sin rol asignado')
+        @php($userAvatarUrl = $user->avatar_url)
         @php($navigationSections = $navigationSections ?? [])
         @php($topbarTitle = $__env->yieldContent('topbar_title', trim(explode('|', $__env->yieldContent('title', 'MAXIMO WMS'))[0])))
         @php($userInitials = collect(preg_split('/\s+/', trim($userName)))->filter()->take(2)->map(fn (string $chunk) => strtoupper(substr($chunk, 0, 1)))->implode(''))
@@ -46,7 +47,11 @@
                 </div>
 
                 <div class="app-drawer-user">
-                    <span class="app-drawer-avatar" aria-hidden="true">{{ $userInitials }}</span>
+                    @if ($userAvatarUrl !== null)
+                        <img src="{{ $userAvatarUrl }}" alt="Avatar de {{ $userName }}" class="app-drawer-avatar-image">
+                    @else
+                        <span class="app-drawer-avatar" aria-hidden="true">{{ $userInitials }}</span>
+                    @endif
                     <div class="app-drawer-user-copy">
                         <strong>{{ $userName }}</strong>
                         <span>{{ $roleName }}</span>
@@ -80,6 +85,10 @@
                         </details>
                     @endforeach
                 </nav>
+
+                <a href="{{ route('profile.edit') }}" class="button-secondary compact-button btn-compact{{ request()->routeIs('profile.*') ? ' is-active' : '' }}">
+                    Mi perfil
+                </a>
 
                 <form method="POST" action="{{ route('logout') }}" class="app-drawer-logout">
                     @csrf
@@ -122,6 +131,7 @@
                 <div class="app-topbar-end">
                     <span class="sr-only">Rol</span>
                     <span class="app-role-chip">{{ $roleName }}</span>
+                    <a href="{{ route('profile.edit') }}" class="button-secondary compact-button btn-compact">Mi perfil</a>
                     <strong class="app-topbar-user">{{ $userName }}</strong>
 
                     <form method="POST" action="{{ route('logout') }}" class="app-topbar-logout">
