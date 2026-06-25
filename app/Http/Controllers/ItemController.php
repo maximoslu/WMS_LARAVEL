@@ -43,7 +43,7 @@ class ItemController extends Controller
                 'search' => $search,
                 'status' => in_array($status, ['all', 'active', 'inactive'], true) ? $status : 'active',
             ],
-            'navigationItems' => WmsNavigation::forUser($request->user()),
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
 
@@ -54,7 +54,7 @@ class ItemController extends Controller
                 'active' => true,
             ]),
             'clients' => Client::query()->orderBy('name')->get(),
-            'navigationItems' => WmsNavigation::forUser($request->user()),
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
 
@@ -72,7 +72,7 @@ class ItemController extends Controller
         return view('items.edit', [
             'item' => $item,
             'clients' => Client::query()->orderBy('name')->get(),
-            'navigationItems' => WmsNavigation::forUser($request->user()),
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
 

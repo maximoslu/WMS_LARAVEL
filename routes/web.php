@@ -56,6 +56,14 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->defaults('module', 'stock')
         ->name('modules.stock');
+    Route::get('/palets', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->defaults('module', 'pallets')
+        ->name('modules.pallets');
+    Route::get('/ubicaciones', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->defaults('module', 'locations')
+        ->name('modules.locations');
 
     Route::get('/solicitudes', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::CLIENTE)

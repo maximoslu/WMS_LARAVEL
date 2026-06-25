@@ -17,7 +17,7 @@ class ModulePlaceholderController extends Controller
 
         return view('modules.placeholder', [
             'module' => $module,
-            'navigationItems' => WmsNavigation::forUser($request->user()),
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
 }

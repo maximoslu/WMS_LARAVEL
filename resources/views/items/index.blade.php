@@ -3,6 +3,14 @@
 @section('title', 'Articulos | MAXIMO WMS')
 
 @section('content')
+    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
+        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <span>/</span>
+        <span>Stock</span>
+        <span>/</span>
+        <span>Articulos</span>
+    </nav>
+
     <section class="items-hero">
         <article class="surface-card items-hero-card">
             <div class="app-copy">
