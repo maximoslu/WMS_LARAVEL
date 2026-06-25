@@ -3,18 +3,17 @@
 @section('title', 'Dashboard | MAXIMO WMS')
 
 @section('content')
-    <section class="app-overview">
-        <article class="app-overview-card surface-card">
+    <section class="ops-dashboard">
+        <article class="surface-card ops-dashboard-intro">
             <div class="app-copy">
                 <span class="status-chip">Panel operativo</span>
-                <h2 class="app-page-title">Bienvenido, {{ auth()->user()->name }}</h2>
-                <p>Accede a los modulos operativos habilitados para tu perfil y trabaja sobre una interfaz comun para almacen, administracion y cliente.</p>
+                <h2 class="app-page-title">Accesos rapidos por seccion</h2>
             </div>
 
-            <div class="app-stat-grid">
+            <div class="ops-kpi-grid">
                 <article class="app-stat">
-                    <strong>Modulos visibles</strong>
-                    <span>{{ count($navigationItems) }} disponibles para tu perfil</span>
+                    <strong>Accesos visibles</strong>
+                    <span>{{ $visibleModuleCount }} disponibles para tu perfil</span>
                 </article>
 
                 <article class="app-stat">
@@ -23,61 +22,34 @@
                 </article>
 
                 <article class="app-stat">
-                    <strong>Estado de acceso</strong>
-                    <span>Sesion autenticada y permisos aplicados</span>
+                    <strong>Estado</strong>
+                    <span>Jerarquia de permisos y navegacion agrupada activas</span>
                 </article>
             </div>
         </article>
-
-        <aside class="app-overview-card app-overview-card--stacked surface-card">
-            <div class="app-copy">
-                <span class="status-chip">Estado del entorno</span>
-                <h2 class="app-page-title">Base operativa preparada</h2>
-                <p>Cabecera, navegacion y modulos comparten el mismo sistema visual para evolucionar sin rehacer la experiencia de usuario.</p>
-            </div>
-
-            <div class="app-stat-grid">
-                <article class="app-stat">
-                    <strong>Navegacion</strong>
-                    <span>Acceso tactil claro en movil, tablet y escritorio</span>
-                </article>
-
-                <article class="app-stat">
-                    <strong>Seguridad</strong>
-                    <span>Autenticacion y jerarquia de roles integradas</span>
-                </article>
-
-                <article class="app-stat">
-                    <strong>Siguiente fase</strong>
-                    <span>Desarrollo progresivo de logica por modulo</span>
-                </article>
-            </div>
-        </aside>
     </section>
 
-    <section class="module-grid" aria-label="Modulos disponibles">
-        @foreach ($navigationItems as $item)
-            <a href="{{ route($item['route']) }}" class="module-card surface-card">
-                <div class="module-card-header">
-                    <span class="module-tag">{{ $item['tag'] }}</span>
-                    <span class="status-chip">Disponible</span>
+    <section class="ops-section-grid" aria-label="Secciones operativas">
+        @foreach ($navigationSections as $section)
+            <article class="surface-card ops-section-card">
+                <div class="ops-section-heading">
+                    <strong>{{ $section['title'] }}</strong>
+                    <span class="ops-status">{{ count($section['children']) }} accesos</span>
                 </div>
 
-                <div class="app-copy">
-                    <strong>{{ $item['title'] }}</strong>
-                    <p>{{ $item['summary'] }}</p>
+                <div class="ops-action-list">
+                    @foreach ($section['children'] as $child)
+                        <a href="{{ route($child['route']) }}" class="ops-action-card{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}">
+                            <strong>{{ $child['title'] }}</strong>
+                            <div class="ops-action-meta">
+                                <span class="ops-status {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
+                                    {{ $child['status_label'] }}
+                                </span>
+                            </div>
+                        </a>
+                    @endforeach
                 </div>
-
-                <div class="module-card-footer">
-                    <span class="module-link">Abrir modulo</span>
-                    <span class="module-path">{{ $item['path'] }}</span>
-                </div>
-            </a>
+            </article>
         @endforeach
-    </section>
-
-    <section class="app-callout surface-card">
-        <h3>Roadmap inmediato</h3>
-        <p>La base visual queda lista para incorporar procesos reales de stock, solicitudes, entradas, salidas y administracion sin rehacer login, cabecera, navegacion ni placeholders.</p>
     </section>
 @endsection

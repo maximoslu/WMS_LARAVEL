@@ -11,10 +11,13 @@ class DashboardController extends Controller
     public function __invoke(Request $request): View
     {
         $user = $request->user();
+        $navigationSections = WmsNavigation::sectionsForUser($user);
 
         return view('dashboard.index', [
-            'navigationItems' => WmsNavigation::forUser($user),
+            'navigationSections' => $navigationSections,
             'currentRoleName' => $user->role?->name ?? 'Sin rol asignado',
+            'visibleModuleCount' => collect($navigationSections)
+                ->sum(fn (array $section): int => count($section['children'])),
         ]);
     }
 }

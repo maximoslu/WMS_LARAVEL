@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ItemController;
 use App\Http\Controllers\ModulePlaceholderController;
 use App\Models\Role;
 use Illuminate\Support\Facades\Auth;
@@ -32,10 +33,37 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
+    Route::get('/articulos', [ItemController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('items.index');
+    Route::get('/articulos/crear', [ItemController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('items.create');
+    Route::post('/articulos', [ItemController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('items.store');
+    Route::get('/articulos/{item}/editar', [ItemController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('items.edit');
+    Route::put('/articulos/{item}', [ItemController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('items.update');
+    Route::patch('/articulos/{item}/activar-desactivar', [ItemController::class, 'toggleActive'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('items.toggle-active');
+
     Route::get('/stock', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->defaults('module', 'stock')
         ->name('modules.stock');
+    Route::get('/palets', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->defaults('module', 'pallets')
+        ->name('modules.pallets');
+    Route::get('/ubicaciones', ModulePlaceholderController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->defaults('module', 'locations')
+        ->name('modules.locations');
 
     Route::get('/solicitudes', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::CLIENTE)

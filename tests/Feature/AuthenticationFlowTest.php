@@ -43,7 +43,8 @@ class AuthenticationFlowTest extends TestCase
 
         $this->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Bienvenido, Operador MAXIMO');
+            ->assertSee('Panel operativo')
+            ->assertSee('Operador MAXIMO');
     }
 
     public function test_dashboard_requires_authentication(): void
