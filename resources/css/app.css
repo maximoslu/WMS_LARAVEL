@@ -786,6 +786,168 @@ button {
     color: var(--brand-slate-dark);
 }
 
+.form-error {
+    color: var(--brand-danger);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.items-hero,
+.item-form-layout {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.items-hero-card,
+.items-side-card,
+.item-filter-card,
+.item-form-card,
+.pagination-card {
+    padding: 1.25rem;
+}
+
+.items-hero-card,
+.items-side-card {
+    display: grid;
+    gap: 1rem;
+}
+
+.items-hero-actions,
+.item-filter-actions,
+.item-form-actions,
+.item-card-actions {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.item-filter-form,
+.item-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.item-form-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.item-form-field--full {
+    grid-column: 1 / -1;
+}
+
+.toggle-field {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    color: var(--brand-slate-dark);
+    font-weight: 600;
+}
+
+.toggle-field input[type='checkbox'] {
+    margin-top: 0.25rem;
+}
+
+.item-form-hint {
+    display: grid;
+    gap: 0.45rem;
+    padding: 1rem;
+    border-radius: 18px;
+    background: rgba(20, 184, 196, 0.08);
+    border: 1px solid rgba(20, 184, 196, 0.12);
+}
+
+.item-form-hint strong,
+.item-card h3,
+.item-empty-state h3 {
+    margin: 0;
+    color: var(--brand-slate-dark);
+}
+
+.item-form-hint p,
+.item-card-description,
+.item-empty-state p {
+    margin: 0;
+    color: var(--brand-soft);
+    line-height: 1.6;
+}
+
+.items-grid {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.item-card,
+.item-empty-state {
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem;
+}
+
+.item-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.item-state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.item-state--active {
+    background: var(--brand-success-bg);
+    color: var(--brand-success);
+}
+
+.item-state--inactive {
+    background: var(--brand-danger-bg);
+    color: var(--brand-danger);
+}
+
+.item-card-metadata {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0;
+}
+
+.item-card-metadata div {
+    padding: 0.9rem 1rem;
+    border-radius: 18px;
+    background: var(--brand-surface);
+    border: 1px solid rgba(53, 83, 107, 0.08);
+}
+
+.item-card-metadata dt {
+    margin: 0 0 0.25rem;
+    color: var(--brand-soft);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.item-card-metadata dd {
+    margin: 0;
+    color: var(--brand-slate-dark);
+    font-weight: 700;
+}
+
+.pagination-card nav {
+    width: 100%;
+}
+
 @media (min-width: 768px) {
     .app-shell {
         width: min(100% - 2rem, 1280px);
@@ -816,6 +978,30 @@ button {
     .module-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .items-hero {
+        grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.9fr);
+    }
+
+    .item-filter-form,
+    .item-form-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .item-filter-actions,
+    .item-form-actions,
+    .item-card-actions {
+        grid-auto-flow: column;
+        justify-content: flex-start;
+    }
+
+    .items-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .item-card-metadata {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (min-width: 1024px) {
@@ -839,6 +1025,15 @@ button {
     }
 
     .module-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .item-filter-form {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto;
+        align-items: end;
+    }
+
+    .items-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
@@ -902,6 +1097,16 @@ button {
     .module-card-footer {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .item-card-header,
+    .toggle-field,
+    .items-hero-actions,
+    .item-filter-actions,
+    .item-form-actions,
+    .item-card-actions {
+        flex-direction: column;
+        align-items: stretch;
     }
 
     .auth-line,

@@ -31,6 +31,14 @@
     </section>
 
     <section class="placeholder-grid" aria-label="Detalles del modulo">
+        @if ($module['key'] === 'stock' && auth()->user()->canAccessRole(\App\Models\Role::ALMACEN))
+            <article class="placeholder-meta surface-card">
+                <strong>Acceso ya disponible</strong>
+                <p>El maestro de articulos ya esta operativo para almacen, administracion y superadmin.</p>
+                <a href="{{ route('items.index') }}" class="back-link">Abrir articulos</a>
+            </article>
+        @endif
+
         <article class="placeholder-meta surface-card">
             <strong>Estado actual</strong>
             <p>La estructura visual y la ruta del modulo ya forman parte del flujo real del WMS.</p>
