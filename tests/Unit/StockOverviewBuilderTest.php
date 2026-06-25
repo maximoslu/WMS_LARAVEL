@@ -4,7 +4,9 @@ namespace Tests\Unit;
 
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\StockPallet;
+use App\Models\Warehouse;
 use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
@@ -149,6 +151,67 @@ class StockOverviewBuilderTest extends TestCase
 
         $this->assertCount(2, $rows);
         $this->assertSame(['LOT-A', 'LOT-B'], $rows->pluck('lot')->all());
+    }
+
+    public function test_builder_reports_peak_overflow_and_full_detail(): void
+    {
+        [$client] = $this->seedClients();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-PEAKS',
+            'units_per_pallet' => 700,
+        ]);
+
+        foreach ([100, 110, 120, 130, 140, 150, 160] as $index => $quantity) {
+            StockPallet::query()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'location_text' => 'P-0'.($index + 1),
+                'pallet_code' => 'PAL-DET-0'.($index + 1),
+                'quantity_units' => $quantity,
+                'active' => true,
+            ]);
+        }
+
+        $row = app(StockOverviewBuilder::class)->build(['stock_state' => 'all'])['rows']->firstWhere('sku', 'SKU-PEAKS');
+
+        $this->assertNotNull($row);
+        $this->assertSame(2, $row['peak_overflow_count']);
+        $this->assertCount(7, $row['peak_details']);
+        $this->assertSame(100, $row['peak_details'][0]['quantity_units']);
+        $this->assertSame(-600, $row['peak_details'][0]['difference_units']);
+    }
+
+    public function test_builder_prefers_location_code_over_legacy_text(): void
+    {
+        [$client] = $this->seedClients();
+
+        $warehouse = Warehouse::factory()->create();
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'A1-REAL',
+        ]);
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-LOC',
+            'units_per_pallet' => 500,
+        ]);
+
+        StockPallet::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'location_text' => 'LEGACY-TEXT',
+            'pallet_code' => 'PAL-LOC-01',
+            'quantity_units' => 500,
+            'active' => true,
+        ]);
+
+        $row = app(StockOverviewBuilder::class)->build(['stock_state' => 'all'])['rows']->firstWhere('sku', 'SKU-LOC');
+
+        $this->assertNotNull($row);
+        $this->assertSame('A1-REAL', $row['location_summary']);
     }
 
     /**

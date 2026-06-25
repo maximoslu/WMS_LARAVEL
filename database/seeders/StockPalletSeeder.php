@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\StockPallet;
 use Illuminate\Database\Seeder;
 
@@ -80,11 +81,14 @@ class StockPalletSeeder extends Seeder
             ],
         ] as $definition) {
             foreach ($definition['pallets'] as $pallet) {
+                $location = Location::query()->where('code', $pallet['location_text'])->first();
+
                 StockPallet::query()->updateOrCreate(
                     ['pallet_code' => $pallet['pallet_code']],
                     [
                         'client_id' => $definition['client']->id,
                         'item_id' => $definition['item']->id,
+                        'location_id' => $location?->id,
                         'location_text' => $pallet['location_text'],
                         'quantity_units' => $pallet['quantity_units'],
                         'received_at' => $pallet['received_at'],

@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Models\Warehouse;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -84,6 +86,74 @@ class StockOverviewTest extends TestCase
             ->assertSee('SKU-PICO-01')
             ->assertSee('300')
             ->assertSee('Picos');
+    }
+
+    public function test_stock_view_shows_location_code_when_location_id_exists(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $warehouse = Warehouse::factory()->create();
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'A1-REAL',
+        ]);
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-LOC-01',
+            'units_per_pallet' => 700,
+        ]);
+
+        StockPallet::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'location_text' => 'ANTIGUA',
+            'pallet_code' => 'PAL-LOC-001',
+            'quantity_units' => 700,
+            'active' => true,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('A1-REAL')
+            ->assertDontSee('ANTIGUA');
+    }
+
+    public function test_stock_view_shows_peak_overflow_and_detail_for_more_than_five_peaks(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-PICOS-07',
+            'description' => 'Articulo con muchos picos',
+            'units_per_pallet' => 700,
+        ]);
+
+        foreach ([100, 110, 120, 130, 140, 150, 160] as $index => $quantity) {
+            StockPallet::query()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'location_text' => 'PX-0'.($index + 1),
+                'pallet_code' => 'PAL-PICOS-0'.($index + 1),
+                'quantity_units' => $quantity,
+                'active' => true,
+            ]);
+        }
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('+2 picos')
+            ->assertSee('Ver picos')
+            ->assertSee('100 uds')
+            ->assertSee('160 uds');
     }
 
     public function test_stock_view_can_filter_references_without_stock(): void

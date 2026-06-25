@@ -16,6 +16,7 @@ class StockPallet extends Model
     protected $fillable = [
         'client_id',
         'item_id',
+        'location_id',
         'location_text',
         'pallet_code',
         'quantity_units',
@@ -51,6 +52,15 @@ class StockPallet extends Model
             }
 
             $stockPallet->client_id = (int) $itemClientId;
+
+            if ($stockPallet->location_id !== null) {
+                $locationCode = $stockPallet->location?->code
+                    ?? Location::query()->whereKey($stockPallet->location_id)->value('code');
+
+                if ($locationCode !== null) {
+                    $stockPallet->location_text = $locationCode;
+                }
+            }
         });
     }
 
@@ -62,5 +72,10 @@ class StockPallet extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
     }
 }

@@ -1,0 +1,133 @@
+@extends('layouts.dashboard')
+
+@section('title', 'Ubicaciones | MAXIMO WMS')
+
+@section('content')
+    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
+        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <span>/</span>
+        <span>Stock</span>
+        <span>/</span>
+        <span>Ubicaciones</span>
+    </nav>
+
+    <section class="surface-card stock-intro-card">
+        <div class="app-copy">
+            <span class="status-chip">Stock · Layout</span>
+            <h2 class="app-page-title">Ubicaciones</h2>
+            <p class="stock-subtitle">Mapa operativo visible desde stock</p>
+            <p>Las ubicaciones ya pueden mantenerse como referencia real y enlazarse con el stock por palet.</p>
+        </div>
+
+        @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+            <div class="items-hero-actions">
+                <a href="{{ route('locations.create') }}" class="button-primary">Nueva ubicacion</a>
+            </div>
+        @endif
+    </section>
+
+    @if (session('status'))
+        <div class="alert alert-success">{{ session('status') }}</div>
+    @endif
+
+    <section class="surface-card item-filter-card">
+        <form method="GET" action="{{ route('locations.index') }}" class="stock-filters">
+            <label class="auth-field">
+                <span>Almacen</span>
+                <select name="warehouse_id" class="auth-input">
+                    <option value="">Todos los almacenes</option>
+                    @foreach ($warehouses as $warehouse)
+                        <option value="{{ $warehouse->id }}" @selected((string) $filters['warehouse_id'] === (string) $warehouse->id)>
+                            {{ $warehouse->code }} · {{ $warehouse->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </label>
+
+            <label class="auth-field">
+                <span>Codigo o nombre</span>
+                <input type="text" name="search" value="{{ $filters['search'] }}" class="auth-input" placeholder="Buscar ubicacion">
+            </label>
+
+            <label class="auth-field">
+                <span>Estado</span>
+                <select name="status" class="auth-input">
+                    <option value="active" @selected($filters['status'] === 'active')>Solo activas</option>
+                    <option value="inactive" @selected($filters['status'] === 'inactive')>Solo inactivas</option>
+                    <option value="all" @selected($filters['status'] === 'all')>Todas</option>
+                </select>
+            </label>
+
+            <div class="stock-filter-actions">
+                <button type="submit" class="button-primary">Filtrar</button>
+                <a href="{{ route('locations.index') }}" class="button-secondary">Limpiar</a>
+            </div>
+        </form>
+    </section>
+
+    @if ($locations->isEmpty())
+        <article class="surface-card item-empty-state">
+            <span class="status-chip">Sin resultados</span>
+            <h3>No hay ubicaciones con estos filtros</h3>
+            <p>Crea ubicaciones nuevas o ajusta almacen, estado y texto de busqueda.</p>
+        </article>
+    @else
+        <section class="surface-card stock-table-shell">
+            <div class="data-table-wrap">
+                <table class="data-table" aria-label="Listado de ubicaciones">
+                    <thead>
+                        <tr>
+                            <th>Almacen</th>
+                            <th>Codigo</th>
+                            <th>Nombre</th>
+                            <th>Zona</th>
+                            <th>Estructura</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($locations as $location)
+                            <tr>
+                                <td>{{ $location->warehouse->code }}</td>
+                                <td><strong>{{ $location->code }}</strong></td>
+                                <td>{{ $location->name ?: '-' }}</td>
+                                <td>{{ $location->zone ?: '-' }}</td>
+                                <td>
+                                    {{ collect([$location->aisle, $location->rack, $location->level, $location->position])->filter()->implode(' / ') ?: '-' }}
+                                </td>
+                                <td>
+                                    <span class="status-badge {{ $location->active ? 'status-badge--active' : 'status-badge--inactive' }}">
+                                        {{ $location->active ? 'Activa' : 'Inactiva' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+                                        <div class="inline-actions">
+                                            <a href="{{ route('locations.edit', $location) }}" class="button-secondary">Editar</a>
+                                            <form method="POST" action="{{ route('locations.toggle-active', $location) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="button-secondary">
+                                                    {{ $location->active ? 'Desactivar' : 'Activar' }}
+                                                </button>
+                                            </form>
+                                        </div>
+                                    @else
+                                        <span class="text-muted">Sin acciones</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    @endif
+
+    @if ($locations->hasPages())
+        <div class="pagination-card surface-card">
+            {{ $locations->links() }}
+        </div>
+    @endif
+@endsection

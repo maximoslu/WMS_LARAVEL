@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\StockPallet;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -19,6 +20,7 @@ class StockPalletFactory extends Factory
         return [
             'client_id' => Client::factory(),
             'item_id' => Item::factory(),
+            'location_id' => null,
             'location_text' => fake()->optional()->bothify('PAS-## / HUE-##'),
             'pallet_code' => strtoupper(fake()->bothify('PAL-#####')),
             'quantity_units' => fake()->numberBetween(1, 1500),
@@ -44,6 +46,14 @@ class StockPalletFactory extends Factory
             }
 
             $stockPallet->client_id = $item->client_id;
+
+            if ($stockPallet->location_id !== null) {
+                $location = $stockPallet->location ?? Location::query()->find($stockPallet->location_id);
+                if ($location !== null) {
+                    $stockPallet->setRelation('location', $location);
+                    $stockPallet->location_text = $location->code;
+                }
+            }
         })->afterCreating(function (StockPallet $stockPallet): void {
             if ($stockPallet->client_id !== $stockPallet->item->client_id) {
                 $stockPallet->forceFill([

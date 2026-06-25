@@ -21,6 +21,7 @@
 
         <div class="items-hero-actions">
             <a href="{{ route('items.index') }}" class="button-secondary">Abrir articulos</a>
+            <a href="{{ route('locations.index') }}" class="button-secondary">Abrir ubicaciones</a>
         </div>
     </section>
 
@@ -125,9 +126,9 @@
             <p>Ajusta cliente, lote, ubicacion o estado para visualizar stock real o referencias sin stock.</p>
         </article>
     @else
-        <section class="surface-card stock-table-shell">
-            <div class="stock-table-wrap">
-                <table class="stock-table" aria-label="Vista operativa de stock">
+        <section class="surface-card stock-table-shell stock-desktop-table">
+            <div class="data-table-wrap stock-table-wrap">
+                <table class="data-table stock-table" aria-label="Vista operativa de stock">
                     <thead>
                         <tr>
                             <th>Cliente</th>
@@ -143,7 +144,9 @@
                             <th>Pico 3</th>
                             <th>Pico 4</th>
                             <th>Pico 5</th>
+                            <th>Mas picos</th>
                             <th>Total palets</th>
+                            <th>Detalle</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -178,10 +181,36 @@
                                         {{ number_format($row['pico_count'], 0, ',', '.') }}
                                     </span>
                                 </td>
-                                @foreach (array_slice($row['pico_columns'], 0, 5) as $peak)
-                                    <td>{{ $peak !== null ? number_format($peak, 0, ',', '.') : '—' }}</td>
+                                @foreach ($row['pico_columns'] as $peak)
+                                    <td>{{ $peak !== null ? number_format($peak, 0, ',', '.') : '-' }}</td>
                                 @endforeach
+                                <td>
+                                    @if ($row['peak_overflow_count'] > 0)
+                                        <span class="stock-badge stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
+                                    @else
+                                        <span class="text-muted">-</span>
+                                    @endif
+                                </td>
                                 <td>{{ number_format($row['total_pallets'], 0, ',', '.') }}</td>
+                                <td>
+                                    @if ($row['has_peaks'])
+                                        <details class="pico-details">
+                                            <summary>Ver picos</summary>
+                                            <ul class="pico-detail-list">
+                                                @foreach ($row['peak_details'] as $peak)
+                                                    <li>
+                                                        <strong>{{ $peak['pallet_code'] ?: 'Sin codigo' }}</strong>
+                                                        <span>{{ $peak['location_label'] !== '' ? $peak['location_label'] : 'Sin ubicacion' }}</span>
+                                                        <span>{{ number_format($peak['quantity_units'], 0, ',', '.') }} uds</span>
+                                                        <span>Diferencia: {{ $peak['difference_units'] > 0 ? '+' : '' }}{{ number_format($peak['difference_units'], 0, ',', '.') }}</span>
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </details>
+                                    @else
+                                        <span class="text-muted">Sin picos</span>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -222,16 +251,28 @@
                         <span class="stock-badge{{ $row['pico_count'] > 0 ? ' stock-badge-pico' : '' }}">
                             Picos: {{ number_format($row['pico_count'], 0, ',', '.') }}
                         </span>
+                        @if ($row['peak_overflow_count'] > 0)
+                            <span class="stock-badge stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
+                        @endif
                         <span class="stock-badge">
                             {{ $row['location_summary'] !== '' ? $row['location_summary'] : 'Sin ubicacion' }}
                         </span>
                     </div>
 
                     @if ($row['has_peaks'])
-                        <p class="stock-note">
-                            Detalle picos:
-                            {{ collect(array_slice($row['pico_columns'], 0, 5))->filter()->map(fn ($peak) => number_format($peak, 0, ',', '.'))->implode(' · ') }}
-                        </p>
+                        <details class="pico-details">
+                            <summary>Ver picos</summary>
+                            <ul class="pico-detail-list">
+                                @foreach ($row['peak_details'] as $peak)
+                                    <li>
+                                        <strong>{{ $peak['pallet_code'] ?: 'Sin codigo' }}</strong>
+                                        <span>{{ $peak['location_label'] !== '' ? $peak['location_label'] : 'Sin ubicacion' }}</span>
+                                        <span>{{ number_format($peak['quantity_units'], 0, ',', '.') }} uds</span>
+                                        <span>Diferencia: {{ $peak['difference_units'] > 0 ? '+' : '' }}{{ number_format($peak['difference_units'], 0, ',', '.') }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </details>
                     @endif
                 </article>
             @endforeach

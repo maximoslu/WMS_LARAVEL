@@ -43,6 +43,7 @@ class StockOverviewBuilder
             ->with([
                 'client',
                 'stockPallets' => fn ($query) => $query
+                    ->with('location')
                     ->where('active', true)
                     ->orderBy('received_at')
                     ->orderBy('id'),
@@ -58,9 +59,12 @@ class StockOverviewBuilder
             ->when($filters['lot'] !== '', fn (Builder $query) => $query->where('lot', 'like', '%'.$filters['lot'].'%'))
             ->when($filters['location'] !== '', function (Builder $query) use ($filters): void {
                 $query->whereHas('stockPallets', function (Builder $query) use ($filters): void {
-                    $query
-                        ->where('active', true)
-                        ->where('location_text', 'like', '%'.$filters['location'].'%');
+                    $query->where('active', true)
+                        ->where(function (Builder $query) use ($filters): void {
+                            $query
+                                ->where('location_text', 'like', '%'.$filters['location'].'%')
+                                ->orWhereHas('location', fn (Builder $query) => $query->where('code', 'like', '%'.$filters['location'].'%'));
+                        });
                 });
             })
             ->orderBy('client_id')
@@ -103,17 +107,28 @@ class StockOverviewBuilder
             ->values();
 
         $standardUnits = max(1, (int) $item->units_per_pallet);
-        $picoQuantities = $pallets
+        $peakPallets = $pallets
             ->filter(fn ($pallet): bool => (int) $pallet->quantity_units !== $standardUnits)
-            ->pluck('quantity_units')
-            ->map(fn ($quantity): int => (int) $quantity)
             ->values();
 
         $locationList = $pallets
-            ->pluck('location_text')
-            ->filter(fn (?string $location): bool => filled($location))
-            ->map(fn (?string $location): string => trim((string) $location))
+            ->map(fn ($pallet): string => $this->locationLabel($pallet))
+            ->filter(fn (string $location): bool => $location !== '')
             ->unique()
+            ->values();
+
+        $peakDetails = $peakPallets
+            ->map(fn ($pallet): array => [
+                'pallet_code' => $pallet->pallet_code,
+                'location_label' => $this->locationLabel($pallet),
+                'quantity_units' => (int) $pallet->quantity_units,
+                'difference_units' => (int) $pallet->quantity_units - $standardUnits,
+            ])
+            ->values();
+
+        $picoQuantities = $peakDetails
+            ->pluck('quantity_units')
+            ->map(fn ($quantity): int => (int) $quantity)
             ->values();
 
         return [
@@ -134,11 +149,13 @@ class StockOverviewBuilder
             'pico_count' => $picoQuantities->count(),
             'total_pallets' => $pallets->count(),
             'pico_quantities' => $picoQuantities->all(),
-            'pico_columns' => collect(range(0, 9))
+            'pico_columns' => collect(range(0, 4))
                 ->map(fn (int $index): ?int => $picoQuantities->get($index))
                 ->all(),
+            'peak_details' => $peakDetails->all(),
+            'peak_overflow_count' => max(0, $peakDetails->count() - 5),
             'has_stock' => $pallets->isNotEmpty(),
-            'has_peaks' => $picoQuantities->isNotEmpty(),
+            'has_peaks' => $peakDetails->isNotEmpty(),
             'locations' => $locationList->all(),
             'location_summary' => $locationList->take(3)->implode(' · '),
         ];
@@ -163,5 +180,16 @@ class StockOverviewBuilder
         }
 
         return true;
+    }
+
+    private function locationLabel(mixed $pallet): string
+    {
+        $locationCode = $pallet->location?->code;
+
+        if (filled($locationCode)) {
+            return trim((string) $locationCode);
+        }
+
+        return trim((string) ($pallet->location_text ?? ''));
     }
 }
