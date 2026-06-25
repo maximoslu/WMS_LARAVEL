@@ -13,10 +13,9 @@
     </nav>
 
     <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
-        <div class="app-copy">
-            <span class="status-chip small-badge badge-compact">Ubicaciones</span>
+        <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Ubicaciones</h2>
-            <p>Mapa operativo visible desde stock y mantenimiento.</p>
+            <span class="ops-page-meta">{{ $locations->total() }} registros</span>
         </div>
 
         @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))

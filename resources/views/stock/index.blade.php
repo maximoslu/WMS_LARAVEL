@@ -13,13 +13,13 @@
     </nav>
 
     <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
-        <div class="app-copy">
-            <span class="status-chip small-badge badge-compact">Stock</span>
+        <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Stock actual</h2>
-            <p>Vista operativa por articulo.</p>
+            <span class="sr-only">Vista operativa por articulo</span>
+            <span class="ops-page-meta">{{ $rows->count() }} referencias en pantalla</span>
         </div>
 
-        <div class="ops-page-actions page-actions-compact action-buttons">
+        <div class="ops-page-actions page-actions-compact action-buttons ops-toolbar-links">
             <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact">Articulos</a>
             <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact">Ubicaciones</a>
         </div>

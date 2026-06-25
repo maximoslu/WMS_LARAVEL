@@ -9,9 +9,12 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="brand-body app-shell-body">
-        @php($roleName = auth()->user()->role?->name ?? 'Sin rol asignado')
+        @php($user = auth()->user())
+        @php($userName = $user->name)
+        @php($roleName = $user->role?->name ?? 'Sin rol asignado')
         @php($navigationSections = $navigationSections ?? [])
-        @php($topbarTitle = trim(explode('|', $__env->yieldContent('title', 'MAXIMO WMS'))[0]))
+        @php($topbarTitle = $__env->yieldContent('topbar_title', trim(explode('|', $__env->yieldContent('title', 'MAXIMO WMS'))[0])))
+        @php($userInitials = collect(preg_split('/\s+/', trim($userName)))->filter()->take(2)->map(fn (string $chunk) => strtoupper(substr($chunk, 0, 1)))->implode(''))
 
         <div class="app-drawer-backdrop" data-drawer-backdrop hidden></div>
 
@@ -20,10 +23,14 @@
                 <div class="app-drawer-header">
                     <a href="{{ route('dashboard') }}" class="app-drawer-brand" aria-label="Ir al dashboard">
                         <img
-                            src="{{ asset('brand/maximo-logo-horizontal.png') }}"
+                            src="{{ asset('brand/maximo-icon.png') }}"
                             alt="MAXIMO Servicios Logisticos"
-                            class="brand-logo-horizontal app-topbar-logo"
+                            class="app-drawer-mark"
                         >
+                        <div class="app-drawer-brand-copy">
+                            <strong>MAXIMO WMS</strong>
+                            <span>Panel operativo</span>
+                        </div>
                     </a>
 
                     <button
@@ -39,12 +46,10 @@
                 </div>
 
                 <div class="app-drawer-user">
+                    <span class="app-drawer-avatar" aria-hidden="true">{{ $userInitials }}</span>
                     <div class="app-drawer-user-copy">
-                        <strong>{{ auth()->user()->name }}</strong>
-                        <span>{{ auth()->user()->email }}</span>
-                    </div>
-                    <div class="app-drawer-user-meta">
-                        <span class="role-badge badge-compact">{{ $roleName }}</span>
+                        <strong>{{ $userName }}</strong>
+                        <span>{{ $roleName }}</span>
                     </div>
                 </div>
 
@@ -101,23 +106,23 @@
 
                     <a href="{{ route('dashboard') }}" class="app-topbar-brand" aria-label="Ir al dashboard">
                         <img
-                            src="{{ asset('brand/maximo-logo-horizontal.png') }}"
+                            src="{{ asset('brand/maximo-icon.png') }}"
                             alt="MAXIMO Servicios Logisticos"
-                            class="brand-logo-horizontal app-topbar-logo"
+                            class="app-topbar-mark"
                         >
+                        <span class="app-topbar-label">MAXIMO</span>
                     </a>
 
                     <div class="app-topbar-copy">
-                        <span class="app-topbar-kicker">Panel operativo</span>
                         <strong>{{ $topbarTitle }}</strong>
+                        <span class="app-topbar-meta">Panel operativo</span>
                     </div>
                 </div>
 
                 <div class="app-topbar-end">
-                    <div class="app-topbar-user">
-                        <strong>{{ auth()->user()->name }}</strong>
-                        <span>{{ $roleName }}</span>
-                    </div>
+                    <span class="sr-only">Rol</span>
+                    <span class="app-role-chip">{{ $roleName }}</span>
+                    <strong class="app-topbar-user">{{ $userName }}</strong>
 
                     <form method="POST" action="{{ route('logout') }}" class="app-topbar-logout">
                         @csrf

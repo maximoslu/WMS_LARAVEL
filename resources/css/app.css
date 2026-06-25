@@ -2211,99 +2211,25 @@ textarea.auth-input {
 body.brand-body.app-shell-body {
     font-size: 14px;
     line-height: 1.45;
-    background:
-        linear-gradient(180deg, #edf3f7 0%, #f6f9fb 32%, #eef3f7 100%);
+    background: linear-gradient(180deg, #eef2f5 0%, #f7f9fb 36%, #edf1f4 100%);
 }
 
 body.brand-body.app-shell-body .surface-card {
-    border-radius: 14px;
-    box-shadow: 0 8px 20px rgba(9, 19, 26, 0.06);
-    backdrop-filter: blur(14px);
+    border-radius: 12px;
+    border-color: rgba(53, 83, 107, 0.12);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+    backdrop-filter: blur(10px);
 }
 
 body.brand-body.app-shell-body .app-shell {
-    width: min(100% - 1.25rem, 1480px);
+    width: min(100% - 1.5rem, 1520px);
     margin: 0 auto;
-    padding: 0.75rem 0 1.5rem;
+    padding: 0.55rem 0 1rem;
     display: grid;
-    gap: 0.9rem;
-    min-height: 100vh;
-}
-
-body.brand-body.app-shell-body .app-topbar {
-    position: sticky;
-    top: 0.75rem;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    min-height: 3.75rem;
-    padding: 0.75rem 0.95rem;
-    overflow: visible;
-}
-
-body.brand-body.app-shell-body .app-topbar-start,
-body.brand-body.app-shell-body .app-topbar-end {
-    display: flex;
-    align-items: center;
+    align-content: start;
     gap: 0.75rem;
-    min-width: 0;
-}
-
-body.brand-body.app-shell-body .app-topbar-copy {
-    display: grid;
-    gap: 0.1rem;
-    min-width: 0;
-}
-
-body.brand-body.app-shell-body .app-topbar-kicker {
-    color: var(--brand-cyan-dark);
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-}
-
-body.brand-body.app-shell-body .app-topbar-copy strong {
-    color: var(--brand-slate-dark);
-    font-size: 0.95rem;
-    line-height: 1.15;
-    white-space: nowrap;
-}
-
-body.brand-body.app-shell-body .app-topbar-brand,
-body.brand-body.app-shell-body .app-drawer-brand {
-    display: inline-flex;
-    align-items: center;
-}
-
-body.brand-body.app-shell-body .app-topbar-logo {
-    width: clamp(7rem, 10vw, 8.5rem);
-}
-
-body.brand-body.app-shell-body .app-topbar-user,
-body.brand-body.app-shell-body .app-drawer-user-copy {
-    display: grid;
-    gap: 0.12rem;
-}
-
-body.brand-body.app-shell-body .app-topbar-user strong,
-body.brand-body.app-shell-body .app-drawer-user-copy strong {
-    color: var(--brand-slate-dark);
-    font-size: 0.88rem;
-    line-height: 1.2;
-}
-
-body.brand-body.app-shell-body .app-topbar-user span,
-body.brand-body.app-shell-body .app-drawer-user-copy span {
-    color: var(--brand-soft);
-    font-size: 0.76rem;
-}
-
-body.brand-body.app-shell-body .app-topbar-logout,
-body.brand-body.app-shell-body .app-drawer-logout {
-    margin: 0;
+    min-height: 100vh;
 }
 
 body.brand-body.app-shell-body .app-main {
@@ -2313,7 +2239,125 @@ body.brand-body.app-shell-body .app-main {
 
 body.brand-body.app-shell-body .ops-content {
     display: grid;
-    gap: 0.9rem;
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .app-topbar {
+    position: sticky;
+    top: 0.55rem;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 3.3rem;
+    padding: 0.55rem 0.75rem;
+    overflow: visible;
+}
+
+body.brand-body.app-shell-body .app-topbar-start,
+body.brand-body.app-shell-body .app-topbar-end,
+body.brand-body.app-shell-body .app-topbar-brand,
+body.brand-body.app-shell-body .app-drawer-brand,
+body.brand-body.app-shell-body .app-drawer-user,
+body.brand-body.app-shell-body .ops-index-link,
+body.brand-body.app-shell-body .page-actions-compact,
+body.brand-body.app-shell-body .action-buttons,
+body.brand-body.app-shell-body .inline-actions,
+body.brand-body.app-shell-body .ops-toolbar-links {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .app-topbar-copy,
+body.brand-body.app-shell-body .app-drawer-brand-copy,
+body.brand-body.app-shell-body .app-drawer-user-copy,
+body.brand-body.app-shell-body .ops-page-headline {
+    display: grid;
+    gap: 0.08rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .app-topbar-copy strong,
+body.brand-body.app-shell-body .app-drawer-brand-copy strong,
+body.brand-body.app-shell-body .ops-section-heading strong,
+body.brand-body.app-shell-body .ops-index-link strong {
+    color: var(--brand-slate-dark);
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .app-topbar-copy strong {
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .app-topbar-meta,
+body.brand-body.app-shell-body .app-drawer-brand-copy span,
+body.brand-body.app-shell-body .app-drawer-user-copy span,
+body.brand-body.app-shell-body .ops-page-meta {
+    color: var(--brand-soft);
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .app-topbar-mark,
+body.brand-body.app-shell-body .app-drawer-mark {
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 8px;
+    flex: 0 0 auto;
+}
+
+body.brand-body.app-shell-body .app-topbar-label {
+    color: var(--brand-slate-dark);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .app-role-chip,
+body.brand-body.app-shell-body .ops-status,
+body.brand-body.app-shell-body .status-chip,
+body.brand-body.app-shell-body .role-badge,
+body.brand-body.app-shell-body .module-tag,
+body.brand-body.app-shell-body .nav-tag,
+body.brand-body.app-shell-body .status-badge,
+body.brand-body.app-shell-body .item-state,
+body.brand-body.app-shell-body .stock-badge,
+body.brand-body.app-shell-body .badge-compact {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.4rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .app-role-chip {
+    border: 1px solid rgba(53, 83, 107, 0.12);
+    background: rgba(244, 248, 251, 0.95);
+    color: var(--brand-slate-dark);
+}
+
+body.brand-body.app-shell-body .app-topbar-user {
+    color: var(--brand-slate-dark);
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .app-topbar-logout,
+body.brand-body.app-shell-body .app-drawer-logout {
+    margin: 0;
 }
 
 body.brand-body.app-shell-body .app-menu-toggle {
@@ -2321,20 +2365,20 @@ body.brand-body.app-shell-body .app-menu-toggle {
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    gap: 0.18rem;
-    width: 2.4rem;
-    height: 2.4rem;
+    gap: 0.16rem;
+    width: 2rem;
+    height: 2rem;
     padding: 0;
     border: 1px solid rgba(53, 83, 107, 0.14);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.88);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.92);
     color: var(--brand-slate-dark);
     box-shadow: none;
 }
 
 body.brand-body.app-shell-body .app-menu-toggle span {
-    width: 0.95rem;
-    height: 2px;
+    width: 0.86rem;
+    height: 1.5px;
     border-radius: 999px;
     background: currentColor;
 }
@@ -2343,16 +2387,16 @@ body.brand-body.app-shell-body .app-drawer-backdrop {
     position: fixed;
     inset: 0;
     z-index: 59;
-    background: rgba(9, 19, 26, 0.32);
+    background: rgba(9, 19, 26, 0.3);
 }
 
 body.brand-body.app-shell-body .app-drawer {
     position: fixed;
-    top: 0.75rem;
-    left: 0.75rem;
-    bottom: 0.75rem;
+    top: 0.55rem;
+    left: 0.55rem;
+    bottom: 0.55rem;
     z-index: 60;
-    width: min(21rem, calc(100vw - 1.5rem));
+    width: min(19rem, calc(100vw - 1.1rem));
     transform: translateX(calc(-100% - 1rem));
     transition: transform 0.18s ease;
 }
@@ -2365,26 +2409,42 @@ body.brand-body.app-shell-body .app-drawer.is-open {
 body.brand-body.app-shell-body .app-drawer-panel {
     display: grid;
     grid-template-rows: auto auto 1fr auto;
-    gap: 0.9rem;
+    gap: 0.85rem;
     height: 100%;
-    padding: 0.95rem;
+    padding: 0.85rem;
 }
 
-body.brand-body.app-shell-body .app-drawer-header,
-body.brand-body.app-shell-body .app-drawer-user,
-body.brand-body.app-shell-body .app-drawer-user-meta {
+body.brand-body.app-shell-body .app-drawer-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
 }
 
+body.brand-body.app-shell-body .app-drawer-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 8px;
+    background: var(--brand-slate-dark);
+    color: #f8fafc;
+    font-size: 0.74rem;
+    font-weight: 800;
+    flex: 0 0 auto;
+}
+
 body.brand-body.app-shell-body .app-drawer-user {
-    align-items: flex-start;
-    padding: 0.85rem;
-    border: 1px solid rgba(53, 83, 107, 0.12);
-    border-radius: 12px;
-    background: rgba(244, 248, 251, 0.92);
+    justify-content: flex-start;
+    padding: 0.65rem;
+    border: 1px solid rgba(53, 83, 107, 0.1);
+    border-radius: 10px;
+    background: rgba(247, 249, 251, 0.94);
+}
+
+body.brand-body.app-shell-body .app-drawer-user-copy strong {
+    font-size: 0.86rem;
 }
 
 body.brand-body.app-shell-body .app-drawer-nav {
@@ -2393,75 +2453,128 @@ body.brand-body.app-shell-body .app-drawer-nav {
     min-height: 0;
 }
 
+body.brand-body.app-shell-body .ops-nav {
+    gap: 0.5rem;
+}
+
 body.brand-body.app-shell-body .ops-nav-section {
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: none;
+    background: rgba(250, 251, 252, 0.98);
 }
 
 body.brand-body.app-shell-body .ops-nav-summary {
-    padding: 0.65rem 0.75rem;
+    padding: 0.58rem 0.7rem;
+}
+
+body.brand-body.app-shell-body .ops-nav-summary strong,
+body.brand-body.app-shell-body .ops-index-heading strong {
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .ops-nav-list,
+body.brand-body.app-shell-body .ops-index-list {
+    display: grid;
+    gap: 0.35rem;
+}
+
+body.brand-body.app-shell-body .ops-nav-list {
+    padding: 0 0.45rem 0.45rem;
 }
 
 body.brand-body.app-shell-body .ops-nav-link,
+body.brand-body.app-shell-body .ops-index-link,
 body.brand-body.app-shell-body .ops-action-card {
-    padding: 0.62rem 0.75rem;
-    border-radius: 10px;
+    justify-content: space-between;
+    padding: 0.58rem 0.7rem;
+    border: 1px solid rgba(53, 83, 107, 0.09);
+    border-radius: 9px;
+    background: #fff;
+    text-decoration: none;
+    transition: border-color 0.18s ease, background 0.18s ease;
 }
 
 body.brand-body.app-shell-body .ops-nav-link strong,
+body.brand-body.app-shell-body .ops-index-link strong,
 body.brand-body.app-shell-body .ops-action-card strong {
-    font-size: 0.88rem;
-    line-height: 1.25;
+    font-size: 0.84rem;
 }
 
-body.brand-body.app-shell-body .ops-status,
-body.brand-body.app-shell-body .status-chip,
-body.brand-body.app-shell-body .role-badge,
-body.brand-body.app-shell-body .module-tag,
-body.brand-body.app-shell-body .nav-tag,
-body.brand-body.app-shell-body .status-badge,
-body.brand-body.app-shell-body .item-state,
-body.brand-body.app-shell-body .stock-badge,
-body.brand-body.app-shell-body .badge-compact {
-    min-height: 1.3rem;
-    padding: 0.12rem 0.42rem;
-    font-size: 0.66rem;
-    letter-spacing: 0.04em;
+body.brand-body.app-shell-body .ops-nav-link:hover,
+body.brand-body.app-shell-body .ops-index-link:hover,
+body.brand-body.app-shell-body .ops-action-card:hover {
+    border-color: rgba(20, 184, 196, 0.22);
+    background: rgba(244, 248, 251, 0.95);
+    transform: none;
+}
+
+body.brand-body.app-shell-body .ops-nav-link.is-active,
+body.brand-body.app-shell-body .ops-index-link.is-active,
+body.brand-body.app-shell-body .ops-action-card.is-active {
+    border-color: rgba(20, 184, 196, 0.28);
+    background: rgba(20, 184, 196, 0.08);
+    box-shadow: none;
 }
 
 body.brand-body.app-shell-body .button-primary,
 body.brand-body.app-shell-body .button-secondary,
 body.brand-body.app-shell-body .compact-button,
 body.brand-body.app-shell-body .btn-compact {
-    min-height: 2.35rem;
-    padding: 0.46rem 0.8rem;
-    border-radius: 10px;
-    font-size: 0.84rem;
+    min-height: 2.1rem;
+    padding: 0.42rem 0.78rem;
+    border-radius: 9px;
+    font-size: 0.82rem;
     font-weight: 700;
     box-shadow: none;
 }
 
+body.brand-body.app-shell-body .button-primary {
+    background: var(--brand-slate-dark);
+    color: #f8fafc;
+}
+
+body.brand-body.app-shell-body .button-secondary {
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--brand-slate-dark);
+}
+
+body.brand-body.app-shell-body .button-primary:hover,
+body.brand-body.app-shell-body .button-secondary:hover {
+    transform: none;
+    filter: brightness(0.98);
+}
+
 body.brand-body.app-shell-body .btn-table {
-    min-height: 2rem;
-    padding: 0.34rem 0.65rem;
-    font-size: 0.78rem;
+    min-height: 1.95rem;
+    padding: 0.3rem 0.62rem;
+    font-size: 0.77rem;
 }
 
 body.brand-body.app-shell-body .auth-input {
-    min-height: 2.5rem;
-    padding: 0.52rem 0.72rem;
-    border-radius: 10px;
-    font-size: 0.86rem;
+    width: 100%;
+    min-height: 2.2rem;
+    padding: 0.45rem 0.68rem;
+    border-radius: 8px;
+    font-size: 0.83rem;
+    background: #fff;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .auth-field {
+    gap: 0.35rem;
 }
 
 body.brand-body.app-shell-body .auth-field span {
-    font-size: 0.77rem;
+    font-size: 0.75rem;
     font-weight: 700;
 }
 
 body.brand-body.app-shell-body .ops-breadcrumb {
-    gap: 0.35rem;
-    font-size: 0.77rem;
+    gap: 0.3rem;
+    font-size: 0.76rem;
+    color: #708390;
 }
 
 body.brand-body.app-shell-body .ops-page-header,
@@ -2472,18 +2585,41 @@ body.brand-body.app-shell-body .compact-filters,
 body.brand-body.app-shell-body .filters-compact,
 body.brand-body.app-shell-body .stock-summary,
 body.brand-body.app-shell-body .kpi-strip,
-body.brand-body.app-shell-body .ops-dashboard,
 body.brand-body.app-shell-body .ops-section-grid,
-body.brand-body.app-shell-body .ops-kpi-grid,
 body.brand-body.app-shell-body .data-toolbar,
 body.brand-body.app-shell-body .item-form,
 body.brand-body.app-shell-body .item-form-grid,
 body.brand-body.app-shell-body .form-grid,
-body.brand-body.app-shell-body .items-grid,
-body.brand-body.app-shell-body .ops-action-list {
+body.brand-body.app-shell-body .items-grid {
+    display: grid;
     gap: 0.7rem;
 }
 
+body.brand-body.app-shell-body .ops-page-header {
+    padding: 0.8rem 0.95rem;
+}
+
+body.brand-body.app-shell-body .ops-page-header--dense {
+    min-height: 0;
+}
+
+body.brand-body.app-shell-body .ops-page-title,
+body.brand-body.app-shell-body .page-title-compact {
+    margin: 0;
+    font-size: clamp(1.5rem, 2vw, 1.85rem);
+    line-height: 1.05;
+}
+
+body.brand-body.app-shell-body .ops-dashboard,
+body.brand-body.app-shell-body .ops-section-grid--dashboard {
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .ops-section-grid {
+    grid-template-columns: repeat(auto-fit, minmax(17.5rem, 1fr));
+}
+
+body.brand-body.app-shell-body .ops-index-card,
 body.brand-body.app-shell-body .stock-intro-card,
 body.brand-body.app-shell-body .stock-filter-card,
 body.brand-body.app-shell-body .stock-table-shell,
@@ -2491,49 +2627,93 @@ body.brand-body.app-shell-body .stock-mobile-card,
 body.brand-body.app-shell-body .item-filter-card,
 body.brand-body.app-shell-body .item-form-card,
 body.brand-body.app-shell-body .pagination-card,
-body.brand-body.app-shell-body .ops-dashboard-intro,
-body.brand-body.app-shell-body .ops-section-card,
-body.brand-body.app-shell-body .placeholder-card,
-body.brand-body.app-shell-body .placeholder-meta,
 body.brand-body.app-shell-body .item-card,
-body.brand-body.app-shell-body .item-empty-state {
-    padding: 0.95rem 1rem;
-    border-radius: 14px;
+body.brand-body.app-shell-body .item-empty-state,
+body.brand-body.app-shell-body .placeholder-card,
+body.brand-body.app-shell-body .placeholder-meta {
+    padding: 0.85rem 0.95rem;
+    border-radius: 12px;
 }
 
-body.brand-body.app-shell-body .ops-page-title,
-body.brand-body.app-shell-body .page-title-compact {
-    font-size: clamp(1.7rem, 2.4vw, 2.1rem);
-    line-height: 1.02;
+body.brand-body.app-shell-body .ops-index-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.65rem;
+}
+
+body.brand-body.app-shell-body .data-toolbar {
+    gap: 0.8rem;
+}
+
+body.brand-body.app-shell-body .view-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.18rem;
+    border: 1px solid rgba(53, 83, 107, 0.1);
+    border-radius: 9px;
+    background: rgba(247, 249, 251, 0.95);
+}
+
+body.brand-body.app-shell-body .view-switcher-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.95rem;
+    padding: 0.3rem 0.68rem;
+    border-radius: 7px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+body.brand-body.app-shell-body .view-switcher-link.is-active {
+    background: #fff;
+    color: var(--brand-slate-dark);
+}
+
+body.brand-body.app-shell-body .stock-summary {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+body.brand-body.app-shell-body .kpi-card,
+body.brand-body.app-shell-body .stock-summary-card,
+body.brand-body.app-shell-body .app-stat,
+body.brand-body.app-shell-body .kpi-compact {
+    padding: 0.75rem 0.8rem;
+    border-radius: 10px;
+}
+
+body.brand-body.app-shell-body .kpi-card strong,
+body.brand-body.app-shell-body .stock-summary-card strong,
+body.brand-body.app-shell-body .app-stat strong {
+    font-size: 0.75rem;
+    line-height: 1.25;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+body.brand-body.app-shell-body .kpi-card span,
+body.brand-body.app-shell-body .stock-summary-card span,
+body.brand-body.app-shell-body .app-stat span {
+    margin-top: 0.28rem;
+    font-size: clamp(1rem, 1.6vw, 1.25rem);
+    line-height: 1.1;
 }
 
 body.brand-body.app-shell-body .app-copy p,
-body.brand-body.app-shell-body .ops-section-note,
 body.brand-body.app-shell-body .item-card-description,
 body.brand-body.app-shell-body .item-empty-state p,
 body.brand-body.app-shell-body .stock-cell-main span,
 body.brand-body.app-shell-body .stock-mobile-card p {
-    font-size: 0.84rem;
-    line-height: 1.42;
+    font-size: 0.82rem;
+    line-height: 1.38;
 }
 
-body.brand-body.app-shell-body .view-switcher {
-    gap: 0.2rem;
-    padding: 0.2rem;
-    border-radius: 10px;
-}
-
-body.brand-body.app-shell-body .view-switcher-link {
-    min-height: 2rem;
-    padding: 0.35rem 0.7rem;
-    border-radius: 8px;
-    font-size: 0.78rem;
-}
-
-body.brand-body.app-shell-body .action-buttons,
-body.brand-body.app-shell-body .page-actions-compact,
-body.brand-body.app-shell-body .inline-actions {
-    gap: 0.45rem;
+body.brand-body.app-shell-body .stock-table-shell {
+    padding-top: 0.45rem;
 }
 
 body.brand-body.app-shell-body .data-table-wrap,
@@ -2542,7 +2722,8 @@ body.brand-body.app-shell-body .stock-table-wrap {
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    border-radius: 12px;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    border-radius: 10px;
 }
 
 body.brand-body.app-shell-body .data-table,
@@ -2550,11 +2731,17 @@ body.brand-body.app-shell-body .stock-table,
 body.brand-body.app-shell-body .table-compact {
     width: max(100%, 58rem);
     border-collapse: collapse;
-    font-size: 0.78rem;
+    font-size: 0.81rem;
 }
 
 body.brand-body.app-shell-body .stock-table {
     min-width: 74rem;
+}
+
+body.brand-body.app-shell-body .table-compact thead,
+body.brand-body.app-shell-body .data-table thead,
+body.brand-body.app-shell-body .stock-table thead {
+    background: #f3f6f8;
 }
 
 body.brand-body.app-shell-body .table-compact th,
@@ -2563,74 +2750,75 @@ body.brand-body.app-shell-body .data-table th,
 body.brand-body.app-shell-body .data-table td,
 body.brand-body.app-shell-body .stock-table th,
 body.brand-body.app-shell-body .stock-table td {
-    padding: 0.48rem 0.58rem;
+    padding: 0.52rem 0.6rem;
     vertical-align: top;
+    border-bottom: 1px solid rgba(53, 83, 107, 0.08);
 }
 
 body.brand-body.app-shell-body .table-compact th,
 body.brand-body.app-shell-body .data-table th,
 body.brand-body.app-shell-body .stock-table th {
-    font-size: 0.67rem;
+    color: #6d7d89;
+    font-size: 0.69rem;
+    font-weight: 800;
     letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .table-compact tbody tr:hover,
+body.brand-body.app-shell-body .data-table tbody tr:hover,
+body.brand-body.app-shell-body .stock-table tbody tr:hover {
+    background: rgba(20, 184, 196, 0.04);
 }
 
 body.brand-body.app-shell-body .stock-total {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
+    font-weight: 700;
 }
 
-body.brand-body.app-shell-body .kpi-card,
-body.brand-body.app-shell-body .stock-summary-card,
-body.brand-body.app-shell-body .app-stat,
-body.brand-body.app-shell-body .kpi-compact {
-    padding: 0.7rem 0.8rem;
-    border-radius: 12px;
+body.brand-body.app-shell-body .stock-mobile-card {
+    gap: 0.75rem;
 }
 
-body.brand-body.app-shell-body .kpi-card span,
-body.brand-body.app-shell-body .stock-summary-card span,
-body.brand-body.app-shell-body .app-stat span {
-    font-size: clamp(1rem, 1.7vw, 1.35rem);
+body.brand-body.app-shell-body .item-card,
+body.brand-body.app-shell-body .stock-mobile-card {
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
 }
 
 body.brand-body.app-shell-body .item-card-metadata div,
 body.brand-body.app-shell-body .stock-mobile-metrics div,
 body.brand-body.app-shell-body .pico-detail-list li,
 body.brand-body.app-shell-body .item-form-hint {
-    padding: 0.65rem 0.72rem;
-    border-radius: 10px;
+    padding: 0.55rem 0.65rem;
+    border-radius: 9px;
 }
 
 body.brand-body.app-shell-body .toggle-field {
-    font-size: 0.86rem;
+    font-size: 0.84rem;
 }
 
 body.brand-body.app-shell-body .alert {
     margin-bottom: 0;
-    padding: 0.7rem 0.85rem;
-    border-radius: 10px;
-    font-size: 0.82rem;
+    padding: 0.66rem 0.8rem;
+    border-radius: 9px;
+    font-size: 0.8rem;
 }
 
-body.brand-body.app-shell-body .ops-section-grid {
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-}
-
-body.brand-body.app-shell-body .ops-action-card {
-    grid-template-columns: minmax(0, 1fr) auto;
+body.brand-body.app-shell-body .pagination-card {
+    padding-block: 0.55rem;
 }
 
 @media (min-width: 768px) {
-    body.brand-body.app-shell-body .page-header-compact,
     body.brand-body.app-shell-body .ops-page-header,
-    body.brand-body.app-shell-body .toolbar-compact,
-    body.brand-body.app-shell-body .compact-toolbar {
+    body.brand-body.app-shell-body .page-header-compact,
+    body.brand-body.app-shell-body .toolbar-compact {
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
     }
 
-    body.brand-body.app-shell-body .stock-summary,
-    body.brand-body.app-shell-body .kpi-strip {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+    body.brand-body.app-shell-body .compact-toolbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
     }
 
     body.brand-body.app-shell-body .stock-filters,
@@ -2640,14 +2828,14 @@ body.brand-body.app-shell-body .ops-action-card {
     }
 
     body.brand-body.app-shell-body .item-filter-form {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) auto;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.8fr) auto;
         align-items: end;
     }
 }
 
 @media (min-width: 1024px) {
     body.brand-body.app-shell-body .app-shell {
-        width: min(100% - 2rem, 1500px);
+        width: min(100% - 2rem, 1560px);
     }
 
     body.brand-body.app-shell-body .stock-filters,
@@ -2663,29 +2851,29 @@ body.brand-body.app-shell-body .ops-action-card {
 @media (max-width: 767px) {
     body.brand-body.app-shell-body .app-shell {
         width: min(100% - 0.9rem, 42rem);
-        padding-top: 0.45rem;
+        padding-top: 0.35rem;
     }
 
     body.brand-body.app-shell-body .app-topbar {
-        top: 0.45rem;
-        padding: 0.65rem 0.75rem;
+        top: 0.35rem;
+        padding: 0.5rem 0.65rem;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-label,
+    body.brand-body.app-shell-body .app-role-chip {
+        display: none;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-meta {
+        display: none;
     }
 
     body.brand-body.app-shell-body .app-topbar-copy strong {
         white-space: normal;
     }
 
-    body.brand-body.app-shell-body .app-topbar-end {
-        gap: 0.5rem;
-    }
-
-    body.brand-body.app-shell-body .app-topbar-user span,
-    body.brand-body.app-shell-body .app-topbar-logo {
-        display: none;
-    }
-
-    body.brand-body.app-shell-body .page-header-compact,
     body.brand-body.app-shell-body .ops-page-header,
+    body.brand-body.app-shell-body .page-header-compact,
     body.brand-body.app-shell-body .toolbar-compact,
     body.brand-body.app-shell-body .compact-toolbar {
         grid-template-columns: 1fr;
@@ -2706,22 +2894,14 @@ body.brand-body.app-shell-body .ops-action-card {
 }
 
 @media (max-width: 540px) {
-    body.brand-body.app-shell-body .app-topbar {
-        flex-wrap: wrap;
-    }
-
-    body.brand-body.app-shell-body .app-topbar-start,
     body.brand-body.app-shell-body .app-topbar-end {
-        width: 100%;
-        justify-content: space-between;
+        gap: 0.4rem;
     }
 
     body.brand-body.app-shell-body .app-topbar-user {
-        min-width: 0;
-    }
-
-    body.brand-body.app-shell-body .app-topbar-user strong {
-        font-size: 0.8rem;
+        max-width: 6.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     body.brand-body.app-shell-body .action-buttons,
@@ -2730,5 +2910,10 @@ body.brand-body.app-shell-body .ops-action-card {
     body.brand-body.app-shell-body .item-card-actions {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    body.brand-body.app-shell-body .ops-toolbar-links {
+        flex-direction: row;
+        align-items: center;
     }
 }

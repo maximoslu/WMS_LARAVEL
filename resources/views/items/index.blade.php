@@ -15,17 +15,15 @@
     </nav>
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
-        <div class="app-copy">
-            <span class="status-chip small-badge badge-compact">Articulos</span>
+        <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Articulos</h2>
-            <p>Vista lista por defecto para consulta y mantenimiento rapido.</p>
+            <span class="ops-page-meta">{{ $items->total() }} registros</span>
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons">
             @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
                 <a href="{{ route('items.create') }}" class="button-primary compact-button btn-compact">Nuevo articulo</a>
             @endif
-            <a href="{{ route('stock.index') }}" class="button-secondary compact-button btn-compact">Volver a stock</a>
         </div>
     </section>
 
