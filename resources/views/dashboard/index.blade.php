@@ -37,6 +37,12 @@
                     <span class="ops-status">{{ count($section['children']) }} accesos</span>
                 </div>
 
+                @if ($section['key'] === 'stock')
+                    <p class="ops-section-note">
+                        Prioridad operativa: consulta primero Stock actual y despues el maestro de Articulos.
+                    </p>
+                @endif
+
                 <div class="ops-action-list">
                     @foreach ($section['children'] as $child)
                         <a href="{{ route($child['route']) }}" class="ops-action-card{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}">

@@ -2,19 +2,26 @@
 
 namespace App\Models;
 
-use Database\Factories\ClientFactory;
+use Database\Factories\LocationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Client extends Model
+class Location extends Model
 {
-    /** @use HasFactory<ClientFactory> */
+    /** @use HasFactory<LocationFactory> */
     use HasFactory;
 
     protected $fillable = [
-        'name',
+        'warehouse_id',
         'code',
+        'name',
+        'zone',
+        'aisle',
+        'rack',
+        'level',
+        'position',
         'active',
     ];
 
@@ -25,18 +32,13 @@ class Client extends Model
         ];
     }
 
-    public function items(): HasMany
+    public function warehouse(): BelongsTo
     {
-        return $this->hasMany(Item::class);
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function stockPallets(): HasMany
     {
         return $this->hasMany(StockPallet::class);
-    }
-
-    public function warehouses(): HasMany
-    {
-        return $this->hasMany(Warehouse::class);
     }
 }

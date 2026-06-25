@@ -6,7 +6,10 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\ModulePlaceholderController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\WarehouseController;
 use App\Models\Role;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -52,18 +55,31 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('items.toggle-active');
 
-    Route::get('/stock', ModulePlaceholderController::class)
-        ->middleware('minimum.role:'.Role::CLIENTE)
-        ->defaults('module', 'stock')
-        ->name('modules.stock');
+    Route::get('/stock', [StockController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('stock.index');
+    Route::get('/ubicaciones', [LocationController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('locations.index');
+    Route::get('/ubicaciones/crear', [LocationController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('locations.create');
+    Route::post('/ubicaciones', [LocationController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('locations.store');
+    Route::get('/ubicaciones/{location}/editar', [LocationController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('locations.edit');
+    Route::put('/ubicaciones/{location}', [LocationController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('locations.update');
+    Route::patch('/ubicaciones/{location}/activar-desactivar', [LocationController::class, 'toggleActive'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('locations.toggle-active');
     Route::get('/palets', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->defaults('module', 'pallets')
         ->name('modules.pallets');
-    Route::get('/ubicaciones', ModulePlaceholderController::class)
-        ->middleware('minimum.role:'.Role::ALMACEN)
-        ->defaults('module', 'locations')
-        ->name('modules.locations');
 
     Route::get('/solicitudes', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::CLIENTE)
@@ -85,10 +101,24 @@ Route::middleware('auth')->group(function (): void {
         ->defaults('module', 'clientes')
         ->name('modules.clients');
 
-    Route::get('/almacenes', ModulePlaceholderController::class)
+    Route::get('/almacenes', [WarehouseController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('warehouses.index');
+    Route::get('/almacenes/crear', [WarehouseController::class, 'create'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
-        ->defaults('module', 'almacenes')
-        ->name('modules.warehouses');
+        ->name('warehouses.create');
+    Route::post('/almacenes', [WarehouseController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('warehouses.store');
+    Route::get('/almacenes/{warehouse}/editar', [WarehouseController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('warehouses.edit');
+    Route::put('/almacenes/{warehouse}', [WarehouseController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('warehouses.update');
+    Route::patch('/almacenes/{warehouse}/activar-desactivar', [WarehouseController::class, 'toggleActive'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('warehouses.toggle-active');
 
     Route::get('/usuarios', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::SUPERADMIN)

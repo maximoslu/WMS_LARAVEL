@@ -103,6 +103,70 @@ class ItemManagementTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_items_index_defaults_to_list_view(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->firstOrFail();
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-LIST-01',
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('items.index'))
+            ->assertOk()
+            ->assertSee('Vista lista de articulos')
+            ->assertSee('SKU-LIST-01');
+    }
+
+    public function test_items_index_supports_cards_view(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->firstOrFail();
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-CARD-01',
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('items.index', ['view' => 'cards']))
+            ->assertOk()
+            ->assertSee('Vista tarjetas de articulos')
+            ->assertSee('SKU-CARD-01');
+    }
+
+    public function test_item_filters_keep_working_in_list_view(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->firstOrFail();
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-FILTER-01',
+            'description' => 'Encontrable',
+        ]);
+
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-FILTER-02',
+            'description' => 'No mostrar',
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('items.index', ['search' => 'Encontrable']))
+            ->assertOk()
+            ->assertSee('SKU-FILTER-01')
+            ->assertDontSee('SKU-FILTER-02');
+    }
+
     public function test_cliente_cannot_create_items(): void
     {
         $this->seedBaseData();

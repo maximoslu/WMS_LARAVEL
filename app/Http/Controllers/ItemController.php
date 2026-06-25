@@ -18,6 +18,8 @@ class ItemController extends Controller
         $clientFilter = $request->integer('client_id');
         $search = trim((string) $request->string('search'));
         $status = (string) $request->string('status', 'active');
+        $view = (string) $request->string('view', 'list');
+        $view = in_array($view, ['list', 'cards'], true) ? $view : 'list';
 
         $items = Item::query()
             ->with('client')
@@ -31,8 +33,10 @@ class ItemController extends Controller
             })
             ->when($status === 'active', fn ($query) => $query->where('active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('active', false))
+            ->orderBy('client_id')
             ->orderBy('sku')
-            ->paginate(12)
+            ->orderBy('lot_key')
+            ->paginate($view === 'cards' ? 12 : 20)
             ->withQueryString();
 
         return view('items.index', [
@@ -42,6 +46,7 @@ class ItemController extends Controller
                 'client_id' => $clientFilter > 0 ? $clientFilter : null,
                 'search' => $search,
                 'status' => in_array($status, ['all', 'active', 'inactive'], true) ? $status : 'active',
+                'view' => $view,
             ],
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
