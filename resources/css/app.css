@@ -2435,6 +2435,15 @@ body.brand-body.app-shell-body .app-drawer-avatar {
     flex: 0 0 auto;
 }
 
+body.brand-body.app-shell-body .app-drawer-avatar-image,
+body.brand-body.app-shell-body .profile-avatar-image {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 8px;
+    object-fit: cover;
+    flex: 0 0 auto;
+}
+
 body.brand-body.app-shell-body .app-drawer-user {
     justify-content: flex-start;
     padding: 0.65rem;
@@ -2647,6 +2656,52 @@ body.brand-body.app-shell-body .data-toolbar {
     gap: 0.8rem;
 }
 
+body.brand-body.app-shell-body .profile-layout {
+    display: grid;
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .profile-avatar-card {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+}
+
+body.brand-body.app-shell-body .profile-avatar-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 14px;
+    background: rgba(244, 248, 251, 0.95);
+    border: 1px solid rgba(53, 83, 107, 0.1);
+}
+
+body.brand-body.app-shell-body .profile-avatar-image {
+    width: 100%;
+    height: 100%;
+    border-radius: 14px;
+}
+
+body.brand-body.app-shell-body .profile-avatar-initials {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 14px;
+    background: var(--brand-slate-dark);
+    color: #f8fafc;
+    font-size: 1.3rem;
+    font-weight: 800;
+}
+
+body.brand-body.app-shell-body .profile-divider {
+    height: 1px;
+    background: rgba(53, 83, 107, 0.1);
+}
+
 body.brand-body.app-shell-body .view-switcher {
     display: inline-flex;
     align-items: center;
@@ -2710,6 +2765,27 @@ body.brand-body.app-shell-body .stock-cell-main span,
 body.brand-body.app-shell-body .stock-mobile-card p {
     font-size: 0.82rem;
     line-height: 1.38;
+}
+
+body.brand-body.app-shell-body .helper-text {
+    color: var(--brand-soft);
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .helper-text--error {
+    color: var(--brand-danger);
+}
+
+body.brand-body.app-shell-body .users-note {
+    padding: 0.75rem 0.9rem;
+}
+
+body.brand-body.app-shell-body .users-note p,
+body.brand-body.app-shell-body .users-table-email {
+    margin: 0;
+    color: var(--brand-soft);
+    font-size: 0.78rem;
 }
 
 body.brand-body.app-shell-body .stock-table-shell {
@@ -2809,6 +2885,11 @@ body.brand-body.app-shell-body .pagination-card {
 }
 
 @media (min-width: 768px) {
+    body.brand-body.app-shell-body .profile-layout {
+        grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
+        align-items: start;
+    }
+
     body.brand-body.app-shell-body .ops-page-header,
     body.brand-body.app-shell-body .page-header-compact,
     body.brand-body.app-shell-body .toolbar-compact {
@@ -2830,6 +2911,10 @@ body.brand-body.app-shell-body .pagination-card {
     body.brand-body.app-shell-body .item-filter-form {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.8fr) auto;
         align-items: end;
+    }
+
+    body.brand-body.app-shell-body .users-filter-form {
+        grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 0.8fr)) auto;
     }
 }
 

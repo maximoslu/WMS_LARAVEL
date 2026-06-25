@@ -8,7 +8,9 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\ModulePlaceholderController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarehouseController;
 use App\Models\Role;
 use Illuminate\Support\Facades\Auth;
@@ -35,6 +37,9 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+    Route::get('/perfil', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/perfil', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/perfil/avatar', [ProfileController::class, 'destroyAvatar'])->name('profile.avatar.destroy');
 
     Route::get('/articulos', [ItemController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
@@ -120,10 +125,18 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('warehouses.toggle-active');
 
-    Route::get('/usuarios', ModulePlaceholderController::class)
+    Route::get('/usuarios', [UserManagementController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('users.index');
+    Route::get('/usuarios/{user}/editar', [UserManagementController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('users.edit');
+    Route::put('/usuarios/{user}', [UserManagementController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('users.update');
+    Route::patch('/usuarios/{user}/activar-desactivar', [UserManagementController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
-        ->defaults('module', 'usuarios')
-        ->name('modules.users');
+        ->name('users.toggle-active');
 
     Route::get('/auditoria', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::ADMINISTRACION)

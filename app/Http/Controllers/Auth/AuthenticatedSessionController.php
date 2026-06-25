@@ -26,7 +26,10 @@ class AuthenticatedSessionController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        if (! Auth::attempt([
+            ...$credentials,
+            'active' => true,
+        ], $request->boolean('remember'))) {
             throw ValidationException::withMessages([
                 'email' => 'No hemos podido validar tus credenciales. Revisa el email y la contraseña.',
             ]);

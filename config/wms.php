@@ -146,15 +146,15 @@ return [
             'children' => [
                 [
                     'key' => 'usuarios',
-                    'route' => 'modules.users',
+                    'route' => 'users.index',
                     'path' => '/usuarios',
                     'title' => 'Usuarios y roles',
-                    'summary' => 'Jerarquia de accesos y gobierno funcional del sistema.',
-                    'minimum_role' => 'superadmin',
+                    'summary' => 'Gestion de usuarios, asignacion de cliente y control de roles.',
+                    'minimum_role' => 'administracion',
                     'tag' => 'Seguridad',
-                    'status' => 'placeholder',
-                    'next_step' => 'Extender gestion de usuarios y asignacion por cliente.',
-                    'active_patterns' => ['modules.users'],
+                    'status' => 'ready',
+                    'next_step' => 'Extender altas operativas y flujos de aprobacion de acceso.',
+                    'active_patterns' => ['users.*'],
                 ],
                 [
                     'key' => 'auditoria',
