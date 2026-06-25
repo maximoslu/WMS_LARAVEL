@@ -23,7 +23,7 @@
                 @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
                     <a href="{{ route('items.create') }}" class="button-primary">Nuevo articulo</a>
                 @endif
-                <a href="{{ route('modules.stock') }}" class="button-secondary">Volver a Stock</a>
+                <a href="{{ route('stock.index') }}" class="button-secondary">Volver a Stock</a>
             </div>
         </article>
 

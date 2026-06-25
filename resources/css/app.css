@@ -1216,6 +1216,178 @@ button {
     font-weight: 700;
 }
 
+.ops-section-note {
+    margin: 0;
+    color: var(--brand-soft);
+    line-height: 1.55;
+}
+
+.stock-intro-card,
+.stock-filter-card,
+.stock-table-shell,
+.stock-mobile-card {
+    padding: 1.25rem;
+}
+
+.stock-intro-card,
+.stock-mobile-card {
+    display: grid;
+    gap: 1rem;
+}
+
+.stock-subtitle {
+    margin: 0;
+    color: var(--brand-slate-dark);
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+.stock-summary {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.stock-summary-card {
+    display: grid;
+    gap: 0.35rem;
+    padding: 1.1rem 1.2rem;
+}
+
+.stock-summary-card strong {
+    color: var(--brand-soft);
+    font-size: 0.84rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.stock-summary-card span {
+    color: var(--brand-slate-dark);
+    font-family: 'Space Grotesk', var(--font-sans);
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 700;
+    letter-spacing: -0.05em;
+}
+
+.stock-filters {
+    display: grid;
+    gap: 1rem;
+}
+
+.stock-filter-actions {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.stock-table-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 18px;
+}
+
+.stock-table {
+    width: 100%;
+    min-width: 76rem;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+}
+
+.stock-table th,
+.stock-table td {
+    padding: 0.9rem 0.8rem;
+    border-bottom: 1px solid rgba(53, 83, 107, 0.08);
+    vertical-align: top;
+    text-align: left;
+}
+
+.stock-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(244, 248, 251, 0.98);
+    color: var(--brand-soft);
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.stock-row:hover td {
+    background: rgba(20, 184, 196, 0.04);
+}
+
+.stock-cell-main {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.stock-cell-main strong {
+    color: var(--brand-slate-dark);
+}
+
+.stock-cell-main span,
+.stock-mobile-card p,
+.stock-mobile-metrics span,
+.stock-note {
+    margin: 0;
+    color: var(--brand-soft);
+    line-height: 1.5;
+}
+
+.stock-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    min-height: 1.9rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(19, 34, 46, 0.08);
+    color: var(--brand-slate-dark);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.stock-badge-pico {
+    background: rgba(180, 35, 24, 0.12);
+    color: var(--brand-danger);
+}
+
+.stock-total {
+    color: var(--brand-slate-dark);
+    font-family: 'Space Grotesk', var(--font-sans);
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.stock-mobile-list {
+    display: grid;
+    gap: 1rem;
+}
+
+.stock-mobile-metrics {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stock-mobile-metrics div {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.85rem 0.95rem;
+    border-radius: 18px;
+    background: var(--brand-surface);
+    border: 1px solid rgba(53, 83, 107, 0.08);
+}
+
+.stock-pill-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
 .pagination-card nav {
     width: 100%;
 }
@@ -1288,13 +1460,15 @@ button {
     }
 
     .item-filter-form,
-    .item-form-grid {
+    .item-form-grid,
+    .stock-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .item-filter-actions,
     .item-form-actions,
-    .item-card-actions {
+    .item-card-actions,
+    .stock-filter-actions {
         grid-auto-flow: column;
         justify-content: flex-start;
     }
@@ -1305,6 +1479,10 @@ button {
 
     .item-card-metadata {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stock-mobile-list {
+        display: none;
     }
 }
 
@@ -1355,6 +1533,19 @@ button {
 
     .items-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .stock-summary {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .stock-filters {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: end;
+    }
+
+    .stock-filter-actions {
+        grid-column: 1 / -1;
     }
 }
 
@@ -1446,8 +1637,18 @@ button {
         align-items: stretch;
     }
 
+    .stock-mobile-metrics {
+        grid-template-columns: 1fr;
+    }
+
     .auth-line,
     .auth-grid {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .stock-table-shell {
         display: none;
     }
 }
