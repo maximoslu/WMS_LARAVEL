@@ -97,7 +97,7 @@ class WmsNavigation
             'status' => $status,
             'status_label' => match ($status) {
                 'ready' => 'Disponible',
-                'placeholder' => 'En preparacion',
+                'placeholder' => 'Proximamente',
                 default => ucfirst((string) $status),
             },
         ];

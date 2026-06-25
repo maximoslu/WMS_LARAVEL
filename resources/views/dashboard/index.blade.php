@@ -8,7 +8,6 @@
             <div class="app-copy">
                 <span class="status-chip">Panel operativo</span>
                 <h2 class="app-page-title">Accesos rapidos por seccion</h2>
-                <p>La home se reorganiza por areas operativas para reducir ruido visual y permitir llegar antes a cada modulo del WMS.</p>
             </div>
 
             <div class="ops-kpi-grid">
@@ -34,22 +33,15 @@
         @foreach ($navigationSections as $section)
             <article class="surface-card ops-section-card">
                 <div class="ops-section-heading">
-                    <div class="app-copy">
-                        <span class="module-tag">{{ $section['title'] }}</span>
-                        <strong>{{ $section['summary'] }}</strong>
-                    </div>
+                    <strong>{{ $section['title'] }}</strong>
                     <span class="ops-status">{{ count($section['children']) }} accesos</span>
                 </div>
 
                 <div class="ops-action-list">
                     @foreach ($section['children'] as $child)
                         <a href="{{ route($child['route']) }}" class="ops-action-card{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}">
-                            <div class="ops-action-copy">
-                                <strong>{{ $child['title'] }}</strong>
-                                <p>{{ $child['summary'] }}</p>
-                            </div>
+                            <strong>{{ $child['title'] }}</strong>
                             <div class="ops-action-meta">
-                                <span class="module-tag">{{ $child['tag'] }}</span>
                                 <span class="ops-status {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
                                     {{ $child['status_label'] }}
                                 </span>

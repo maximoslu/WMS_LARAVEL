@@ -23,7 +23,6 @@
 
                     <div class="ops-brand-copy">
                         <span class="status-chip">MAXIMO WMS</span>
-                        <p>Acceso operativo agrupado por areas para trabajar mas rapido en almacen, gestion y sistema.</p>
                     </div>
                 </div>
 
@@ -46,10 +45,7 @@
 
                         <details class="ops-nav-section" @if($sectionActive) open @endif>
                             <summary class="ops-nav-summary">
-                                <div>
-                                    <strong>{{ $section['title'] }}</strong>
-                                    <span>{{ $section['summary'] }}</span>
-                                </div>
+                                <strong>{{ $section['title'] }}</strong>
                                 <span class="ops-status">{{ count($section['children']) }}</span>
                             </summary>
 
@@ -58,12 +54,8 @@
                                     @php($isActive = request()->routeIs(...($child['active_patterns'] ?? [$child['route']])))
 
                                     <a href="{{ route($child['route']) }}" class="ops-nav-link{{ $isActive ? ' is-active' : '' }}">
-                                        <div>
-                                            <strong>{{ $child['title'] }}</strong>
-                                            <span>{{ $child['summary'] }}</span>
-                                        </div>
+                                        <strong>{{ $child['title'] }}</strong>
                                         <span class="ops-link-meta">
-                                            <span class="module-tag">{{ $child['tag'] }}</span>
                                             <span class="ops-status {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
                                                 {{ $child['status_label'] }}
                                             </span>
@@ -80,7 +72,6 @@
                 <header class="ops-topbar surface-card">
                     <div class="ops-topbar-copy">
                         <span class="status-chip">Panel operativo</span>
-                        <p>Navegacion compacta, rol visible y accesos rapidos listos para uso diario.</p>
                     </div>
 
                     <div class="ops-topbar-meta">
