@@ -11,17 +11,16 @@
         <span>Almacenes</span>
     </nav>
 
-    <section class="surface-card stock-intro-card">
+    <section class="surface-card ops-page-header stock-intro-card compact-card">
         <div class="app-copy">
-            <span class="status-chip">Gestion · Estructura</span>
-            <h2 class="app-page-title">Almacenes</h2>
-            <p class="stock-subtitle">Base operativa para ubicaciones y stock</p>
-            <p>En esta fase se gestionan almacenes operativos generales y, si hace falta, almacenes asociados a cliente.</p>
+            <span class="status-chip small-badge">Almacenes</span>
+            <h2 class="ops-page-title">Almacenes</h2>
+            <p>Estructura base para ubicaciones y stock.</p>
         </div>
 
         @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-            <div class="items-hero-actions">
-                <a href="{{ route('warehouses.create') }}" class="button-primary">Nuevo almacen</a>
+            <div class="ops-page-actions action-buttons">
+                <a href="{{ route('warehouses.create') }}" class="button-primary compact-button">Nuevo almacen</a>
             </div>
         @endif
     </section>
@@ -30,8 +29,8 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="surface-card item-filter-card">
-        <form method="GET" action="{{ route('warehouses.index') }}" class="stock-filters">
+    <section class="surface-card item-filter-card compact-card">
+        <form method="GET" action="{{ route('warehouses.index') }}" class="stock-filters compact-filters">
             <label class="auth-field">
                 <span>Codigo o nombre</span>
                 <input type="text" name="search" value="{{ $filters['search'] }}" class="auth-input" placeholder="Buscar almacen">
@@ -46,21 +45,21 @@
                 </select>
             </label>
 
-            <div class="stock-filter-actions">
-                <button type="submit" class="button-primary">Filtrar</button>
-                <a href="{{ route('warehouses.index') }}" class="button-secondary">Limpiar</a>
+            <div class="stock-filter-actions action-buttons">
+                <button type="submit" class="button-primary compact-button">Filtrar</button>
+                <a href="{{ route('warehouses.index') }}" class="button-secondary compact-button">Limpiar</a>
             </div>
         </form>
     </section>
 
     @if ($warehouses->isEmpty())
-        <article class="surface-card item-empty-state">
-            <span class="status-chip">Sin resultados</span>
+        <article class="surface-card item-empty-state compact-card">
+            <span class="status-chip small-badge">Sin resultados</span>
             <h3>No hay almacenes con estos filtros</h3>
             <p>Crea el primer almacen operativo o ajusta la busqueda.</p>
         </article>
     @else
-        <section class="surface-card stock-table-shell">
+        <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
                 <table class="data-table" aria-label="Listado de almacenes">
                     <thead>
@@ -87,12 +86,12 @@
                                 </td>
                                 <td>
                                     @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-                                        <div class="inline-actions">
-                                            <a href="{{ route('warehouses.edit', $warehouse) }}" class="button-secondary">Editar</a>
+                                        <div class="inline-actions action-buttons">
+                                            <a href="{{ route('warehouses.edit', $warehouse) }}" class="button-secondary compact-button">Editar</a>
                                             <form method="POST" action="{{ route('warehouses.toggle-active', $warehouse) }}">
                                                 @csrf
                                                 @method('PATCH')
-                                                <button type="submit" class="button-secondary">
+                                                <button type="submit" class="button-secondary compact-button">
                                                     {{ $warehouse->active ? 'Desactivar' : 'Activar' }}
                                                 </button>
                                             </form>
@@ -110,7 +109,7 @@
     @endif
 
     @if ($warehouses->hasPages())
-        <div class="pagination-card surface-card">
+        <div class="pagination-card surface-card compact-card">
             {{ $warehouses->links() }}
         </div>
     @endif

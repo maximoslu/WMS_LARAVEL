@@ -1529,10 +1529,415 @@ button {
     width: 100%;
 }
 
+:root {
+    --brand-radius: 18px;
+    --brand-shadow: 0 12px 28px rgba(9, 19, 26, 0.1);
+    --brand-shadow-soft: 0 6px 16px rgba(9, 19, 26, 0.07);
+}
+
+.surface-card {
+    border-radius: var(--brand-radius);
+    box-shadow: var(--brand-shadow-soft);
+    backdrop-filter: blur(14px);
+}
+
+.brand-logo-horizontal {
+    width: clamp(8.75rem, 14vw, 11.5rem);
+}
+
+.button-primary,
+.button-secondary,
+.compact-button {
+    min-height: 2.55rem;
+    padding: 0.58rem 0.92rem;
+    border-radius: 12px;
+    font-size: 0.88rem;
+}
+
+.button-primary {
+    box-shadow: 0 10px 20px rgba(13, 139, 157, 0.18);
+}
+
+.button-secondary {
+    box-shadow: none;
+}
+
+.status-chip,
+.role-badge,
+.module-tag,
+.nav-tag,
+.small-badge,
+.status-badge,
+.item-state,
+.stock-badge {
+    min-height: 1.45rem;
+    padding: 0.14rem 0.52rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+}
+
+.auth-field {
+    gap: 0.35rem;
+}
+
+.auth-field span {
+    font-size: 0.78rem;
+}
+
+.auth-input {
+    min-height: 2.75rem;
+    padding: 0.62rem 0.8rem;
+    border-radius: 12px;
+}
+
+textarea.auth-input {
+    min-height: 6rem;
+}
+
+.alert {
+    padding: 0.75rem 0.9rem;
+    border-radius: 14px;
+    font-size: 0.88rem;
+}
+
+.ops-shell {
+    width: min(100% - 0.75rem, 1560px);
+    gap: 0.75rem;
+    padding: 0.5rem 0 0.75rem;
+}
+
+.ops-sidebar {
+    gap: 0.6rem;
+    padding: 0.7rem;
+}
+
+.ops-brand,
+.ops-user-card,
+.ops-topbar,
+.ops-section-heading,
+.ops-action-card,
+.ops-placeholder-actions {
+    gap: 0.55rem;
+}
+
+.ops-brand-copy,
+.ops-user-copy,
+.ops-topbar-copy,
+.ops-action-copy {
+    gap: 0.2rem;
+}
+
+.ops-user-card {
+    padding: 0.75rem;
+    border-radius: 14px;
+}
+
+.ops-nav {
+    gap: 0.45rem;
+}
+
+.ops-nav-section {
+    border-radius: 14px;
+}
+
+.ops-nav-summary {
+    padding: 0.58rem 0.72rem;
+}
+
+.ops-nav-list {
+    gap: 0.3rem;
+    padding: 0 0.45rem 0.45rem;
+}
+
+.ops-nav-link,
+.ops-action-card {
+    padding: 0.6rem 0.72rem;
+    border-radius: 12px;
+}
+
+.ops-main,
+.ops-content,
+.ops-dashboard,
+.ops-section-grid,
+.ops-action-list,
+.ops-placeholder-actions,
+.ops-placeholder-grid,
+.ops-kpi-grid,
+.items-grid,
+.item-form,
+.item-form-grid,
+.stock-summary,
+.stock-filters,
+.stock-mobile-list,
+.stock-mobile-metrics,
+.data-toolbar,
+.entity-form,
+.form-grid,
+.placeholder-layout {
+    gap: 0.75rem;
+}
+
+.ops-topbar,
+.ops-dashboard-intro,
+.ops-section-card,
+.ops-placeholder-main,
+.ops-placeholder-side,
+.items-hero-card,
+.items-side-card,
+.item-filter-card,
+.item-form-card,
+.pagination-card,
+.stock-intro-card,
+.stock-filter-card,
+.stock-table-shell,
+.stock-mobile-card,
+.placeholder-card,
+.placeholder-meta,
+.module-card {
+    padding: 0.85rem 0.95rem;
+}
+
+.ops-topbar-meta {
+    gap: 0.45rem;
+}
+
+.ops-page-header {
+    display: grid;
+    gap: 0.75rem;
+    align-items: start;
+}
+
+.ops-page-title {
+    margin: 0;
+    color: var(--brand-ink);
+    font-family: 'Space Grotesk', var(--font-sans);
+    font-size: clamp(1.35rem, 2.4vw, 2rem);
+    line-height: 1.05;
+    letter-spacing: -0.05em;
+}
+
+.ops-page-header p,
+.item-form-card p,
+.placeholder-card p,
+.placeholder-meta p,
+.app-copy p,
+.ops-section-note {
+    margin: 0;
+    color: var(--brand-soft);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.ops-page-actions,
+.action-buttons,
+.inline-actions,
+.item-card-actions,
+.items-hero-actions,
+.item-filter-actions,
+.item-form-actions,
+.stock-filter-actions,
+.ops-placeholder-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.ops-content > *,
+.ops-dashboard > *,
+.ops-section-grid > *,
+.placeholder-layout > *,
+.stock-summary > *,
+.items-grid > * {
+    min-width: 0;
+}
+
+.stock-intro-card,
+.stock-filter-card,
+.stock-table-shell,
+.item-filter-card,
+.item-form-card,
+.pagination-card,
+.ops-dashboard-intro,
+.ops-section-card,
+.placeholder-card,
+.placeholder-meta {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.action-buttons form,
+.inline-actions form,
+.item-card-actions form {
+    margin: 0;
+}
+
+.compact-card {
+    border-radius: 16px;
+}
+
+.compact-toolbar {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.compact-filters {
+    gap: 0.75rem;
+}
+
+.compact-filters .auth-input,
+.item-form-card .auth-input {
+    min-height: 2.65rem;
+}
+
+.kpi-strip {
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+}
+
+.kpi-card,
+.stock-summary-card,
+.app-stat {
+    padding: 0.75rem 0.85rem;
+    border-radius: 14px;
+    background: var(--brand-surface);
+    border: 1px solid rgba(53, 83, 107, 0.08);
+}
+
+.kpi-card strong,
+.stock-summary-card strong,
+.app-stat strong {
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.kpi-card span,
+.stock-summary-card span,
+.app-stat span {
+    margin-top: 0.2rem;
+    color: var(--brand-slate-dark);
+    font-family: 'Space Grotesk', var(--font-sans);
+    font-size: clamp(1.12rem, 1.9vw, 1.55rem);
+    line-height: 1.1;
+}
+
+.stock-subtitle {
+    font-size: 0.92rem;
+}
+
+.stock-table-shell {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.data-table-wrap,
+.stock-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+    width: max(100%, 62rem);
+    font-size: 0.84rem;
+}
+
+.stock-table {
+    width: max(100%, 76rem);
+    min-width: 76rem;
+    font-size: 0.82rem;
+}
+
+.data-table th,
+.data-table td,
+.stock-table th,
+.stock-table td {
+    padding: 0.55rem 0.65rem;
+    line-height: 1.35;
+}
+
+.data-table th,
+.stock-table th {
+    font-size: 0.68rem;
+}
+
+.stock-cell-main {
+    gap: 0.18rem;
+}
+
+.stock-cell-main span,
+.stock-mobile-card p,
+.stock-mobile-metrics span,
+.stock-note {
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.stock-total {
+    font-size: 0.98rem;
+}
+
+.stock-mobile-metrics div,
+.item-card-metadata div,
+.pico-detail-list li,
+.item-form-hint {
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+}
+
+.item-card,
+.item-empty-state,
+.stock-mobile-card {
+    gap: 0.75rem;
+}
+
+.item-card-metadata {
+    gap: 0.65rem;
+}
+
+.item-card-description,
+.item-empty-state p {
+    line-height: 1.45;
+}
+
+.toggle-field {
+    gap: 0.55rem;
+    font-size: 0.92rem;
+}
+
+.pico-details {
+    min-width: 11rem;
+}
+
+.pico-details summary {
+    font-size: 0.84rem;
+}
+
+.view-switcher {
+    gap: 0.3rem;
+    padding: 0.25rem;
+    border-radius: 12px;
+}
+
+.view-switcher-link {
+    min-height: 2.05rem;
+    padding: 0.38rem 0.72rem;
+    border-radius: 10px;
+    font-size: 0.84rem;
+}
+
+.pagination-card {
+    padding-block: 0.65rem;
+}
+
 @media (min-width: 768px) {
     .ops-shell {
-        width: min(100% - 1.5rem, 1400px);
-        padding-top: 1rem;
+        width: min(100% - 1.25rem, 1560px);
+        padding-top: 0.75rem;
     }
 
     .ops-sidebar,
@@ -1541,7 +1946,7 @@ button {
     .ops-section-card,
     .ops-placeholder-main,
     .ops-placeholder-side {
-        padding: 1rem;
+        padding: 0.95rem;
     }
 
     .ops-topbar {
@@ -1573,16 +1978,6 @@ button {
         padding-bottom: 2rem;
     }
 
-    .auth-panel,
-    .app-header,
-    .app-overview-card,
-    .app-callout,
-    .module-card,
-    .placeholder-card,
-    .placeholder-meta {
-        padding: 1.5rem;
-    }
-
     .app-stat-grid,
     .placeholder-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1603,14 +1998,6 @@ button {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .item-filter-actions,
-    .item-form-actions,
-    .item-card-actions,
-    .stock-filter-actions {
-        grid-auto-flow: column;
-        justify-content: flex-start;
-    }
-
     .items-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -1623,7 +2010,9 @@ button {
         display: none;
     }
 
-    .data-toolbar {
+    .data-toolbar,
+    .compact-toolbar,
+    .ops-page-header {
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: end;
     }
@@ -1631,7 +2020,7 @@ button {
 
 @media (min-width: 1024px) {
     .ops-shell {
-        grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
+        grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr);
         align-items: start;
     }
 
@@ -1648,11 +2037,6 @@ button {
 
     .auth-frame {
         width: min(100% - 2rem, 42rem);
-    }
-
-    .auth-panel,
-    .app-header {
-        padding: 1.85rem;
     }
 
     .app-header-content {
@@ -1683,7 +2067,7 @@ button {
     }
 
     .stock-filters {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         align-items: end;
     }
 
@@ -1779,7 +2163,11 @@ button {
     .items-hero-actions,
     .item-filter-actions,
     .item-form-actions,
-    .item-card-actions {
+    .item-card-actions,
+    .ops-page-actions,
+    .stock-filter-actions,
+    .action-buttons,
+    .inline-actions {
         flex-direction: column;
         align-items: stretch;
     }

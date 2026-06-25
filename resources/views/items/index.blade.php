@@ -13,38 +13,28 @@
         <span>Articulos</span>
     </nav>
 
-    <section class="items-hero">
-        <article class="surface-card items-hero-card">
-            <div class="app-copy">
-                <span class="status-chip">Stock · Maestro</span>
-                <h2 class="app-page-title">Articulos</h2>
-                <p>El articulo define el paletizado estandar y ahora puede consultarse en modo lista o en tarjetas segun el contexto operativo.</p>
-            </div>
+    <section class="surface-card ops-page-header compact-card">
+        <div class="app-copy">
+            <span class="status-chip small-badge">Articulos</span>
+            <h2 class="ops-page-title">Maestro de articulos</h2>
+            <p>Vista lista por defecto para consulta y mantenimiento rapido.</p>
+        </div>
 
-            <div class="items-hero-actions">
-                @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-                    <a href="{{ route('items.create') }}" class="button-primary">Nuevo articulo</a>
-                @endif
-                <a href="{{ route('stock.index') }}" class="button-secondary">Volver a Stock</a>
-            </div>
-        </article>
-
-        <aside class="surface-card items-side-card">
-            <div class="app-copy">
-                <span class="module-tag">Vista operativa</span>
-                <strong>Lista por defecto, tarjetas como apoyo</strong>
-                <p>Con muchas referencias la tabla acelera lectura, filtro y mantenimiento. Las tarjetas siguen disponibles para un repaso visual rapido.</p>
-            </div>
-        </aside>
+        <div class="ops-page-actions action-buttons">
+            @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+                <a href="{{ route('items.create') }}" class="button-primary compact-button">Nuevo articulo</a>
+            @endif
+            <a href="{{ route('stock.index') }}" class="button-secondary compact-button">Volver a stock</a>
+        </div>
     </section>
 
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="surface-card item-filter-card">
-        <div class="data-toolbar">
-            <form method="GET" action="{{ route('items.index') }}" class="item-filter-form">
+    <section class="surface-card item-filter-card compact-card">
+        <div class="data-toolbar compact-toolbar">
+            <form method="GET" action="{{ route('items.index') }}" class="item-filter-form compact-filters">
                 <input type="hidden" name="view" value="{{ $filters['view'] }}">
 
                 <label class="auth-field">
@@ -79,9 +69,9 @@
                     </select>
                 </label>
 
-                <div class="item-filter-actions">
-                    <button type="submit" class="button-primary">Filtrar</button>
-                    <a href="{{ route('items.index', ['view' => $filters['view']]) }}" class="button-secondary">Limpiar</a>
+                <div class="item-filter-actions action-buttons">
+                    <button type="submit" class="button-primary compact-button">Filtrar</button>
+                    <a href="{{ route('items.index', ['view' => $filters['view']]) }}" class="button-secondary compact-button">Limpiar</a>
                 </div>
             </form>
 
@@ -103,18 +93,18 @@
     </section>
 
     @if ($items->isEmpty())
-        <article class="surface-card item-empty-state">
-            <span class="status-chip">Sin resultados</span>
+        <article class="surface-card item-empty-state compact-card">
+            <span class="status-chip small-badge">Sin resultados</span>
             <h3>No hay articulos con estos filtros</h3>
             <p>Ajusta cliente, estado o texto de busqueda para localizar articulos existentes.</p>
         </article>
     @elseif ($isCardsView)
         <section class="items-grid" aria-label="Vista tarjetas de articulos">
             @foreach ($items as $item)
-                <article class="surface-card item-card">
+                <article class="surface-card item-card compact-card">
                     <div class="item-card-header">
                         <div>
-                            <span class="module-tag">{{ $item->client->name }}</span>
+                            <span class="module-tag small-badge">{{ $item->client->name }}</span>
                             <h3>{{ $item->sku }}</h3>
                         </div>
                         <span class="item-state {{ $item->active ? 'item-state--active' : 'item-state--inactive' }}">
@@ -136,13 +126,13 @@
                     </dl>
 
                     @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-                        <div class="item-card-actions">
-                            <a href="{{ route('items.edit', $item) }}" class="button-secondary">Editar</a>
+                        <div class="item-card-actions action-buttons">
+                            <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button">Editar</a>
 
                             <form method="POST" action="{{ route('items.toggle-active', $item) }}">
                                 @csrf
                                 @method('PATCH')
-                                <button type="submit" class="button-secondary">
+                                <button type="submit" class="button-secondary compact-button">
                                     {{ $item->active ? 'Desactivar' : 'Activar' }}
                                 </button>
                             </form>
@@ -152,7 +142,7 @@
             @endforeach
         </section>
     @else
-        <section class="surface-card stock-table-shell">
+        <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
                 <table class="data-table" aria-label="Vista lista de articulos">
                     <thead>
@@ -181,13 +171,13 @@
                                 </td>
                                 <td>
                                     @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-                                        <div class="inline-actions">
-                                            <a href="{{ route('items.edit', $item) }}" class="button-secondary">Editar</a>
+                                        <div class="inline-actions action-buttons">
+                                            <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button">Editar</a>
 
                                             <form method="POST" action="{{ route('items.toggle-active', $item) }}">
                                                 @csrf
                                                 @method('PATCH')
-                                                <button type="submit" class="button-secondary">
+                                                <button type="submit" class="button-secondary compact-button">
                                                     {{ $item->active ? 'Desactivar' : 'Activar' }}
                                                 </button>
                                             </form>
@@ -205,7 +195,7 @@
     @endif
 
     @if ($items->hasPages())
-        <div class="pagination-card surface-card">
+        <div class="pagination-card surface-card compact-card">
             {{ $items->links() }}
         </div>
     @endif

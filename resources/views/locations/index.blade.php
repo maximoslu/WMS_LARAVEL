@@ -11,17 +11,16 @@
         <span>Ubicaciones</span>
     </nav>
 
-    <section class="surface-card stock-intro-card">
+    <section class="surface-card ops-page-header stock-intro-card compact-card">
         <div class="app-copy">
-            <span class="status-chip">Stock · Layout</span>
-            <h2 class="app-page-title">Ubicaciones</h2>
-            <p class="stock-subtitle">Mapa operativo visible desde stock</p>
-            <p>Las ubicaciones ya pueden mantenerse como referencia real y enlazarse con el stock por palet.</p>
+            <span class="status-chip small-badge">Ubicaciones</span>
+            <h2 class="ops-page-title">Ubicaciones</h2>
+            <p>Mapa operativo visible desde stock y mantenimiento.</p>
         </div>
 
         @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-            <div class="items-hero-actions">
-                <a href="{{ route('locations.create') }}" class="button-primary">Nueva ubicacion</a>
+            <div class="ops-page-actions action-buttons">
+                <a href="{{ route('locations.create') }}" class="button-primary compact-button">Nueva ubicacion</a>
             </div>
         @endif
     </section>
@@ -30,15 +29,15 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="surface-card item-filter-card">
-        <form method="GET" action="{{ route('locations.index') }}" class="stock-filters">
+    <section class="surface-card item-filter-card compact-card">
+        <form method="GET" action="{{ route('locations.index') }}" class="stock-filters compact-filters">
             <label class="auth-field">
                 <span>Almacen</span>
                 <select name="warehouse_id" class="auth-input">
                     <option value="">Todos los almacenes</option>
                     @foreach ($warehouses as $warehouse)
                         <option value="{{ $warehouse->id }}" @selected((string) $filters['warehouse_id'] === (string) $warehouse->id)>
-                            {{ $warehouse->code }} · {{ $warehouse->name }}
+                            {{ $warehouse->code }} / {{ $warehouse->name }}
                         </option>
                     @endforeach
                 </select>
@@ -58,21 +57,21 @@
                 </select>
             </label>
 
-            <div class="stock-filter-actions">
-                <button type="submit" class="button-primary">Filtrar</button>
-                <a href="{{ route('locations.index') }}" class="button-secondary">Limpiar</a>
+            <div class="stock-filter-actions action-buttons">
+                <button type="submit" class="button-primary compact-button">Filtrar</button>
+                <a href="{{ route('locations.index') }}" class="button-secondary compact-button">Limpiar</a>
             </div>
         </form>
     </section>
 
     @if ($locations->isEmpty())
-        <article class="surface-card item-empty-state">
-            <span class="status-chip">Sin resultados</span>
+        <article class="surface-card item-empty-state compact-card">
+            <span class="status-chip small-badge">Sin resultados</span>
             <h3>No hay ubicaciones con estos filtros</h3>
             <p>Crea ubicaciones nuevas o ajusta almacen, estado y texto de busqueda.</p>
         </article>
     @else
-        <section class="surface-card stock-table-shell">
+        <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
                 <table class="data-table" aria-label="Listado de ubicaciones">
                     <thead>
@@ -103,12 +102,12 @@
                                 </td>
                                 <td>
                                     @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-                                        <div class="inline-actions">
-                                            <a href="{{ route('locations.edit', $location) }}" class="button-secondary">Editar</a>
+                                        <div class="inline-actions action-buttons">
+                                            <a href="{{ route('locations.edit', $location) }}" class="button-secondary compact-button">Editar</a>
                                             <form method="POST" action="{{ route('locations.toggle-active', $location) }}">
                                                 @csrf
                                                 @method('PATCH')
-                                                <button type="submit" class="button-secondary">
+                                                <button type="submit" class="button-secondary compact-button">
                                                     {{ $location->active ? 'Desactivar' : 'Activar' }}
                                                 </button>
                                             </form>
@@ -126,7 +125,7 @@
     @endif
 
     @if ($locations->hasPages())
-        <div class="pagination-card surface-card">
+        <div class="pagination-card surface-card compact-card">
             {{ $locations->links() }}
         </div>
     @endif

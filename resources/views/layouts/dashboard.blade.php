@@ -22,7 +22,7 @@
                     >
 
                     <div class="ops-brand-copy">
-                        <span class="status-chip">MAXIMO WMS</span>
+                        <span class="status-chip small-badge">MAXIMO WMS</span>
                     </div>
                 </div>
 
@@ -35,7 +35,7 @@
 
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
-                        <button type="submit" class="button-secondary">Cerrar sesion</button>
+                        <button type="submit" class="button-secondary compact-button">Cerrar sesion</button>
                     </form>
                 </div>
 
@@ -71,12 +71,12 @@
             <div class="ops-main">
                 <header class="ops-topbar surface-card">
                     <div class="ops-topbar-copy">
-                        <span class="status-chip">Panel operativo</span>
+                        <span class="status-chip small-badge">Panel operativo</span>
                     </div>
 
                     <div class="ops-topbar-meta">
                         <span class="role-badge">{{ $roleName }}</span>
-                        <span class="text-muted">{{ auth()->user()->email }}</span>
+                        <span class="text-muted">{{ auth()->user()->name }}</span>
                     </div>
                 </header>
 
