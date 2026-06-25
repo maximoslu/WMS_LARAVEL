@@ -1,6 +1,7 @@
 @extends('layouts.dashboard')
 
 @section('title', 'Stock | MAXIMO WMS')
+@section('topbar_title', 'Stock actual')
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
@@ -11,17 +12,16 @@
         <span>Stock actual</span>
     </nav>
 
-    <section class="surface-card stock-intro-card">
-        <div class="app-copy">
-            <span class="status-chip">Stock · Visibilidad</span>
-            <h2 class="app-page-title">Stock</h2>
-            <p class="stock-subtitle">Vista operativa por articulo</p>
-            <p>Los picos representan palets con cantidad distinta al estandar del articulo.</p>
+    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
+        <div class="ops-page-headline">
+            <h2 class="ops-page-title page-title-compact">Stock actual</h2>
+            <span class="sr-only">Vista operativa por articulo</span>
+            <span class="ops-page-meta">{{ $rows->count() }} referencias en pantalla</span>
         </div>
 
-        <div class="items-hero-actions">
-            <a href="{{ route('items.index') }}" class="button-secondary">Abrir articulos</a>
-            <a href="{{ route('locations.index') }}" class="button-secondary">Abrir ubicaciones</a>
+        <div class="ops-page-actions page-actions-compact action-buttons ops-toolbar-links">
+            <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact">Articulos</a>
+            <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact">Ubicaciones</a>
         </div>
     </section>
 
@@ -29,27 +29,27 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="stock-summary" aria-label="Resumen de stock">
-        <article class="surface-card stock-summary-card">
+    <section class="stock-summary kpi-strip" aria-label="Resumen de stock">
+        <article class="surface-card stock-summary-card kpi-card kpi-compact">
             <strong>Referencias con stock</strong>
             <span>{{ number_format($summary['references_with_stock'], 0, ',', '.') }}</span>
         </article>
-        <article class="surface-card stock-summary-card">
+        <article class="surface-card stock-summary-card kpi-card kpi-compact">
             <strong>Total unidades</strong>
             <span>{{ number_format($summary['total_units'], 0, ',', '.') }}</span>
         </article>
-        <article class="surface-card stock-summary-card">
+        <article class="surface-card stock-summary-card kpi-card kpi-compact">
             <strong>Total palets</strong>
             <span>{{ number_format($summary['total_pallets'], 0, ',', '.') }}</span>
         </article>
-        <article class="surface-card stock-summary-card">
+        <article class="surface-card stock-summary-card kpi-card kpi-compact">
             <strong>Total picos</strong>
             <span>{{ number_format($summary['total_peaks'], 0, ',', '.') }}</span>
         </article>
     </section>
 
-    <section class="surface-card stock-filter-card">
-        <form method="GET" action="{{ route('stock.index') }}" class="stock-filters">
+    <section class="surface-card stock-filter-card compact-card">
+        <form method="GET" action="{{ route('stock.index') }}" class="stock-filters compact-filters filters-compact">
             <label class="auth-field">
                 <span>Cliente</span>
                 <select name="client_id" class="auth-input">
@@ -112,27 +112,27 @@
                 >
             </label>
 
-            <div class="stock-filter-actions">
-                <button type="submit" class="button-primary">Filtrar</button>
-                <a href="{{ route('stock.index') }}" class="button-secondary">Limpiar</a>
+            <div class="stock-filter-actions action-buttons page-actions-compact">
+                <button type="submit" class="button-primary compact-button btn-compact">Filtrar</button>
+                <a href="{{ route('stock.index') }}" class="button-secondary compact-button btn-compact">Limpiar</a>
             </div>
         </form>
     </section>
 
     @if ($rows->isEmpty())
-        <article class="surface-card item-empty-state">
-            <span class="status-chip">Sin resultados</span>
+        <article class="surface-card item-empty-state compact-card">
+            <span class="status-chip small-badge badge-compact">Sin resultados</span>
             <h3>No hay referencias para estos filtros</h3>
-            <p>Ajusta cliente, lote, ubicacion o estado para visualizar stock real o referencias sin stock.</p>
+            <p>Ajusta los filtros para recuperar referencias con o sin stock.</p>
         </article>
     @else
-        <section class="surface-card stock-table-shell stock-desktop-table">
+        <section class="surface-card stock-table-shell compact-card stock-desktop-table">
             <div class="data-table-wrap stock-table-wrap">
-                <table class="data-table stock-table" aria-label="Vista operativa de stock">
+                <table class="data-table stock-table table-compact" aria-label="Vista operativa de stock">
                     <thead>
                         <tr>
                             <th>Cliente</th>
-                            <th>Referencia/SKU</th>
+                            <th>SKU</th>
                             <th>Descripcion</th>
                             <th>Cantidad total</th>
                             <th>Lote</th>
@@ -162,14 +162,14 @@
                                     <div class="stock-cell-main">
                                         <strong>{{ $row['sku'] }}</strong>
                                         @unless ($row['item_active'])
-                                            <span class="stock-badge">Inactivo</span>
+                                            <span class="stock-badge small-badge badge-compact">Inactivo</span>
                                         @endunless
                                     </div>
                                 </td>
                                 <td>
                                     <div class="stock-cell-main">
                                         <strong>{{ $row['description'] }}</strong>
-                                        <span>{{ $row['location_summary'] !== '' ? 'Ubicaciones: '.$row['location_summary'] : 'Sin ubicacion informada' }}</span>
+                                        <span>{{ $row['location_summary'] !== '' ? 'Ubic.: '.$row['location_summary'] : 'Sin ubicacion' }}</span>
                                     </div>
                                 </td>
                                 <td class="stock-total">{{ number_format($row['total_units'], 0, ',', '.') }}</td>
@@ -177,7 +177,7 @@
                                 <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
                                 <td>{{ number_format($row['full_pallets'], 0, ',', '.') }}</td>
                                 <td>
-                                    <span class="stock-badge{{ $row['pico_count'] > 0 ? ' stock-badge-pico' : '' }}">
+                                    <span class="stock-badge small-badge badge-compact{{ $row['pico_count'] > 0 ? ' stock-badge-pico' : '' }}">
                                         {{ number_format($row['pico_count'], 0, ',', '.') }}
                                     </span>
                                 </td>
@@ -186,7 +186,7 @@
                                 @endforeach
                                 <td>
                                     @if ($row['peak_overflow_count'] > 0)
-                                        <span class="stock-badge stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
+                                        <span class="stock-badge small-badge badge-compact stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
                                     @else
                                         <span class="text-muted">-</span>
                                     @endif
@@ -220,10 +220,10 @@
 
         <section class="stock-mobile-list" aria-label="Vista movil de stock">
             @foreach ($rows as $row)
-                <article class="surface-card stock-mobile-card">
+                <article class="surface-card stock-mobile-card compact-card">
                     <div class="stock-cell-main">
                         <strong>{{ $row['sku'] }}</strong>
-                        <span>{{ $row['client_name'] }} · {{ $row['lot_label'] }}</span>
+                        <span>{{ $row['client_name'] }} / {{ $row['lot_label'] }}</span>
                     </div>
 
                     <p>{{ $row['description'] }}</p>
@@ -248,13 +248,13 @@
                     </div>
 
                     <div class="stock-pill-list">
-                        <span class="stock-badge{{ $row['pico_count'] > 0 ? ' stock-badge-pico' : '' }}">
+                        <span class="stock-badge small-badge badge-compact{{ $row['pico_count'] > 0 ? ' stock-badge-pico' : '' }}">
                             Picos: {{ number_format($row['pico_count'], 0, ',', '.') }}
                         </span>
                         @if ($row['peak_overflow_count'] > 0)
-                            <span class="stock-badge stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
+                            <span class="stock-badge small-badge badge-compact stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
                         @endif
-                        <span class="stock-badge">
+                        <span class="stock-badge small-badge badge-compact">
                             {{ $row['location_summary'] !== '' ? $row['location_summary'] : 'Sin ubicacion' }}
                         </span>
                     </div>

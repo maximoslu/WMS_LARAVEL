@@ -8,45 +8,59 @@
         <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="brand-body">
-        @php($roleName = auth()->user()->role?->name ?? 'Sin rol asignado')
+    <body class="brand-body app-shell-body">
+        @php($user = auth()->user())
+        @php($userName = $user->name)
+        @php($roleName = $user->role?->name ?? 'Sin rol asignado')
         @php($navigationSections = $navigationSections ?? [])
+        @php($topbarTitle = $__env->yieldContent('topbar_title', trim(explode('|', $__env->yieldContent('title', 'MAXIMO WMS'))[0])))
+        @php($userInitials = collect(preg_split('/\s+/', trim($userName)))->filter()->take(2)->map(fn (string $chunk) => strtoupper(substr($chunk, 0, 1)))->implode(''))
 
-        <div class="ops-shell">
-            <aside class="ops-sidebar surface-card">
-                <div class="ops-brand">
-                    <img
-                        src="{{ asset('brand/maximo-logo-horizontal.png') }}"
-                        alt="MAXIMO Servicios Logisticos"
-                        class="brand-logo-horizontal"
+        <div class="app-drawer-backdrop" data-drawer-backdrop hidden></div>
+
+        <aside class="app-drawer" id="app-drawer" data-app-drawer aria-hidden="true">
+            <div class="app-drawer-panel surface-card">
+                <div class="app-drawer-header">
+                    <a href="{{ route('dashboard') }}" class="app-drawer-brand" aria-label="Ir al dashboard">
+                        <img
+                            src="{{ asset('brand/maximo-icon.png') }}"
+                            alt="MAXIMO Servicios Logisticos"
+                            class="app-drawer-mark"
+                        >
+                        <div class="app-drawer-brand-copy">
+                            <strong>MAXIMO WMS</strong>
+                            <span>Panel operativo</span>
+                        </div>
+                    </a>
+
+                    <button
+                        type="button"
+                        class="app-menu-toggle"
+                        data-drawer-close
+                        aria-controls="app-drawer"
+                        aria-label="Cerrar menu"
                     >
+                        <span></span>
+                        <span></span>
+                    </button>
+                </div>
 
-                    <div class="ops-brand-copy">
-                        <span class="status-chip">MAXIMO WMS</span>
+                <div class="app-drawer-user">
+                    <span class="app-drawer-avatar" aria-hidden="true">{{ $userInitials }}</span>
+                    <div class="app-drawer-user-copy">
+                        <strong>{{ $userName }}</strong>
+                        <span>{{ $roleName }}</span>
                     </div>
                 </div>
 
-                <div class="ops-user-card">
-                    <div class="ops-user-copy">
-                        <strong>{{ auth()->user()->name }}</strong>
-                        <span>{{ auth()->user()->email }}</span>
-                        <span class="role-badge">{{ $roleName }}</span>
-                    </div>
-
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" class="button-secondary">Cerrar sesion</button>
-                    </form>
-                </div>
-
-                <nav class="ops-nav" aria-label="Navegacion principal">
+                <nav class="app-drawer-nav ops-nav" aria-label="Navegacion principal">
                     @foreach ($navigationSections as $section)
                         @php($sectionActive = collect($section['children'])->contains(fn (array $child) => request()->routeIs(...($child['active_patterns'] ?? [$child['route']]))))
 
                         <details class="ops-nav-section" @if($sectionActive) open @endif>
                             <summary class="ops-nav-summary">
                                 <strong>{{ $section['title'] }}</strong>
-                                <span class="ops-status">{{ count($section['children']) }}</span>
+                                <span class="ops-status badge-compact">{{ count($section['children']) }}</span>
                             </summary>
 
                             <div class="ops-nav-list">
@@ -56,7 +70,7 @@
                                     <a href="{{ route($child['route']) }}" class="ops-nav-link{{ $isActive ? ' is-active' : '' }}">
                                         <strong>{{ $child['title'] }}</strong>
                                         <span class="ops-link-meta">
-                                            <span class="ops-status {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
+                                            <span class="ops-status badge-compact {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
                                                 {{ $child['status_label'] }}
                                             </span>
                                         </span>
@@ -66,24 +80,62 @@
                         </details>
                     @endforeach
                 </nav>
-            </aside>
 
-            <div class="ops-main">
-                <header class="ops-topbar surface-card">
-                    <div class="ops-topbar-copy">
-                        <span class="status-chip">Panel operativo</span>
-                    </div>
-
-                    <div class="ops-topbar-meta">
-                        <span class="role-badge">{{ $roleName }}</span>
-                        <span class="text-muted">{{ auth()->user()->email }}</span>
-                    </div>
-                </header>
-
-                <main class="ops-content">
-                    @yield('content')
-                </main>
+                <form method="POST" action="{{ route('logout') }}" class="app-drawer-logout">
+                    @csrf
+                    <button type="submit" class="button-secondary compact-button btn-compact">Cerrar sesion</button>
+                </form>
             </div>
+        </aside>
+
+        <div class="app-shell">
+            <header class="app-topbar surface-card">
+                <div class="app-topbar-start">
+                    <button
+                        type="button"
+                        class="app-menu-toggle"
+                        data-drawer-toggle
+                        aria-controls="app-drawer"
+                        aria-expanded="false"
+                        aria-label="Abrir menu"
+                    >
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+
+                    <a href="{{ route('dashboard') }}" class="app-topbar-brand" aria-label="Ir al dashboard">
+                        <img
+                            src="{{ asset('brand/maximo-icon.png') }}"
+                            alt="MAXIMO Servicios Logisticos"
+                            class="app-topbar-mark"
+                        >
+                        <span class="app-topbar-label">MAXIMO</span>
+                    </a>
+
+                    <div class="app-topbar-copy">
+                        <strong>{{ $topbarTitle }}</strong>
+                        <span class="app-topbar-meta">Panel operativo</span>
+                    </div>
+                </div>
+
+                <div class="app-topbar-end">
+                    <span class="sr-only">Rol</span>
+                    <span class="app-role-chip">{{ $roleName }}</span>
+                    <strong class="app-topbar-user">{{ $userName }}</strong>
+
+                    <form method="POST" action="{{ route('logout') }}" class="app-topbar-logout">
+                        @csrf
+                        <button type="submit" class="button-secondary compact-button btn-compact">Salir</button>
+                    </form>
+                </div>
+            </header>
+
+            <main class="app-main">
+                <div class="ops-content">
+                    @yield('content')
+                </div>
+            </main>
         </div>
     </body>
 </html>

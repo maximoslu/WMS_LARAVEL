@@ -12,23 +12,23 @@
     </nav>
 
     <section class="placeholder-layout ops-placeholder-layout">
-        <article class="placeholder-card surface-card ops-placeholder-main">
+        <article class="placeholder-card surface-card ops-placeholder-main compact-card">
             <div class="app-copy">
-                <span class="module-tag">{{ $module['tag'] }}</span>
-                <h2 class="placeholder-title">{{ $module['title'] }}</h2>
+                <span class="module-tag small-badge">{{ $module['tag'] }}</span>
+                <h2 class="ops-page-title">{{ $module['title'] }}</h2>
                 <p>{{ $module['summary'] }}</p>
             </div>
 
-            <div class="ops-placeholder-actions">
-                <a href="{{ route('dashboard') }}" class="button-secondary">Volver al panel</a>
+            <div class="ops-placeholder-actions action-buttons">
+                <a href="{{ route('dashboard') }}" class="button-secondary compact-button">Volver al panel</a>
 
                 @if ($module['section_key'] === 'stock' && auth()->user()->canAccessRole(\App\Models\Role::ALMACEN))
-                    <a href="{{ route('items.index') }}" class="button-primary">Abrir articulos</a>
+                    <a href="{{ route('items.index') }}" class="button-primary compact-button">Abrir articulos</a>
                 @endif
             </div>
         </article>
 
-        <aside class="placeholder-meta surface-card ops-placeholder-side">
+        <aside class="placeholder-meta surface-card ops-placeholder-side compact-card">
             <span class="placeholder-state">{{ $module['status_label'] }}</span>
             <div>
                 <strong>Seccion</strong>
@@ -50,17 +50,17 @@
     </section>
 
     <section class="placeholder-grid ops-placeholder-grid" aria-label="Detalles del modulo">
-        <article class="placeholder-meta surface-card">
+        <article class="placeholder-meta surface-card compact-card">
             <strong>Estado actual</strong>
             <p>El acceso ya esta integrado en la navegacion operativa y protegido por rol.</p>
         </article>
 
-        <article class="placeholder-meta surface-card">
+        <article class="placeholder-meta surface-card compact-card">
             <strong>Siguiente desarrollo</strong>
             <p>{{ $module['next_step'] ?? 'Pendiente de definir en siguientes iteraciones del roadmap.' }}</p>
         </article>
 
-        <article class="placeholder-meta surface-card">
+        <article class="placeholder-meta surface-card compact-card">
             <strong>Proteccion activa</strong>
             <p>Autenticacion, jerarquia de roles y acceso agrupado por secciones ya estan aplicados.</p>
         </article>

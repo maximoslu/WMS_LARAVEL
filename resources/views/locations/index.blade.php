@@ -1,6 +1,7 @@
 @extends('layouts.dashboard')
 
 @section('title', 'Ubicaciones | MAXIMO WMS')
+@section('topbar_title', 'Ubicaciones')
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
@@ -11,17 +12,15 @@
         <span>Ubicaciones</span>
     </nav>
 
-    <section class="surface-card stock-intro-card">
-        <div class="app-copy">
-            <span class="status-chip">Stock · Layout</span>
-            <h2 class="app-page-title">Ubicaciones</h2>
-            <p class="stock-subtitle">Mapa operativo visible desde stock</p>
-            <p>Las ubicaciones ya pueden mantenerse como referencia real y enlazarse con el stock por palet.</p>
+    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
+        <div class="ops-page-headline">
+            <h2 class="ops-page-title page-title-compact">Ubicaciones</h2>
+            <span class="ops-page-meta">{{ $locations->total() }} registros</span>
         </div>
 
         @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-            <div class="items-hero-actions">
-                <a href="{{ route('locations.create') }}" class="button-primary">Nueva ubicacion</a>
+            <div class="ops-page-actions page-actions-compact action-buttons">
+                <a href="{{ route('locations.create') }}" class="button-primary compact-button btn-compact">Nueva ubicacion</a>
             </div>
         @endif
     </section>
@@ -30,15 +29,15 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="surface-card item-filter-card">
-        <form method="GET" action="{{ route('locations.index') }}" class="stock-filters">
+    <section class="surface-card item-filter-card compact-card">
+        <form method="GET" action="{{ route('locations.index') }}" class="stock-filters compact-filters filters-compact">
             <label class="auth-field">
                 <span>Almacen</span>
                 <select name="warehouse_id" class="auth-input">
                     <option value="">Todos los almacenes</option>
                     @foreach ($warehouses as $warehouse)
                         <option value="{{ $warehouse->id }}" @selected((string) $filters['warehouse_id'] === (string) $warehouse->id)>
-                            {{ $warehouse->code }} · {{ $warehouse->name }}
+                            {{ $warehouse->code }} / {{ $warehouse->name }}
                         </option>
                     @endforeach
                 </select>
@@ -58,23 +57,23 @@
                 </select>
             </label>
 
-            <div class="stock-filter-actions">
-                <button type="submit" class="button-primary">Filtrar</button>
-                <a href="{{ route('locations.index') }}" class="button-secondary">Limpiar</a>
+            <div class="stock-filter-actions action-buttons page-actions-compact">
+                <button type="submit" class="button-primary compact-button btn-compact">Filtrar</button>
+                <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact">Limpiar</a>
             </div>
         </form>
     </section>
 
     @if ($locations->isEmpty())
-        <article class="surface-card item-empty-state">
-            <span class="status-chip">Sin resultados</span>
+        <article class="surface-card item-empty-state compact-card">
+            <span class="status-chip small-badge badge-compact">Sin resultados</span>
             <h3>No hay ubicaciones con estos filtros</h3>
             <p>Crea ubicaciones nuevas o ajusta almacen, estado y texto de busqueda.</p>
         </article>
     @else
-        <section class="surface-card stock-table-shell">
+        <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
-                <table class="data-table" aria-label="Listado de ubicaciones">
+                <table class="data-table table-compact" aria-label="Listado de ubicaciones">
                     <thead>
                         <tr>
                             <th>Almacen</th>
@@ -103,12 +102,12 @@
                                 </td>
                                 <td>
                                     @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-                                        <div class="inline-actions">
-                                            <a href="{{ route('locations.edit', $location) }}" class="button-secondary">Editar</a>
+                                        <div class="inline-actions action-buttons">
+                                            <a href="{{ route('locations.edit', $location) }}" class="button-secondary compact-button btn-table">Editar</a>
                                             <form method="POST" action="{{ route('locations.toggle-active', $location) }}">
                                                 @csrf
                                                 @method('PATCH')
-                                                <button type="submit" class="button-secondary">
+                                                <button type="submit" class="button-secondary compact-button btn-table">
                                                     {{ $location->active ? 'Desactivar' : 'Activar' }}
                                                 </button>
                                             </form>
@@ -126,7 +125,7 @@
     @endif
 
     @if ($locations->hasPages())
-        <div class="pagination-card surface-card">
+        <div class="pagination-card surface-card compact-card">
             {{ $locations->links() }}
         </div>
     @endif

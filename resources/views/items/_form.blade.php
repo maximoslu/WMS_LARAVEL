@@ -1,11 +1,21 @@
 @php($isEditing = $item->exists)
 
-<div class="surface-card item-form-card">
+<nav class="ops-breadcrumb" aria-label="Breadcrumb">
+    <a href="{{ route('dashboard') }}">Panel operativo</a>
+    <span>/</span>
+    <span>Stock</span>
+    <span>/</span>
+    <a href="{{ route('items.index') }}">Articulos</a>
+    <span>/</span>
+    <span>{{ $isEditing ? 'Editar' : 'Crear' }}</span>
+</nav>
+
+<div class="surface-card item-form-card entity-form compact-card">
     <div class="item-form-header">
         <div class="app-copy">
-            <span class="status-chip">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
-            <h2 class="app-page-title">{{ $isEditing ? 'Editar articulo' : 'Nuevo articulo' }}</h2>
-            <p>El articulo define el paletizado estandar. El stock real y los picos se gestionaran en movimientos/palets.</p>
+            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
+            <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar articulo' : 'Nuevo articulo' }}</h2>
+            <p>Define cliente, SKU, lote y paletizado estandar.</p>
         </div>
     </div>
 
@@ -101,12 +111,12 @@
 
         <div class="item-form-hint">
             <strong>Nota operativa</strong>
-            <p>La cantidad por palet guarda el estandar de paletizado del articulo. Los picos se resolveran mas adelante a nivel de palet o movimiento, sin alterar este maestro.</p>
+            <p>La cantidad por palet fija el estandar de referencia para stock y picos.</p>
         </div>
 
-        <div class="item-form-actions">
-            <a href="{{ route('items.index') }}" class="button-secondary">Cancelar</a>
-            <button type="submit" class="button-primary">{{ $isEditing ? 'Guardar cambios' : 'Crear articulo' }}</button>
+        <div class="item-form-actions action-buttons">
+            <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
+            <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear articulo' }}</button>
         </div>
     </form>
 </div>
