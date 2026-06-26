@@ -3224,3 +3224,100 @@ body.brand-body.app-shell-body .pagination-card {
         min-width: 62rem;
     }
 }
+
+.users-pending-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: rgba(13, 139, 157, 0.14);
+    color: var(--brand-cyan-dark);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.access-request-summary,
+.access-request-approval-note {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.access-request-detail-card,
+.access-request-action-card,
+.access-request-resolution-card {
+    display: grid;
+    gap: 1rem;
+}
+
+.access-request-detail-meta {
+    margin: 0.35rem 0 0;
+    color: var(--brand-soft);
+    font-size: 0.92rem;
+}
+
+.access-request-detail-grid {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    margin: 0;
+}
+
+.access-request-detail-grid div {
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    border-radius: 12px;
+    background: rgba(247, 249, 251, 0.82);
+}
+
+.access-request-detail-grid dt {
+    color: var(--brand-soft);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.access-request-detail-grid dd {
+    margin: 0.35rem 0 0;
+    color: var(--brand-slate-dark);
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.access-request-actions-grid {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.access-request-form-stack {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.access-request-status--pending,
+.status-badge--warning {
+    background: rgba(255, 190, 92, 0.18);
+    color: #9a5b00;
+}
+
+.access-request-status--approved {
+    background: rgba(46, 125, 92, 0.14);
+    color: #176344;
+}
+
+.access-request-status--rejected {
+    background: rgba(172, 48, 48, 0.14);
+    color: #992d2d;
+}
+
+@media (min-width: 1024px) {
+    .access-request-actions-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+    }
+}

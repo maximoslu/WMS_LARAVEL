@@ -17,6 +17,14 @@
             <h2 class="ops-page-title page-title-compact">Usuarios y roles</h2>
             <span class="ops-page-meta">{{ $users->total() }} registros</span>
         </div>
+        <div class="item-filter-actions action-buttons page-actions-compact">
+            <a href="{{ route('access-requests.index') }}" class="button-secondary compact-button btn-compact">
+                Solicitudes de acceso
+                @if ($pendingAccessRequests > 0)
+                    <span class="users-pending-count">{{ $pendingAccessRequests }}</span>
+                @endif
+            </a>
+        </div>
     </section>
 
     @if (session('status'))
