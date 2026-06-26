@@ -12,6 +12,7 @@ use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -32,20 +33,30 @@ class MerchandiseRequestController extends Controller
             ->when($status !== 'all' && in_array($status, MerchandiseRequest::statuses(), true), fn (Builder $query) => $query->where('status', $status))
             ->when($search !== '', function (Builder $query) use ($search): void {
                 $query->where(function (Builder $query) use ($search): void {
-                    $query
-                        ->where('request_code', 'like', '%'.$search.'%')
-                        ->orWhereHas('lines', function (Builder $query) use ($search): void {
-                            $query
-                                ->where('lot', 'like', '%'.$search.'%')
-                                ->orWhereHas('item', function (Builder $query) use ($search): void {
-                                    $query
-                                        ->where('sku', 'like', '%'.$search.'%')
-                                        ->orWhere('description', 'like', '%'.$search.'%');
-                                });
-                        });
+                    $normalizedCode = preg_replace('/\D+/', '', $search);
+
+                    if (Schema::hasColumn('merchandise_requests', 'request_code')) {
+                        $query->where('request_code', 'like', '%'.$search.'%');
+                    } elseif ($normalizedCode !== '') {
+                        $query->whereKey((int) $normalizedCode);
+                    }
+
+                    $query->orWhereHas('lines', function (Builder $query) use ($search): void {
+                        $query
+                            ->where('lot', 'like', '%'.$search.'%')
+                            ->orWhereHas('item', function (Builder $query) use ($search): void {
+                                $query
+                                    ->where('sku', 'like', '%'.$search.'%')
+                                    ->orWhere('description', 'like', '%'.$search.'%');
+                            });
+                    });
                 });
             })
-            ->latest('submitted_at')
+            ->when(
+                Schema::hasColumn('merchandise_requests', 'submitted_at'),
+                fn (Builder $query) => $query->latest('submitted_at'),
+                fn (Builder $query) => $query->latest('requested_date')
+            )
             ->latest()
             ->paginate(12)
             ->withQueryString();

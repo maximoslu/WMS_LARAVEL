@@ -312,8 +312,25 @@ const setupMerchandiseRequestBuilder = () => {
     const summaryEmpty = form.querySelector('[data-request-summary-empty]');
     const summaryLines = form.querySelector('[data-request-summary-lines]');
     const summaryPallets = form.querySelector('[data-request-summary-pallets]');
+    const hiddenInputs = form.querySelector('[data-request-hidden-inputs]');
+    const pickerSelect = form.querySelector('[data-request-picker-item]');
+    const pickerQuantity = form.querySelector('[data-request-picker-quantity]');
+    const pickerFeedback = form.querySelector('[data-request-picker-feedback]');
+    const pickerAddButton = form.querySelector('[data-request-add-selected]');
+    const submitButton = form.querySelector('[data-request-submit]');
 
-    if (!summaryRows || !summaryEmpty || !summaryLines || !summaryPallets) {
+    if (
+        !summaryRows
+        || !summaryEmpty
+        || !summaryLines
+        || !summaryPallets
+        || !hiddenInputs
+        || !pickerSelect
+        || !pickerQuantity
+        || !pickerFeedback
+        || !pickerAddButton
+        || !submitButton
+    ) {
         return;
     }
 
@@ -327,6 +344,8 @@ const setupMerchandiseRequestBuilder = () => {
         .replaceAll("'", '&#039;');
 
     const sourceInputFor = (itemId) => form.querySelector(`[data-request-quantity][data-item-id="${itemId}"]`);
+    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-request-hidden-quantity][data-item-id="${itemId}"]`);
+    const cardFor = (itemId) => form.querySelector(`[data-request-item-card][data-item-id="${itemId}"]`);
 
     const normalizeInput = (input) => {
         if (!input) {
@@ -340,13 +359,44 @@ const setupMerchandiseRequestBuilder = () => {
         return safeValue;
     };
 
-    const selectedItems = () => itemCards
-        .map((card) => {
-            const itemId = card.dataset.itemId;
-            const sourceInput = sourceInputFor(itemId);
-            const pallets = normalizeInput(sourceInput);
+    const parsePositiveInteger = (value) => {
+        const normalized = String(value ?? '').trim();
 
-            if (!itemId || pallets <= 0) {
+        if (!/^[1-9]\d*$/.test(normalized)) {
+            return 0;
+        }
+
+        const parsed = Number.parseInt(normalized, 10);
+
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    };
+
+    const setFeedback = (message, type = 'default') => {
+        pickerFeedback.textContent = message;
+        pickerFeedback.classList.toggle('helper-text--error', type === 'error');
+        pickerFeedback.classList.toggle('helper-text--success', type === 'success');
+    };
+
+    const syncCardState = (itemId) => {
+        const card = cardFor(itemId);
+        const sourceInput = sourceInputFor(itemId);
+        const hiddenInput = hiddenInputFor(itemId);
+        const isSelected = hiddenInput !== null;
+
+        card?.classList.toggle('is-selected', isSelected);
+
+        if (sourceInput && hiddenInput) {
+            sourceInput.value = hiddenInput.value;
+        }
+    };
+
+    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-request-hidden-quantity]'))
+        .map((input) => {
+            const itemId = input.dataset.itemId;
+            const card = cardFor(itemId);
+            const pallets = normalizeInput(input);
+
+            if (!itemId || !card || pallets <= 0) {
                 return null;
             }
 
@@ -361,6 +411,32 @@ const setupMerchandiseRequestBuilder = () => {
         })
         .filter(Boolean);
 
+    const upsertHiddenInput = (itemId, pallets) => {
+        if (!itemId) {
+            return;
+        }
+
+        let hiddenInput = hiddenInputFor(itemId);
+
+        if (pallets <= 0) {
+            hiddenInput?.remove();
+            syncCardState(itemId);
+            return;
+        }
+
+        if (!hiddenInput) {
+            hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = `quantities[${itemId}]`;
+            hiddenInput.dataset.requestHiddenQuantity = 'true';
+            hiddenInput.dataset.itemId = itemId;
+            hiddenInputs.append(hiddenInput);
+        }
+
+        hiddenInput.value = String(pallets);
+        syncCardState(itemId);
+    };
+
     const renderSummary = () => {
         const lines = selectedItems();
         const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
@@ -368,6 +444,7 @@ const setupMerchandiseRequestBuilder = () => {
         summaryLines.textContent = formatNumber.format(lines.length);
         summaryPallets.textContent = formatNumber.format(totalPallets);
         summaryEmpty.hidden = lines.length > 0;
+        submitButton.disabled = lines.length === 0;
 
         if (lines.length === 0) {
             summaryRows.innerHTML = '';
@@ -409,12 +486,50 @@ const setupMerchandiseRequestBuilder = () => {
         `).join('');
     };
 
+    const addItemToRequest = (itemId, pallets) => {
+        const normalizedPallets = parsePositiveInteger(pallets);
+
+        if (!itemId || normalizedPallets <= 0) {
+            setFeedback('Indica una cantidad valida de pallets antes de anadir la mercancia.', 'error');
+            return;
+        }
+
+        upsertHiddenInput(itemId, normalizedPallets);
+        renderSummary();
+
+        const card = cardFor(itemId);
+        const itemLabel = card?.dataset.itemSku ?? 'La mercancia seleccionada';
+
+        setFeedback(`${itemLabel} se ha anadido al pedido con ${formatNumber.format(normalizedPallets)} pallets.`, 'success');
+    };
+
+    pickerAddButton.addEventListener('click', () => {
+        addItemToRequest(pickerSelect.value, pickerQuantity.value);
+    });
+
+    pickerQuantity.addEventListener('input', () => {
+        const validValue = parsePositiveInteger(pickerQuantity.value);
+
+        if (validValue <= 0 && pickerQuantity.value !== '') {
+            setFeedback('Usa solo cantidades enteras y mayores que cero.', 'error');
+            return;
+        }
+
+        setFeedback('Puedes anadir varias lineas. Si repites una mercancia, se actualizara la cantidad en el resumen.');
+    });
+
     itemCards.forEach((card) => {
         const input = sourceInputFor(card.dataset.itemId);
+        const addButton = card.querySelector('[data-request-add-item]');
 
         input?.addEventListener('input', () => {
-            normalizeInput(input);
-            renderSummary();
+            if (parsePositiveInteger(input.value) <= 0 && input.value !== '') {
+                setFeedback('Usa solo cantidades enteras y mayores que cero.', 'error');
+            }
+        });
+
+        addButton?.addEventListener('click', () => {
+            addItemToRequest(card.dataset.itemId, input?.value ?? '');
         });
     });
 
@@ -425,14 +540,9 @@ const setupMerchandiseRequestBuilder = () => {
             return;
         }
 
-        const sourceInput = sourceInputFor(input.dataset.itemId);
+        const pallets = parsePositiveInteger(input.value);
 
-        if (!sourceInput) {
-            return;
-        }
-
-        sourceInput.value = input.value;
-        normalizeInput(sourceInput);
+        upsertHiddenInput(input.dataset.itemId, pallets);
         renderSummary();
     });
 
@@ -443,14 +553,13 @@ const setupMerchandiseRequestBuilder = () => {
             return;
         }
 
-        const sourceInput = sourceInputFor(button.dataset.itemId);
-
-        if (!sourceInput) {
-            return;
-        }
-
-        sourceInput.value = '0';
+        upsertHiddenInput(button.dataset.itemId, 0);
         renderSummary();
+        setFeedback('Linea eliminada del pedido. Puedes volver a anadirla cuando quieras.');
+    });
+
+    form.querySelectorAll('[data-request-hidden-quantity]').forEach((input) => {
+        syncCardState(input.dataset.itemId);
     });
 
     form.dataset.requestBuilderBound = 'true';
