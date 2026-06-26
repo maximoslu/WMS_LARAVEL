@@ -55,7 +55,7 @@ class RoleAccessTest extends TestCase
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
 
         $this->actingAs($user)
-            ->get(route('modules.inbound'))
+            ->get(route('goods-receipts.index'))
             ->assertOk()
             ->assertSee('Entradas');
     }

@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Client;
+use App\Models\GoodsReceipt;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\StockPallet;
@@ -20,6 +21,7 @@ class StockPalletFactory extends Factory
         return [
             'client_id' => Client::factory(),
             'item_id' => Item::factory(),
+            'goods_receipt_id' => null,
             'location_id' => null,
             'location_text' => fake()->optional()->bothify('PAS-## / HUE-##'),
             'pallet_code' => strtoupper(fake()->bothify('PAL-#####')),
