@@ -6,6 +6,16 @@ return [
         'administracion@maximosl.com'
     ),
 
+    'merchandise_requests' => [
+        'schedule' => [
+            'timezone' => env('APP_TIMEZONE', 'Europe/Madrid'),
+            'business_days' => [1, 2, 3, 4, 5],
+            'start' => '08:00',
+            'end' => '17:00',
+            // TODO: Configurar aqui el horario real de empresa y el mensaje final definitivo para pedidos.
+        ],
+    ],
+
     'navigation_sections' => [
         [
             'key' => 'stock',
@@ -70,15 +80,15 @@ return [
             'children' => [
                 [
                     'key' => 'solicitudes',
-                    'route' => 'modules.requests',
-                    'path' => '/solicitudes',
-                    'title' => 'Solicitudes de mercancia',
-                    'summary' => 'Alta y seguimiento de necesidades operativas y expediciones.',
+                    'route' => 'merchandise-requests.index',
+                    'path' => '/solicitudes-mercancia',
+                    'title' => 'Solicitar mercancia',
+                    'summary' => 'Solicitud de pallets por cliente y consulta interna de pedidos recibidos.',
                     'minimum_role' => 'cliente',
                     'tag' => 'Operacion',
-                    'status' => 'placeholder',
-                    'next_step' => 'Disenar flujo de solicitud por cliente y validacion operativa.',
-                    'active_patterns' => ['modules.requests'],
+                    'status' => 'ready',
+                    'next_step' => 'Conectar reglas reales de horario, preparacion y cierre de pedidos.',
+                    'active_patterns' => ['merchandise-requests.*'],
                 ],
                 [
                     'key' => 'entradas',

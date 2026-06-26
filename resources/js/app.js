@@ -300,12 +300,171 @@ const setupGoodsReceiptLines = () => {
     container.dataset.linesBound = 'true';
 };
 
+const setupMerchandiseRequestBuilder = () => {
+    const form = document.querySelector('[data-merchandise-request-form]');
+
+    if (!form || form.dataset.requestBuilderBound === 'true') {
+        return;
+    }
+
+    const itemCards = Array.from(form.querySelectorAll('[data-request-item-card]'));
+    const summaryRows = form.querySelector('[data-request-summary-rows]');
+    const summaryEmpty = form.querySelector('[data-request-summary-empty]');
+    const summaryLines = form.querySelector('[data-request-summary-lines]');
+    const summaryPallets = form.querySelector('[data-request-summary-pallets]');
+
+    if (!summaryRows || !summaryEmpty || !summaryLines || !summaryPallets) {
+        return;
+    }
+
+    const formatNumber = new Intl.NumberFormat('es-ES');
+
+    const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+
+    const sourceInputFor = (itemId) => form.querySelector(`[data-request-quantity][data-item-id="${itemId}"]`);
+
+    const normalizeInput = (input) => {
+        if (!input) {
+            return 0;
+        }
+
+        const parsed = Number.parseInt(input.value, 10);
+        const safeValue = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+        input.value = String(safeValue);
+
+        return safeValue;
+    };
+
+    const selectedItems = () => itemCards
+        .map((card) => {
+            const itemId = card.dataset.itemId;
+            const sourceInput = sourceInputFor(itemId);
+            const pallets = normalizeInput(sourceInput);
+
+            if (!itemId || pallets <= 0) {
+                return null;
+            }
+
+            return {
+                itemId,
+                sku: card.dataset.itemSku ?? '',
+                description: card.dataset.itemDescription ?? '',
+                lot: card.dataset.itemLot ?? 'Sin lote',
+                unitsPerPallet: card.dataset.unitsPerPallet ?? '',
+                pallets,
+            };
+        })
+        .filter(Boolean);
+
+    const renderSummary = () => {
+        const lines = selectedItems();
+        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
+
+        summaryLines.textContent = formatNumber.format(lines.length);
+        summaryPallets.textContent = formatNumber.format(totalPallets);
+        summaryEmpty.hidden = lines.length > 0;
+
+        if (lines.length === 0) {
+            summaryRows.innerHTML = '';
+            return;
+        }
+
+        summaryRows.innerHTML = lines.map((line) => `
+            <tr>
+                <td>
+                    <div class="stock-cell-main">
+                        <strong>${escapeHtml(line.sku)}</strong>
+                        <span class="users-table-email">
+                            ${escapeHtml(line.description)} · ${escapeHtml(line.lot)} · ${escapeHtml(line.unitsPerPallet)} uds/pallet
+                        </span>
+                    </div>
+                </td>
+                <td>
+                    <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value="${escapeHtml(line.pallets)}"
+                        class="auth-input merchandise-request-summary-input"
+                        data-summary-quantity
+                        data-item-id="${escapeHtml(line.itemId)}"
+                    >
+                </td>
+                <td>
+                    <button
+                        type="button"
+                        class="button-secondary compact-button btn-table"
+                        data-summary-remove
+                        data-item-id="${escapeHtml(line.itemId)}"
+                    >
+                        Eliminar
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    };
+
+    itemCards.forEach((card) => {
+        const input = sourceInputFor(card.dataset.itemId);
+
+        input?.addEventListener('input', () => {
+            normalizeInput(input);
+            renderSummary();
+        });
+    });
+
+    summaryRows.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-summary-quantity]');
+
+        if (!input) {
+            return;
+        }
+
+        const sourceInput = sourceInputFor(input.dataset.itemId);
+
+        if (!sourceInput) {
+            return;
+        }
+
+        sourceInput.value = input.value;
+        normalizeInput(sourceInput);
+        renderSummary();
+    });
+
+    summaryRows.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-summary-remove]');
+
+        if (!button) {
+            return;
+        }
+
+        const sourceInput = sourceInputFor(button.dataset.itemId);
+
+        if (!sourceInput) {
+            return;
+        }
+
+        sourceInput.value = '0';
+        renderSummary();
+    });
+
+    form.dataset.requestBuilderBound = 'true';
+    renderSummary();
+};
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         setupAppDrawer();
         setupGoodsReceiptLines();
+        setupMerchandiseRequestBuilder();
     }, { once: true });
 } else {
     setupAppDrawer();
     setupGoodsReceiptLines();
+    setupMerchandiseRequestBuilder();
 }

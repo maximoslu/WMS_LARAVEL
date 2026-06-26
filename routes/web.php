@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\LocationController;
+use App\Http\Controllers\MerchandiseRequestController;
 use App\Http\Controllers\ModulePlaceholderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
@@ -88,10 +89,18 @@ Route::middleware('auth')->group(function (): void {
         ->defaults('module', 'pallets')
         ->name('modules.pallets');
 
-    Route::get('/solicitudes', ModulePlaceholderController::class)
+    Route::get('/solicitudes-mercancia', [MerchandiseRequestController::class, 'index'])
         ->middleware('minimum.role:'.Role::CLIENTE)
-        ->defaults('module', 'solicitudes')
-        ->name('modules.requests');
+        ->name('merchandise-requests.index');
+    Route::get('/solicitudes-mercancia/crear', [MerchandiseRequestController::class, 'create'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('merchandise-requests.create');
+    Route::post('/solicitudes-mercancia', [MerchandiseRequestController::class, 'store'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('merchandise-requests.store');
+    Route::get('/solicitudes-mercancia/{merchandiseRequest}', [MerchandiseRequestController::class, 'show'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('merchandise-requests.show');
 
     Route::get('/entradas', [GoodsReceiptController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

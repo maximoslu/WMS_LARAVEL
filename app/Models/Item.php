@@ -49,4 +49,9 @@ class Item extends Model
     {
         return $this->hasMany(GoodsReceiptLine::class);
     }
+
+    public function merchandiseRequestLines(): HasMany
+    {
+        return $this->hasMany(MerchandiseRequestLine::class);
+    }
 }
