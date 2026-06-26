@@ -73,6 +73,7 @@ class GoodsReceiptController extends Controller
     {
         return view('goods-receipts.create', $this->formData($request, new GoodsReceipt([
             'status' => GoodsReceipt::STATUS_DRAFT,
+            'received_at' => today(),
         ])));
     }
 
@@ -87,7 +88,7 @@ class GoodsReceiptController extends Controller
                 'receipt_number' => $validated['receipt_number'] ?? null,
                 'external_document_number' => $validated['external_document_number'] ?? null,
                 'status' => GoodsReceipt::STATUS_DRAFT,
-                'received_at' => $validated['received_at'] ?? null,
+                'received_at' => $validated['received_at'] ?? today()->toDateString(),
                 'notes' => $validated['notes'] ?? null,
                 'created_by' => $request->user()->id,
                 ...$this->documentPayload($request->file('document')),
@@ -218,6 +219,20 @@ class GoodsReceiptController extends Controller
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('active', true)->orderBy('name')->get(),
             'items' => Item::query()->where('active', true)->with('client')->orderBy('sku')->get(),
+            'itemsCatalog' => Item::query()
+                ->where('active', true)
+                ->orderBy('sku')
+                ->get()
+                ->map(fn (Item $item): array => [
+                    'id' => $item->id,
+                    'client_id' => $item->client_id,
+                    'sku' => $item->sku,
+                    'description' => $item->description,
+                    'lot' => $item->lot,
+                    'units_per_pallet' => $item->units_per_pallet,
+                ])
+                ->values()
+                ->all(),
             'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
             'lineValues' => $this->lineValues($request, $receipt),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
@@ -257,9 +272,9 @@ class GoodsReceiptController extends Controller
             'sku' => null,
             'description' => null,
             'lot' => null,
-            'quantity_units' => 0,
+            'quantity_units' => null,
             'units_per_pallet' => null,
-            'pallet_count' => 0,
+            'pallet_count' => null,
             'pico_units' => null,
             'location_id' => null,
             'notes' => null,

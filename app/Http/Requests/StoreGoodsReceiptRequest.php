@@ -20,33 +20,41 @@ class StoreGoodsReceiptRequest extends FormRequest
             ->map(function (mixed $line): array {
                 $line = is_array($line) ? $line : [];
 
+                $itemId = $this->normalizeNullableInteger($line['item_id'] ?? null);
+                $item = $itemId !== null ? Item::query()->find($itemId) : null;
                 $quantityUnits = $this->normalizeInteger($line['quantity_units'] ?? 0);
-                $unitsPerPallet = $this->normalizeNullableInteger($line['units_per_pallet'] ?? null);
-                $palletCount = $this->normalizeInteger($line['pallet_count'] ?? 0);
+                $unitsPerPallet = $this->normalizeNullableInteger($line['units_per_pallet'] ?? null)
+                    ?? ($item?->units_per_pallet !== null ? (int) $item->units_per_pallet : null);
+                $palletCount = $this->normalizeNullableInteger($line['pallet_count'] ?? null);
                 $picoUnits = $this->normalizeNullableInteger($line['pico_units'] ?? null);
+                $manualPicoUnitsProvided = array_key_exists('pico_units', $line) && $line['pico_units'] !== '' && $line['pico_units'] !== null;
+                $manualPalletCountProvided = array_key_exists('pallet_count', $line)
+                    && $line['pallet_count'] !== ''
+                    && $line['pallet_count'] !== null
+                    && (int) $line['pallet_count'] > 0;
 
-                if ($unitsPerPallet !== null && ($palletCount > 0 || ($picoUnits ?? 0) > 0)) {
-                    $computedTotal = ($palletCount * $unitsPerPallet) + (int) ($picoUnits ?? 0);
+                if ($unitsPerPallet !== null && ($manualPalletCountProvided || $manualPicoUnitsProvided)) {
+                    $computedTotal = ((int) ($palletCount ?? 0) * $unitsPerPallet) + (int) ($picoUnits ?? 0);
 
                     if ($quantityUnits === 0 && $computedTotal > 0) {
                         $quantityUnits = $computedTotal;
                     }
                 }
 
-                if ($unitsPerPallet !== null && $quantityUnits > 0 && $palletCount === 0 && $picoUnits === null) {
+                if ($unitsPerPallet !== null && $quantityUnits > 0 && ! $manualPalletCountProvided && ! $manualPicoUnitsProvided) {
                     $palletCount = intdiv($quantityUnits, $unitsPerPallet);
                     $picoUnits = $quantityUnits % $unitsPerPallet;
                 }
 
                 return [
-                    'item_id' => $this->normalizeNullableInteger($line['item_id'] ?? null),
-                    'sku' => $this->normalizeNullableUpper($line['sku'] ?? null),
-                    'description' => $this->normalizeNullableText($line['description'] ?? null),
-                    'lot' => $this->normalizeNullableUpper($line['lot'] ?? null),
+                    'item_id' => $itemId,
+                    'sku' => $this->normalizeNullableUpper($line['sku'] ?? null) ?? $item?->sku,
+                    'description' => $this->normalizeNullableText($line['description'] ?? null) ?? $item?->description,
+                    'lot' => $this->normalizeNullableUpper($line['lot'] ?? null) ?? $this->normalizeNullableUpper($item?->lot),
                     'quantity_units' => $quantityUnits,
                     'units_per_pallet' => $unitsPerPallet,
-                    'pallet_count' => $palletCount,
-                    'pico_units' => $picoUnits,
+                    'pallet_count' => $palletCount ?? 0,
+                    'pico_units' => ($picoUnits ?? 0) > 0 ? $picoUnits : null,
                     'location_id' => $this->normalizeNullableInteger($line['location_id'] ?? null),
                     'notes' => $this->normalizeNullableText($line['notes'] ?? null),
                 ];
@@ -139,7 +147,7 @@ class StoreGoodsReceiptRequest extends FormRequest
                     $computedTotal = ($palletCount * $unitsPerPallet) + (int) ($picoUnits ?? 0);
 
                     if ($quantityUnits > 0 && $computedTotal !== $quantityUnits) {
-                        $validator->errors()->add("lines.$index.quantity_units", 'La cantidad total debe coincidir con palets completos y pico.');
+                        $validator->errors()->add("lines.$index.quantity_units", 'La cantidad total debe coincidir con palets completos y pico. Ajusta cantidad o paletizado.');
                     }
                 }
             }

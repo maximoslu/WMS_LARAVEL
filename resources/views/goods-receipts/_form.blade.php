@@ -27,6 +27,7 @@
             action="{{ $isEditing ? route('goods-receipts.update', $receipt) : route('goods-receipts.store') }}"
             class="item-form goods-receipt-form"
             enctype="multipart/form-data"
+            data-goods-receipt-form
         >
             @csrf
             @if ($isEditing)
@@ -36,7 +37,7 @@
             <div class="form-grid form-grid--tight">
                 <label class="auth-field">
                     <span>Cliente</span>
-                    <select name="client_id" class="auth-input" required>
+                    <select name="client_id" class="auth-input" required data-receipt-client>
                         <option value="">Selecciona cliente</option>
                         @foreach ($clients as $client)
                             <option value="{{ $client->id }}" @selected((string) old('client_id', $receipt->client_id) === (string) $client->id)>
@@ -123,7 +124,7 @@
                 <div class="goods-receipt-lines-tools">
                     <div class="app-copy">
                         <strong>Lineas de entrada</strong>
-                        <p>Indica articulo existente o captura SKU, descripcion, lote y paletizado para crear stock al confirmar.</p>
+                        <p>Selecciona articulo y cantidad; el sistema calcula palets y pico.</p>
                     </div>
 
                     <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea</button>
@@ -158,7 +159,7 @@
                     @include('goods-receipts._line-row', ['index' => '__INDEX__', 'line' => null])
                 </template>
 
-                <p class="helper-text">Si informas palets y pico, el total debe cuadrar. Si solo indicas total y uds/palet, el sistema calcula la division al confirmar.</p>
+                <p class="helper-text">Puedes ajustar manualmente las uds/palet de una entrada concreta sin cambiar el maestro del articulo.</p>
             </section>
 
             <div class="item-form-actions action-buttons">
@@ -172,3 +173,5 @@
         </form>
     </section>
 </div>
+
+<script type="application/json" data-goods-receipt-items>@json($itemsCatalog)</script>
