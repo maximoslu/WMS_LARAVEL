@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateManagedUserRequest;
+use App\Models\AccessRequest;
 use App\Models\Client;
 use App\Models\Role;
 use App\Models\User;
@@ -41,6 +42,7 @@ class UserManagementController extends Controller
             'users' => $users,
             'roles' => Role::query()->orderByDesc('level')->get(),
             'clients' => Client::query()->orderBy('name')->get(),
+            'pendingAccessRequests' => AccessRequest::query()->pending()->count(),
             'filters' => [
                 'search' => $search,
                 'role_id' => $roleId > 0 ? $roleId : null,

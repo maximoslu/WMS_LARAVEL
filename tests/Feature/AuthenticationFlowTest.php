@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -55,7 +57,23 @@ class AuthenticationFlowTest extends TestCase
 
     public function test_access_request_can_be_submitted(): void
     {
+        $this->seed(RoleSeeder::class);
         $this->configureBrevo();
+
+        $adminRole = Role::query()->where('slug', Role::ADMINISTRACION)->firstOrFail();
+        $superadminRole = Role::query()->where('slug', Role::SUPERADMIN)->firstOrFail();
+
+        User::factory()->create([
+            'email' => 'administracion@maximosl.com',
+            'role_id' => $adminRole->id,
+            'active' => true,
+        ]);
+
+        User::factory()->create([
+            'email' => 'superadmin@maximosl.com',
+            'role_id' => $superadminRole->id,
+            'active' => true,
+        ]);
 
         Http::fake([
             'https://api.brevo.com/*' => Http::response([
@@ -71,7 +89,7 @@ class AuthenticationFlowTest extends TestCase
         ])->assertRedirect(route('access-requests.create'))
             ->assertSessionHas(
                 'status',
-                'Solicitud enviada. El equipo de MAXIMO revisara tu peticion y te contactara.'
+                'Solicitud recibida. Revisaremos el alta y te avisaremos por correo.'
             );
 
         $this->assertDatabaseHas('access_requests', [
@@ -82,7 +100,10 @@ class AuthenticationFlowTest extends TestCase
         Http::assertSent(function ($request): bool {
             return $request->url() === 'https://api.brevo.com/v3/smtp/email'
                 && $request['subject'] === 'MAXIMO WMS - Nueva solicitud de acceso'
-                && $request['to'][0]['email'] === 'administracion@maximosl.com'
+                && collect($request['to'])->pluck('email')->all() === [
+                    'administracion@maximosl.com',
+                    'superadmin@maximosl.com',
+                ]
                 && $request['sender']['email'] === 'sistema@maximosl.com';
         });
     }
@@ -105,7 +126,7 @@ class AuthenticationFlowTest extends TestCase
         ])->assertRedirect(route('access-requests.create'))
             ->assertSessionHas(
                 'status',
-                'Solicitud enviada. La notificacion interna por correo no ha podido verificarse.'
+                'Solicitud recibida. Revisaremos el alta y te avisaremos por correo.'
             );
 
         $this->assertDatabaseHas('access_requests', [

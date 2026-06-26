@@ -28,6 +28,10 @@
                 </tr>
             </table>
             <hr style="border:none;border-top:1px solid #d8e3ea;margin:24px 0;">
+            <p style="margin:0 0 18px;font-size:14px;line-height:1.6;">
+                Revisa la solicitud desde el panel interno:
+                <a href="{{ $reviewUrl }}" style="color:#0d8b9d;font-weight:700;">Solicitudes de acceso</a>
+            </p>
             <p style="margin:0;font-size:12px;color:#6d7d89;">MAXIMO Servicios Logisticos</p>
         </div>
     </body>

@@ -54,4 +54,9 @@ class Client extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    public function accessRequests(): HasMany
+    {
+        return $this->hasMany(AccessRequest::class);
+    }
 }

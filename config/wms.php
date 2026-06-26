@@ -169,6 +169,18 @@ return [
                     'active_patterns' => ['users.*'],
                 ],
                 [
+                    'key' => 'access-requests',
+                    'route' => 'access-requests.index',
+                    'path' => '/solicitudes-acceso',
+                    'title' => 'Solicitudes de acceso',
+                    'summary' => 'Revision de altas externas y aprobacion de usuarios cliente.',
+                    'minimum_role' => 'administracion',
+                    'tag' => 'Seguridad',
+                    'status' => 'ready',
+                    'next_step' => 'Extender el flujo con indicadores de carga y SLA de revision.',
+                    'active_patterns' => ['access-requests.*'],
+                ],
+                [
                     'key' => 'auditoria',
                     'route' => 'modules.audit',
                     'path' => '/auditoria',

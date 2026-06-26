@@ -182,6 +182,19 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('users.toggle-active');
 
+    Route::get('/solicitudes-acceso', [AccessRequestController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('access-requests.index');
+    Route::get('/solicitudes-acceso/{accessRequest}', [AccessRequestController::class, 'show'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('access-requests.show');
+    Route::patch('/solicitudes-acceso/{accessRequest}/aprobar', [AccessRequestController::class, 'approve'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('access-requests.approve');
+    Route::patch('/solicitudes-acceso/{accessRequest}/rechazar', [AccessRequestController::class, 'reject'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('access-requests.reject');
+
     Route::get('/auditoria', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->defaults('module', 'auditoria')
