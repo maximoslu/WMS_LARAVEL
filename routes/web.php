@@ -4,12 +4,15 @@ use App\Http\Controllers\AccessRequestController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GoodsDispatchController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MerchandiseRequestController;
 use App\Http\Controllers\ModulePlaceholderController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\SupplierController;
@@ -43,6 +46,10 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/perfil', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/perfil', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/perfil/avatar', [ProfileController::class, 'destroyAvatar'])->name('profile.avatar.destroy');
+    Route::get('/notificaciones', [NotificationController::class, 'index'])
+        ->name('notifications.index');
+    Route::patch('/notificaciones/{notification}/leer', [NotificationController::class, 'markAsRead'])
+        ->name('notifications.read');
 
     Route::get('/articulos', [ItemController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
@@ -101,6 +108,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/solicitudes-mercancia/{merchandiseRequest}', [MerchandiseRequestController::class, 'show'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.show');
+    Route::patch('/solicitudes-mercancia/{merchandiseRequest}/estado', [MerchandiseRequestController::class, 'updateStatus'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('merchandise-requests.update-status');
+    Route::get('/solicitudes-mercancia/{merchandiseRequest}/preparacion-pdf', [MerchandiseRequestController::class, 'preparationPdf'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('merchandise-requests.preparation-pdf');
 
     Route::get('/entradas', [GoodsReceiptController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
@@ -130,15 +143,52 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.attach-document');
 
-    Route::get('/salidas', ModulePlaceholderController::class)
+    Route::get('/salidas', [GoodsDispatchController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
-        ->defaults('module', 'salidas')
-        ->name('modules.outbound');
+        ->name('dispatches.index');
+    Route::get('/salidas/crear', [GoodsDispatchController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.create');
+    Route::post('/salidas', [GoodsDispatchController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.store');
+    Route::get('/salidas/pedidos-pendientes', [GoodsDispatchController::class, 'pendingRequests'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.requests.index');
+    Route::get('/salidas/pedidos/{merchandiseRequest}', [GoodsDispatchController::class, 'showRequest'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.requests.show');
+    Route::post('/salidas/pedidos/{merchandiseRequest}/generar', [GoodsDispatchController::class, 'generateFromRequest'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.requests.generate');
+    Route::get('/salidas/{goodsDispatch}', [GoodsDispatchController::class, 'show'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.show');
+    Route::patch('/salidas/{goodsDispatch}/estado', [GoodsDispatchController::class, 'updateStatus'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.update-status');
+    Route::get('/salidas/{goodsDispatch}/albaran', [GoodsDispatchController::class, 'deliveryNotePdf'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.delivery-note');
 
-    Route::get('/clientes', ModulePlaceholderController::class)
+    Route::get('/clientes', [ClientController::class, 'index'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
-        ->defaults('module', 'clientes')
-        ->name('modules.clients');
+        ->name('clients.index');
+    Route::get('/clientes/crear', [ClientController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.create');
+    Route::post('/clientes', [ClientController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.store');
+    Route::get('/clientes/{client}/editar', [ClientController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.edit');
+    Route::put('/clientes/{client}', [ClientController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.update');
+    Route::patch('/clientes/{client}/activar-desactivar', [ClientController::class, 'toggleActive'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.toggle-active');
 
     Route::get('/almacenes', [WarehouseController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

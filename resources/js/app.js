@@ -566,14 +566,235 @@ const setupMerchandiseRequestBuilder = () => {
     renderSummary();
 };
 
+const setupGoodsDispatchBuilder = () => {
+    const form = document.querySelector('[data-goods-dispatch-form]');
+
+    if (!form || form.dataset.dispatchBuilderBound === 'true') {
+        return;
+    }
+
+    const clientSelect = form.querySelector('[data-dispatch-client]');
+    const pickerSelect = form.querySelector('[data-dispatch-picker-item]');
+    const pickerQuantity = form.querySelector('[data-dispatch-picker-quantity]');
+    const pickerFeedback = form.querySelector('[data-dispatch-picker-feedback]');
+    const pickerAddButton = form.querySelector('[data-dispatch-add-selected]');
+    const hiddenInputs = form.querySelector('[data-dispatch-hidden-inputs]');
+    const summaryRows = form.querySelector('[data-dispatch-summary-rows]');
+    const summaryEmpty = form.querySelector('[data-dispatch-summary-empty]');
+    const summaryLines = form.querySelector('[data-dispatch-summary-lines]');
+    const summaryPallets = form.querySelector('[data-dispatch-summary-pallets]');
+    const submitButton = form.querySelector('[data-dispatch-submit]');
+    const itemsCatalogNode = form.querySelector('[data-dispatch-items]');
+
+    if (
+        !clientSelect
+        || !pickerSelect
+        || !pickerQuantity
+        || !pickerFeedback
+        || !pickerAddButton
+        || !hiddenInputs
+        || !summaryRows
+        || !summaryEmpty
+        || !summaryLines
+        || !summaryPallets
+        || !submitButton
+        || !itemsCatalogNode
+    ) {
+        return;
+    }
+
+    let itemsCatalog = [];
+
+    try {
+        itemsCatalog = JSON.parse(itemsCatalogNode.textContent ?? '[]');
+    } catch {
+        itemsCatalog = [];
+    }
+
+    const itemsById = new Map(itemsCatalog.map((item) => [String(item.id), item]));
+    const formatNumber = new Intl.NumberFormat('es-ES');
+
+    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-dispatch-hidden-quantity][data-item-id="${itemId}"]`);
+
+    const parsePositiveInteger = (value) => {
+        const normalized = String(value ?? '').trim();
+
+        if (!/^[1-9]\d*$/.test(normalized)) {
+            return 0;
+        }
+
+        const parsed = Number.parseInt(normalized, 10);
+
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    };
+
+    const setFeedback = (message, type = 'default') => {
+        pickerFeedback.textContent = message;
+        pickerFeedback.classList.toggle('helper-text--error', type === 'error');
+        pickerFeedback.classList.toggle('helper-text--success', type === 'success');
+    };
+
+    const syncPickerOptions = () => {
+        const currentClientId = clientSelect.value;
+
+        pickerSelect.querySelectorAll('option[data-item-client-id]').forEach((option) => {
+            const matchesClient = currentClientId !== '' && option.dataset.itemClientId === currentClientId;
+            option.hidden = !matchesClient;
+            option.disabled = !matchesClient;
+        });
+
+        if (pickerSelect.selectedOptions[0]?.disabled) {
+            pickerSelect.value = '';
+        }
+    };
+
+    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-dispatch-hidden-quantity]'))
+        .map((input) => {
+            const item = itemsById.get(input.dataset.itemId);
+            const pallets = parsePositiveInteger(input.value);
+
+            if (!item || pallets <= 0) {
+                return null;
+            }
+
+            return {
+                itemId: String(item.id),
+                sku: item.sku ?? '',
+                description: item.description ?? '',
+                lot: item.lot ?? 'Sin lote',
+                unitsPerPallet: item.units_per_pallet ?? '',
+                pallets,
+            };
+        })
+        .filter(Boolean);
+
+    const upsertHiddenInput = (itemId, pallets) => {
+        let hiddenInput = hiddenInputFor(itemId);
+
+        if (pallets <= 0) {
+            hiddenInput?.remove();
+            return;
+        }
+
+        if (!hiddenInput) {
+            hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = `quantities[${itemId}]`;
+            hiddenInput.dataset.dispatchHiddenQuantity = 'true';
+            hiddenInput.dataset.itemId = itemId;
+            hiddenInputs.append(hiddenInput);
+        }
+
+        hiddenInput.value = String(pallets);
+    };
+
+    const renderSummary = () => {
+        const lines = selectedItems();
+        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
+
+        summaryLines.textContent = formatNumber.format(lines.length);
+        summaryPallets.textContent = formatNumber.format(totalPallets);
+        summaryEmpty.hidden = lines.length > 0;
+        submitButton.disabled = lines.length === 0;
+
+        if (lines.length === 0) {
+            summaryRows.innerHTML = '';
+            return;
+        }
+
+        summaryRows.innerHTML = lines.map((line) => `
+            <tr>
+                <td>
+                    <div class="stock-cell-main">
+                        <strong>${line.sku}</strong>
+                        <span class="users-table-email">${line.description} · ${line.lot} · ${line.unitsPerPallet} uds/pallet</span>
+                    </div>
+                </td>
+                <td>
+                    <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value="${line.pallets}"
+                        class="auth-input merchandise-request-summary-input"
+                        data-dispatch-summary-quantity
+                        data-item-id="${line.itemId}"
+                    >
+                </td>
+                <td>
+                    <button type="button" class="button-secondary compact-button btn-table" data-dispatch-summary-remove data-item-id="${line.itemId}">
+                        Eliminar
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    };
+
+    const addItem = () => {
+        if (clientSelect.value === '') {
+            setFeedback('Selecciona un cliente antes de anadir referencias a la salida.', 'error');
+            return;
+        }
+
+        const itemId = pickerSelect.value;
+        const pallets = parsePositiveInteger(pickerQuantity.value);
+
+        if (!itemId || pallets <= 0) {
+            setFeedback('Indica una referencia valida y una cantidad entera mayor que cero.', 'error');
+            return;
+        }
+
+        upsertHiddenInput(itemId, pallets);
+        renderSummary();
+
+        const item = itemsById.get(itemId);
+        setFeedback(`${item?.sku ?? 'La referencia'} se ha anadido a la salida.`, 'success');
+    };
+
+    clientSelect.addEventListener('change', () => {
+        syncPickerOptions();
+        setFeedback('Cliente seleccionado. Ya puedes anadir referencias a la salida.');
+    });
+
+    pickerAddButton.addEventListener('click', addItem);
+
+    summaryRows.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-dispatch-summary-quantity]');
+
+        if (!input) {
+            return;
+        }
+
+        upsertHiddenInput(input.dataset.itemId, parsePositiveInteger(input.value));
+        renderSummary();
+    });
+
+    summaryRows.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-dispatch-summary-remove]');
+
+        if (!button) {
+            return;
+        }
+
+        upsertHiddenInput(button.dataset.itemId, 0);
+        renderSummary();
+    });
+
+    syncPickerOptions();
+    renderSummary();
+    form.dataset.dispatchBuilderBound = 'true';
+};
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         setupAppDrawer();
         setupGoodsReceiptLines();
         setupMerchandiseRequestBuilder();
+        setupGoodsDispatchBuilder();
     }, { once: true });
 } else {
     setupAppDrawer();
     setupGoodsReceiptLines();
     setupMerchandiseRequestBuilder();
+    setupGoodsDispatchBuilder();
 }

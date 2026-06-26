@@ -15,6 +15,11 @@ class Client extends Model
     protected $fillable = [
         'name',
         'code',
+        'delivery_address',
+        'delivery_postal_code',
+        'delivery_city',
+        'delivery_province',
+        'delivery_country',
         'active',
     ];
 
@@ -63,5 +68,25 @@ class Client extends Model
     public function merchandiseRequests(): HasMany
     {
         return $this->hasMany(MerchandiseRequest::class);
+    }
+
+    public function goodsDispatches(): HasMany
+    {
+        return $this->hasMany(GoodsDispatch::class);
+    }
+
+    public function formattedDeliveryAddress(): string
+    {
+        $lines = collect([
+            $this->delivery_address,
+            trim(collect([
+                $this->delivery_postal_code,
+                $this->delivery_city,
+                $this->delivery_province,
+            ])->filter()->implode(' ')),
+            $this->delivery_country,
+        ])->filter(fn (?string $value) => filled($value));
+
+        return $lines->implode(', ');
     }
 }

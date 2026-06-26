@@ -11,8 +11,11 @@ class Role extends Model
     use HasFactory;
 
     public const SUPERADMIN = 'superadmin';
+
     public const ADMINISTRACION = 'administracion';
+
     public const ALMACEN = 'almacen';
+
     public const CLIENTE = 'cliente';
 
     protected $fillable = [

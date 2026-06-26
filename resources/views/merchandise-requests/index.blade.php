@@ -55,6 +55,7 @@
                     <option value="all" @selected($filters['status'] === 'all')>Todos</option>
                     <option value="pending" @selected($filters['status'] === 'pending')>Pendiente</option>
                     <option value="preparing" @selected($filters['status'] === 'preparing')>Preparando</option>
+                    <option value="sent" @selected($filters['status'] === 'sent')>Enviado</option>
                     <option value="completed" @selected($filters['status'] === 'completed')>Completado</option>
                     <option value="cancelled" @selected($filters['status'] === 'cancelled')>Cancelado</option>
                 </select>
@@ -140,9 +141,16 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
-                                        Ver detalle
-                                    </a>
+                                    <div class="inline-actions action-buttons">
+                                        <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
+                                            Ver detalle
+                                        </a>
+                                        @unless ($isClient)
+                                            <a href="{{ route('dispatches.requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
+                                                Gestionar
+                                            </a>
+                                        @endunless
+                                    </div>
                                 </td>
                             </tr>
                         @endforeach

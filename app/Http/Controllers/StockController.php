@@ -12,8 +12,7 @@ class StockController extends Controller
 {
     public function __construct(
         private readonly StockOverviewBuilder $overviewBuilder,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): View
     {

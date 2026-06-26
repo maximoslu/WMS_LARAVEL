@@ -7,13 +7,16 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
+use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestScheduleService;
 use App\Support\WmsNavigation;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class MerchandiseRequestController extends Controller
@@ -95,6 +98,7 @@ class MerchandiseRequestController extends Controller
     public function store(
         StoreMerchandiseRequestRequest $request,
         MerchandiseRequestScheduleService $scheduleService,
+        MerchandiseRequestNotificationService $notificationService,
     ): RedirectResponse {
         $user = $request->user();
         $requestedLines = $request->validatedLines();
@@ -130,9 +134,12 @@ class MerchandiseRequestController extends Controller
             return $requestModel;
         });
 
+        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item']);
+        $notificationService->notifySubmitted($merchandiseRequest);
+
         return redirect()
             ->route('merchandise-requests.show', $merchandiseRequest)
-            ->with('status', $scheduleService->submissionNotice($merchandiseRequest->submittedAt()));
+            ->with('status', $scheduleService->submissionNotice($merchandiseRequest->submittedAt()).' Solicitud registrada y notificada correctamente.');
     }
 
     public function show(Request $request, MerchandiseRequest $merchandiseRequest): View
@@ -146,9 +153,65 @@ class MerchandiseRequestController extends Controller
         }
 
         return view('merchandise-requests.show', [
-            'merchandiseRequest' => $merchandiseRequest->load(['client', 'requestedBy', 'lines.item']),
+            'merchandiseRequest' => $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch']),
             'isClient' => $user->hasRole(Role::CLIENTE),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
+    }
+
+    public function updateStatus(
+        Request $request,
+        MerchandiseRequest $merchandiseRequest,
+        MerchandiseRequestNotificationService $notificationService,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(MerchandiseRequest::statuses())],
+        ]);
+
+        $previousStatus = $merchandiseRequest->status;
+
+        if ($previousStatus === $validated['status']) {
+            return back()->with('status', 'La solicitud ya estaba en ese estado.');
+        }
+
+        $payload = [
+            'status' => $validated['status'],
+        ];
+
+        if ($validated['status'] === MerchandiseRequest::STATUS_PREPARING) {
+            $payload['prepared_by'] = $request->user()->id;
+            $payload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
+        }
+
+        if ($validated['status'] === MerchandiseRequest::STATUS_SENT) {
+            $payload['shipped_by'] = $request->user()->id;
+            $payload['shipped_at'] = $merchandiseRequest->shipped_at ?? now();
+        }
+
+        if ($validated['status'] === MerchandiseRequest::STATUS_CANCELLED) {
+            $payload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
+        }
+
+        $merchandiseRequest->update($payload);
+
+        $notificationService->notifyStatusChanged(
+            $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item']),
+            $previousStatus
+        );
+
+        return redirect()
+            ->route('merchandise-requests.show', $merchandiseRequest)
+            ->with('status', 'Estado de la solicitud actualizado correctamente.');
+    }
+
+    public function preparationPdf(Request $request, MerchandiseRequest $merchandiseRequest)
+    {
+        abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
+
+        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item']);
+
+        return Pdf::loadView('merchandise-requests.preparation-pdf', [
+            'merchandiseRequest' => $merchandiseRequest,
+        ])->stream($merchandiseRequest->referenceCode().'-preparacion.pdf');
     }
 }

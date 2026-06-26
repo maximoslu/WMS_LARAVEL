@@ -98,6 +98,11 @@ class User extends Authenticatable
         return $this->hasMany(MerchandiseRequest::class, 'requested_by');
     }
 
+    public function createdGoodsDispatches(): HasMany
+    {
+        return $this->hasMany(GoodsDispatch::class, 'created_by');
+    }
+
     public function hasRole(string $slug): bool
     {
         return $this->role?->slug === $slug;

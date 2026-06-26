@@ -25,8 +25,7 @@ class GoodsReceiptController extends Controller
 {
     public function __construct(
         private readonly GoodsReceiptConfirmationService $confirmationService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request): View
     {

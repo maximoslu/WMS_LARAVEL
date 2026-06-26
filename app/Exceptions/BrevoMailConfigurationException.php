@@ -4,6 +4,4 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-class BrevoMailConfigurationException extends RuntimeException
-{
-}
+class BrevoMailConfigurationException extends RuntimeException {}

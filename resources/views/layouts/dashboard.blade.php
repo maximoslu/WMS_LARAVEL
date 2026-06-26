@@ -14,6 +14,7 @@
         @php($roleName = $user->role?->name ?? 'Sin rol asignado')
         @php($userAvatarUrl = $user->avatar_url)
         @php($navigationSections = $navigationSections ?? [])
+        @php($unreadNotificationsCount = $layoutUnreadNotificationsCount ?? 0)
         @php($topbarTitle = $__env->yieldContent('topbar_title', trim(explode('|', $__env->yieldContent('title', 'MAXIMO WMS'))[0])))
         @php($userInitials = collect(preg_split('/\s+/', trim($userName)))->filter()->take(2)->map(fn (string $chunk) => strtoupper(substr($chunk, 0, 1)))->implode(''))
 
@@ -90,6 +91,13 @@
                     Mi perfil
                 </a>
 
+                <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-compact{{ request()->routeIs('notifications.*') ? ' is-active' : '' }}">
+                    Notificaciones
+                    @if ($unreadNotificationsCount > 0)
+                        <span class="users-pending-count">{{ $unreadNotificationsCount }}</span>
+                    @endif
+                </a>
+
                 <form method="POST" action="{{ route('logout') }}" class="app-drawer-logout">
                     @csrf
                     <button type="submit" class="button-secondary compact-button btn-compact">Cerrar sesion</button>
@@ -129,6 +137,12 @@
                 </div>
 
                 <div class="app-topbar-end">
+                    <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-compact app-notification-link">
+                        Notificaciones
+                        @if ($unreadNotificationsCount > 0)
+                            <span class="users-pending-count">{{ $unreadNotificationsCount }}</span>
+                        @endif
+                    </a>
                     <span class="sr-only">Rol</span>
                     <span class="app-role-chip">{{ $roleName }}</span>
                     <a href="{{ route('profile.edit') }}" class="button-secondary compact-button btn-compact">Mi perfil</a>

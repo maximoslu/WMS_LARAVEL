@@ -197,7 +197,7 @@ class AccessRequestController extends Controller
     private function ensurePending(AccessRequest $accessRequest): void
     {
         if ($accessRequest->status !== AccessRequest::STATUS_PENDING) {
-            throw (new ModelNotFoundException())->setModel(AccessRequest::class, [$accessRequest->id]);
+            throw (new ModelNotFoundException)->setModel(AccessRequest::class, [$accessRequest->id]);
         }
     }
 }

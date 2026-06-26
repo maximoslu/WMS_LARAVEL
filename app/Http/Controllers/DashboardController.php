@@ -18,6 +18,10 @@ class DashboardController extends Controller
             'currentRoleName' => $user->role?->name ?? 'Sin rol asignado',
             'visibleModuleCount' => collect($navigationSections)
                 ->sum(fn (array $section): int => count($section['children'])),
+            'recentNotifications' => $user->notifications()
+                ->latest()
+                ->limit(5)
+                ->get(),
         ]);
     }
 }

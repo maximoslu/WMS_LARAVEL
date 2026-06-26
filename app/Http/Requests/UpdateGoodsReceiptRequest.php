@@ -2,6 +2,4 @@
 
 namespace App\Http\Requests;
 
-class UpdateGoodsReceiptRequest extends StoreGoodsReceiptRequest
-{
-}
+class UpdateGoodsReceiptRequest extends StoreGoodsReceiptRequest {}

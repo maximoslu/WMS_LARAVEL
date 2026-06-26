@@ -16,12 +16,17 @@ class GoodsReceipt extends Model
     use HasFactory;
 
     public const STATUS_DRAFT = 'draft';
+
     public const STATUS_PENDING_REVIEW = 'pending_review';
+
     public const STATUS_CONFIRMED = 'confirmed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     public const AI_STATUS_PENDING = 'pending';
+
     public const AI_STATUS_PROCESSED = 'processed';
+
     public const AI_STATUS_FAILED = 'failed';
 
     protected $fillable = [

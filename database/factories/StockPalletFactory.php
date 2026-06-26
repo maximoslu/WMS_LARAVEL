@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Models\Client;
-use App\Models\GoodsReceipt;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\StockPallet;

@@ -7,14 +7,20 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class MerchandiseRequest extends Model
 {
     use HasFactory;
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_PREPARING = 'preparing';
+
+    public const STATUS_SENT = 'sent';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
@@ -50,6 +56,7 @@ class MerchandiseRequest extends Model
         return [
             self::STATUS_PENDING,
             self::STATUS_PREPARING,
+            self::STATUS_SENT,
             self::STATUS_COMPLETED,
             self::STATUS_CANCELLED,
         ];
@@ -68,6 +75,11 @@ class MerchandiseRequest extends Model
     public function lines(): HasMany
     {
         return $this->hasMany(MerchandiseRequestLine::class);
+    }
+
+    public function dispatch(): HasOne
+    {
+        return $this->hasOne(GoodsDispatch::class);
     }
 
     public function referenceCode(): string
@@ -112,6 +124,7 @@ class MerchandiseRequest extends Model
         return match ($this->status) {
             self::STATUS_PENDING => 'Pendiente',
             self::STATUS_PREPARING => 'Preparando',
+            self::STATUS_SENT => 'Enviado',
             self::STATUS_COMPLETED => 'Completado',
             self::STATUS_CANCELLED => 'Cancelado',
             default => ucfirst((string) $this->status),

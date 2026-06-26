@@ -36,4 +36,33 @@
             </article>
         @endforeach
     </section>
+
+    <section class="surface-card compact-card dashboard-notifications-card">
+        <div class="ops-section-heading">
+            <div>
+                <strong>Notificaciones recientes</strong>
+                <p class="merchandise-request-summary-copy">Avisos internos y seguimiento operativo reciente en el SGA.</p>
+            </div>
+            <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-table">Ver todas</a>
+        </div>
+
+        @if ($recentNotifications->isEmpty())
+            <div class="merchandise-request-summary-empty">
+                No hay notificaciones recientes para este usuario.
+            </div>
+        @else
+            <div class="dashboard-notification-list">
+                @foreach ($recentNotifications as $notification)
+                    <article class="dashboard-notification-item{{ $notification->read_at === null ? ' is-unread' : '' }}">
+                        <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
+                        <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
+                        <div class="dashboard-notification-meta">
+                            <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
+                            <span>{{ $notification->created_at?->format('d/m/Y H:i') }}</span>
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        @endif
+    </section>
 @endsection

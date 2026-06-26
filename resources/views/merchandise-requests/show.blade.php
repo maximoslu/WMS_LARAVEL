@@ -46,8 +46,68 @@
                 <dt>Total pallets</dt>
                 <dd>{{ number_format($merchandiseRequest->requestedPalletsCount(), 0, ',', '.') }}</dd>
             </div>
+            @if ($merchandiseRequest->dispatch)
+                <div>
+                    <dt>Salida asociada</dt>
+                    <dd>{{ $merchandiseRequest->dispatch->dispatchNumber() }}</dd>
+                </div>
+            @endif
         </dl>
     </section>
+
+    @unless ($isClient)
+        <section class="surface-card compact-card merchandise-request-detail-card">
+            <div class="ops-section-heading">
+                <div>
+                    <strong>Gestion operativa</strong>
+                    <p class="merchandise-request-summary-copy">Cambia el estado, imprime preparacion o genera la salida documental.</p>
+                </div>
+            </div>
+
+            <div class="dispatch-actions-grid">
+                <form method="POST" action="{{ route('merchandise-requests.update-status', $merchandiseRequest) }}" class="dispatch-inline-form">
+                    @csrf
+                    @method('PATCH')
+
+                    <label class="auth-field">
+                        <span>Cambiar estado</span>
+                        <select name="status" class="auth-input">
+                            @foreach (\App\Models\MerchandiseRequest::statuses() as $status)
+                                <option value="{{ $status }}" @selected($merchandiseRequest->status === $status)>
+                                    {{ \Illuminate\Support\Str::headline($status) }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    <button type="submit" class="button-primary compact-button btn-compact">Guardar estado</button>
+                </form>
+
+                <div class="dispatch-action-stack">
+                    <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact">
+                        Imprimir preparacion
+                    </a>
+
+                    @if ($merchandiseRequest->dispatch)
+                        <a href="{{ route('dispatches.show', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact">
+                            Ver salida
+                        </a>
+
+                        @if (in_array($merchandiseRequest->status, [\App\Models\MerchandiseRequest::STATUS_SENT, \App\Models\MerchandiseRequest::STATUS_COMPLETED], true))
+                            <a href="{{ route('dispatches.delivery-note', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact">
+                                Imprimir albaran
+                            </a>
+                        @endif
+                    @else
+                        <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
+                            @csrf
+                            <button type="submit" class="button-primary compact-button btn-compact">Generar salida</button>
+                        </form>
+                    @endif
+                </div>
+            </div>
+        </section>
+    @endunless
 
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-section-heading">

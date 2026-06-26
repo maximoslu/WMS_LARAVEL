@@ -12,7 +12,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AuthenticationFlowTest extends TestCase
@@ -207,11 +206,11 @@ class AuthenticationFlowTest extends TestCase
         ]);
 
         $this->post(route('password.email'), [
-                'email' => 'operador@maximo.test',
-            ])->assertSessionHas(
-                'status',
-                'Si el correo pertenece a una cuenta activa, recibiras un enlace para restablecer la contrasena.'
-            );
+            'email' => 'operador@maximo.test',
+        ])->assertSessionHas(
+            'status',
+            'Si el correo pertenece a una cuenta activa, recibiras un enlace para restablecer la contrasena.'
+        );
 
         $this->assertDatabaseHas('password_reset_tokens', [
             'email' => $user->email,

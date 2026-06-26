@@ -142,6 +142,37 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertSessionHasErrors('quantities');
     }
 
+    public function test_cliente_cannot_create_request_with_negative_or_decimal_pallets(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.create'))
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => -1,
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.create'))
+            ->assertSessionHasErrors('quantities');
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.create'))
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => '1.5',
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.create'))
+            ->assertSessionHasErrors('quantities.'.$item->id);
+    }
+
     public function test_cliente_only_sees_own_requests(): void
     {
         $this->seedBaseData();

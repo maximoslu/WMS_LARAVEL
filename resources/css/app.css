@@ -3506,6 +3506,12 @@ body.brand-body.app-shell-body .pagination-card {
     color: var(--brand-success);
 }
 
+.merchandise-request-status--sent,
+.dispatch-status--sent {
+    background: rgba(20, 184, 196, 0.18);
+    color: var(--brand-cyan-dark);
+}
+
 .merchandise-request-status--cancelled {
     background: var(--brand-danger-bg);
     color: var(--brand-danger);
@@ -3515,14 +3521,129 @@ body.brand-body.app-shell-body .pagination-card {
     min-width: 64rem;
 }
 
+.dispatch-status--draft {
+    background: rgba(53, 83, 107, 0.1);
+    color: var(--brand-slate-dark);
+}
+
+.dispatch-status--preparing {
+    background: rgba(255, 190, 92, 0.18);
+    color: #9a5b00;
+}
+
+.dispatch-status--completed {
+    background: var(--brand-success-bg);
+    color: var(--brand-success);
+}
+
+.dispatch-status--cancelled {
+    background: var(--brand-danger-bg);
+    color: var(--brand-danger);
+}
+
+.dashboard-notifications-card,
+.notification-list,
+.dispatch-entry-grid,
+.dispatch-builder,
+.dispatch-pending-list,
+.dispatch-actions-grid,
+.dispatch-entry-card,
+.notification-card,
+.dashboard-notification-list,
+.dispatch-action-stack,
+.dispatch-inline-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.dashboard-notification-list,
+.dispatch-pending-list {
+    gap: 0.75rem;
+}
+
+.dashboard-notification-item,
+.dispatch-pending-card {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    border-radius: 12px;
+    background: rgba(247, 249, 251, 0.82);
+}
+
+.dashboard-notification-item.is-unread,
+.notification-card.is-unread {
+    border-color: rgba(20, 184, 196, 0.24);
+    background: linear-gradient(180deg, rgba(20, 184, 196, 0.08), rgba(255, 255, 255, 0.92));
+}
+
+.dashboard-notification-item p,
+.notification-card-head p,
+.dispatch-entry-card p,
+.dispatch-pending-card p {
+    margin: 0;
+    color: var(--brand-soft);
+    line-height: 1.5;
+}
+
+.dashboard-notification-meta,
+.notification-card-meta,
+.notification-card-head {
+    display: flex;
+    gap: 0.85rem;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.notification-card {
+    padding: 1rem;
+}
+
+.dispatch-entry-card {
+    padding: 1rem;
+}
+
+.dispatch-builder {
+    align-items: start;
+}
+
+.dispatch-pending-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+}
+
+.dispatch-actions-grid {
+    align-items: start;
+}
+
+.dispatch-action-stack {
+    align-content: start;
+}
+
+.dispatch-inline-form .button-primary,
+.dispatch-action-stack .button-primary,
+.dispatch-action-stack .button-secondary {
+    width: 100%;
+}
+
 @media (min-width: 1024px) {
     .merchandise-request-builder {
         grid-template-columns: minmax(0, 1.6fr) minmax(22rem, 0.9fr);
         align-items: start;
     }
 
+    .dispatch-builder {
+        grid-template-columns: minmax(0, 1.55fr) minmax(22rem, 0.95fr);
+    }
+
     .merchandise-request-picker {
         grid-template-columns: minmax(0, 1.6fr) minmax(10rem, 0.6fr) auto;
+    }
+
+    .dispatch-entry-grid,
+    .dispatch-actions-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -3546,12 +3667,17 @@ body.brand-body.app-shell-body .pagination-card {
         grid-template-columns: 1fr;
     }
 
+    .dispatch-pending-card {
+        grid-template-columns: 1fr;
+    }
+
     .merchandise-request-item-footer {
         align-items: stretch;
     }
 
     .merchandise-request-item-footer .button-secondary,
-    .merchandise-request-picker .button-primary {
+    .merchandise-request-picker .button-primary,
+    .dispatch-entry-card .button-primary {
         width: 100%;
     }
 }
