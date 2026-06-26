@@ -5,11 +5,13 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\ModulePlaceholderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarehouseController;
 use App\Models\Role;
@@ -91,10 +93,33 @@ Route::middleware('auth')->group(function (): void {
         ->defaults('module', 'solicitudes')
         ->name('modules.requests');
 
-    Route::get('/entradas', ModulePlaceholderController::class)
+    Route::get('/entradas', [GoodsReceiptController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
-        ->defaults('module', 'entradas')
-        ->name('modules.inbound');
+        ->name('goods-receipts.index');
+    Route::get('/entradas/crear', [GoodsReceiptController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.create');
+    Route::post('/entradas', [GoodsReceiptController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.store');
+    Route::get('/entradas/{goodsReceipt}', [GoodsReceiptController::class, 'show'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.show');
+    Route::get('/entradas/{goodsReceipt}/editar', [GoodsReceiptController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.edit');
+    Route::put('/entradas/{goodsReceipt}', [GoodsReceiptController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.update');
+    Route::patch('/entradas/{goodsReceipt}/confirmar', [GoodsReceiptController::class, 'confirm'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.confirm');
+    Route::patch('/entradas/{goodsReceipt}/cancelar', [GoodsReceiptController::class, 'cancel'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.cancel');
+    Route::post('/entradas/{goodsReceipt}/documento', [GoodsReceiptController::class, 'attachDocument'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.attach-document');
 
     Route::get('/salidas', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::ALMACEN)
@@ -124,6 +149,25 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/almacenes/{warehouse}/activar-desactivar', [WarehouseController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('warehouses.toggle-active');
+
+    Route::get('/proveedores', [SupplierController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('suppliers.index');
+    Route::get('/proveedores/crear', [SupplierController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('suppliers.create');
+    Route::post('/proveedores', [SupplierController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('suppliers.store');
+    Route::get('/proveedores/{supplier}/editar', [SupplierController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('suppliers.edit');
+    Route::put('/proveedores/{supplier}', [SupplierController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('suppliers.update');
+    Route::patch('/proveedores/{supplier}/activar-desactivar', [SupplierController::class, 'toggleActive'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('suppliers.toggle-active');
 
     Route::get('/usuarios', [UserManagementController::class, 'index'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)

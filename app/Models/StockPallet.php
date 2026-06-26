@@ -16,6 +16,7 @@ class StockPallet extends Model
     protected $fillable = [
         'client_id',
         'item_id',
+        'goods_receipt_id',
         'location_id',
         'location_text',
         'pallet_code',
@@ -72,6 +73,11 @@ class StockPallet extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function goodsReceipt(): BelongsTo
+    {
+        return $this->belongsTo(GoodsReceipt::class);
     }
 
     public function location(): BelongsTo

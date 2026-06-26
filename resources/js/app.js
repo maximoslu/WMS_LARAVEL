@@ -62,8 +62,250 @@ const setupAppDrawer = () => {
     syncState(false);
 };
 
+const setupGoodsReceiptLines = () => {
+    const form = document.querySelector('[data-goods-receipt-form]');
+    const container = document.querySelector('[data-receipt-lines]');
+    const addButton = document.querySelector('[data-add-line]');
+    const template = document.querySelector('[data-line-template]');
+    const clientSelect = document.querySelector('[data-receipt-client]');
+    const itemsCatalogNode = document.querySelector('[data-goods-receipt-items]');
+
+    if (!form || !container || !addButton || !template || !clientSelect || !itemsCatalogNode || container.dataset.linesBound === 'true') {
+        return;
+    }
+
+    let itemsCatalog = [];
+
+    try {
+        itemsCatalog = JSON.parse(itemsCatalogNode.textContent ?? '[]');
+    } catch {
+        itemsCatalog = [];
+    }
+
+    const itemsById = new Map(itemsCatalog.map((item) => [String(item.id), item]));
+    const rowCount = () => container.querySelectorAll('[data-line-row]').length;
+    const currentClientId = () => clientSelect.value;
+
+    const markAutofilled = (field, isAutofilled) => {
+        if (!field) {
+            return;
+        }
+
+        field.classList.toggle('is-autofilled', isAutofilled);
+        field.dataset.autofilled = isAutofilled ? 'true' : 'false';
+    };
+
+    const recalculateRow = (row) => {
+        const quantityField = row.querySelector('[data-line-quantity]');
+        const unitsField = row.querySelector('[data-line-units]');
+        const palletCountField = row.querySelector('[data-line-pallet-count]');
+        const picoField = row.querySelector('[data-line-pico]');
+
+        if (!quantityField || !unitsField || !palletCountField || !picoField) {
+            return;
+        }
+
+        const quantity = Number.parseInt(quantityField.value, 10);
+        const unitsPerPallet = Number.parseInt(unitsField.value, 10);
+
+        if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitsPerPallet) || unitsPerPallet <= 0) {
+            palletCountField.value = '';
+            picoField.value = '';
+            return;
+        }
+
+        const palletCount = Math.floor(quantity / unitsPerPallet);
+        const picoUnits = quantity % unitsPerPallet;
+
+        palletCountField.value = String(palletCount);
+        picoField.value = picoUnits > 0 ? String(picoUnits) : '';
+    };
+
+    const syncItemOptionsForRow = (row) => {
+        const itemSelect = row.querySelector('[data-line-item]');
+
+        if (!itemSelect) {
+            return;
+        }
+
+        const clientId = currentClientId();
+
+        itemSelect.querySelectorAll('option[data-item-client-id]').forEach((option) => {
+            const matchesClient = clientId === '' || option.dataset.itemClientId === clientId;
+            option.hidden = !matchesClient;
+            option.disabled = !matchesClient;
+        });
+
+        if (itemSelect.value !== '') {
+            const selectedOption = itemSelect.selectedOptions[0];
+
+            if (selectedOption?.disabled) {
+                itemSelect.value = '';
+                ['[data-line-sku]', '[data-line-description]', '[data-line-units]', '[data-line-lot]'].forEach((selector) => {
+                    const field = row.querySelector(selector);
+
+                    if (field?.dataset.autofilled === 'true') {
+                        field.value = '';
+                        markAutofilled(field, false);
+                    }
+                });
+
+                recalculateRow(row);
+            }
+        }
+    };
+
+    const applyItemToRow = (row) => {
+        const itemSelect = row.querySelector('[data-line-item]');
+        const skuField = row.querySelector('[data-line-sku]');
+        const descriptionField = row.querySelector('[data-line-description]');
+        const lotField = row.querySelector('[data-line-lot]');
+        const unitsField = row.querySelector('[data-line-units]');
+
+        if (!itemSelect || !skuField || !descriptionField || !lotField || !unitsField) {
+            return;
+        }
+
+        const item = itemsById.get(itemSelect.value);
+
+        if (!item) {
+            [skuField, descriptionField, lotField, unitsField].forEach((field) => {
+                if (field.dataset.autofilled === 'true') {
+                    markAutofilled(field, false);
+                }
+            });
+
+            recalculateRow(row);
+            return;
+        }
+
+        skuField.value = item.sku ?? '';
+        descriptionField.value = item.description ?? '';
+        unitsField.value = item.units_per_pallet ? String(item.units_per_pallet) : '';
+
+        if (!lotField.value && item.lot) {
+            lotField.value = item.lot;
+            markAutofilled(lotField, true);
+        }
+
+        markAutofilled(skuField, true);
+        markAutofilled(descriptionField, true);
+        markAutofilled(unitsField, true);
+
+        recalculateRow(row);
+    };
+
+    const bindRow = (row) => {
+        if (!row || row.dataset.rowBound === 'true') {
+            return;
+        }
+
+        syncItemOptionsForRow(row);
+        applyItemToRow(row);
+        recalculateRow(row);
+
+        const itemSelect = row.querySelector('[data-line-item]');
+        const quantityField = row.querySelector('[data-line-quantity]');
+        const unitsField = row.querySelector('[data-line-units]');
+        const skuField = row.querySelector('[data-line-sku]');
+        const descriptionField = row.querySelector('[data-line-description]');
+        const lotField = row.querySelector('[data-line-lot]');
+
+        itemSelect?.addEventListener('change', () => {
+            applyItemToRow(row);
+        });
+
+        [quantityField, unitsField].forEach((field) => {
+            field?.addEventListener('input', () => {
+                if (field === unitsField) {
+                    markAutofilled(unitsField, false);
+                }
+
+                recalculateRow(row);
+            });
+        });
+
+        [skuField, descriptionField, lotField].forEach((field) => {
+            field?.addEventListener('input', () => {
+                markAutofilled(field, false);
+            });
+        });
+
+        row.dataset.rowBound = 'true';
+    };
+
+    const resetRow = (row) => {
+        row.querySelectorAll('input, select, textarea').forEach((field) => {
+            if (field instanceof HTMLInputElement && field.type === 'number') {
+                field.value = '';
+                markAutofilled(field, false);
+                return;
+            }
+
+            if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+                field.value = '';
+                markAutofilled(field, false);
+                return;
+            }
+
+            if (field instanceof HTMLSelectElement) {
+                field.selectedIndex = 0;
+            }
+        });
+
+        recalculateRow(row);
+    };
+
+    addButton.addEventListener('click', () => {
+        const nextIndex = rowCount();
+        const markup = template.innerHTML.replaceAll('__INDEX__', String(nextIndex));
+        container.insertAdjacentHTML('beforeend', markup);
+        const rows = container.querySelectorAll('[data-line-row]');
+        const newRow = rows[rows.length - 1];
+
+        bindRow(newRow);
+    });
+
+    container.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-remove-line]');
+
+        if (!trigger) {
+            return;
+        }
+
+        const row = trigger.closest('[data-line-row]');
+
+        if (!row) {
+            return;
+        }
+
+        if (rowCount() === 1) {
+            resetRow(row);
+            return;
+        }
+
+        row.remove();
+    });
+
+    clientSelect.addEventListener('change', () => {
+        container.querySelectorAll('[data-line-row]').forEach((row) => {
+            syncItemOptionsForRow(row);
+        });
+    });
+
+    container.querySelectorAll('[data-line-row]').forEach((row) => {
+        bindRow(row);
+    });
+
+    container.dataset.linesBound = 'true';
+};
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupAppDrawer, { once: true });
+    document.addEventListener('DOMContentLoaded', () => {
+        setupAppDrawer();
+        setupGoodsReceiptLines();
+    }, { once: true });
 } else {
     setupAppDrawer();
+    setupGoodsReceiptLines();
 }

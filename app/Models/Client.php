@@ -40,6 +40,16 @@ class Client extends Model
         return $this->hasMany(Warehouse::class);
     }
 
+    public function suppliers(): HasMany
+    {
+        return $this->hasMany(Supplier::class);
+    }
+
+    public function goodsReceipts(): HasMany
+    {
+        return $this->hasMany(GoodsReceipt::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
