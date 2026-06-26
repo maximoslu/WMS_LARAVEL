@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Models\AccessRequest;
+use App\Models\Client;
 use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AuthenticationFlowTest extends TestCase
@@ -157,9 +161,13 @@ class AuthenticationFlowTest extends TestCase
             'Si el correo pertenece a una cuenta activa, recibiras un enlace para restablecer la contrasena.'
         );
 
+        $this->assertDatabaseHas('password_reset_tokens', [
+            'email' => $user->email,
+        ]);
+
         Http::assertSent(function ($request) use ($user): bool {
             return $request->url() === 'https://api.brevo.com/v3/smtp/email'
-                && $request['subject'] === 'MAXIMO WMS - Recuperacion de contrasena'
+                && $request['subject'] === 'Restablecer contrasena - MAXIMO WMS'
                 && $request['to'][0]['email'] === $user->email
                 && str_contains(
                     $request['htmlContent'],
@@ -185,7 +193,7 @@ class AuthenticationFlowTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_password_reset_request_requires_brevo_configuration(): void
+    public function test_password_reset_request_with_missing_brevo_configuration_keeps_generic_response(): void
     {
         config([
             'services.brevo.key' => null,
@@ -193,14 +201,125 @@ class AuthenticationFlowTest extends TestCase
             'mail.from.name' => 'MAXIMO WMS',
         ]);
 
-        $this->from(route('password.request'))
-            ->post(route('password.email'), [
+        $user = User::factory()->create([
+            'email' => 'operador@maximo.test',
+            'active' => true,
+        ]);
+
+        $this->post(route('password.email'), [
                 'email' => 'operador@maximo.test',
-            ])
-            ->assertRedirect(route('password.request'))
-            ->assertSessionHasErrors([
-                'email' => 'El sistema de correo no esta configurado correctamente. Contacta con administracion.',
-            ]);
+            ])->assertSessionHas(
+                'status',
+                'Si el correo pertenece a una cuenta activa, recibiras un enlace para restablecer la contrasena.'
+            );
+
+        $this->assertDatabaseHas('password_reset_tokens', [
+            'email' => $user->email,
+        ]);
+    }
+
+    public function test_inactive_user_does_not_receive_password_reset_email(): void
+    {
+        $this->configureBrevo();
+
+        Http::fake();
+
+        $user = User::factory()->create([
+            'email' => 'inactivo@maximo.test',
+            'active' => false,
+        ]);
+
+        $this->post(route('password.email'), [
+            'email' => $user->email,
+        ])->assertSessionHas(
+            'status',
+            'Si el correo pertenece a una cuenta activa, recibiras un enlace para restablecer la contrasena.'
+        );
+
+        $this->assertDatabaseMissing('password_reset_tokens', [
+            'email' => $user->email,
+        ]);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_password_reset_request_creates_valid_token(): void
+    {
+        $this->configureBrevo();
+
+        Http::fake([
+            'https://api.brevo.com/*' => Http::response([
+                'messageId' => 'password-reset-token',
+            ], 201),
+        ]);
+
+        $user = User::factory()->create([
+            'email' => 'token@maximo.test',
+            'active' => true,
+        ]);
+
+        $this->post(route('password.email'), [
+            'email' => $user->email,
+        ])->assertSessionHas(
+            'status',
+            'Si el correo pertenece a una cuenta activa, recibiras un enlace para restablecer la contrasena.'
+        );
+
+        Http::assertSent(function ($request) use ($user): bool {
+            preg_match('#/reset-password/([^"?]+)#', (string) $request['htmlContent'], $matches);
+
+            return isset($matches[1]) && Password::broker()->tokenExists($user, $matches[1]);
+        });
+    }
+
+    public function test_user_approved_from_access_request_can_request_password_reset(): void
+    {
+        $this->configureBrevo();
+
+        Http::fake([
+            'https://api.brevo.com/*' => Http::response([
+                'messageId' => 'password-reset-approved',
+            ], 201),
+        ]);
+
+        $this->seed([
+            RoleSeeder::class,
+            ClientSeeder::class,
+        ]);
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $clientRole = Role::query()->where('slug', Role::CLIENTE)->firstOrFail();
+        $user = User::factory()->create([
+            'name' => 'Cliente Aprobado',
+            'email' => 'aprobado@friesland.test',
+            'role_id' => $clientRole->id,
+            'client_id' => $client->id,
+            'active' => true,
+        ]);
+
+        AccessRequest::query()->create([
+            'name' => $user->name,
+            'company' => 'Friesland',
+            'email' => $user->email,
+            'notes' => 'Alta aprobada',
+            'status' => AccessRequest::STATUS_APPROVED,
+            'user_id' => $user->id,
+            'client_id' => $client->id,
+            'approved_at' => now(),
+        ]);
+
+        $this->post(route('password.email'), [
+            'email' => $user->email,
+        ])->assertSessionHas(
+            'status',
+            'Si el correo pertenece a una cuenta activa, recibiras un enlace para restablecer la contrasena.'
+        );
+
+        $this->assertDatabaseHas('password_reset_tokens', [
+            'email' => $user->email,
+        ]);
+
+        Http::assertSent(fn ($request): bool => $request['to'][0]['email'] === $user->email);
     }
 
     public function test_password_can_be_reset_with_valid_token(): void

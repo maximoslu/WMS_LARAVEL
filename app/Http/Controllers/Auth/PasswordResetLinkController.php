@@ -2,13 +2,15 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Exceptions\BrevoMailConfigurationException;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\BrevoMailService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Throwable;
 
 class PasswordResetLinkController extends Controller
 {
@@ -23,17 +25,27 @@ class PasswordResetLinkController extends Controller
             'email' => ['required', 'email'],
         ]);
 
-        try {
-            app(BrevoMailService::class)->assertConfigured();
-        } catch (BrevoMailConfigurationException $exception) {
-            return back()
-                ->withInput($request->only('email'))
-                ->withErrors([
-                    'email' => 'El sistema de correo no esta configurado correctamente. Contacta con administracion.',
-                ]);
-        }
+        $email = Str::lower(trim((string) $request->input('email')));
+        $user = User::query()
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->where('active', true)
+            ->first();
 
-        Password::sendResetLink($request->only('email'));
+        try {
+            if ($user !== null) {
+                $token = Password::broker()->createToken($user);
+
+                app(BrevoMailService::class)->sendPasswordReset(
+                    $user->email,
+                    route('password.reset', [
+                        'token' => $token,
+                        'email' => $user->email,
+                    ])
+                );
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+        }
 
         return back()->with(
             'status',

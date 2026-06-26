@@ -45,7 +45,7 @@ class BrevoMailService
     {
         $this->send(
             toEmails: $recipientEmail,
-            subject: 'MAXIMO WMS - Recuperacion de contrasena',
+            subject: 'Restablecer contrasena - MAXIMO WMS',
             htmlView: 'emails.brevo.password-reset',
             data: [
                 'resetUrl' => $resetUrl,
