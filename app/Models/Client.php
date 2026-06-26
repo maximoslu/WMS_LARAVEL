@@ -50,6 +50,11 @@ class Client extends Model
         return $this->hasMany(GoodsReceipt::class);
     }
 
+    public function merchandiseRequests(): HasMany
+    {
+        return $this->hasMany(MerchandiseRequest::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);

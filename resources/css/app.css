@@ -3198,6 +3198,111 @@ body.brand-body.app-shell-body .pagination-card {
     align-content: start;
 }
 
+.merchandise-request-shell,
+.merchandise-request-lines-card {
+    display: grid;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.merchandise-request-lines-table {
+    width: max(100%, 62rem);
+    min-width: 62rem;
+}
+
+.merchandise-request-derived-field.is-autofilled,
+.merchandise-request-locked-field {
+    border-color: rgba(20, 184, 196, 0.2);
+    background: rgba(20, 184, 196, 0.05);
+}
+
+.merchandise-request-locked-field {
+    display: flex;
+    align-items: center;
+    min-height: 2.2rem;
+}
+
+.merchandise-request-total-field {
+    font-weight: 800;
+    color: var(--brand-slate-dark);
+}
+
+.request-status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    min-height: 1.7rem;
+    padding: 0.22rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.request-status-pill--draft,
+.request-status-pill--created {
+    background: rgba(20, 184, 196, 0.12);
+    color: var(--brand-cyan-dark);
+}
+
+.request-status-pill--prepared {
+    background: rgba(53, 83, 107, 0.1);
+    color: var(--brand-slate-dark);
+}
+
+.request-status-pill--shipped {
+    background: var(--brand-success-bg);
+    color: var(--brand-success);
+}
+
+.request-status-pill--cancelled {
+    background: var(--brand-danger-bg);
+    color: var(--brand-danger);
+}
+
+.merchandise-request-timeline {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.merchandise-request-timeline-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+}
+
+.merchandise-request-timeline-dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-top: 0.35rem;
+    border-radius: 999px;
+    background: var(--brand-cyan-dark);
+    box-shadow: 0 0 0 4px rgba(20, 184, 196, 0.12);
+}
+
+.merchandise-request-timeline-content {
+    display: grid;
+    gap: 0.2rem;
+}
+
+.merchandise-request-timeline-content strong {
+    color: var(--brand-slate-dark);
+}
+
+.merchandise-request-timeline-content span,
+.merchandise-request-timeline-content p {
+    margin: 0;
+    color: var(--brand-soft);
+    font-size: 0.82rem;
+    line-height: 1.38;
+}
+
 @media (min-width: 1024px) {
     .goods-receipt-grid {
         grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
@@ -3222,5 +3327,9 @@ body.brand-body.app-shell-body .pagination-card {
 
     .goods-receipt-lines-table {
         min-width: 62rem;
+    }
+
+    .merchandise-request-lines-table {
+        min-width: 54rem;
     }
 }

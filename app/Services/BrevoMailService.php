@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\BrevoMailConfigurationException;
 use App\Models\AccessRequest;
+use App\Models\MerchandiseRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\View;
 use RuntimeException;
@@ -41,7 +42,7 @@ class BrevoMailService
     public function sendPasswordReset(string $recipientEmail, string $resetUrl): void
     {
         $this->send(
-            toEmail: $recipientEmail,
+            toEmails: $recipientEmail,
             subject: 'MAXIMO WMS - Recuperacion de contrasena',
             htmlView: 'emails.brevo.password-reset',
             data: [
@@ -56,7 +57,7 @@ class BrevoMailService
     public function sendAccessRequestNotification(AccessRequest $accessRequest): void
     {
         $this->send(
-            toEmail: (string) config('wms.access_request_notification_email'),
+            toEmails: (string) config('wms.access_request_notification_email'),
             subject: 'MAXIMO WMS - Nueva solicitud de acceso',
             htmlView: 'emails.brevo.access-request-submitted',
             data: [
@@ -71,7 +72,7 @@ class BrevoMailService
     public function sendTestMail(string $recipientEmail): void
     {
         $this->send(
-            toEmail: $recipientEmail,
+            toEmails: $recipientEmail,
             subject: 'MAXIMO WMS - Prueba de correo',
             htmlView: 'emails.brevo.test-mail',
             data: [
@@ -82,16 +83,45 @@ class BrevoMailService
     }
 
     /**
+     * @param  array<int, string>  $recipientEmails
+     *
+     * @throws BrevoMailConfigurationException
+     */
+    public function sendMerchandiseRequestCreated(array $recipientEmails, MerchandiseRequest $merchandiseRequest): void
+    {
+        $this->send(
+            toEmails: $recipientEmails,
+            subject: 'Nueva solicitud de mercancia - '.$merchandiseRequest->client->name,
+            htmlView: 'emails.brevo.merchandise-request-created',
+            data: [
+                'merchandiseRequest' => $merchandiseRequest,
+                'requestUrl' => route('merchandise-requests.show', $merchandiseRequest),
+            ],
+        );
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      *
      * @throws BrevoMailConfigurationException
      */
-    private function send(string $toEmail, string $subject, string $htmlView, array $data): void
+    private function send(string|array $toEmails, string $subject, string $htmlView, array $data): void
     {
         $this->assertConfigured();
 
         $htmlContent = View::make($htmlView, $data)->render();
         $textContent = trim(preg_replace('/\s+/', ' ', strip_tags($htmlContent)) ?? '');
+        $recipients = collect((array) $toEmails)
+            ->map(fn (string $email): string => trim($email))
+            ->filter(fn (string $email): bool => $email !== '')
+            ->unique()
+            ->map(fn (string $email): array => ['email' => $email])
+            ->values()
+            ->all();
+
+        if ($recipients === []) {
+            return;
+        }
 
         $response = Http::baseUrl((string) config('services.brevo.base_url'))
             ->acceptJson()
@@ -103,9 +133,7 @@ class BrevoMailService
                     'email' => (string) config('mail.from.address'),
                     'name' => (string) config('mail.from.name'),
                 ],
-                'to' => [
-                    ['email' => $toEmail],
-                ],
+                'to' => $recipients,
                 'subject' => $subject,
                 'htmlContent' => $htmlContent,
                 'textContent' => $textContent,

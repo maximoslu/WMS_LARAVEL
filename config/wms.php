@@ -70,15 +70,15 @@ return [
             'children' => [
                 [
                     'key' => 'solicitudes',
-                    'route' => 'modules.requests',
+                    'route' => 'merchandise-requests.index',
                     'path' => '/solicitudes',
                     'title' => 'Solicitudes de mercancia',
                     'summary' => 'Alta y seguimiento de necesidades operativas y expediciones.',
                     'minimum_role' => 'cliente',
                     'tag' => 'Operacion',
-                    'status' => 'placeholder',
-                    'next_step' => 'Disenar flujo de solicitud por cliente y validacion operativa.',
-                    'active_patterns' => ['modules.requests'],
+                    'status' => 'ready',
+                    'next_step' => 'Conectar picking real, expedicion y trazabilidad de salidas.',
+                    'active_patterns' => ['merchandise-requests.*'],
                 ],
                 [
                     'key' => 'entradas',

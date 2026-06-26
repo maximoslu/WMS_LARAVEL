@@ -300,12 +300,194 @@ const setupGoodsReceiptLines = () => {
     container.dataset.linesBound = 'true';
 };
 
+const setupMerchandiseRequestLines = () => {
+    const form = document.querySelector('[data-merchandise-request-form]');
+    const container = document.querySelector('[data-request-lines]');
+    const addButton = document.querySelector('[data-add-request-line]');
+    const template = document.querySelector('[data-request-line-template]');
+    const clientField = document.querySelector('[data-request-client]');
+    const itemsCatalogNode = document.querySelector('[data-merchandise-request-items]');
+
+    if (!form || !container || !addButton || !template || !clientField || !itemsCatalogNode || container.dataset.requestLinesBound === 'true') {
+        return;
+    }
+
+    let itemsCatalog = [];
+
+    try {
+        itemsCatalog = JSON.parse(itemsCatalogNode.textContent ?? '[]');
+    } catch {
+        itemsCatalog = [];
+    }
+
+    const itemsById = new Map(itemsCatalog.map((item) => [String(item.id), item]));
+    const currentClientId = () => clientField.value;
+    const rowCount = () => container.querySelectorAll('[data-request-line-row]').length;
+
+    const markDerived = (field, enabled) => {
+        if (!field) {
+            return;
+        }
+
+        field.classList.toggle('is-autofilled', enabled);
+    };
+
+    const syncRowTotals = (row) => {
+        const palletsField = row.querySelector('[data-request-pallets]');
+        const unitsField = row.querySelector('[data-request-units-per-pallet]');
+        const totalField = row.querySelector('[data-request-total-units]');
+
+        if (!palletsField || !unitsField || !totalField) {
+            return;
+        }
+
+        const pallets = Number.parseInt(palletsField.value, 10);
+        const units = Number.parseInt(unitsField.value, 10);
+
+        if (!Number.isFinite(pallets) || pallets <= 0 || !Number.isFinite(units) || units <= 0) {
+            totalField.value = '';
+            return;
+        }
+
+        totalField.value = String(pallets * units);
+    };
+
+    const syncItemOptionsForRow = (row) => {
+        const itemSelect = row.querySelector('[data-request-item]');
+
+        if (!itemSelect) {
+            return;
+        }
+
+        const clientId = currentClientId();
+
+        itemSelect.querySelectorAll('option[data-item-client-id]').forEach((option) => {
+            const matchesClient = clientId === '' || option.dataset.itemClientId === clientId;
+            option.hidden = !matchesClient;
+            option.disabled = !matchesClient;
+        });
+
+        const selectedOption = itemSelect.selectedOptions[0];
+
+        if (selectedOption?.disabled) {
+            itemSelect.value = '';
+            applyItemToRow(row);
+        }
+    };
+
+    const applyItemToRow = (row) => {
+        const itemSelect = row.querySelector('[data-request-item]');
+        const lotField = row.querySelector('[data-request-lot]');
+        const unitsField = row.querySelector('[data-request-units-per-pallet]');
+
+        if (!itemSelect || !lotField || !unitsField) {
+            return;
+        }
+
+        const item = itemsById.get(itemSelect.value);
+
+        if (!item) {
+            if (lotField.dataset.autofilled === 'true') {
+                lotField.value = '';
+            }
+
+            unitsField.value = '';
+            lotField.dataset.autofilled = 'false';
+            markDerived(unitsField, false);
+            markDerived(lotField, false);
+            syncRowTotals(row);
+            return;
+        }
+
+        unitsField.value = item.units_per_pallet ? String(item.units_per_pallet) : '';
+        markDerived(unitsField, true);
+
+        if (!lotField.value && item.lot) {
+            lotField.value = item.lot;
+            lotField.dataset.autofilled = 'true';
+            markDerived(lotField, true);
+        }
+
+        syncRowTotals(row);
+    };
+
+    const bindRow = (row) => {
+        if (!row || row.dataset.requestRowBound === 'true') {
+            return;
+        }
+
+        syncItemOptionsForRow(row);
+        applyItemToRow(row);
+        syncRowTotals(row);
+
+        row.querySelector('[data-request-item]')?.addEventListener('change', () => applyItemToRow(row));
+        row.querySelector('[data-request-pallets]')?.addEventListener('input', () => syncRowTotals(row));
+        row.querySelector('[data-request-lot]')?.addEventListener('input', (event) => {
+            event.currentTarget.dataset.autofilled = 'false';
+            markDerived(event.currentTarget, false);
+        });
+
+        row.dataset.requestRowBound = 'true';
+    };
+
+    const resetRow = (row) => {
+        row.querySelectorAll('input, select, textarea').forEach((field) => {
+            if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+                field.value = '';
+                markDerived(field, false);
+            }
+
+            if (field instanceof HTMLSelectElement) {
+                field.selectedIndex = 0;
+            }
+        });
+    };
+
+    addButton.addEventListener('click', () => {
+        const nextIndex = rowCount();
+        const markup = template.innerHTML.replaceAll('__INDEX__', String(nextIndex));
+        container.insertAdjacentHTML('beforeend', markup);
+        const rows = container.querySelectorAll('[data-request-line-row]');
+        bindRow(rows[rows.length - 1]);
+    });
+
+    container.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-remove-request-line]');
+
+        if (!trigger) {
+            return;
+        }
+
+        const row = trigger.closest('[data-request-line-row]');
+
+        if (!row) {
+            return;
+        }
+
+        if (rowCount() === 1) {
+            resetRow(row);
+            return;
+        }
+
+        row.remove();
+    });
+
+    clientField.addEventListener('change', () => {
+        container.querySelectorAll('[data-request-line-row]').forEach((row) => syncItemOptionsForRow(row));
+    });
+
+    container.querySelectorAll('[data-request-line-row]').forEach((row) => bindRow(row));
+    container.dataset.requestLinesBound = 'true';
+};
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         setupAppDrawer();
         setupGoodsReceiptLines();
+        setupMerchandiseRequestLines();
     }, { once: true });
 } else {
     setupAppDrawer();
     setupGoodsReceiptLines();
+    setupMerchandiseRequestLines();
 }

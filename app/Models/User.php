@@ -78,6 +78,21 @@ class User extends Authenticatable
         return $this->hasMany(GoodsReceipt::class, 'confirmed_by');
     }
 
+    public function requestedMerchandiseRequests(): HasMany
+    {
+        return $this->hasMany(MerchandiseRequest::class, 'requested_by');
+    }
+
+    public function preparedMerchandiseRequests(): HasMany
+    {
+        return $this->hasMany(MerchandiseRequest::class, 'prepared_by');
+    }
+
+    public function shippedMerchandiseRequests(): HasMany
+    {
+        return $this->hasMany(MerchandiseRequest::class, 'shipped_by');
+    }
+
     public function hasRole(string $slug): bool
     {
         return $this->role?->slug === $slug;
