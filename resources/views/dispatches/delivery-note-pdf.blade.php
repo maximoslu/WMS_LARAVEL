@@ -21,6 +21,7 @@
             <p><strong>Fecha de salida:</strong> {{ ($dispatch->sent_at ?? now())->format('d/m/Y H:i') }}</p>
             <p><strong>Cliente:</strong> {{ $dispatch->client?->name ?? 'Sin cliente' }}</p>
             <p><strong>Direccion de entrega:</strong> {{ $dispatch->client?->formattedDeliveryAddress() ?: 'Pendiente en ficha de cliente' }}</p>
+            <p><strong>Estado:</strong> {{ $dispatch->statusLabel() }}</p>
             <p><strong>Observaciones:</strong> {{ $dispatch->notes ?: 'Sin observaciones' }}</p>
         </div>
 
@@ -30,7 +31,9 @@
                     <th>Mercancia</th>
                     <th>Descripcion</th>
                     <th>Lote</th>
-                    <th>Pallets</th>
+                    <th>Pallets solicitados</th>
+                    <th>Pallets entregados</th>
+                    <th>Observaciones de carga</th>
                 </tr>
             </thead>
             <tbody>
@@ -39,13 +42,15 @@
                         <td>{{ $line->sku }}</td>
                         <td>{{ $line->description }}</td>
                         <td>{{ $line->lot ?: 'Sin lote' }}</td>
-                        <td>{{ number_format($line->pallets, 0, ',', '.') }}</td>
+                        <td>{{ number_format($line->requestedPallets(), 0, ',', '.') }}</td>
+                        <td>{{ number_format($line->loadedPallets(), 0, ',', '.') }}</td>
+                        <td>{{ $line->loading_notes ?: '-' }}</td>
                     </tr>
                 @endforeach
             </tbody>
         </table>
 
-        <p><strong>Total pallets:</strong> {{ number_format($dispatch->palletsCount(), 0, ',', '.') }}</p>
+        <p><strong>Total pallets entregados:</strong> {{ number_format($dispatch->loadedPalletsCount(), 0, ',', '.') }}</p>
 
         <div class="box"><strong>Firma / Recibi:</strong></div>
     </body>

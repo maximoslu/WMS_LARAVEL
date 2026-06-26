@@ -164,6 +164,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/salidas/{goodsDispatch}', [GoodsDispatchController::class, 'show'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.show');
+    Route::patch('/salidas/{goodsDispatch}/confirmar-carga', [GoodsDispatchController::class, 'confirmLoading'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.confirm-loading');
     Route::patch('/salidas/{goodsDispatch}/estado', [GoodsDispatchController::class, 'updateStatus'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.update-status');

@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\GoodsDispatch;
+use App\Models\GoodsDispatchLine;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
@@ -77,7 +79,7 @@ class MerchandiseRequestNotificationTest extends TestCase
         }
     }
 
-    public function test_status_change_notifies_cliente(): void
+    public function test_status_change_to_sent_notifies_cliente_through_dispatch_workflow(): void
     {
         Notification::fake();
         $this->seedBaseData();
@@ -88,14 +90,26 @@ class MerchandiseRequestNotificationTest extends TestCase
         $merchandiseRequest = MerchandiseRequest::factory()->create([
             'client_id' => $client->id,
             'requested_by' => $cliente->id,
-            'status' => MerchandiseRequest::STATUS_PENDING,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 2,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
         ]);
 
         $this->actingAs($almacen)
-            ->patch(route('merchandise-requests.update-status', $merchandiseRequest), [
-                'status' => MerchandiseRequest::STATUS_SENT,
+            ->patch(route('dispatches.update-status', $dispatch), [
+                'status' => GoodsDispatch::STATUS_SENT,
             ])
-            ->assertRedirect(route('merchandise-requests.show', $merchandiseRequest));
+            ->assertRedirect(route('dispatches.show', $dispatch));
 
         $this->assertDatabaseHas('merchandise_requests', [
             'id' => $merchandiseRequest->id,
@@ -106,6 +120,35 @@ class MerchandiseRequestNotificationTest extends TestCase
             $cliente,
             CustomerMerchandiseRequestStatusChangedNotification::class,
             fn ($notification, array $channels): bool => in_array('mail', $channels, true)
+        );
+    }
+
+    public function test_status_change_with_invalid_email_keeps_database_notification_without_breaking_flow(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'correo-invalido']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('merchandise-requests.update-status', $merchandiseRequest), [
+                'status' => MerchandiseRequest::STATUS_PREPARING,
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $merchandiseRequest));
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestStatusChangedNotification::class,
+            fn ($notification, array $channels): bool => in_array('database', $channels, true)
+                && ! in_array('mail', $channels, true)
         );
     }
 

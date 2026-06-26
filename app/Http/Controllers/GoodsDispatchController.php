@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ConfirmGoodsDispatchLoadingRequest;
 use App\Http\Requests\StoreGoodsDispatchRequest;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
+use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -99,6 +101,7 @@ class GoodsDispatchController extends Controller
                     'units_per_pallet' => $item->units_per_pallet,
                     'pallets' => $line['pallets'],
                     'requested_units' => $line['pallets'] * $item->units_per_pallet,
+                    'requested_pallets' => $line['pallets'],
                 ]);
             }
 
@@ -131,7 +134,7 @@ class GoodsDispatchController extends Controller
 
     public function showRequest(Request $request, MerchandiseRequest $merchandiseRequest): View
     {
-        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch']);
+        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines']);
 
         return view('dispatches.request', [
             'merchandiseRequest' => $merchandiseRequest,
@@ -171,6 +174,7 @@ class GoodsDispatchController extends Controller
                     'units_per_pallet' => $line->units_per_pallet,
                     'pallets' => $line->requested_pallets,
                     'requested_units' => $line->requested_units,
+                    'requested_pallets' => $line->requested_pallets,
                     'notes' => $line->notes,
                 ]);
             }
@@ -196,7 +200,7 @@ class GoodsDispatchController extends Controller
 
     public function show(Request $request, GoodsDispatch $goodsDispatch): View
     {
-        $goodsDispatch->load(['client', 'creator', 'merchandiseRequest', 'lines.item']);
+        $goodsDispatch->load(['client', 'creator', 'merchandiseRequest', 'lines.item', 'lines']);
 
         return view('dispatches.show', [
             'dispatch' => $goodsDispatch,
@@ -204,71 +208,43 @@ class GoodsDispatchController extends Controller
         ]);
     }
 
+    public function confirmLoading(
+        ConfirmGoodsDispatchLoadingRequest $request,
+        GoodsDispatch $goodsDispatch,
+        GoodsDispatchWorkflowService $workflowService,
+    ): RedirectResponse {
+        $workflowService->confirmLoading($goodsDispatch, $request->validated('lines'), $request->user());
+
+        return redirect()
+            ->route('dispatches.show', $goodsDispatch)
+            ->with('status', 'Carga confirmada correctamente con las cantidades reales.');
+    }
+
     public function updateStatus(
         Request $request,
         GoodsDispatch $goodsDispatch,
-        MerchandiseRequestNotificationService $notificationService,
+        GoodsDispatchWorkflowService $workflowService,
     ): RedirectResponse {
         $validated = $request->validate([
             'status' => ['required', Rule::in(GoodsDispatch::statuses())],
         ]);
 
-        $previousStatus = $goodsDispatch->status;
-
-        if ($previousStatus === $validated['status']) {
+        if ($goodsDispatch->status === $validated['status']) {
             return back()->with('status', 'La salida ya estaba en ese estado.');
         }
 
-        $payload = [
-            'status' => $validated['status'],
-        ];
-
-        if ($validated['status'] === GoodsDispatch::STATUS_SENT) {
-            $payload['sent_at'] = $goodsDispatch->sent_at ?? now();
-        }
-
-        DB::transaction(function () use ($goodsDispatch, $payload, $validated, $request, $notificationService): void {
-            $goodsDispatch->update($payload);
-
-            $merchandiseRequest = $goodsDispatch->merchandiseRequest;
-
-            if ($merchandiseRequest === null) {
-                return;
-            }
-
-            $previousRequestStatus = $merchandiseRequest->status;
-            $requestPayload = [
-                'status' => $validated['status'],
-            ];
-
-            if ($validated['status'] === MerchandiseRequest::STATUS_PREPARING) {
-                $requestPayload['prepared_by'] = $request->user()->id;
-                $requestPayload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
-            }
-
-            if ($validated['status'] === MerchandiseRequest::STATUS_SENT) {
-                $requestPayload['shipped_by'] = $request->user()->id;
-                $requestPayload['shipped_at'] = $merchandiseRequest->shipped_at ?? now();
-            }
-
-            if ($validated['status'] === MerchandiseRequest::STATUS_CANCELLED) {
-                $requestPayload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
-            }
-
-            $merchandiseRequest->update($requestPayload);
-
-            $notificationService->notifyStatusChanged(
-                $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item']),
-                $previousRequestStatus
-            );
-        });
+        $workflowService->changeStatus($goodsDispatch, $validated['status'], $request->user());
 
         return redirect()
             ->route('dispatches.show', $goodsDispatch->fresh())
             ->with('status', 'Estado de salida actualizado correctamente.');
     }
 
-    public function deliveryNotePdf(Request $request, GoodsDispatch $goodsDispatch)
+    public function deliveryNotePdf(
+        Request $request,
+        GoodsDispatch $goodsDispatch,
+        GoodsDispatchWorkflowService $workflowService,
+    )
     {
         $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item']);
 
@@ -276,6 +252,8 @@ class GoodsDispatchController extends Controller
             in_array($goodsDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true),
             403
         );
+
+        $workflowService->ensureDeliveryNoteCanBeGenerated($goodsDispatch);
 
         return Pdf::loadView('dispatches.delivery-note-pdf', [
             'dispatch' => $goodsDispatch,

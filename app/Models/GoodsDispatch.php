@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\WmsStatus;
 use Database\Factories\GoodsDispatchFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -35,6 +36,7 @@ class GoodsDispatch extends Model
         'status',
         'created_by',
         'sent_at',
+        'completed_at',
         'notes',
     ];
 
@@ -42,6 +44,7 @@ class GoodsDispatch extends Model
     {
         return [
             'sent_at' => 'datetime',
+            'completed_at' => 'datetime',
         ];
     }
 
@@ -100,21 +103,59 @@ class GoodsDispatch extends Model
     public function palletsCount(): int
     {
         if ($this->relationLoaded('lines')) {
-            return (int) $this->lines->sum('pallets');
+            return (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->requestedPallets());
         }
 
-        return (int) $this->lines()->sum('pallets');
+        return (int) $this->lines()->sum('requested_pallets');
+    }
+
+    public function loadedPalletsCount(): int
+    {
+        if ($this->relationLoaded('lines')) {
+            return (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->loadedPallets());
+        }
+
+        return (int) $this->lines()->sum('loaded_pallets');
+    }
+
+    public function hasConfirmedLoading(): bool
+    {
+        if (! $this->relationLoaded('lines')) {
+            $this->load('lines');
+        }
+
+        return $this->lines->isNotEmpty()
+            && $this->lines->every(fn (GoodsDispatchLine $line) => $line->confirmed_at !== null);
+    }
+
+    public function latestLoadingConfirmationAt()
+    {
+        if (! $this->relationLoaded('lines')) {
+            $this->load('lines');
+        }
+
+        return $this->lines->max('confirmed_at');
+    }
+
+    public function latestLoadingConfirmedBy(): ?int
+    {
+        if (! $this->relationLoaded('lines')) {
+            $this->load('lines');
+        }
+
+        return $this->lines->sortByDesc('confirmed_at')->first()?->confirmed_by;
     }
 
     public function statusLabel(): string
     {
-        return match ($this->status) {
-            self::STATUS_DRAFT => 'Borrador',
-            self::STATUS_PREPARING => 'Preparando',
-            self::STATUS_SENT => 'Enviado',
-            self::STATUS_COMPLETED => 'Completado',
-            self::STATUS_CANCELLED => 'Cancelado',
-            default => ucfirst((string) $this->status),
-        };
+        return WmsStatus::goodsDispatchLabel((string) $this->status);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function statusOptions(): array
+    {
+        return WmsStatus::goodsDispatchLabels();
     }
 }

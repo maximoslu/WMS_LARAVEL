@@ -198,6 +198,31 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertDontSee($foreignRequest->referenceCode());
     }
 
+    public function test_cliente_sees_request_status_in_spanish_and_cannot_change_it(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSee('En preparacion')
+            ->assertDontSee('Preparing');
+
+        $this->actingAs($cliente)
+            ->patch(route('merchandise-requests.update-status', $merchandiseRequest), [
+                'status' => MerchandiseRequest::STATUS_COMPLETED,
+            ])
+            ->assertForbidden();
+    }
+
     public function test_cliente_can_filter_requests_by_item_sku_without_optional_columns(): void
     {
         $this->seedBaseData();

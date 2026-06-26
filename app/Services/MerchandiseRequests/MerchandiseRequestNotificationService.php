@@ -2,14 +2,18 @@
 
 namespace App\Services\MerchandiseRequests;
 
+use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
 use App\Notifications\CustomerMerchandiseRequestSubmittedNotification;
 use App\Notifications\InternalMerchandiseRequestSubmittedNotification;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Throwable;
 
 class MerchandiseRequestNotificationService
 {
@@ -49,13 +53,52 @@ class MerchandiseRequestNotificationService
         $recipients = $this->clientRecipients($merchandiseRequest);
 
         foreach ($recipients as $recipient) {
-            if (! filled($recipient->email)) {
-                continue;
-            }
-
             $recipient->notify(
                 new CustomerMerchandiseRequestStatusChangedNotification($merchandiseRequest, $previousStatus)
             );
+        }
+    }
+
+    public function sendCompletedDeliveryNote(GoodsDispatch $dispatch): void
+    {
+        $dispatch->loadMissing([
+            'client',
+            'lines.item',
+            'merchandiseRequest.client',
+            'merchandiseRequest.requestedBy',
+            'merchandiseRequest.lines.item',
+        ]);
+
+        $merchandiseRequest = $dispatch->merchandiseRequest;
+
+        if ($merchandiseRequest === null) {
+            return;
+        }
+
+        try {
+            $pdfContent = Pdf::loadView('dispatches.delivery-note-pdf', [
+                'dispatch' => $dispatch,
+            ])->output();
+        } catch (Throwable $exception) {
+            Log::warning('No se ha podido adjuntar el albaran al email de completado.', [
+                'dispatch_id' => $dispatch->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            throw $exception;
+        }
+
+        $recipients = $this->clientRecipients($merchandiseRequest);
+
+        foreach ($recipients as $recipient) {
+            $recipient->notify(new CustomerMerchandiseRequestStatusChangedNotification(
+                $merchandiseRequest,
+                MerchandiseRequest::STATUS_SENT,
+                [
+                    'name' => $dispatch->dispatchNumber().'.pdf',
+                    'content' => $pdfContent,
+                ]
+            ));
         }
     }
 

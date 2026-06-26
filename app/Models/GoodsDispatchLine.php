@@ -21,6 +21,11 @@ class GoodsDispatchLine extends Model
         'units_per_pallet',
         'pallets',
         'requested_units',
+        'requested_pallets',
+        'loaded_pallets',
+        'loading_notes',
+        'confirmed_by',
+        'confirmed_at',
         'notes',
     ];
 
@@ -30,6 +35,9 @@ class GoodsDispatchLine extends Model
             'units_per_pallet' => 'integer',
             'pallets' => 'integer',
             'requested_units' => 'integer',
+            'requested_pallets' => 'integer',
+            'loaded_pallets' => 'integer',
+            'confirmed_at' => 'datetime',
         ];
     }
 
@@ -41,5 +49,20 @@ class GoodsDispatchLine extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function requestedPallets(): int
+    {
+        return (int) ($this->requested_pallets ?? $this->pallets ?? 0);
+    }
+
+    public function loadedPallets(): int
+    {
+        return (int) ($this->loaded_pallets ?? $this->requestedPallets());
+    }
+
+    public function hasLoadingDifference(): bool
+    {
+        return $this->requestedPallets() !== $this->loadedPallets();
     }
 }

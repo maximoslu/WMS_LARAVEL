@@ -56,6 +56,7 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             'url' => route('dispatches.requests.show', $request),
             'reference' => $request->referenceCode(),
             'status' => $request->status,
+            'status_label' => $request->statusLabel(),
         ];
     }
 }

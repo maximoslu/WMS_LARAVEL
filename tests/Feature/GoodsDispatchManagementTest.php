@@ -4,13 +4,17 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\GoodsDispatch;
+use App\Models\GoodsDispatchLine;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class GoodsDispatchManagementTest extends TestCase
@@ -40,6 +44,24 @@ class GoodsDispatchManagementTest extends TestCase
                 ->assertOk()
                 ->assertSee('Salida de mercancia');
         }
+    }
+
+    public function test_internal_view_shows_statuses_in_spanish(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.show', $dispatch))
+            ->assertOk()
+            ->assertSee('En preparacion')
+            ->assertDontSee('Preparing');
     }
 
     public function test_manual_dispatch_requires_client_and_lines(): void
@@ -151,6 +173,13 @@ class GoodsDispatchManagementTest extends TestCase
             'status' => GoodsDispatch::STATUS_PREPARING,
             'sent_at' => null,
         ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 2,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
 
         $this->actingAs($almacen)
             ->patch(route('dispatches.update-status', $dispatch), [
@@ -179,11 +208,57 @@ class GoodsDispatchManagementTest extends TestCase
             'status' => GoodsDispatch::STATUS_SENT,
             'sent_at' => now(),
         ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 3,
+            'loaded_pallets' => 4,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
 
         $this->actingAs($almacen)
             ->get(route('dispatches.delivery-note', $dispatch))
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_dispatch_pdf_links_open_in_new_tab(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 2,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.show', $dispatch))
+            ->assertOk()
+            ->assertSee('target="_blank"', false)
+            ->assertSee('rel="noopener noreferrer"', false);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSee('target="_blank"', false)
+            ->assertSee('rel="noopener noreferrer"', false);
     }
 
     public function test_preparation_pdf_responds_correctly(): void
@@ -202,6 +277,164 @@ class GoodsDispatchManagementTest extends TestCase
             ->get(route('merchandise-requests.preparation-pdf', $merchandiseRequest))
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_cannot_complete_dispatch_without_confirming_loaded_lines(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => null,
+            'confirmed_at' => null,
+            'confirmed_by' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.show', $dispatch))
+            ->patch(route('dispatches.update-status', $dispatch), [
+                'status' => GoodsDispatch::STATUS_COMPLETED,
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasErrors('status');
+
+        $this->assertNull($dispatch->fresh()->completed_at);
+    }
+
+    public function test_loaded_pallets_can_be_confirmed_line_by_line_and_store_confirmation_data(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 3,
+            'loaded_pallets' => null,
+            'confirmed_at' => null,
+            'confirmed_by' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    $line->id => [
+                        'loaded_pallets' => 5,
+                        'loading_notes' => 'Se carga un pallet extra por operativa.',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $line->refresh();
+
+        $this->assertSame(5, $line->loadedPallets());
+        $this->assertSame($almacen->id, $line->confirmed_by);
+        $this->assertNotNull($line->confirmed_at);
+        $this->assertSame('Se carga un pallet extra por operativa.', $line->loading_notes);
+    }
+
+    public function test_completing_dispatch_sends_customer_email_with_delivery_note_attachment(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'cliente@friesland.test']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+            'shipped_at' => now(),
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 3,
+            'loaded_pallets' => 4,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $line->item_id,
+            'lot' => $line->lot,
+            'units_per_pallet' => $line->units_per_pallet ?? 1,
+            'requested_pallets' => 3,
+            'requested_units' => ($line->units_per_pallet ?? 1) * 3,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch), [
+                'status' => GoodsDispatch::STATUS_COMPLETED,
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertNotNull($dispatch->fresh()->completed_at);
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestStatusChangedNotification::class,
+            function ($notification, array $channels) use ($cliente): bool {
+                $mail = $notification->toMail($cliente);
+
+                return in_array('mail', $channels, true)
+                    && $mail instanceof MailMessage
+                    && count($mail->rawAttachments) > 0;
+            }
+        );
+    }
+
+    public function test_albaran_view_shows_loaded_quantities_and_delivery_address(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $client->update([
+            'delivery_address' => 'Calle Mayor 1',
+            'delivery_postal_code' => '28001',
+            'delivery_city' => 'Madrid',
+            'delivery_province' => 'Madrid',
+            'delivery_country' => 'Espana',
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 5,
+            'loading_notes' => 'Se cargan pallets extra.',
+            'confirmed_at' => now(),
+        ]);
+
+        $html = view('dispatches.delivery-note-pdf', [
+            'dispatch' => $dispatch->load('client', 'lines'),
+        ])->render();
+
+        $this->assertStringContainsString('Pallets entregados', $html);
+        $this->assertStringContainsString('Calle Mayor 1', $html);
+        $this->assertStringContainsString('5', $html);
     }
 
     private function seedBaseData(): void

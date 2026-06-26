@@ -3608,6 +3608,44 @@ body.brand-body.app-shell-body .pagination-card {
     align-items: start;
 }
 
+.dispatch-history-grid {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+.dispatch-history-item,
+.dispatch-inline-help {
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    border-radius: 12px;
+    background: rgba(247, 249, 251, 0.82);
+}
+
+.dispatch-history-item strong {
+    display: block;
+    margin-top: 0.45rem;
+    color: var(--brand-slate-dark);
+}
+
+.dispatch-history-item p,
+.dispatch-inline-help {
+    margin: 0;
+    color: var(--brand-soft);
+    line-height: 1.5;
+}
+
+.dispatch-loading-form {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.dispatch-stock-warning {
+    border-style: dashed;
+    color: #8b5e0b;
+    background: rgba(255, 190, 92, 0.12);
+}
+
 .dispatch-pending-card {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;

@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
+use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestScheduleService;
 use App\Support\WmsNavigation;
@@ -153,7 +154,7 @@ class MerchandiseRequestController extends Controller
         }
 
         return view('merchandise-requests.show', [
-            'merchandiseRequest' => $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch']),
+            'merchandiseRequest' => $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines']),
             'isClient' => $user->hasRole(Role::CLIENTE),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
@@ -162,6 +163,7 @@ class MerchandiseRequestController extends Controller
     public function updateStatus(
         Request $request,
         MerchandiseRequest $merchandiseRequest,
+        GoodsDispatchWorkflowService $workflowService,
         MerchandiseRequestNotificationService $notificationService,
     ): RedirectResponse {
         $validated = $request->validate([
@@ -174,30 +176,37 @@ class MerchandiseRequestController extends Controller
             return back()->with('status', 'La solicitud ya estaba en ese estado.');
         }
 
-        $payload = [
-            'status' => $validated['status'],
-        ];
+        if ($merchandiseRequest->dispatch !== null) {
+            $workflowService->changeStatus($merchandiseRequest->dispatch, $validated['status'], $request->user());
+        } else {
+            $payload = [
+                'status' => $validated['status'],
+            ];
 
-        if ($validated['status'] === MerchandiseRequest::STATUS_PREPARING) {
-            $payload['prepared_by'] = $request->user()->id;
-            $payload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
+            if ($validated['status'] === MerchandiseRequest::STATUS_PREPARING) {
+                $payload['prepared_by'] = $request->user()->id;
+                $payload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
+            }
+
+            if ($validated['status'] === MerchandiseRequest::STATUS_CANCELLED) {
+                $payload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
+            }
+
+            if (in_array($validated['status'], [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)) {
+                return redirect()
+                    ->route('merchandise-requests.show', $merchandiseRequest)
+                    ->withErrors([
+                        'status' => 'Debes generar primero una salida y confirmar la carga real antes de marcar este pedido como enviado o completado.',
+                    ]);
+            }
+
+            $merchandiseRequest->update($payload);
+
+            $notificationService->notifyStatusChanged(
+                $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item']),
+                $previousStatus
+            );
         }
-
-        if ($validated['status'] === MerchandiseRequest::STATUS_SENT) {
-            $payload['shipped_by'] = $request->user()->id;
-            $payload['shipped_at'] = $merchandiseRequest->shipped_at ?? now();
-        }
-
-        if ($validated['status'] === MerchandiseRequest::STATUS_CANCELLED) {
-            $payload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
-        }
-
-        $merchandiseRequest->update($payload);
-
-        $notificationService->notifyStatusChanged(
-            $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item']),
-            $previousStatus
-        );
 
         return redirect()
             ->route('merchandise-requests.show', $merchandiseRequest)

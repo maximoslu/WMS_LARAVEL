@@ -54,7 +54,7 @@
                 <select name="status" class="auth-input">
                     <option value="all" @selected($filters['status'] === 'all')>Todos</option>
                     <option value="pending" @selected($filters['status'] === 'pending')>Pendiente</option>
-                    <option value="preparing" @selected($filters['status'] === 'preparing')>Preparando</option>
+                    <option value="preparing" @selected($filters['status'] === 'preparing')>En preparacion</option>
                     <option value="sent" @selected($filters['status'] === 'sent')>Enviado</option>
                     <option value="completed" @selected($filters['status'] === 'completed')>Completado</option>
                     <option value="cancelled" @selected($filters['status'] === 'cancelled')>Cancelado</option>

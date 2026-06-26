@@ -18,6 +18,10 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
+    @if ($errors->any())
+        <div class="alert alert-error">{{ $errors->first() }}</div>
+    @endif
+
     <section class="surface-card compact-card merchandise-request-detail-card">
         <div class="ops-page-headline">
             <div>
@@ -57,8 +61,8 @@
                 <label class="auth-field">
                     <span>Cambiar estado del pedido</span>
                     <select name="status" class="auth-input">
-                        @foreach (\App\Models\MerchandiseRequest::statuses() as $status)
-                            <option value="{{ $status }}" @selected($merchandiseRequest->status === $status)>{{ \Illuminate\Support\Str::headline($status) }}</option>
+                        @foreach (\App\Models\MerchandiseRequest::statusOptions() as $status => $label)
+                            <option value="{{ $status }}" @selected($merchandiseRequest->status === $status)>{{ $label }}</option>
                         @endforeach
                     </select>
                 </label>
@@ -66,13 +70,13 @@
             </form>
 
             <div class="dispatch-action-stack">
-                <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact">Imprimir preparacion</a>
+                <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact" target="_blank" rel="noopener noreferrer">Imprimir preparacion</a>
 
                 @if ($merchandiseRequest->dispatch)
                     <a href="{{ route('dispatches.show', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact">Ver salida</a>
 
                     @if (in_array($merchandiseRequest->status, [\App\Models\MerchandiseRequest::STATUS_SENT, \App\Models\MerchandiseRequest::STATUS_COMPLETED], true))
-                        <a href="{{ route('dispatches.delivery-note', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact">Imprimir albaran</a>
+                        <a href="{{ route('dispatches.delivery-note', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact" target="_blank" rel="noopener noreferrer">Imprimir albaran</a>
                     @endif
                 @else
                     <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
@@ -95,23 +99,30 @@
                 <thead>
                     <tr>
                         <th>Mercancia</th>
-                        <th>Descripcion</th>
-                        <th>Lote</th>
-                        <th>Uds/pallet</th>
-                        <th>Pallets</th>
-                    </tr>
-                </thead>
-                <tbody>
+                <th>Descripcion</th>
+                <th>Lote</th>
+                <th>Uds/pallet</th>
+                <th>Pallets solicitados</th>
+                @if ($merchandiseRequest->dispatch)
+                    <th>Pallets cargados</th>
+                @endif
+            </tr>
+        </thead>
+        <tbody>
                     @foreach ($merchandiseRequest->lines as $line)
                         <tr>
                             <td><strong>{{ $line->item?->sku ?? 'Articulo eliminado' }}</strong></td>
-                            <td>{{ $line->item?->description ?? 'Sin descripcion' }}</td>
-                            <td>{{ $line->lot ?: 'Sin lote' }}</td>
-                            <td>{{ number_format($line->units_per_pallet, 0, ',', '.') }}</td>
-                            <td>{{ number_format($line->requested_pallets, 0, ',', '.') }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
+                        <td>{{ $line->item?->description ?? 'Sin descripcion' }}</td>
+                        <td>{{ $line->lot ?: 'Sin lote' }}</td>
+                        <td>{{ number_format($line->units_per_pallet, 0, ',', '.') }}</td>
+                        <td>{{ number_format($line->requested_pallets, 0, ',', '.') }}</td>
+                        @if ($merchandiseRequest->dispatch)
+                            @php($dispatchLine = $merchandiseRequest->dispatch->lines->firstWhere('item_id', $line->item_id))
+                            <td>{{ number_format($dispatchLine?->loadedPallets() ?? $line->requested_pallets, 0, ',', '.') }}</td>
+                        @endif
+                    </tr>
+                @endforeach
+            </tbody>
             </table>
         </div>
     </section>

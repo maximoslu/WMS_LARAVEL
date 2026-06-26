@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\CarbonInterface;
+use App\Support\WmsStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -35,6 +36,7 @@ class MerchandiseRequest extends Model
         'prepared_at',
         'shipped_by',
         'shipped_at',
+        'completed_at',
         'cancelled_at',
     ];
 
@@ -44,6 +46,7 @@ class MerchandiseRequest extends Model
             'requested_date' => 'date',
             'prepared_at' => 'datetime',
             'shipped_at' => 'datetime',
+            'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
         ];
     }
@@ -121,13 +124,14 @@ class MerchandiseRequest extends Model
 
     public function statusLabel(): string
     {
-        return match ($this->status) {
-            self::STATUS_PENDING => 'Pendiente',
-            self::STATUS_PREPARING => 'Preparando',
-            self::STATUS_SENT => 'Enviado',
-            self::STATUS_COMPLETED => 'Completado',
-            self::STATUS_CANCELLED => 'Cancelado',
-            default => ucfirst((string) $this->status),
-        };
+        return WmsStatus::merchandiseRequestLabel((string) $this->status);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function statusOptions(): array
+    {
+        return WmsStatus::merchandiseRequestLabels();
     }
 }

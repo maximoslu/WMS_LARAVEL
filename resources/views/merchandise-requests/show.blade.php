@@ -16,6 +16,10 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
+    @if ($errors->any())
+        <div class="alert alert-error">{{ $errors->first() }}</div>
+    @endif
+
     <section class="surface-card compact-card merchandise-request-detail-card">
         <div class="ops-page-headline">
             <div>
@@ -40,7 +44,7 @@
             </div>
             <div>
                 <dt>Fecha envio</dt>
-                <dd>{{ $merchandiseRequest->submittedAt()?->format('Y-m-d H:i') }}</dd>
+                <dd>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') }}</dd>
             </div>
             <div>
                 <dt>Total pallets</dt>
@@ -53,6 +57,35 @@
                 </div>
             @endif
         </dl>
+    </section>
+
+    <section class="surface-card compact-card merchandise-request-detail-card">
+        <div class="ops-section-heading">
+            <div>
+                <strong>Seguimiento del pedido</strong>
+                <p class="merchandise-request-summary-copy">Estado actual e hitos visibles para el cliente y el equipo interno.</p>
+            </div>
+        </div>
+
+        <div class="dispatch-history-grid">
+            <article class="dispatch-history-item">
+                <span class="ops-status badge-compact">Creado</span>
+                <strong>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') }}</strong>
+                <p>Solicitud registrada en el sistema.</p>
+            </article>
+
+            <article class="dispatch-history-item">
+                <span class="ops-status badge-compact">Enviado</span>
+                <strong>{{ $merchandiseRequest->shipped_at?->format('d/m/Y H:i') ?: 'Pendiente' }}</strong>
+                <p>Salida expedida o pendiente de expedicion.</p>
+            </article>
+
+            <article class="dispatch-history-item">
+                <span class="ops-status badge-compact">Completado</span>
+                <strong>{{ $merchandiseRequest->completed_at?->format('d/m/Y H:i') ?: $merchandiseRequest->updated_at?->format('d/m/Y H:i') }}</strong>
+                <p>{{ $merchandiseRequest->completed_at ? 'Pedido cerrado.' : 'Ultima actualizacion registrada.' }}</p>
+            </article>
+        </div>
     </section>
 
     @unless ($isClient)
@@ -72,9 +105,9 @@
                     <label class="auth-field">
                         <span>Cambiar estado</span>
                         <select name="status" class="auth-input">
-                            @foreach (\App\Models\MerchandiseRequest::statuses() as $status)
+                            @foreach (\App\Models\MerchandiseRequest::statusOptions() as $status => $label)
                                 <option value="{{ $status }}" @selected($merchandiseRequest->status === $status)>
-                                    {{ \Illuminate\Support\Str::headline($status) }}
+                                    {{ $label }}
                                 </option>
                             @endforeach
                         </select>
@@ -84,7 +117,7 @@
                 </form>
 
                 <div class="dispatch-action-stack">
-                    <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact">
+                    <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact" target="_blank" rel="noopener noreferrer">
                         Imprimir preparacion
                     </a>
 
@@ -94,7 +127,7 @@
                         </a>
 
                         @if (in_array($merchandiseRequest->status, [\App\Models\MerchandiseRequest::STATUS_SENT, \App\Models\MerchandiseRequest::STATUS_COMPLETED], true))
-                            <a href="{{ route('dispatches.delivery-note', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact">
+                            <a href="{{ route('dispatches.delivery-note', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact" target="_blank" rel="noopener noreferrer">
                                 Imprimir albaran
                             </a>
                         @endif
@@ -124,6 +157,9 @@
                         <th>Lote</th>
                         <th>Uds/pallet</th>
                         <th>Pallets solicitados</th>
+                        @if (! $isClient && $merchandiseRequest->dispatch)
+                            <th>Pallets cargados</th>
+                        @endif
                     </tr>
                 </thead>
                 <tbody>
@@ -134,6 +170,10 @@
                             <td>{{ $line->lot ?: 'Sin lote' }}</td>
                             <td>{{ number_format($line->units_per_pallet, 0, ',', '.') }}</td>
                             <td>{{ number_format($line->requested_pallets, 0, ',', '.') }}</td>
+                            @if (! $isClient && $merchandiseRequest->dispatch)
+                                @php($dispatchLine = $merchandiseRequest->dispatch->lines->firstWhere('item_id', $line->item_id))
+                                <td>{{ number_format($dispatchLine?->loadedPallets() ?? $line->requested_pallets, 0, ',', '.') }}</td>
+                            @endif
                         </tr>
                     @endforeach
                 </tbody>
