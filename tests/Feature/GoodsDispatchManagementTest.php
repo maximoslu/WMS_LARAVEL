@@ -9,7 +9,9 @@ use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\CustomerDispatchDeliveryNoteNotification;
 use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
+use App\Notifications\InternalGoodsDispatchLoadingConfirmedNotification;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -311,10 +313,12 @@ class GoodsDispatchManagementTest extends TestCase
 
     public function test_loaded_pallets_can_be_confirmed_line_by_line_and_store_confirmation_data(): void
     {
+        Notification::fake();
         $this->seedBaseData();
 
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
         $dispatch = GoodsDispatch::factory()->create([
             'client_id' => $client->id,
             'status' => GoodsDispatch::STATUS_PREPARING,
@@ -344,6 +348,66 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame($almacen->id, $line->confirmed_by);
         $this->assertNotNull($line->confirmed_at);
         $this->assertSame('Se carga un pallet extra por operativa.', $line->loading_notes);
+
+        Notification::assertSentTo(
+            $superadmin,
+            InternalGoodsDispatchLoadingConfirmedNotification::class
+        );
+    }
+
+    public function test_confirming_loading_can_add_extra_reference_lines(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $requestedItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'BASE0001',
+        ]);
+        $extraItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'EXTRA0001',
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $requestedItem->id,
+            'sku' => $requestedItem->sku,
+            'description' => $requestedItem->description,
+            'lot' => $requestedItem->lot,
+            'requested_pallets' => 3,
+            'loaded_pallets' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'item_id' => $requestedItem->id,
+                        'loaded_pallets' => 0,
+                        'loading_notes' => 'La referencia original no sale.',
+                    ],
+                    'new_extra' => [
+                        'item_id' => $extraItem->id,
+                        'loaded_pallets' => 2,
+                        'loading_notes' => 'Sustitucion operativa.',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertDatabaseHas('goods_dispatch_lines', [
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $extraItem->id,
+            'is_extra_line' => true,
+            'requested_pallets' => 0,
+            'loaded_pallets' => 2,
+        ]);
     }
 
     public function test_completing_dispatch_sends_customer_email_with_delivery_note_attachment(): void
@@ -392,7 +456,7 @@ class GoodsDispatchManagementTest extends TestCase
 
         Notification::assertSentTo(
             $cliente,
-            CustomerMerchandiseRequestStatusChangedNotification::class,
+            CustomerDispatchDeliveryNoteNotification::class,
             function ($notification, array $channels) use ($cliente): bool {
                 $mail = $notification->toMail($cliente);
 
@@ -400,6 +464,105 @@ class GoodsDispatchManagementTest extends TestCase
                     && $mail instanceof MailMessage
                     && count($mail->rawAttachments) > 0;
             }
+        );
+    }
+
+    public function test_sent_dispatch_sends_delivery_note_once_and_stores_delivery_note_sent_at(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'cliente@friesland.test']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 3,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch), [
+                'status' => GoodsDispatch::STATUS_SENT,
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertNotNull($dispatch->fresh()->delivery_note_sent_at);
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerDispatchDeliveryNoteNotification::class
+        );
+
+        Notification::fake();
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch->fresh()), [
+                'status' => GoodsDispatch::STATUS_SENT,
+            ])
+            ->assertSessionHas('status', 'La salida ya estaba en ese estado.');
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_completed_status_does_not_duplicate_delivery_note_when_it_was_already_sent(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'cliente@friesland.test']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+            'shipped_at' => now(),
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+            'delivery_note_sent_at' => now(),
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 2,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch), [
+                'status' => GoodsDispatch::STATUS_COMPLETED,
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestStatusChangedNotification::class,
+            fn ($notification, array $channels): bool => in_array('mail', $channels, true)
+        );
+
+        Notification::assertNotSentTo(
+            $cliente,
+            CustomerDispatchDeliveryNoteNotification::class
         );
     }
 

@@ -26,6 +26,8 @@ class GoodsDispatchLine extends Model
         'loading_notes',
         'confirmed_by',
         'confirmed_at',
+        'is_extra_line',
+        'source_request_line_id',
         'notes',
     ];
 
@@ -38,6 +40,7 @@ class GoodsDispatchLine extends Model
             'requested_pallets' => 'integer',
             'loaded_pallets' => 'integer',
             'confirmed_at' => 'datetime',
+            'is_extra_line' => 'boolean',
         ];
     }
 
@@ -49,6 +52,11 @@ class GoodsDispatchLine extends Model
     public function item(): BelongsTo
     {
         return $this->belongsTo(Item::class);
+    }
+
+    public function sourceRequestLine(): BelongsTo
+    {
+        return $this->belongsTo(MerchandiseRequestLine::class, 'source_request_line_id');
     }
 
     public function requestedPallets(): int
@@ -64,5 +72,10 @@ class GoodsDispatchLine extends Model
     public function hasLoadingDifference(): bool
     {
         return $this->requestedPallets() !== $this->loadedPallets();
+    }
+
+    public function lineOriginLabel(): string
+    {
+        return $this->is_extra_line ? 'Extra' : 'Pedido';
     }
 }

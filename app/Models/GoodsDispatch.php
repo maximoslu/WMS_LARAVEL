@@ -37,6 +37,7 @@ class GoodsDispatch extends Model
         'created_by',
         'sent_at',
         'completed_at',
+        'delivery_note_sent_at',
         'notes',
     ];
 
@@ -45,6 +46,7 @@ class GoodsDispatch extends Model
         return [
             'sent_at' => 'datetime',
             'completed_at' => 'datetime',
+            'delivery_note_sent_at' => 'datetime',
         ];
     }
 
@@ -116,6 +118,26 @@ class GoodsDispatch extends Model
         }
 
         return (int) $this->lines()->sum('loaded_pallets');
+    }
+
+    public function hasLoadingDifferences(): bool
+    {
+        if (! $this->relationLoaded('lines')) {
+            $this->load('lines');
+        }
+
+        return $this->lines->contains(
+            fn (GoodsDispatchLine $line) => $line->is_extra_line || $line->hasLoadingDifference()
+        );
+    }
+
+    public function hasDeliveredLine(): bool
+    {
+        if (! $this->relationLoaded('lines')) {
+            $this->load('lines');
+        }
+
+        return $this->lines->contains(fn (GoodsDispatchLine $line) => $line->loadedPallets() > 0);
     }
 
     public function hasConfirmedLoading(): bool

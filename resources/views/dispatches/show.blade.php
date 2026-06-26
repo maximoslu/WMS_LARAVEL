@@ -3,6 +3,15 @@
 @section('title', 'Detalle de salida | MAXIMO WMS')
 @section('topbar_title', 'Detalle de salida')
 
+@php
+    $submittedLines = collect(old('lines', []));
+    $existingLineInputs = $submittedLines
+        ->filter(fn ($payload) => filled($payload['line_id'] ?? null))
+        ->mapWithKeys(fn ($payload) => [(string) $payload['line_id'] => $payload]);
+    $extraLineInputs = $submittedLines->filter(fn ($payload) => blank($payload['line_id'] ?? null));
+    $requestedLines = $dispatch->merchandiseRequest?->lines ?? $dispatch->lines->reject(fn ($line) => $line->is_extra_line);
+@endphp
+
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
         <a href="{{ route('dashboard') }}">Panel operativo</a>
@@ -14,6 +23,10 @@
 
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
+    @endif
+
+    @if (session('warning'))
+        <div class="alert alert-error">{{ session('warning') }}</div>
     @endif
 
     @if ($errors->any())
@@ -35,7 +48,7 @@
                 <dd>{{ $dispatch->type === \App\Models\GoodsDispatch::TYPE_REQUEST ? 'Desde solicitud' : 'Manual' }}</dd>
             </div>
             <div>
-                <dt>Total pallets</dt>
+                <dt>Total solicitado</dt>
                 <dd>{{ number_format($dispatch->palletsCount(), 0, ',', '.') }}</dd>
             </div>
             <div>
@@ -47,42 +60,114 @@
                 <dd>{{ $dispatch->sent_at?->format('d/m/Y H:i') ?: 'Pendiente' }}</dd>
             </div>
             <div>
-                <dt>Direccion entrega</dt>
-                <dd>{{ $dispatch->client?->formattedDeliveryAddress() ?: 'Pendiente en ficha de cliente' }}</dd>
+                <dt>Albaran enviado</dt>
+                <dd>{{ $dispatch->delivery_note_sent_at?->format('d/m/Y H:i') ?: 'Pendiente' }}</dd>
             </div>
             <div>
                 <dt>Carga confirmada</dt>
                 <dd>{{ $dispatch->hasConfirmedLoading() ? optional($dispatch->latestLoadingConfirmationAt())->format('d/m/Y H:i') : 'Pendiente de confirmar' }}</dd>
             </div>
+            <div>
+                <dt>Direccion entrega</dt>
+                <dd>{{ $dispatch->client?->formattedDeliveryAddress() ?: 'Pendiente en ficha de cliente' }}</dd>
+            </div>
+            <div>
+                <dt>Diferencias</dt>
+                <dd>{{ $dispatch->hasLoadingDifferences() ? 'Si, revisar carga real' : 'No detectadas' }}</dd>
+            </div>
         </dl>
+    </section>
+
+    <section class="surface-card stock-table-shell compact-card">
+        <div class="ops-section-heading">
+            <div>
+                <strong>{{ $dispatch->merchandiseRequest ? 'Lineas solicitadas' : 'Lineas base de la salida' }}</strong>
+                <p class="merchandise-request-summary-copy">
+                    {{ $dispatch->merchandiseRequest ? 'Estas lineas vienen del pedido original del cliente.' : 'Estas lineas sirven como referencia base para la expedicion manual.' }}
+                </p>
+            </div>
+            <span class="ops-page-meta">{{ $requestedLines->count() }} lineas</span>
+        </div>
+
+        <div class="data-table-wrap">
+            <table class="data-table table-compact">
+                <thead>
+                    <tr>
+                        <th>Mercancia</th>
+                        <th>Descripcion</th>
+                        <th>Lote</th>
+                        <th>Uds/pallet</th>
+                        <th>Pallets solicitados</th>
+                        <th>Pallets cargados</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($requestedLines as $requestedLine)
+                        @php
+                            $dispatchLine = $dispatch->lines->first(fn ($line) => (int) $line->source_request_line_id === (int) ($requestedLine->id ?? 0))
+                                ?? $dispatch->lines->first(fn ($line) => ! $line->is_extra_line && (int) $line->item_id === (int) ($requestedLine->item_id ?? 0));
+                        @endphp
+                        <tr>
+                            <td><strong>{{ $requestedLine->item?->sku ?? $requestedLine->sku ?? 'Articulo eliminado' }}</strong></td>
+                            <td>{{ $requestedLine->item?->description ?? $requestedLine->description ?? 'Sin descripcion' }}</td>
+                            <td>{{ $requestedLine->lot ?: 'Sin lote' }}</td>
+                            <td>{{ number_format($requestedLine->units_per_pallet ?? 0, 0, ',', '.') }}</td>
+                            <td>{{ number_format($requestedLine->requested_pallets ?? $requestedLine->requestedPallets(), 0, ',', '.') }}</td>
+                            <td>{{ number_format($dispatchLine?->loadedPallets() ?? ($requestedLine->requested_pallets ?? 0), 0, ',', '.') }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
     </section>
 
     <section class="surface-card compact-card merchandise-request-detail-card">
         <div class="ops-section-heading">
             <div>
-                <strong>Confirmacion de carga real</strong>
-                <p class="merchandise-request-summary-copy">Antes de marcar la salida como enviada o completada, confirma linea a linea lo realmente cargado.</p>
+                <strong>Carga real</strong>
+                <p class="merchandise-request-summary-copy">Aqui puedes confirmar lo realmente cargado, anadir referencias extra, registrar picos o dejar una linea a cero si finalmente no sale.</p>
             </div>
             <span class="ops-status badge-compact">{{ $dispatch->hasConfirmedLoading() ? 'Confirmada' : 'Pendiente' }}</span>
         </div>
 
-        <form method="POST" action="{{ route('dispatches.confirm-loading', $dispatch) }}" class="dispatch-loading-form">
+        <div class="dispatch-inline-help">
+            Total solicitado: {{ number_format($dispatch->palletsCount(), 0, ',', '.') }} pallets.
+            Total cargado actual: {{ number_format($dispatch->loadedPalletsCount(), 0, ',', '.') }} pallets.
+            {{ $dispatch->hasLoadingDifferences() ? 'Hay diferencias entre pedido y carga real.' : 'No hay diferencias registradas por ahora.' }}
+        </div>
+
+        <form method="POST" action="{{ route('dispatches.confirm-loading', $dispatch) }}" class="dispatch-loading-form" data-dispatch-loading-editor>
             @csrf
             @method('PATCH')
 
             <div class="data-table-wrap">
-                <table class="data-table table-compact">
+                <table class="data-table table-compact dispatch-loading-table">
                     <thead>
                         <tr>
+                            <th>Origen</th>
                             <th>Mercancia</th>
                             <th>Solicitados</th>
-                            <th>Cargados</th>
+                            <th>Pallets cargados</th>
                             <th>Observaciones de carga</th>
+                            <th>Accion</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody data-dispatch-loading-rows>
                         @foreach ($dispatch->lines as $line)
-                            <tr>
+                            @php
+                                $input = $existingLineInputs->get((string) $line->id, []);
+                                $removeRequested = filter_var($input['remove'] ?? false, FILTER_VALIDATE_BOOL);
+                            @endphp
+                            @continue($line->is_extra_line && $removeRequested)
+                            <tr data-dispatch-loading-row>
+                                <td>
+                                    <span class="ops-status badge-compact">{{ $line->lineOriginLabel() }}</span>
+                                    <input type="hidden" name="lines[line_{{ $line->id }}][line_id]" value="{{ $line->id }}">
+                                    @if ($line->item_id)
+                                        <input type="hidden" name="lines[line_{{ $line->id }}][item_id]" value="{{ $line->item_id }}">
+                                    @endif
+                                    <input type="hidden" name="lines[line_{{ $line->id }}][remove]" value="0" data-dispatch-remove-flag>
+                                </td>
                                 <td>
                                     <div class="stock-cell-main">
                                         <strong>{{ $line->sku }}</strong>
@@ -95,19 +180,73 @@
                                         type="number"
                                         min="0"
                                         step="1"
-                                        name="lines[{{ $line->id }}][loaded_pallets]"
-                                        value="{{ old('lines.'.$line->id.'.loaded_pallets', $line->loadedPallets()) }}"
+                                        name="lines[line_{{ $line->id }}][loaded_pallets]"
+                                        value="{{ old('lines.line_'.$line->id.'.loaded_pallets', $input['loaded_pallets'] ?? $line->loadedPallets()) }}"
                                         class="auth-input merchandise-request-summary-input"
                                         required
                                     >
                                 </td>
                                 <td>
                                     <textarea
-                                        name="lines[{{ $line->id }}][loading_notes]"
+                                        name="lines[line_{{ $line->id }}][loading_notes]"
                                         class="auth-input"
                                         rows="2"
                                         placeholder="Opcional. Recomendado si la carga difiere."
-                                    >{{ old('lines.'.$line->id.'.loading_notes', $line->loading_notes) }}</textarea>
+                                    >{{ old('lines.line_'.$line->id.'.loading_notes', $input['loading_notes'] ?? $line->loading_notes) }}</textarea>
+                                </td>
+                                <td class="dispatch-loading-actions">
+                                    @if ($line->is_extra_line)
+                                        <button type="button" class="button-secondary compact-button btn-table" data-dispatch-loading-remove>
+                                            Eliminar linea extra
+                                        </button>
+                                    @else
+                                        <span class="users-table-email">Usa 0 si no se carga.</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+
+                        @foreach ($extraLineInputs as $rowKey => $payload)
+                            <tr data-dispatch-loading-row>
+                                <td>
+                                    <span class="ops-status badge-compact">Extra</span>
+                                    <input type="hidden" name="lines[{{ $rowKey }}][remove]" value="0" data-dispatch-remove-flag>
+                                </td>
+                                <td>
+                                    <label class="sr-only" for="dispatch-extra-item-{{ $rowKey }}">Mercancia extra</label>
+                                    <select id="dispatch-extra-item-{{ $rowKey }}" name="lines[{{ $rowKey }}][item_id]" class="auth-input" required>
+                                        <option value="">Selecciona una referencia</option>
+                                        @foreach ($itemsCatalog as $item)
+                                            <option value="{{ $item['id'] }}" @selected((string) ($payload['item_id'] ?? '') === (string) $item['id'])>
+                                                {{ $item['sku'] }} - {{ $item['description'] }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </td>
+                                <td>0</td>
+                                <td>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        name="lines[{{ $rowKey }}][loaded_pallets]"
+                                        value="{{ $payload['loaded_pallets'] ?? 0 }}"
+                                        class="auth-input merchandise-request-summary-input"
+                                        required
+                                    >
+                                </td>
+                                <td>
+                                    <textarea
+                                        name="lines[{{ $rowKey }}][loading_notes]"
+                                        class="auth-input"
+                                        rows="2"
+                                        placeholder="Ejemplo: pico, sustitucion o referencia adicional."
+                                    >{{ $payload['loading_notes'] ?? '' }}</textarea>
+                                </td>
+                                <td class="dispatch-loading-actions">
+                                    <button type="button" class="button-secondary compact-button btn-table" data-dispatch-loading-remove>
+                                        Eliminar linea extra
+                                    </button>
                                 </td>
                             </tr>
                         @endforeach
@@ -115,8 +254,58 @@
                 </table>
             </div>
 
+            <div class="dispatch-loading-toolbar">
+                <button type="button" class="button-secondary compact-button btn-compact" data-dispatch-loading-add>
+                    Anadir referencia a la carga
+                </button>
+                <span class="users-table-email">Usa esta opcion para picos, sustituciones, referencias adicionales o mercancia no prevista en el pedido original.</span>
+            </div>
+
+            <template data-dispatch-loading-row-template>
+                <tr data-dispatch-loading-row>
+                    <td>
+                        <span class="ops-status badge-compact">Extra</span>
+                        <input type="hidden" name="lines[__KEY__][remove]" value="0" data-dispatch-remove-flag>
+                    </td>
+                    <td>
+                        <label class="sr-only" for="dispatch-extra-item-__KEY__">Mercancia extra</label>
+                        <select id="dispatch-extra-item-__KEY__" name="lines[__KEY__][item_id]" class="auth-input" required>
+                            <option value="">Selecciona una referencia</option>
+                            @foreach ($itemsCatalog as $item)
+                                <option value="{{ $item['id'] }}">{{ $item['sku'] }} - {{ $item['description'] }}</option>
+                            @endforeach
+                        </select>
+                    </td>
+                    <td>0</td>
+                    <td>
+                        <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            name="lines[__KEY__][loaded_pallets]"
+                            value="0"
+                            class="auth-input merchandise-request-summary-input"
+                            required
+                        >
+                    </td>
+                    <td>
+                        <textarea
+                            name="lines[__KEY__][loading_notes]"
+                            class="auth-input"
+                            rows="2"
+                            placeholder="Ejemplo: pico, sustitucion o referencia adicional."
+                        ></textarea>
+                    </td>
+                    <td class="dispatch-loading-actions">
+                        <button type="button" class="button-secondary compact-button btn-table" data-dispatch-loading-remove>
+                            Eliminar linea extra
+                        </button>
+                    </td>
+                </tr>
+            </template>
+
             <div class="dispatch-inline-help">
-                Puedes dejar una linea a cero si finalmente no se carga. Si la cantidad real difiere de la solicitada, deja observacion para trazabilidad.
+                Puedes dejar una linea solicitada a cero si finalmente no se carga. Para sustituciones o mercancia adicional, anade una linea extra y documenta la observacion de carga.
             </div>
 
             <div class="item-filter-actions action-buttons page-actions-compact">
@@ -161,7 +350,7 @@
 
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-section-heading">
-            <strong>Lineas de salida</strong>
+            <strong>Carga real registrada</strong>
             <span class="ops-page-meta">{{ $dispatch->lines->count() }} lineas</span>
         </div>
 
@@ -169,10 +358,10 @@
             <table class="data-table table-compact">
                 <thead>
                     <tr>
+                        <th>Origen</th>
                         <th>Mercancia</th>
                         <th>Descripcion</th>
                         <th>Lote</th>
-                        <th>Uds/pallet</th>
                         <th>Pallets solicitados</th>
                         <th>Pallets cargados</th>
                         <th>Observaciones</th>
@@ -181,10 +370,10 @@
                 <tbody>
                     @foreach ($dispatch->lines as $line)
                         <tr>
+                            <td>{{ $line->lineOriginLabel() }}</td>
                             <td><strong>{{ $line->sku }}</strong></td>
                             <td>{{ $line->description }}</td>
                             <td>{{ $line->lot ?: 'Sin lote' }}</td>
-                            <td>{{ number_format($line->units_per_pallet ?? 0, 0, ',', '.') }}</td>
                             <td>{{ number_format($line->requestedPallets(), 0, ',', '.') }}</td>
                             <td>{{ number_format($line->loadedPallets(), 0, ',', '.') }}</td>
                             <td>{{ $line->loading_notes ?: '-' }}</td>

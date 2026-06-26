@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\User;
+use App\Notifications\CustomerDispatchDeliveryNoteNotification;
 use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
 use App\Notifications\CustomerMerchandiseRequestSubmittedNotification;
 use App\Notifications\InternalMerchandiseRequestSubmittedNotification;
@@ -118,7 +119,7 @@ class MerchandiseRequestNotificationTest extends TestCase
 
         Notification::assertSentTo(
             $cliente,
-            CustomerMerchandiseRequestStatusChangedNotification::class,
+            CustomerDispatchDeliveryNoteNotification::class,
             fn ($notification, array $channels): bool => in_array('mail', $channels, true)
         );
     }

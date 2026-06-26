@@ -3640,6 +3640,21 @@ body.brand-body.app-shell-body .pagination-card {
     gap: 0.9rem;
 }
 
+.dispatch-loading-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    align-items: center;
+}
+
+.dispatch-loading-table {
+    min-width: 58rem;
+}
+
+.dispatch-loading-actions {
+    min-width: 11rem;
+}
+
 .dispatch-stock-warning {
     border-style: dashed;
     color: #8b5e0b;
@@ -3707,6 +3722,14 @@ body.brand-body.app-shell-body .pagination-card {
 
     .dispatch-pending-card {
         grid-template-columns: 1fr;
+    }
+
+    .dispatch-loading-toolbar {
+        align-items: stretch;
+    }
+
+    .dispatch-loading-toolbar .button-secondary {
+        width: 100%;
     }
 
     .merchandise-request-item-footer {

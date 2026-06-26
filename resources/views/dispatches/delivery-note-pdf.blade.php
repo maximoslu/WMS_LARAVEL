@@ -14,6 +14,8 @@
         </style>
     </head>
     <body>
+        @php($deliveredLines = $dispatch->lines->filter(fn ($line) => $line->loadedPallets() > 0))
+
         <h1>Albaran de salida</h1>
 
         <div class="meta">
@@ -28,6 +30,7 @@
         <table>
             <thead>
                 <tr>
+                    <th>Origen</th>
                     <th>Mercancia</th>
                     <th>Descripcion</th>
                     <th>Lote</th>
@@ -37,8 +40,9 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($dispatch->lines as $line)
+                @foreach ($deliveredLines as $line)
                     <tr>
+                        <td>{{ $line->lineOriginLabel() }}</td>
                         <td>{{ $line->sku }}</td>
                         <td>{{ $line->description }}</td>
                         <td>{{ $line->lot ?: 'Sin lote' }}</td>

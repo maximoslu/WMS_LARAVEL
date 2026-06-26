@@ -134,7 +134,7 @@ class GoodsDispatchController extends Controller
 
     public function showRequest(Request $request, MerchandiseRequest $merchandiseRequest): View
     {
-        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines']);
+        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines.item', 'dispatch.lines.sourceRequestLine']);
 
         return view('dispatches.request', [
             'merchandiseRequest' => $merchandiseRequest,
@@ -175,6 +175,7 @@ class GoodsDispatchController extends Controller
                     'pallets' => $line->requested_pallets,
                     'requested_units' => $line->requested_units,
                     'requested_pallets' => $line->requested_pallets,
+                    'source_request_line_id' => $line->id,
                     'notes' => $line->notes,
                 ]);
             }
@@ -200,10 +201,24 @@ class GoodsDispatchController extends Controller
 
     public function show(Request $request, GoodsDispatch $goodsDispatch): View
     {
-        $goodsDispatch->load(['client', 'creator', 'merchandiseRequest', 'lines.item', 'lines']);
+        $goodsDispatch->load(['client', 'creator', 'merchandiseRequest.lines.item', 'merchandiseRequest', 'lines.item', 'lines.sourceRequestLine']);
 
         return view('dispatches.show', [
             'dispatch' => $goodsDispatch,
+            'itemsCatalog' => Item::query()
+                ->where('client_id', $goodsDispatch->client_id)
+                ->where('active', true)
+                ->orderBy('sku')
+                ->get()
+                ->map(fn (Item $item): array => [
+                    'id' => $item->id,
+                    'sku' => $item->sku,
+                    'description' => $item->description,
+                    'lot' => $item->lot,
+                    'units_per_pallet' => $item->units_per_pallet,
+                ])
+                ->values()
+                ->all(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -233,19 +248,24 @@ class GoodsDispatchController extends Controller
             return back()->with('status', 'La salida ya estaba en ese estado.');
         }
 
-        $workflowService->changeStatus($goodsDispatch, $validated['status'], $request->user());
+        $warning = $workflowService->changeStatus($goodsDispatch, $validated['status'], $request->user());
 
-        return redirect()
+        $response = redirect()
             ->route('dispatches.show', $goodsDispatch->fresh())
             ->with('status', 'Estado de salida actualizado correctamente.');
+
+        if ($warning !== null) {
+            $response->with('warning', $warning);
+        }
+
+        return $response;
     }
 
     public function deliveryNotePdf(
         Request $request,
         GoodsDispatch $goodsDispatch,
         GoodsDispatchWorkflowService $workflowService,
-    )
-    {
+    ) {
         $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item']);
 
         abort_unless(

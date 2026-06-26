@@ -18,6 +18,10 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
+    @if (session('warning'))
+        <div class="alert alert-error">{{ session('warning') }}</div>
+    @endif
+
     @if ($errors->any())
         <div class="alert alert-error">{{ $errors->first() }}</div>
     @endif
@@ -110,6 +114,13 @@
         </thead>
         <tbody>
                     @foreach ($merchandiseRequest->lines as $line)
+                        @php
+                            $dispatchLine = $merchandiseRequest->dispatch?->lines->first(
+                                fn ($candidate) => (int) $candidate->source_request_line_id === (int) $line->id
+                            ) ?? $merchandiseRequest->dispatch?->lines->first(
+                                fn ($candidate) => ! $candidate->is_extra_line && (int) $candidate->item_id === (int) $line->item_id
+                            );
+                        @endphp
                         <tr>
                             <td><strong>{{ $line->item?->sku ?? 'Articulo eliminado' }}</strong></td>
                         <td>{{ $line->item?->description ?? 'Sin descripcion' }}</td>
@@ -117,7 +128,6 @@
                         <td>{{ number_format($line->units_per_pallet, 0, ',', '.') }}</td>
                         <td>{{ number_format($line->requested_pallets, 0, ',', '.') }}</td>
                         @if ($merchandiseRequest->dispatch)
-                            @php($dispatchLine = $merchandiseRequest->dispatch->lines->firstWhere('item_id', $line->item_id))
                             <td>{{ number_format($dispatchLine?->loadedPallets() ?? $line->requested_pallets, 0, ',', '.') }}</td>
                         @endif
                     </tr>
@@ -126,4 +136,40 @@
             </table>
         </div>
     </section>
+
+    @if ($merchandiseRequest->dispatch && $merchandiseRequest->dispatch->lines->contains(fn ($line) => $line->is_extra_line))
+        <section class="surface-card stock-table-shell compact-card">
+            <div class="ops-section-heading">
+                <strong>Carga real adicional</strong>
+                <span class="ops-page-meta">
+                    {{ $merchandiseRequest->dispatch->lines->where('is_extra_line', true)->count() }} lineas extra
+                </span>
+            </div>
+
+            <div class="data-table-wrap">
+                <table class="data-table table-compact">
+                    <thead>
+                        <tr>
+                            <th>Mercancia</th>
+                            <th>Descripcion</th>
+                            <th>Lote</th>
+                            <th>Pallets cargados</th>
+                            <th>Observaciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($merchandiseRequest->dispatch->lines->where('is_extra_line', true) as $extraLine)
+                            <tr>
+                                <td><strong>{{ $extraLine->sku }}</strong></td>
+                                <td>{{ $extraLine->description }}</td>
+                                <td>{{ $extraLine->lot ?: 'Sin lote' }}</td>
+                                <td>{{ number_format($extraLine->loadedPallets(), 0, ',', '.') }}</td>
+                                <td>{{ $extraLine->loading_notes ?: '-' }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    @endif
 @endsection

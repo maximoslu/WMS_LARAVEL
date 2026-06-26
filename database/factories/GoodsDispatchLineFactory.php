@@ -27,6 +27,13 @@ class GoodsDispatchLineFactory extends Factory
             'units_per_pallet' => fake()->numberBetween(1, 1500),
             'pallets' => fake()->numberBetween(1, 12),
             'requested_units' => fake()->numberBetween(1, 15000),
+            'requested_pallets' => fake()->numberBetween(1, 12),
+            'loaded_pallets' => null,
+            'loading_notes' => null,
+            'confirmed_by' => null,
+            'confirmed_at' => null,
+            'is_extra_line' => false,
+            'source_request_line_id' => null,
             'notes' => null,
         ];
     }

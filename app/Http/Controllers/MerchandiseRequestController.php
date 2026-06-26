@@ -154,7 +154,7 @@ class MerchandiseRequestController extends Controller
         }
 
         return view('merchandise-requests.show', [
-            'merchandiseRequest' => $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines']),
+            'merchandiseRequest' => $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines.item', 'dispatch.lines.sourceRequestLine']),
             'isClient' => $user->hasRole(Role::CLIENTE),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
@@ -177,7 +177,17 @@ class MerchandiseRequestController extends Controller
         }
 
         if ($merchandiseRequest->dispatch !== null) {
-            $workflowService->changeStatus($merchandiseRequest->dispatch, $validated['status'], $request->user());
+            $warning = $workflowService->changeStatus($merchandiseRequest->dispatch, $validated['status'], $request->user());
+
+            $response = redirect()
+                ->route('merchandise-requests.show', $merchandiseRequest)
+                ->with('status', 'Estado de la solicitud actualizado correctamente.');
+
+            if ($warning !== null) {
+                $response->with('warning', $warning);
+            }
+
+            return $response;
         } else {
             $payload = [
                 'status' => $validated['status'],
