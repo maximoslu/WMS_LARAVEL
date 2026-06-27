@@ -16,7 +16,7 @@
         </style>
     </head>
     <body>
-        <h1>Hoja de preparacion de pedido</h1>
+        <h1>Hoja de preparación de pedido</h1>
         <div class="meta">
             <p><strong>Solicitud:</strong> {{ $merchandiseRequest->referenceCode() }}</p>
             <p><strong>Cliente:</strong> {{ $merchandiseRequest->client?->name ?? 'Sin cliente' }}</p>

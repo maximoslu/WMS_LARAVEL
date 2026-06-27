@@ -5,7 +5,7 @@
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <a href="{{ route('access-requests.index') }}">Solicitudes de acceso</a>
         <span>/</span>

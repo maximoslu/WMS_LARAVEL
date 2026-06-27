@@ -1,9 +1,9 @@
 @php($isEditing = $supplier->exists)
 
 <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel operativo</a>
+    <a href="{{ route('dashboard') }}">Panel de control</a>
     <span>/</span>
-    <span>Gestion</span>
+    <span>Gestión</span>
     <span>/</span>
     <a href="{{ route('suppliers.index') }}">Proveedores</a>
     <span>/</span>
@@ -14,7 +14,7 @@
     <div class="app-copy">
         <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
         <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar proveedor' : 'Nuevo proveedor' }}</h2>
-        <p>Configura proveedores globales o vinculados a un cliente para las futuras entradas de mercancia.</p>
+        <p>Configura proveedores globales o vinculados a un cliente para las futuras entradas de mercancía.</p>
     </div>
 
     <form method="POST" action="{{ $isEditing ? route('suppliers.update', $supplier) : route('suppliers.store') }}" class="item-form">

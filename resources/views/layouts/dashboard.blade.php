@@ -3,7 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>@yield('title', 'MAXIMO WMS Dashboard')</title>
+        <title>@yield('title', 'MAXIMO WMS Panel de control')</title>
         <link rel="icon" type="image/png" href="{{ asset('brand/maximo-icon.png') }}">
         <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -23,7 +23,7 @@
         <aside class="app-drawer" id="app-drawer" data-app-drawer aria-hidden="true">
             <div class="app-drawer-panel surface-card">
                 <div class="app-drawer-header">
-                    <a href="{{ route('dashboard') }}" class="app-drawer-brand" aria-label="Ir al dashboard">
+                    <a href="{{ route('dashboard') }}" class="app-drawer-brand" aria-label="Ir al panel de control">
                         <img
                             src="{{ asset('brand/maximo-icon.png') }}"
                             alt="MAXIMO Servicios Logisticos"
@@ -31,7 +31,7 @@
                         >
                         <div class="app-drawer-brand-copy">
                             <strong>MAXIMO WMS</strong>
-                            <span>Panel operativo</span>
+                            <span>Panel de control</span>
                         </div>
                     </a>
 
@@ -40,7 +40,7 @@
                         class="app-menu-toggle"
                         data-drawer-close
                         aria-controls="app-drawer"
-                        aria-label="Cerrar menu"
+                        aria-label="Cerrar menú"
                     >
                         <span></span>
                         <span></span>
@@ -59,7 +59,7 @@
                     </div>
                 </div>
 
-                <nav class="app-drawer-nav ops-nav" aria-label="Navegacion principal">
+                <nav class="app-drawer-nav ops-nav" aria-label="Navegación principal">
                     @foreach ($navigationSections as $section)
                         @php($sectionActive = collect($section['children'])->contains(fn (array $child) => request()->routeIs(...($child['active_patterns'] ?? [$child['route']]))))
 
@@ -100,7 +100,7 @@
 
                 <form method="POST" action="{{ route('logout') }}" class="app-drawer-logout">
                     @csrf
-                    <button type="submit" class="button-secondary compact-button btn-compact">Cerrar sesion</button>
+                    <button type="submit" class="button-secondary compact-button btn-compact">Cerrar sesión</button>
                 </form>
             </div>
         </aside>
@@ -114,14 +114,14 @@
                         data-drawer-toggle
                         aria-controls="app-drawer"
                         aria-expanded="false"
-                        aria-label="Abrir menu"
+                        aria-label="Abrir menú"
                     >
                         <span></span>
                         <span></span>
                         <span></span>
                     </button>
 
-                    <a href="{{ route('dashboard') }}" class="app-topbar-brand" aria-label="Ir al dashboard">
+                    <a href="{{ route('dashboard') }}" class="app-topbar-brand" aria-label="Ir al panel de control">
                         <img
                             src="{{ asset('brand/maximo-icon.png') }}"
                             alt="MAXIMO Servicios Logisticos"
@@ -132,7 +132,7 @@
 
                     <div class="app-topbar-copy">
                         <strong>{{ $topbarTitle }}</strong>
-                        <span class="app-topbar-meta">Panel operativo</span>
+                        <span class="app-topbar-meta">Panel de control</span>
                     </div>
                 </div>
 

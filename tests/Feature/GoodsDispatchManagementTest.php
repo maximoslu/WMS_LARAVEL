@@ -48,7 +48,7 @@ class GoodsDispatchManagementTest extends TestCase
             $this->actingAs($user)
                 ->get(route('dispatches.index'))
                 ->assertOk()
-                ->assertSee('Salida de mercancia');
+                ->assertSee('Salida de mercancía');
         }
     }
 
@@ -66,7 +66,7 @@ class GoodsDispatchManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('dispatches.show', $dispatch))
             ->assertOk()
-            ->assertSee('En preparacion')
+            ->assertSee('En preparación')
             ->assertDontSee('Preparing');
     }
 

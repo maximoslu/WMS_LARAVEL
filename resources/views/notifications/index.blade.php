@@ -5,7 +5,7 @@
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <span>Notificaciones</span>
     </nav>
@@ -25,7 +25,7 @@
         <article class="surface-card item-empty-state compact-card">
             <span class="status-chip small-badge badge-compact">Sin avisos</span>
             <h3>No hay notificaciones para mostrar</h3>
-            <p>Cuando el sistema registre avisos operativos apareceran aqui.</p>
+            <p>Cuando el sistema registre avisos operativos aparecerán aquí.</p>
         </article>
     @else
         <section class="notification-list">
@@ -33,10 +33,10 @@
                 <article class="surface-card compact-card notification-card{{ $notification->read_at === null ? ' is-unread' : '' }}">
                     <div class="notification-card-head">
                         <div>
-                            <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
+                            <strong>{{ $notification->data['title'] ?? 'Notificación' }}</strong>
                             <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
                         </div>
-                        <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
+                        <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leída' }}</span>
                     </div>
 
                     <div class="notification-card-meta">
@@ -50,7 +50,7 @@
                                 <form method="POST" action="{{ route('notifications.read', $notification->id) }}">
                                     @csrf
                                     @method('PATCH')
-                                    <button type="submit" class="button-secondary compact-button btn-table">Marcar leida</button>
+                                    <button type="submit" class="button-secondary compact-button btn-table">Marcar leída</button>
                                 </form>
                             @endif
                         </div>

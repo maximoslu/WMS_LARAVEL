@@ -1,9 +1,9 @@
 @php($isEditing = $client->exists)
 
 <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel operativo</a>
+    <a href="{{ route('dashboard') }}">Panel de control</a>
     <span>/</span>
-    <span>Gestion</span>
+    <span>Gestión</span>
     <span>/</span>
     <a href="{{ route('clients.index') }}">Clientes</a>
     <span>/</span>

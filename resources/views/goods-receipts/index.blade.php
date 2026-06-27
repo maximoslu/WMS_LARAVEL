@@ -5,7 +5,7 @@
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <span>Operaciones</span>
         <span>/</span>
@@ -14,7 +14,7 @@
 
     <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">Entradas de mercancia</h2>
+            <h2 class="ops-page-title page-title-compact">Entradas de mercancía</h2>
             <span class="ops-page-meta">{{ $receipts->total() }} registros</span>
         </div>
 

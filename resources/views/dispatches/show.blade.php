@@ -14,7 +14,7 @@
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <a href="{{ route('dispatches.index') }}">Salidas</a>
         <span>/</span>
@@ -56,7 +56,7 @@
                 <dd>{{ number_format($dispatch->loadedPalletsCount(), 0, ',', '.') }}</dd>
             </div>
             <div>
-                <dt>Fecha envio</dt>
+                <dt>Fecha envío</dt>
                 <dd>{{ $dispatch->sent_at?->format('d/m/Y H:i') ?: 'Pendiente' }}</dd>
             </div>
             <div>
@@ -83,10 +83,10 @@
             <div>
                 <strong>{{ $dispatch->merchandiseRequest ? 'Lineas solicitadas' : 'Lineas base de la salida' }}</strong>
                 <p class="merchandise-request-summary-copy">
-                    {{ $dispatch->merchandiseRequest ? 'Estas lineas vienen del pedido original del cliente.' : 'Estas lineas sirven como referencia base para la expedicion manual.' }}
+                    {{ $dispatch->merchandiseRequest ? 'Estas líneas vienen del pedido original del cliente.' : 'Estas líneas sirven como referencia base para la expedición manual.' }}
                 </p>
             </div>
-            <span class="ops-page-meta">{{ $requestedLines->count() }} lineas</span>
+            <span class="ops-page-meta">{{ $requestedLines->count() }} líneas</span>
         </div>
 
         <div class="data-table-wrap">
@@ -256,9 +256,9 @@
 
             <div class="dispatch-loading-toolbar">
                 <button type="button" class="button-secondary compact-button btn-compact" data-dispatch-loading-add>
-                    Anadir referencia a la carga
+                    Añadir referencia a la carga
                 </button>
-                <span class="users-table-email">Usa esta opcion para picos, sustituciones, referencias adicionales o mercancia no prevista en el pedido original.</span>
+                <span class="users-table-email">Usa esta opción para picos, sustituciones, referencias adicionales o mercancía no prevista en el pedido original.</span>
             </div>
 
             <template data-dispatch-loading-row-template>
@@ -305,7 +305,7 @@
             </template>
 
             <div class="dispatch-inline-help">
-                Puedes dejar una linea solicitada a cero si finalmente no se carga. Para sustituciones o mercancia adicional, anade una linea extra y documenta la observacion de carga.
+                Puedes dejar una línea solicitada a cero si finalmente no se carga. Para sustituciones o mercancía adicional, añade una línea extra y documenta la observación de carga.
             </div>
 
             <div class="item-filter-actions action-buttons page-actions-compact">
@@ -351,7 +351,7 @@
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-section-heading">
             <strong>Carga real registrada</strong>
-            <span class="ops-page-meta">{{ $dispatch->lines->count() }} lineas</span>
+            <span class="ops-page-meta">{{ $dispatch->lines->count() }} líneas</span>
         </div>
 
         <div class="data-table-wrap">

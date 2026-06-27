@@ -5,7 +5,7 @@
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <a href="{{ route('dispatches.index') }}">Salidas</a>
         <span>/</span>
@@ -26,7 +26,7 @@
                 <div class="ops-section-heading">
                     <div>
                         <strong>Crear salida manual</strong>
-                        <p class="merchandise-request-summary-copy">Selecciona cliente, mercancia y pallets para registrar la expedicion.</p>
+                        <p class="merchandise-request-summary-copy">Selecciona cliente, mercancía y pallets para registrar la expedición.</p>
                     </div>
                 </div>
 
@@ -61,7 +61,7 @@
                     </label>
 
                     <button type="button" class="button-primary compact-button btn-compact" data-dispatch-add-selected>
-                        Anadir a salida
+                        Añadir a salida
                     </button>
                 </section>
 
@@ -89,7 +89,7 @@
                 <div class="ops-section-heading">
                     <div>
                         <strong>Resumen de salida</strong>
-                        <p class="merchandise-request-summary-copy">Revisa lineas y pallets antes de registrar la salida.</p>
+                        <p class="merchandise-request-summary-copy">Revisa líneas y pallets antes de registrar la salida.</p>
                     </div>
                 </div>
 
@@ -105,7 +105,7 @@
                 </div>
 
                 <div class="merchandise-request-summary-empty" data-dispatch-summary-empty>
-                    Todavia no hay lineas en la salida.
+                    Todavía no hay líneas en la salida.
                 </div>
 
                 <div class="data-table-wrap">

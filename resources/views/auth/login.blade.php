@@ -39,7 +39,7 @@
         </label>
 
         <div class="auth-actions">
-            <button type="submit" class="auth-button button-primary">Iniciar sesion</button>
+            <button type="submit" class="auth-button button-primary">Iniciar sesión</button>
             <p class="auth-footnote">Entorno interno protegido.</p>
         </div>
     </form>

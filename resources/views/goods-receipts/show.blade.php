@@ -5,7 +5,7 @@
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <span>Operaciones</span>
         <span>/</span>
@@ -149,7 +149,7 @@
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-index-heading">
             <strong>Lineas y stock previsto</strong>
-            <span class="ops-page-meta">{{ $receipt->lines->count() }} lineas</span>
+            <span class="ops-page-meta">{{ $receipt->lines->count() }} líneas</span>
         </div>
 
         <div class="data-table-wrap goods-receipt-lines-wrap">

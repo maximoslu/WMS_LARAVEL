@@ -5,9 +5,9 @@
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
-        <a href="{{ route('merchandise-requests.index') }}">Solicitudes de mercancia</a>
+        <a href="{{ route('merchandise-requests.index') }}">Solicitudes de mercancía</a>
         <span>/</span>
         <span>{{ $merchandiseRequest->referenceCode() }}</span>
     </nav>
@@ -47,7 +47,7 @@
                 <dd>{{ $merchandiseRequest->requestedBy?->name ?? 'Sin usuario' }}</dd>
             </div>
             <div>
-                <dt>Fecha envio</dt>
+                <dt>Fecha envío</dt>
                 <dd>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') }}</dd>
             </div>
             <div>
@@ -96,8 +96,8 @@
         <section class="surface-card compact-card merchandise-request-detail-card">
             <div class="ops-section-heading">
                 <div>
-                    <strong>Gestion operativa</strong>
-                    <p class="merchandise-request-summary-copy">Cambia el estado, imprime preparacion o genera la salida documental.</p>
+                    <strong>Gestión operativa</strong>
+                    <p class="merchandise-request-summary-copy">Cambia el estado, imprime preparación o genera la salida documental.</p>
                 </div>
             </div>
 
@@ -122,7 +122,7 @@
 
                 <div class="dispatch-action-stack">
                     <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact" target="_blank" rel="noopener noreferrer">
-                        Imprimir preparacion
+                        Imprimir preparación
                     </a>
 
                     @if ($merchandiseRequest->dispatch)
@@ -149,11 +149,11 @@
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-section-heading">
             <strong>Lineas del pedido</strong>
-            <span class="ops-page-meta">{{ $merchandiseRequest->lines->count() }} lineas</span>
+            <span class="ops-page-meta">{{ $merchandiseRequest->lines->count() }} líneas</span>
         </div>
 
         <div class="data-table-wrap">
-            <table class="data-table table-compact" aria-label="Lineas de solicitud de mercancia">
+            <table class="data-table table-compact" aria-label="Líneas de solicitud de mercancía">
                 <thead>
                     <tr>
                         <th>Mercancia</th>
@@ -196,7 +196,7 @@
             <div class="ops-section-heading">
                 <strong>Carga real adicional</strong>
                 <span class="ops-page-meta">
-                    {{ $merchandiseRequest->dispatch->lines->where('is_extra_line', true)->count() }} lineas extra
+                    {{ $merchandiseRequest->dispatch->lines->where('is_extra_line', true)->count() }} líneas extra
                 </span>
             </div>
 

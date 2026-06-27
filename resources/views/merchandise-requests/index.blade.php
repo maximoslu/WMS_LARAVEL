@@ -1,21 +1,21 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Solicitudes de mercancia | MAXIMO WMS')
-@section('topbar_title', 'Solicitudes de mercancia')
+@section('title', 'Solicitudes de mercancía | MAXIMO WMS')
+@section('topbar_title', 'Solicitudes de mercancía')
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <span>Operaciones</span>
         <span>/</span>
-        <span>Solicitudes de mercancia</span>
+        <span>Solicitudes de mercancía</span>
     </nav>
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">
-                {{ $isClient ? 'Mis solicitudes de mercancia' : 'Solicitudes de mercancia recibidas' }}
+                {{ $isClient ? 'Mis solicitudes de mercancía' : 'Solicitudes de mercancía recibidas' }}
             </h2>
             <span class="ops-page-meta">{{ $requests->total() }} registros</span>
         </div>
@@ -23,7 +23,7 @@
         @if ($canCreate)
             <div class="ops-page-actions page-actions-compact action-buttons">
                 <a href="{{ route('merchandise-requests.create') }}" class="button-primary compact-button btn-compact">
-                    Solicitar mercancia
+                    Solicitar mercancía
                 </a>
             </div>
         @endif
@@ -54,7 +54,7 @@
                 <select name="status" class="auth-input">
                     <option value="all" @selected($filters['status'] === 'all')>Todos</option>
                     <option value="pending" @selected($filters['status'] === 'pending')>Pendiente</option>
-                    <option value="preparing" @selected($filters['status'] === 'preparing')>En preparacion</option>
+                    <option value="preparing" @selected($filters['status'] === 'preparing')>En preparación</option>
                     <option value="sent" @selected($filters['status'] === 'sent')>Enviado</option>
                     <option value="completed" @selected($filters['status'] === 'completed')>Completado</option>
                     <option value="cancelled" @selected($filters['status'] === 'cancelled')>Cancelado</option>
@@ -82,10 +82,10 @@
     @if ($requests->isEmpty())
         <article class="surface-card item-empty-state compact-card">
             <span class="status-chip small-badge badge-compact">Sin solicitudes</span>
-            <h3>{{ $isClient ? 'Todavia no has enviado pedidos' : 'No hay solicitudes con estos filtros' }}</h3>
+            <h3>{{ $isClient ? 'Todavía no has enviado pedidos' : 'No hay solicitudes con estos filtros' }}</h3>
             <p>
                 {{ $isClient
-                    ? 'Cuando selecciones pallets y envies tu pedido, aparecera aqui para que puedas consultarlo.'
+                    ? 'Cuando selecciones pallets y envíes tu pedido, aparecerá aquí para que puedas consultarlo.'
                     : 'Ajusta los filtros para localizar solicitudes pendientes o historicas.' }}
             </p>
             @if ($canCreate)
@@ -99,7 +99,7 @@
     @else
         <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
-                <table class="data-table table-compact merchandise-requests-table" aria-label="Listado de solicitudes de mercancia">
+                <table class="data-table table-compact merchandise-requests-table" aria-label="Listado de solicitudes de mercancía">
                     <thead>
                         <tr>
                             <th>Codigo</th>
@@ -125,7 +125,7 @@
                                 <td>{{ $merchandiseRequest->submittedAt()?->format('Y-m-d H:i') }}</td>
                                 <td>
                                     <div class="stock-cell-main">
-                                        <strong>{{ $merchandiseRequest->lines->count() }} lineas</strong>
+                                        <strong>{{ $merchandiseRequest->lines->count() }} líneas</strong>
                                         <span class="users-table-email">
                                             {{ $merchandiseRequest->lines->take(2)->map(fn ($line) => $line->item?->sku ?? 'Articulo')->implode(', ') }}
                                             @if ($merchandiseRequest->lines->count() > 2)

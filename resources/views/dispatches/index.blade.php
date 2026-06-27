@@ -1,11 +1,11 @@
 @extends('layouts.dashboard')
 
 @section('title', 'Salidas | MAXIMO WMS')
-@section('topbar_title', 'Salida de mercancia')
+@section('topbar_title', 'Salida de mercancía')
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <span>Operaciones</span>
         <span>/</span>
@@ -14,7 +14,7 @@
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">Salida de mercancia</h2>
+            <h2 class="ops-page-title page-title-compact">Salida de mercancía</h2>
             <span class="ops-page-meta">{{ $dispatches->total() }} salidas registradas</span>
         </div>
     </section>
@@ -27,14 +27,14 @@
         <article class="surface-card compact-card dispatch-entry-card">
             <span class="status-chip small-badge badge-compact">Desde pedido</span>
             <h3>Salida desde pedido pendiente</h3>
-            <p>Revisa solicitudes pendientes, imprime preparacion y genera la salida sin duplicados.</p>
+            <p>Revisa solicitudes pendientes, imprime preparación y genera la salida sin duplicados.</p>
             <a href="{{ route('dispatches.requests.index') }}" class="button-primary compact-button btn-compact">Ver pedidos pendientes</a>
         </article>
 
         <article class="surface-card compact-card dispatch-entry-card">
             <span class="status-chip small-badge badge-compact">Manual</span>
             <h3>Salida manual</h3>
-            <p>Selecciona cliente, anade mercancias y registra una salida documental directa.</p>
+            <p>Selecciona cliente, añade mercancías y registra una salida documental directa.</p>
             <a href="{{ route('dispatches.create') }}" class="button-primary compact-button btn-compact">Crear salida manual</a>
         </article>
     </section>
@@ -100,7 +100,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6">Todavia no hay salidas registradas.</td>
+                            <td colspan="6">Todavía no hay salidas registradas.</td>
                         </tr>
                     @endforelse
                 </tbody>

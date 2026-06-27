@@ -1,9 +1,9 @@
 @php($isEditing = $warehouse->exists)
 
 <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel operativo</a>
+    <a href="{{ route('dashboard') }}">Panel de control</a>
     <span>/</span>
-    <span>Gestion</span>
+    <span>Gestión</span>
     <span>/</span>
     <a href="{{ route('warehouses.index') }}">Almacenes</a>
     <span>/</span>

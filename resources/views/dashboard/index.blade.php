@@ -1,13 +1,13 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Dashboard | MAXIMO WMS')
-@section('topbar_title', 'Dashboard')
+@section('title', 'Panel de control | MAXIMO WMS')
+@section('topbar_title', 'Panel de control')
 
 @section('content')
     <section class="surface-card ops-page-header ops-page-header--dense compact-card">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">Dashboard</h2>
-            <span class="ops-page-meta">{{ $visibleModuleCount }} modulos visibles</span>
+            <h2 class="ops-page-title page-title-compact">Panel de control</h2>
+            <span class="ops-page-meta">{{ $visibleModuleCount }} módulos visibles</span>
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons">
@@ -54,10 +54,10 @@
             <div class="dashboard-notification-list">
                 @foreach ($recentNotifications as $notification)
                     <article class="dashboard-notification-item{{ $notification->read_at === null ? ' is-unread' : '' }}">
-                        <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
+                        <strong>{{ $notification->data['title'] ?? 'Notificación' }}</strong>
                         <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
                         <div class="dashboard-notification-meta">
-                            <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
+                            <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leída' }}</span>
                             <span>{{ $notification->created_at?->format('d/m/Y H:i') }}</span>
                         </div>
                     </article>

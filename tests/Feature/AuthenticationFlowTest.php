@@ -29,7 +29,7 @@ class AuthenticationFlowTest extends TestCase
         $this->get(route('login'))
             ->assertOk()
             ->assertSee('MAXIMO WMS')
-            ->assertSee('Iniciar sesion');
+            ->assertSee('Iniciar sesión');
     }
 
     public function test_user_can_authenticate_and_reach_dashboard(): void
@@ -48,7 +48,7 @@ class AuthenticationFlowTest extends TestCase
 
         $this->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Panel operativo')
+            ->assertSee('Panel de control')
             ->assertSee('Operador MAXIMO');
     }
 

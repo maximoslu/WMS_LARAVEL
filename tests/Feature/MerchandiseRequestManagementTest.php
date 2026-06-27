@@ -257,7 +257,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->get(route('merchandise-requests.show', $merchandiseRequest))
             ->assertOk()
-            ->assertSee('En preparacion')
+            ->assertSee('En preparación')
             ->assertDontSee('Preparing');
 
         $this->actingAs($cliente)

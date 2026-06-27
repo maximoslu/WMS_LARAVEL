@@ -1,11 +1,11 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Gestion de pedido | MAXIMO WMS')
-@section('topbar_title', 'Gestion de pedido')
+@section('title', 'Gestión de pedido | MAXIMO WMS')
+@section('topbar_title', 'Gestión de pedido')
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel operativo</a>
+        <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
         <a href="{{ route('dispatches.index') }}">Salidas</a>
         <span>/</span>
@@ -74,7 +74,7 @@
             </form>
 
             <div class="dispatch-action-stack">
-                <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact" target="_blank" rel="noopener noreferrer">Imprimir preparacion</a>
+                <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact" target="_blank" rel="noopener noreferrer">Imprimir preparación</a>
 
                 @if ($merchandiseRequest->dispatch)
                     <a href="{{ route('dispatches.show', $merchandiseRequest->dispatch) }}" class="button-secondary compact-button btn-compact">Ver salida</a>
@@ -95,7 +95,7 @@
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-section-heading">
             <strong>Lineas del pedido</strong>
-            <span class="ops-page-meta">{{ $merchandiseRequest->lines->count() }} lineas</span>
+            <span class="ops-page-meta">{{ $merchandiseRequest->lines->count() }} líneas</span>
         </div>
 
         <div class="data-table-wrap">
@@ -142,7 +142,7 @@
             <div class="ops-section-heading">
                 <strong>Carga real adicional</strong>
                 <span class="ops-page-meta">
-                    {{ $merchandiseRequest->dispatch->lines->where('is_extra_line', true)->count() }} lineas extra
+                    {{ $merchandiseRequest->dispatch->lines->where('is_extra_line', true)->count() }} líneas extra
                 </span>
             </div>
 

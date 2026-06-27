@@ -1,7 +1,7 @@
 @php($isEditing = $receipt->exists)
 
 <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel operativo</a>
+    <a href="{{ route('dashboard') }}">Panel de control</a>
     <span>/</span>
     <span>Operaciones</span>
     <span>/</span>
@@ -14,8 +14,8 @@
     <section class="surface-card item-form-card entity-form compact-card">
         <div class="app-copy">
             <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Borrador' }}</span>
-            <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar entrada' : 'Nueva entrada de mercancia' }}</h2>
-            <p>Registra cabecera, adjunto y lineas. La generacion de stock se realiza al confirmar la entrada.</p>
+            <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar entrada' : 'Nueva entrada de mercancía' }}</h2>
+            <p>Registra cabecera, adjunto y líneas. La generación de stock se realiza al confirmar la entrada.</p>
         </div>
 
         @if ($errors->has('goods_receipt'))
@@ -127,7 +127,7 @@
                         <p>Selecciona articulo y cantidad; el sistema calcula palets y pico.</p>
                     </div>
 
-                    <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea</button>
+                    <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Añadir línea</button>
                 </div>
 
                 <div class="data-table-wrap goods-receipt-lines-wrap">

@@ -32,7 +32,7 @@ class GoodsReceiptManagementTest extends TestCase
             $this->actingAs($user)
                 ->get(route('goods-receipts.index'))
                 ->assertOk()
-                ->assertSee('Entradas de mercancia');
+                ->assertSee('Entradas de mercancía');
         }
     }
 
