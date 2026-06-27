@@ -2,6 +2,10 @@
 
 namespace App\Services\MerchandiseRequests;
 
+use App\Jobs\ProcessGoodsDispatchLoadingConfirmedNotificationsJob;
+use App\Jobs\ProcessGoodsDispatchStatusChangedJob;
+use App\Jobs\ProcessMerchandiseRequestStatusChangedJob;
+use App\Jobs\ProcessMerchandiseRequestSubmittedNotificationsJob;
 use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
@@ -20,6 +24,11 @@ class MerchandiseRequestNotificationService
 {
     public function notifySubmitted(MerchandiseRequest $merchandiseRequest): void
     {
+        ProcessMerchandiseRequestSubmittedNotificationsJob::dispatch($merchandiseRequest->id)->afterResponse();
+    }
+
+    public function deliverSubmittedNotifications(MerchandiseRequest $merchandiseRequest): void
+    {
         $merchandiseRequest->loadMissing(['client', 'requestedBy', 'lines.item']);
 
         if ($merchandiseRequest->requestedBy !== null && $this->hasValidEmail($merchandiseRequest->requestedBy)) {
@@ -35,6 +44,11 @@ class MerchandiseRequestNotificationService
     }
 
     public function notifyStatusChanged(MerchandiseRequest $merchandiseRequest, string $previousStatus): void
+    {
+        ProcessMerchandiseRequestStatusChangedJob::dispatch($merchandiseRequest->id, $previousStatus)->afterResponse();
+    }
+
+    public function deliverStatusChangedNotification(MerchandiseRequest $merchandiseRequest, string $previousStatus): void
     {
         $merchandiseRequest->loadMissing(['client', 'requestedBy', 'lines.item', 'client.users.role']);
 
@@ -53,12 +67,30 @@ class MerchandiseRequestNotificationService
 
     public function notifyLoadingConfirmed(GoodsDispatch $dispatch, User $confirmedBy): void
     {
+        ProcessGoodsDispatchLoadingConfirmedNotificationsJob::dispatch($dispatch->id, $confirmedBy->id)->afterResponse();
+    }
+
+    public function deliverLoadingConfirmedNotifications(GoodsDispatch $dispatch, User $confirmedBy): void
+    {
         $dispatch->loadMissing(['client', 'lines.item', 'merchandiseRequest']);
 
         $this->notifyInternalUsers(
             new InternalGoodsDispatchLoadingConfirmedNotification($dispatch, $confirmedBy, ['database']),
             new InternalGoodsDispatchLoadingConfirmedNotification($dispatch, $confirmedBy, ['mail'])
         );
+    }
+
+    public function notifyDispatchStatusChanged(
+        GoodsDispatch $dispatch,
+        string $previousRequestStatus,
+        string $currentStatus,
+    ): void {
+        ProcessGoodsDispatchStatusChangedJob::dispatch(
+            $dispatch->id,
+            $dispatch->merchandise_request_id,
+            $previousRequestStatus,
+            $currentStatus,
+        )->afterResponse();
     }
 
     public function sendDeliveryNoteToClient(GoodsDispatch $dispatch, string $currentStatus): ?string

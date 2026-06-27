@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ProcessMerchandiseRequestSubmittedNotificationsJob;
 use App\Models\Client;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
@@ -10,6 +11,7 @@ use App\Models\User;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Tests\TestCase;
 
 class MerchandiseRequestManagementTest extends TestCase
@@ -30,13 +32,51 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->get(route('merchandise-requests.create'))
             ->assertOk()
-            ->assertSee('Solicitar mercancia')
-            ->assertSee('Anadir al pedido')
-            ->assertSee('CAJA000X');
+            ->assertSee('Solicitar mercancía')
+            ->assertSee('Buscar por SKU, referencia, lote o descripción...')
+            ->assertDontSee('CAJA000X');
+    }
+
+    public function test_ajax_search_limits_results_and_hides_other_clients_items(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        foreach (range(1, 18) as $index) {
+            Item::factory()->create([
+                'client_id' => $client->id,
+                'sku' => sprintf('CAJA%04d', $index),
+                'description' => 'Catalogo cliente '.$index,
+                'lot_key' => sprintf('L%04d', $index),
+                'active' => true,
+            ]);
+        }
+        Item::factory()->create([
+            'client_id' => $otherClient->id,
+            'sku' => 'CAJA9999',
+            'description' => 'Otro cliente',
+            'active' => true,
+        ]);
+
+        $response = $this->actingAs($cliente)
+            ->getJson(route('merchandise-requests.items.search', [
+                'search' => 'CAJA',
+            ]))
+            ->assertOk();
+
+        $data = $response->json('data');
+
+        $this->assertCount(15, $data);
+        $this->assertTrue(collect($data)->every(fn (array $item): bool => str_starts_with($item['sku'], 'CAJA')));
+        $this->assertFalse(collect($data)->contains(fn (array $item): bool => $item['sku'] === 'CAJA9999'));
     }
 
     public function test_cliente_can_create_request_with_lines(): void
     {
+        Bus::fake();
         $this->seedBaseData();
 
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
@@ -67,6 +107,10 @@ class MerchandiseRequestManagementTest extends TestCase
             'requested_pallets' => 4,
             'requested_units' => 2800,
         ]);
+        Bus::assertDispatchedAfterResponse(
+            ProcessMerchandiseRequestSubmittedNotificationsJob::class,
+            fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $request->id
+        );
     }
 
     public function test_cliente_can_create_a_second_request_after_submitting_the_first_one(): void
@@ -99,7 +143,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->get(route('merchandise-requests.create'))
             ->assertOk()
-            ->assertSee('Anadir al pedido')
+            ->assertSee('Buscar mercancía')
             ->assertDontSee('data-request-hidden-quantity', false);
 
         $this->actingAs($cliente)

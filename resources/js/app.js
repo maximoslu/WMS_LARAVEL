@@ -307,17 +307,17 @@ const setupMerchandiseRequestBuilder = () => {
         return;
     }
 
-    const itemCards = Array.from(form.querySelectorAll('[data-request-item-card]'));
     const summaryRows = form.querySelector('[data-request-summary-rows]');
     const summaryEmpty = form.querySelector('[data-request-summary-empty]');
     const summaryLines = form.querySelector('[data-request-summary-lines]');
     const summaryPallets = form.querySelector('[data-request-summary-pallets]');
     const hiddenInputs = form.querySelector('[data-request-hidden-inputs]');
-    const pickerSelect = form.querySelector('[data-request-picker-item]');
-    const pickerQuantity = form.querySelector('[data-request-picker-quantity]');
-    const pickerFeedback = form.querySelector('[data-request-picker-feedback]');
-    const pickerAddButton = form.querySelector('[data-request-add-selected]');
+    const searchInput = form.querySelector('[data-request-search]');
+    const searchFeedback = form.querySelector('[data-request-search-feedback]');
+    const resultsNode = form.querySelector('[data-request-results]');
     const submitButton = form.querySelector('[data-request-submit]');
+    const selectedItemsNode = form.querySelector('[data-request-selected-items]');
+    const searchEndpoint = form.dataset.searchEndpoint;
 
     if (
         !summaryRows
@@ -325,16 +325,21 @@ const setupMerchandiseRequestBuilder = () => {
         || !summaryLines
         || !summaryPallets
         || !hiddenInputs
-        || !pickerSelect
-        || !pickerQuantity
-        || !pickerFeedback
-        || !pickerAddButton
+        || !searchInput
+        || !searchFeedback
+        || !resultsNode
         || !submitButton
+        || !selectedItemsNode
+        || !searchEndpoint
     ) {
         return;
     }
 
     const formatNumber = new Intl.NumberFormat('es-ES');
+    const itemCache = new Map();
+    let searchResults = [];
+    let searchTimer = null;
+    let currentRequest = null;
 
     const escapeHtml = (value) => String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -343,21 +348,7 @@ const setupMerchandiseRequestBuilder = () => {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#039;');
 
-    const sourceInputFor = (itemId) => form.querySelector(`[data-request-quantity][data-item-id="${itemId}"]`);
     const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-request-hidden-quantity][data-item-id="${itemId}"]`);
-    const cardFor = (itemId) => form.querySelector(`[data-request-item-card][data-item-id="${itemId}"]`);
-
-    const normalizeInput = (input) => {
-        if (!input) {
-            return 0;
-        }
-
-        const parsed = Number.parseInt(input.value, 10);
-        const safeValue = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-        input.value = String(safeValue);
-
-        return safeValue;
-    };
 
     const parsePositiveInteger = (value) => {
         const normalized = String(value ?? '').trim();
@@ -372,40 +363,35 @@ const setupMerchandiseRequestBuilder = () => {
     };
 
     const setFeedback = (message, type = 'default') => {
-        pickerFeedback.textContent = message;
-        pickerFeedback.classList.toggle('helper-text--error', type === 'error');
-        pickerFeedback.classList.toggle('helper-text--success', type === 'success');
+        searchFeedback.textContent = message;
+        searchFeedback.classList.toggle('helper-text--error', type === 'error');
+        searchFeedback.classList.toggle('helper-text--success', type === 'success');
     };
 
-    const syncCardState = (itemId) => {
-        const card = cardFor(itemId);
-        const sourceInput = sourceInputFor(itemId);
-        const hiddenInput = hiddenInputFor(itemId);
-        const isSelected = hiddenInput !== null;
-
-        card?.classList.toggle('is-selected', isSelected);
-
-        if (sourceInput && hiddenInput) {
-            sourceInput.value = hiddenInput.value;
+    const rememberItem = (item) => {
+        if (!item || !item.id) {
+            return;
         }
+
+        itemCache.set(String(item.id), item);
     };
 
     const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-request-hidden-quantity]'))
         .map((input) => {
             const itemId = input.dataset.itemId;
-            const card = cardFor(itemId);
-            const pallets = normalizeInput(input);
+            const item = itemCache.get(String(itemId));
+            const pallets = parsePositiveInteger(input.value);
 
-            if (!itemId || !card || pallets <= 0) {
+            if (!itemId || !item || pallets <= 0) {
                 return null;
             }
 
             return {
                 itemId,
-                sku: card.dataset.itemSku ?? '',
-                description: card.dataset.itemDescription ?? '',
-                lot: card.dataset.itemLot ?? 'Sin lote',
-                unitsPerPallet: card.dataset.unitsPerPallet ?? '',
+                sku: item.sku ?? '',
+                description: item.description ?? '',
+                lot: item.lot || 'Sin lote',
+                unitsPerPallet: item.units_per_pallet ?? '',
                 pallets,
             };
         })
@@ -420,7 +406,6 @@ const setupMerchandiseRequestBuilder = () => {
 
         if (pallets <= 0) {
             hiddenInput?.remove();
-            syncCardState(itemId);
             return;
         }
 
@@ -434,7 +419,6 @@ const setupMerchandiseRequestBuilder = () => {
         }
 
         hiddenInput.value = String(pallets);
-        syncCardState(itemId);
     };
 
     const renderSummary = () => {
@@ -452,16 +436,14 @@ const setupMerchandiseRequestBuilder = () => {
         }
 
         summaryRows.innerHTML = lines.map((line) => `
-            <tr>
-                <td>
-                    <div class="stock-cell-main">
-                        <strong>${escapeHtml(line.sku)}</strong>
-                        <span class="users-table-email">
-                            ${escapeHtml(line.description)} Â· ${escapeHtml(line.lot)} Â· ${escapeHtml(line.unitsPerPallet)} uds/pallet
-                        </span>
-                    </div>
-                </td>
-                <td>
+            <article class="merchandise-request-summary-row">
+                <div class="merchandise-request-summary-main">
+                    <strong>${escapeHtml(line.sku)}</strong>
+                    <span>${escapeHtml(line.description)}</span>
+                    <small>${escapeHtml(line.lot)} · ${escapeHtml(line.unitsPerPallet)} uds/pallet</small>
+                </div>
+                <label class="auth-field merchandise-request-summary-field">
+                    <span>Pallets</span>
                     <input
                         type="number"
                         min="1"
@@ -471,66 +453,167 @@ const setupMerchandiseRequestBuilder = () => {
                         data-summary-quantity
                         data-item-id="${escapeHtml(line.itemId)}"
                     >
-                </td>
-                <td>
+                </label>
+                <button
+                    type="button"
+                    class="button-secondary compact-button btn-compact"
+                    data-summary-remove
+                    data-item-id="${escapeHtml(line.itemId)}"
+                >
+                    Quitar
+                </button>
+            </article>
+        `).join('');
+    };
+
+    const renderResults = () => {
+        const query = searchInput.value.trim();
+
+        if (query.length < 2) {
+            resultsNode.innerHTML = `
+                <div class="merchandise-request-results-empty">
+                    Empieza a escribir para buscar mercancías activas sin cargar todo el catálogo.
+                </div>
+            `;
+            return;
+        }
+
+        if (searchResults.length === 0) {
+            resultsNode.innerHTML = `
+                <div class="merchandise-request-results-empty">
+                    No hay resultados para "${escapeHtml(query)}".
+                </div>
+            `;
+            return;
+        }
+
+        resultsNode.innerHTML = searchResults.map((item) => {
+            const selected = hiddenInputFor(String(item.id));
+            const currentPallets = selected ? selected.value : '1';
+
+            return `
+                <article class="merchandise-request-result-row ${selected ? 'is-selected' : ''}">
+                    <div class="merchandise-request-result-main">
+                        <strong>${escapeHtml(item.sku)}</strong>
+                        <span>${escapeHtml(item.description)}</span>
+                        <small>Lote: ${escapeHtml(item.lot || 'Sin lote')} · ${escapeHtml(item.units_per_pallet)} uds/pallet</small>
+                    </div>
+                    <label class="auth-field merchandise-request-result-quantity">
+                        <span>Pallets</span>
+                        <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value="${escapeHtml(currentPallets)}"
+                            class="auth-input"
+                            data-result-quantity
+                            data-item-id="${escapeHtml(item.id)}"
+                        >
+                    </label>
                     <button
                         type="button"
-                        class="button-secondary compact-button btn-table"
-                        data-summary-remove
-                        data-item-id="${escapeHtml(line.itemId)}"
+                        class="button-primary compact-button btn-compact"
+                        data-result-add
+                        data-item-id="${escapeHtml(item.id)}"
                     >
-                        Eliminar
+                        ${selected ? 'Actualizar' : 'Añadir'}
                     </button>
-                </td>
-            </tr>
-        `).join('');
+                </article>
+            `;
+        }).join('');
     };
 
     const addItemToRequest = (itemId, pallets) => {
         const normalizedPallets = parsePositiveInteger(pallets);
+        const item = itemCache.get(String(itemId));
 
-        if (!itemId || normalizedPallets <= 0) {
-            setFeedback('Indica una cantidad valida de pallets antes de anadir la mercancia.', 'error');
+        if (!itemId || !item || normalizedPallets <= 0) {
+            setFeedback('Indica una cantidad válida de pallets antes de añadir la mercancía.', 'error');
             return;
         }
 
         upsertHiddenInput(itemId, normalizedPallets);
         renderSummary();
-
-        const card = cardFor(itemId);
-        const itemLabel = card?.dataset.itemSku ?? 'La mercancia seleccionada';
-
-        setFeedback(`${itemLabel} se ha anadido al pedido con ${formatNumber.format(normalizedPallets)} pallets.`, 'success');
+        renderResults();
+        setFeedback(`${item.sku} se ha añadido al pedido con ${formatNumber.format(normalizedPallets)} pallets.`, 'success');
     };
 
-    pickerAddButton.addEventListener('click', () => {
-        addItemToRequest(pickerSelect.value, pickerQuantity.value);
-    });
+    const performSearch = async () => {
+        const query = searchInput.value.trim();
 
-    pickerQuantity.addEventListener('input', () => {
-        const validValue = parsePositiveInteger(pickerQuantity.value);
-
-        if (validValue <= 0 && pickerQuantity.value !== '') {
-            setFeedback('Usa solo cantidades enteras y mayores que cero.', 'error');
+        if (query.length < 2) {
+            searchResults = [];
+            setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
+            renderResults();
             return;
         }
 
-        setFeedback('Puedes anadir varias lineas. Si repites una mercancia, se actualizara la cantidad en el resumen.');
+        currentRequest?.abort();
+        currentRequest = new AbortController();
+        setFeedback('Buscando mercancías...');
+
+        try {
+            const response = await fetch(`${searchEndpoint}?search=${encodeURIComponent(query)}`, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                signal: currentRequest.signal,
+            });
+
+            if (!response.ok) {
+                throw new Error('search_failed');
+            }
+
+            const payload = await response.json();
+            searchResults = Array.isArray(payload.data) ? payload.data : [];
+            searchResults.forEach(rememberItem);
+            setFeedback(
+                searchResults.length > 0
+                    ? `${formatNumber.format(searchResults.length)} resultados encontrados.`
+                    : 'No se han encontrado mercancías con ese criterio.',
+                searchResults.length > 0 ? 'success' : 'default',
+            );
+            renderResults();
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return;
+            }
+
+            searchResults = [];
+            setFeedback('No se ha podido completar la búsqueda. Inténtalo de nuevo en unos segundos.', 'error');
+            renderResults();
+        }
+    };
+
+    searchInput.addEventListener('input', () => {
+        window.clearTimeout(searchTimer);
+        searchTimer = window.setTimeout(() => {
+            performSearch();
+        }, 250);
     });
 
-    itemCards.forEach((card) => {
-        const input = sourceInputFor(card.dataset.itemId);
-        const addButton = card.querySelector('[data-request-add-item]');
+    resultsNode.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-result-quantity]');
 
-        input?.addEventListener('input', () => {
-            if (parsePositiveInteger(input.value) <= 0 && input.value !== '') {
-                setFeedback('Usa solo cantidades enteras y mayores que cero.', 'error');
-            }
-        });
+        if (!input) {
+            return;
+        }
 
-        addButton?.addEventListener('click', () => {
-            addItemToRequest(card.dataset.itemId, input?.value ?? '');
-        });
+        if (parsePositiveInteger(input.value) <= 0 && input.value !== '') {
+            setFeedback('Usa solo cantidades enteras y mayores que cero.', 'error');
+        }
+    });
+
+    resultsNode.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-result-add]');
+
+        if (!button) {
+            return;
+        }
+
+        const quantityInput = resultsNode.querySelector(`[data-result-quantity][data-item-id="${button.dataset.itemId}"]`);
+        addItemToRequest(button.dataset.itemId, quantityInput?.value ?? '0');
     });
 
     summaryRows.addEventListener('input', (event) => {
@@ -544,6 +627,7 @@ const setupMerchandiseRequestBuilder = () => {
 
         upsertHiddenInput(input.dataset.itemId, pallets);
         renderSummary();
+        renderResults();
     });
 
     summaryRows.addEventListener('click', (event) => {
@@ -555,15 +639,23 @@ const setupMerchandiseRequestBuilder = () => {
 
         upsertHiddenInput(button.dataset.itemId, 0);
         renderSummary();
-        setFeedback('Linea eliminada del pedido. Puedes volver a anadirla cuando quieras.');
+        renderResults();
+        setFeedback('Línea eliminada del pedido. Puedes volver a añadirla cuando quieras.');
     });
 
-    form.querySelectorAll('[data-request-hidden-quantity]').forEach((input) => {
-        syncCardState(input.dataset.itemId);
-    });
+    try {
+        const initialItems = JSON.parse(selectedItemsNode.textContent ?? '[]');
+
+        if (Array.isArray(initialItems)) {
+            initialItems.forEach(rememberItem);
+        }
+    } catch {
+        // Ignore invalid bootstrap data and keep search working.
+    }
 
     form.dataset.requestBuilderBound = 'true';
     renderSummary();
+    renderResults();
 };
 
 const setupGoodsDispatchBuilder = () => {
@@ -850,3 +942,6 @@ if (document.readyState === 'loading') {
     setupGoodsDispatchBuilder();
     setupDispatchLoadingEditor();
 }
+
+
+

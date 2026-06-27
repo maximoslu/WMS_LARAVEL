@@ -13,6 +13,7 @@ use App\Services\MerchandiseRequests\MerchandiseRequestScheduleService;
 use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -82,17 +83,77 @@ class MerchandiseRequestController extends Controller
     public function create(Request $request): View
     {
         $user = $request->user();
+        $oldQuantities = collect(old('quantities', []))
+            ->filter(fn ($quantity, $itemId) => is_numeric((string) $itemId) && (int) $quantity > 0);
 
         abort_unless($user->hasRole(Role::CLIENTE) && $user->client_id !== null, 403);
 
         return view('merchandise-requests.create', [
-            'items' => Item::query()
+            'hasActiveItems' => Item::query()
                 ->where('client_id', $user->client_id)
                 ->where('active', true)
+                ->exists(),
+            'selectedItems' => Item::query()
+                ->where('client_id', $user->client_id)
+                ->where('active', true)
+                ->whereIn('id', $oldQuantities->keys()->map(fn ($itemId) => (int) $itemId))
                 ->orderBy('sku')
-                ->get(),
+                ->get()
+                ->map(fn (Item $item): array => [
+                    'id' => $item->id,
+                    'sku' => $item->sku,
+                    'description' => $item->description,
+                    'lot' => $item->lot,
+                    'units_per_pallet' => $item->units_per_pallet,
+                    'requested_pallets' => (int) $oldQuantities->get((string) $item->id, 0),
+                ])
+                ->values()
+                ->all(),
             'client' => $user->client,
+            'searchEndpoint' => route('merchandise-requests.items.search'),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
+        ]);
+    }
+
+    public function searchItems(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user->hasRole(Role::CLIENTE) && $user->client_id !== null, 403);
+
+        $search = trim((string) $request->string('search'));
+
+        if (mb_strlen($search) < 2) {
+            return response()->json([
+                'data' => [],
+            ]);
+        }
+
+        $items = Item::query()
+            ->where('client_id', $user->client_id)
+            ->where('active', true)
+            ->where(function (Builder $query) use ($search): void {
+                $query
+                    ->where('sku', 'like', '%'.$search.'%')
+                    ->orWhere('description', 'like', '%'.$search.'%')
+                    ->orWhere('lot', 'like', '%'.$search.'%')
+                    ->orWhere('lot_key', 'like', '%'.$search.'%');
+            })
+            ->orderBy('sku')
+            ->orderBy('lot_key')
+            ->limit(15)
+            ->get()
+            ->map(fn (Item $item): array => [
+                'id' => $item->id,
+                'sku' => $item->sku,
+                'description' => $item->description,
+                'lot' => $item->lot,
+                'units_per_pallet' => $item->units_per_pallet,
+            ])
+            ->values()
+            ->all();
+
+        return response()->json([
+            'data' => $items,
         ]);
     }
 
@@ -135,7 +196,6 @@ class MerchandiseRequestController extends Controller
             return $requestModel;
         });
 
-        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item']);
         $notificationService->notifySubmitted($merchandiseRequest);
 
         return redirect()
@@ -212,10 +272,7 @@ class MerchandiseRequestController extends Controller
 
             $merchandiseRequest->update($payload);
 
-            $notificationService->notifyStatusChanged(
-                $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item']),
-                $previousStatus
-            );
+            $notificationService->notifyStatusChanged($merchandiseRequest, $previousStatus);
         }
 
         return redirect()

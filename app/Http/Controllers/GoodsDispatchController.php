@@ -189,10 +189,7 @@ class GoodsDispatchController extends Controller
             return $dispatch;
         });
 
-        $notificationService->notifyStatusChanged(
-            $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item']),
-            MerchandiseRequest::STATUS_PENDING
-        );
+        $notificationService->notifyStatusChanged($merchandiseRequest, MerchandiseRequest::STATUS_PENDING);
 
         return redirect()
             ->route('dispatches.show', $dispatch)

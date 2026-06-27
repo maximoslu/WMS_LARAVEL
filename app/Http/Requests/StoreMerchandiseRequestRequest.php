@@ -37,25 +37,30 @@ class StoreMerchandiseRequestRequest extends FormRequest
             $lines = $this->validatedLines();
 
             if ($lines === []) {
-                $validator->errors()->add('quantities', 'Debes seleccionar al menos una mercancia con pallets mayores que cero.');
+                $validator->errors()->add('quantities', 'Debes seleccionar al menos una mercancía con pallets mayores que cero.');
+                return;
             }
+
+            $requestedItemIds = collect($lines)
+                ->pluck('item_id')
+                ->map(fn ($itemId) => (int) $itemId)
+                ->unique()
+                ->values();
 
             $allowedItemIds = Item::query()
                 ->where('client_id', $this->user()->client_id)
                 ->where('active', true)
+                ->whereIn('id', $requestedItemIds)
                 ->pluck('id')
-                ->map(fn ($id) => (string) $id)
+                ->map(fn ($id) => (int) $id)
                 ->all();
 
-            $requestedItemIds = array_map(
-                static fn (array $line): string => (string) $line['item_id'],
-                $lines
-            );
-
-            $invalidItemIds = array_diff($requestedItemIds, $allowedItemIds);
+            $invalidItemIds = $requestedItemIds
+                ->reject(fn (int $itemId) => in_array($itemId, $allowedItemIds, true))
+                ->all();
 
             if ($invalidItemIds !== []) {
-                $validator->errors()->add('quantities', 'Hay mercancias no validas para este cliente.');
+                $validator->errors()->add('quantities', 'Hay mercancías no válidas para este cliente.');
             }
         });
     }

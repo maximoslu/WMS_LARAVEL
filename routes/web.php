@@ -102,6 +102,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/solicitudes-mercancia/crear', [MerchandiseRequestController::class, 'create'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.create');
+    Route::get('/solicitudes-mercancia/buscar-mercancias', [MerchandiseRequestController::class, 'searchItems'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('merchandise-requests.items.search');
     Route::post('/solicitudes-mercancia', [MerchandiseRequestController::class, 'store'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.store');

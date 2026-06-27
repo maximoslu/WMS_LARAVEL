@@ -7,11 +7,8 @@ use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\User;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 class GoodsDispatchWorkflowService
 {
@@ -132,9 +129,9 @@ class GoodsDispatchWorkflowService
 
         $this->guardStatusTransition($dispatch, $newStatus);
 
-        $warning = null;
+        $previousRequestStatus = $dispatch->merchandiseRequest?->status;
 
-        DB::transaction(function () use ($dispatch, $newStatus, $user, &$warning): void {
+        DB::transaction(function () use ($dispatch, $newStatus, $user): void {
             $dispatchPayload = [
                 'status' => $newStatus,
             ];
@@ -155,7 +152,6 @@ class GoodsDispatchWorkflowService
                 return;
             }
 
-            $previousRequestStatus = $merchandiseRequest->status;
             $requestPayload = [
                 'status' => $newStatus,
             ];
@@ -180,51 +176,17 @@ class GoodsDispatchWorkflowService
             }
 
             $merchandiseRequest->update($requestPayload);
-
-            $refreshRelations = [
-                'client',
-                'lines.item',
-                'merchandiseRequest.client',
-                'merchandiseRequest.requestedBy',
-                'merchandiseRequest.lines.item',
-            ];
-
-            if ($newStatus === GoodsDispatch::STATUS_SENT) {
-                $warning = $this->notificationService->sendDeliveryNoteToClient(
-                    $dispatch->fresh($refreshRelations),
-                    MerchandiseRequest::STATUS_SENT
-                );
-
-                return;
-            }
-
-            if ($newStatus === GoodsDispatch::STATUS_COMPLETED) {
-                $refreshedDispatch = $dispatch->fresh($refreshRelations);
-
-                if ($refreshedDispatch->delivery_note_sent_at === null) {
-                    $warning = $this->notificationService->sendDeliveryNoteToClient(
-                        $refreshedDispatch,
-                        MerchandiseRequest::STATUS_COMPLETED
-                    );
-
-                    return;
-                }
-
-                $this->notificationService->notifyStatusChanged(
-                    $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item', 'dispatch.lines']),
-                    $previousRequestStatus
-                );
-
-                return;
-            }
-
-            $this->notificationService->notifyStatusChanged(
-                $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item', 'dispatch.lines']),
-                $previousRequestStatus
-            );
         });
 
-        return $warning;
+        if ($dispatch->merchandiseRequest !== null && $previousRequestStatus !== null) {
+            $this->notificationService->notifyDispatchStatusChanged(
+                $dispatch->fresh(['merchandiseRequest']),
+                $previousRequestStatus,
+                $newStatus,
+            );
+        }
+
+        return null;
     }
 
     public function ensureDeliveryNoteCanBeGenerated(GoodsDispatch $dispatch): void
@@ -249,20 +211,6 @@ class GoodsDispatchWorkflowService
             ]);
         }
 
-        try {
-            Pdf::loadView('dispatches.delivery-note-pdf', [
-                'dispatch' => $dispatch,
-            ])->output();
-        } catch (Throwable $exception) {
-            Log::warning('No se ha podido generar el albaran de salida.', [
-                'dispatch_id' => $dispatch->id,
-                'message' => $exception->getMessage(),
-            ]);
-
-            throw ValidationException::withMessages([
-                'dispatch' => 'No se ha podido generar el albaran definitivo con los datos actuales.',
-            ]);
-        }
     }
 
     private function guardStatusTransition(GoodsDispatch $dispatch, string $newStatus): void
