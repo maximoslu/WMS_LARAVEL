@@ -38,16 +38,16 @@
     </section>
 
     <section class="surface-card compact-card dashboard-notifications-card">
-        <div class="ops-section-heading">
-            <div>
+        <div class="ops-section-heading dashboard-notifications-header">
+            <div class="dashboard-notifications-intro">
                 <strong>Notificaciones recientes</strong>
                 <p class="merchandise-request-summary-copy">Avisos internos y seguimiento operativo reciente en el SGA.</p>
             </div>
-            <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-table">Ver todas</a>
+            <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Ver todas</a>
         </div>
 
         @if ($recentNotifications->isEmpty())
-            <div class="merchandise-request-summary-empty">
+            <div class="merchandise-request-summary-empty dashboard-notifications-empty">
                 No hay notificaciones recientes para este usuario.
             </div>
         @else
