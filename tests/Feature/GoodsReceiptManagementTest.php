@@ -349,7 +349,7 @@ class GoodsReceiptManagementTest extends TestCase
         Storage::disk('public')->assertExists($receipt->document_path);
     }
 
-    public function test_confirming_goods_receipt_generates_stock_pallets_and_prevents_duplicates(): void
+    public function test_confirming_goods_receipt_generates_one_aggregated_stock_batch_and_prevents_duplicates(): void
     {
         $this->seed(RoleSeeder::class);
 
@@ -390,22 +390,19 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertSame(GoodsReceipt::STATUS_CONFIRMED, $receipt->status);
         $this->assertNotNull($receipt->confirmed_at);
         $this->assertSame($user->id, $receipt->confirmed_by);
-        $this->assertDatabaseCount('stock_pallets', 3);
+        $this->assertDatabaseCount('stock_pallets', 1);
         $this->assertDatabaseHas('stock_pallets', [
             'goods_receipt_id' => $receipt->id,
-            'quantity_units' => 1000,
+            'quantity_units' => 2500,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 2,
+            'peaks_count' => 1,
+            'peak_1' => 500,
             'location_id' => $location->id,
             'lot' => 'LOT-CF1',
             'status' => 'available',
             'active' => true,
-        ]);
-        $this->assertDatabaseHas('stock_pallets', [
-            'goods_receipt_id' => $receipt->id,
-            'quantity_units' => 500,
-            'location_id' => $location->id,
-            'lot' => 'LOT-CF1',
-            'status' => 'available',
-            'active' => true,
+            'pallet_code' => null,
         ]);
         $this->assertDatabaseHas('items', [
             'client_id' => $client->id,
@@ -419,7 +416,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertRedirect(route('goods-receipts.show', $receipt))
             ->assertSessionHasErrors('goods_receipt');
 
-        $this->assertDatabaseCount('stock_pallets', 3);
+        $this->assertDatabaseCount('stock_pallets', 1);
     }
 
     public function test_confirmed_goods_receipt_status_is_visible_and_stock_page_reflects_it(): void
@@ -443,7 +440,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('26/06/2026');
     }
 
-    public function test_confirming_15000_units_with_700_units_per_pallet_generates_21_full_pallets_and_one_peak(): void
+    public function test_confirming_70000_units_with_1080_units_per_pallet_generates_one_batch_with_64_full_pallets_and_one_peak_of_880(): void
     {
         $this->seed(RoleSeeder::class);
 
@@ -455,22 +452,22 @@ class GoodsReceiptManagementTest extends TestCase
             'description' => 'Caja confirmada',
             'lot' => 'LOT-C700',
             'lot_key' => 'LOT-C700',
-            'units_per_pallet' => 700,
+            'units_per_pallet' => 1080,
         ]);
 
         $this->actingAs($user)
             ->post(route('goods-receipts.store'), [
                 'client_id' => $client->id,
                 'supplier_id' => $supplier->id,
-                'receipt_number' => 'ALB-CONF-700',
+                'receipt_number' => 'ALB-CONF-1080',
                 'received_at' => '2026-06-26',
                 'lines' => [
                     [
                         'item_id' => $item->id,
                         'sku' => '',
                         'description' => '',
-                        'lot' => '',
-                        'quantity_units' => 15000,
+                        'lot' => 'LOTE 1',
+                        'quantity_units' => 70000,
                         'units_per_pallet' => '',
                         'pallet_count' => '',
                         'pico_units' => '',
@@ -480,29 +477,27 @@ class GoodsReceiptManagementTest extends TestCase
             ])
             ->assertRedirect();
 
-        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-CONF-700')->firstOrFail();
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-CONF-1080')->firstOrFail();
 
         $this->actingAs($user)
             ->patch(route('goods-receipts.confirm', $receipt))
             ->assertRedirect(route('goods-receipts.show', $receipt));
 
-        $this->assertDatabaseCount('stock_pallets', 22);
-        $this->assertSame(22, $receipt->fresh()->stockPallets()->count());
-        $this->assertSame(21, $receipt->lines()->firstOrFail()->fresh()->pallet_count);
-        $this->assertSame(300, $receipt->lines()->firstOrFail()->fresh()->pico_units);
+        $this->assertDatabaseCount('stock_pallets', 1);
+        $this->assertSame(1, $receipt->fresh()->stockPallets()->count());
+        $this->assertSame(64, $receipt->lines()->firstOrFail()->fresh()->pallet_count);
+        $this->assertSame(880, $receipt->lines()->firstOrFail()->fresh()->pico_units);
         $this->assertDatabaseHas('stock_pallets', [
             'goods_receipt_id' => $receipt->id,
-            'quantity_units' => 700,
+            'quantity_units' => 70000,
+            'units_per_pallet' => 1080,
+            'full_pallets' => 64,
+            'peaks_count' => 1,
+            'peak_1' => 880,
             'location_id' => $location->id,
-            'lot' => null,
+            'lot' => 'LOTE 1',
             'active' => true,
-        ]);
-        $this->assertDatabaseHas('stock_pallets', [
-            'goods_receipt_id' => $receipt->id,
-            'quantity_units' => 300,
-            'location_id' => $location->id,
-            'lot' => null,
-            'active' => true,
+            'pallet_code' => null,
         ]);
     }
 

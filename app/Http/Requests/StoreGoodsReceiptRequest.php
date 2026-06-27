@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Item;
 use App\Models\Supplier;
+use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -42,8 +43,8 @@ class StoreGoodsReceiptRequest extends FormRequest
                 }
 
                 if ($unitsPerPallet !== null && $quantityUnits > 0 && ! $manualPalletCountProvided && ! $manualPicoUnitsProvided) {
-                    $palletCount = intdiv($quantityUnits, $unitsPerPallet);
-                    $picoUnits = $quantityUnits % $unitsPerPallet;
+                    $palletCount = StockBatchCalculator::calculateFullPallets($quantityUnits, $unitsPerPallet);
+                    $picoUnits = StockBatchCalculator::calculateRemainderPeak($quantityUnits, $unitsPerPallet);
                 }
 
                 return [
@@ -141,19 +142,19 @@ class StoreGoodsReceiptRequest extends FormRequest
                     }
 
                     if (! ($itemData?->active ?? false)) {
-                        $validator->errors()->add("lines.$index.item_id", 'El artículo seleccionado no está activo para nuevas entradas.');
+                        $validator->errors()->add("lines.$index.item_id", 'El articulo seleccionado no esta activo para nuevas entradas.');
                     }
                 }
 
                 if ($unitsPerPallet === null && ($palletCount > 0 || ($picoUnits ?? 0) > 0)) {
-                    $validator->errors()->add("lines.$index.units_per_pallet", 'Para informar palets completos o pico, indica tambien las unidades por palet.');
+                    $validator->errors()->add("lines.$index.units_per_pallet", 'Para informar pallets completos o pico, indica tambien las unidades por pallet.');
                 }
 
                 if ($unitsPerPallet !== null && ($palletCount > 0 || $picoUnits !== null)) {
                     $computedTotal = ($palletCount * $unitsPerPallet) + (int) ($picoUnits ?? 0);
 
                     if ($quantityUnits > 0 && $computedTotal !== $quantityUnits) {
-                        $validator->errors()->add("lines.$index.quantity_units", 'La cantidad total debe coincidir con palets completos y pico. Ajusta cantidad o paletizado.');
+                        $validator->errors()->add("lines.$index.quantity_units", 'La cantidad total debe coincidir con pallets completos y pico. Ajusta cantidad o paletizado.');
                     }
                 }
             }

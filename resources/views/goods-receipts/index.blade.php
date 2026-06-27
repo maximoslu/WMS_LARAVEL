@@ -100,7 +100,7 @@
                             <th>Proveedor</th>
                             <th>Recepcion</th>
                             <th>Lineas</th>
-                            <th>Stock generado</th>
+                            <th>Partidas generadas</th>
                             <th>Documento</th>
                             <th>IA</th>
                             <th>Estado</th>

@@ -72,8 +72,8 @@
             <span>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Stock generado</strong>
-            <span>{{ number_format($receipt->stockPallets->count(), 0, ',', '.') }} palets</span>
+            <strong>Partidas generadas</strong>
+            <span>{{ number_format($receipt->stockPallets->count(), 0, ',', '.') }}</span>
         </article>
     </section>
 
@@ -149,7 +149,7 @@
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-index-heading">
             <strong>Lineas y stock previsto</strong>
-            <span class="ops-page-meta">{{ $receipt->lines->count() }} líneas</span>
+            <span class="ops-page-meta">{{ $receipt->lines->count() }} lineas</span>
         </div>
 
         <div class="data-table-wrap goods-receipt-lines-wrap">
@@ -160,8 +160,8 @@
                         <th>Descripcion</th>
                         <th>Lote</th>
                         <th>Total uds</th>
-                        <th>Uds/palet</th>
-                        <th>Palets</th>
+                        <th>Uds/pallet</th>
+                        <th>Pallets</th>
                         <th>Pico</th>
                         <th>Ubicacion</th>
                         <th>Notas</th>
@@ -189,29 +189,39 @@
     @if ($receipt->stockPallets->isNotEmpty())
         <section class="surface-card stock-table-shell compact-card">
             <div class="ops-index-heading">
-                <strong>Stock generado</strong>
-                <span class="ops-page-meta">{{ $receipt->stockPallets->count() }} palets activos</span>
+                <strong>Partidas generadas</strong>
+                <span class="ops-page-meta">{{ $receipt->stockPallets->count() }} lineas activas</span>
             </div>
 
             <div class="data-table-wrap goods-receipt-lines-wrap">
                 <table class="data-table table-compact" aria-label="Stock generado por la entrada">
                     <thead>
                         <tr>
-                            <th>Palet</th>
                             <th>SKU</th>
+                            <th>Lote</th>
                             <th>Unidades</th>
+                            <th>Uds/pallet</th>
+                            <th>Pallets</th>
+                            <th>Picos</th>
+                            <th>Pico 1</th>
                             <th>Ubicacion</th>
                             <th>Fecha</th>
+                            <th>Estado</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($receipt->stockPallets as $stockPallet)
                             <tr>
-                                <td>{{ $stockPallet->pallet_code ?: '-' }}</td>
                                 <td>{{ $stockPallet->item?->sku ?: '-' }}</td>
+                                <td>{{ $stockPallet->lot ?: '-' }}</td>
                                 <td>{{ number_format($stockPallet->quantity_units, 0, ',', '.') }}</td>
+                                <td>{{ number_format($stockPallet->units_per_pallet ?? 0, 0, ',', '.') }}</td>
+                                <td>{{ number_format($stockPallet->full_pallets ?? 0, 0, ',', '.') }}</td>
+                                <td>{{ number_format($stockPallet->peaks_count ?? 0, 0, ',', '.') }}</td>
+                                <td>{{ number_format($stockPallet->peak_1 ?? 0, 0, ',', '.') }}</td>
                                 <td>{{ $stockPallet->location?->code ?: ($stockPallet->location_text ?: 'Sin ubicacion') }}</td>
                                 <td>{{ optional($stockPallet->received_at)->format('d/m/Y') ?: '-' }}</td>
+                                <td>{{ $stockPallet->statusLabel() }}</td>
                             </tr>
                         @endforeach
                     </tbody>

@@ -344,7 +344,7 @@
         </div>
 
         <div class="dispatch-inline-help dispatch-stock-warning">
-            Pendiente integrar descuento real de stock cuando el modelo de stock definitivo quede cerrado y permita trazar con seguridad los palets exactos expedidos.
+            Pendiente seleccionar partida/lote concreto en preparacion de salida cuando se active descuento real de stock.
         </div>
     </section>
 

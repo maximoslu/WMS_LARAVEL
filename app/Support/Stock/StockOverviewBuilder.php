@@ -37,7 +37,7 @@ class StockOverviewBuilder
             'summary' => [
                 'references_with_stock' => $stockRows->pluck('item_id')->filter()->unique()->count(),
                 'total_units' => (int) $stockRows->sum('quantity_units'),
-                'total_pallets' => $stockRows->count(),
+                'total_pallets' => (int) $stockRows->sum('full_pallets'),
                 'blocked_batches' => $stockRows->where('batch_status', StockPallet::STATUS_BLOCKED)->count(),
             ],
         ];
@@ -139,7 +139,7 @@ class StockOverviewBuilder
             'client_code' => $pallet->client?->code ?? $item?->client?->code ?? '',
             'item_id' => $item?->id,
             'sku' => $item?->sku ?? 'Sin SKU',
-            'description' => $item?->description ?? 'Sin descripción',
+            'description' => $item?->description ?? 'Sin descripcion',
             'lot' => $pallet->lot,
             'lot_label' => $pallet->lot ?: 'Sin lote',
             'received_at' => $pallet->received_at?->format('d/m/Y'),
@@ -149,11 +149,20 @@ class StockOverviewBuilder
             'batch_status' => $pallet->status,
             'batch_status_label' => $pallet->statusLabel(),
             'blocked_reason' => $pallet->blocked_reason,
-            'location_label' => $this->locationLabel($pallet) ?: 'Sin ubicación',
+            'location_label' => $this->locationLabel($pallet) ?: 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($defaultLocation),
             'quantity_units' => (int) $pallet->quantity_units,
-            'units_per_pallet' => max(1, (int) ($item?->units_per_pallet ?? 1)),
-            'pallet_code' => $pallet->pallet_code ?: 'Sin código',
+            'units_per_pallet' => max(1, (int) ($pallet->units_per_pallet ?? $item?->units_per_pallet ?? 1)),
+            'full_pallets' => (int) $pallet->full_pallets,
+            'peaks_count' => (int) $pallet->peaks_count,
+            'peak_1' => (int) $pallet->peak_1,
+            'peak_2' => (int) $pallet->peak_2,
+            'peak_3' => (int) $pallet->peak_3,
+            'peak_4' => (int) $pallet->peak_4,
+            'peak_5' => (int) $pallet->peak_5,
+            'peak_6' => (int) $pallet->peak_6,
+            'peak_7' => (int) $pallet->peak_7,
+            'peak_8' => (int) $pallet->peak_8,
             'has_stock' => true,
         ];
     }
@@ -180,11 +189,20 @@ class StockOverviewBuilder
             'batch_status' => null,
             'batch_status_label' => 'Sin stock',
             'blocked_reason' => null,
-            'location_label' => 'Sin ubicación',
+            'location_label' => 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($item->defaultLocation),
             'quantity_units' => 0,
             'units_per_pallet' => max(1, (int) $item->units_per_pallet),
-            'pallet_code' => '-',
+            'full_pallets' => 0,
+            'peaks_count' => 0,
+            'peak_1' => 0,
+            'peak_2' => 0,
+            'peak_3' => 0,
+            'peak_4' => 0,
+            'peak_5' => 0,
+            'peak_6' => 0,
+            'peak_7' => 0,
+            'peak_8' => 0,
             'has_stock' => false,
         ];
     }
@@ -203,7 +221,7 @@ class StockOverviewBuilder
     private function defaultLocationLabel(mixed $location): string
     {
         if ($location === null) {
-            return 'Sin ubicación por defecto';
+            return 'Sin ubicacion por defecto';
         }
 
         $warehouseCode = $location->warehouse?->code;

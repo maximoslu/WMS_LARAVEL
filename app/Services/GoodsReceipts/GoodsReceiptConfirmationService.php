@@ -7,6 +7,7 @@ use App\Models\GoodsReceiptLine;
 use App\Models\Item;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -61,7 +62,7 @@ class GoodsReceiptConfirmationService
 
         if ($unitsPerPallet <= 0) {
             throw ValidationException::withMessages([
-                'goods_receipt' => "La linea {$line->id} necesita unidades por palet para generar stock.",
+                'goods_receipt' => "La linea {$line->id} necesita unidades por pallet para generar stock.",
             ]);
         }
 
@@ -75,39 +76,36 @@ class GoodsReceiptConfirmationService
 
         if ($fullPallets === 0 && $picoUnits === 0) {
             throw ValidationException::withMessages([
-                'goods_receipt' => "La linea {$line->id} no genera palets validos.",
+                'goods_receipt' => "La linea {$line->id} no genera una partida valida.",
             ]);
         }
 
-        for ($index = 1; $index <= $fullPallets; $index++) {
-            $receipt->stockPallets()->create([
-                'client_id' => $receipt->client_id,
-                'item_id' => $item->id,
-                'location_id' => $line->location_id,
-                'location_text' => $line->location?->code,
-                'pallet_code' => sprintf('GR-%d-L%d-P%d', $receipt->id, $line->id, $index),
-                'lot' => $line->lot,
-                'quantity_units' => $unitsPerPallet,
-                'received_at' => $receipt->received_at,
-                'status' => StockPallet::STATUS_AVAILABLE,
-                'active' => true,
-            ]);
-        }
+        $breakdown = StockBatchCalculator::calculateBreakdown($quantityUnits, $unitsPerPallet);
 
-        if ($picoUnits > 0) {
-            $receipt->stockPallets()->create([
-                'client_id' => $receipt->client_id,
-                'item_id' => $item->id,
-                'location_id' => $line->location_id,
-                'location_text' => $line->location?->code,
-                'pallet_code' => sprintf('GR-%d-L%d-X1', $receipt->id, $line->id),
-                'lot' => $line->lot,
-                'quantity_units' => $picoUnits,
-                'received_at' => $receipt->received_at,
-                'status' => StockPallet::STATUS_AVAILABLE,
-                'active' => true,
-            ]);
-        }
+        $receipt->stockPallets()->create([
+            'client_id' => $receipt->client_id,
+            'item_id' => $item->id,
+            'location_id' => $line->location_id,
+            'location_text' => $line->location?->code,
+            'pallet_code' => null,
+            'lot' => $line->lot,
+            'quantity_units' => $quantityUnits,
+            'units_per_pallet' => $unitsPerPallet,
+            'full_pallets' => $breakdown['full_pallets'],
+            'peaks_count' => $breakdown['peaks_count'],
+            'peak_1' => $breakdown['peak_1'],
+            'peak_2' => $breakdown['peak_2'],
+            'peak_3' => $breakdown['peak_3'],
+            'peak_4' => $breakdown['peak_4'],
+            'peak_5' => $breakdown['peak_5'],
+            'peak_6' => $breakdown['peak_6'],
+            'peak_7' => $breakdown['peak_7'],
+            'peak_8' => $breakdown['peak_8'],
+            'received_at' => $receipt->received_at,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'notes' => $line->notes,
+            'active' => true,
+        ]);
 
         $line->forceFill([
             'item_id' => $item->id,
@@ -135,9 +133,10 @@ class GoodsReceiptConfirmationService
         $sku = $line->sku;
         $description = $line->description;
         $unitsPerPallet = (int) ($line->units_per_pallet ?? 0);
+
         if ($sku === null || $description === null || $unitsPerPallet <= 0) {
             throw ValidationException::withMessages([
-                'goods_receipt' => "La linea {$line->id} necesita articulo o datos suficientes para crearlo (SKU, descripcion y unidades por palet).",
+                'goods_receipt' => "La linea {$line->id} necesita articulo o datos suficientes para crearlo (SKU, descripcion y unidades por pallet).",
             ]);
         }
 
@@ -168,7 +167,7 @@ class GoodsReceiptConfirmationService
 
             if ($computedTotal !== $quantityUnits) {
                 throw ValidationException::withMessages([
-                    'goods_receipt' => "La linea {$line->id} no cuadra entre cantidad total, palets completos y pico.",
+                    'goods_receipt' => "La linea {$line->id} no cuadra entre cantidad total, pallets completos y pico.",
                 ]);
             }
 
@@ -176,8 +175,8 @@ class GoodsReceiptConfirmationService
         }
 
         return [
-            intdiv($quantityUnits, $unitsPerPallet),
-            $quantityUnits % $unitsPerPallet,
+            StockBatchCalculator::calculateFullPallets($quantityUnits, $unitsPerPallet),
+            StockBatchCalculator::calculateRemainderPeak($quantityUnits, $unitsPerPallet),
         ];
     }
 }

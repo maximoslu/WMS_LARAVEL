@@ -17,18 +17,35 @@ class StockPalletFactory extends Factory
 
     public function definition(): array
     {
+        $unitsPerPallet = fake()->numberBetween(1, 1500);
+        $quantityUnits = fake()->numberBetween(1, 4000);
+        $fullPallets = intdiv($quantityUnits, $unitsPerPallet);
+        $peak1 = $quantityUnits % $unitsPerPallet;
+
         return [
             'client_id' => Client::factory(),
             'item_id' => Item::factory(),
             'goods_receipt_id' => null,
             'location_id' => null,
             'location_text' => fake()->optional()->bothify('PAS-## / HUE-##'),
-            'pallet_code' => strtoupper(fake()->bothify('PAL-#####')),
+            'pallet_code' => null,
             'lot' => fake()->optional()->bothify('LOT-###'),
-            'quantity_units' => fake()->numberBetween(1, 1500),
+            'quantity_units' => $quantityUnits,
+            'units_per_pallet' => $unitsPerPallet,
+            'full_pallets' => $fullPallets,
+            'peaks_count' => $peak1 > 0 ? 1 : 0,
+            'peak_1' => $peak1,
+            'peak_2' => 0,
+            'peak_3' => 0,
+            'peak_4' => 0,
+            'peak_5' => 0,
+            'peak_6' => 0,
+            'peak_7' => 0,
+            'peak_8' => 0,
             'received_at' => fake()->optional()->date(),
             'status' => StockPallet::STATUS_AVAILABLE,
             'blocked_reason' => null,
+            'notes' => null,
             'active' => true,
         ];
     }

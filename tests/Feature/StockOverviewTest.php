@@ -25,7 +25,7 @@ class StockOverviewTest extends TestCase
             'client_id' => $client->id,
             'sku' => 'SKU-STOCK-01',
             'description' => 'Stock operativo',
-            'units_per_pallet' => 700,
+            'units_per_pallet' => 1080,
         ]);
 
         StockPallet::query()->create([
@@ -33,8 +33,11 @@ class StockOverviewTest extends TestCase
             'item_id' => $item->id,
             'lot' => 'LOT-001',
             'location_text' => 'A1-01',
-            'pallet_code' => 'PAL-STOCK-001',
-            'quantity_units' => 700,
+            'quantity_units' => 70000,
+            'units_per_pallet' => 1080,
+            'full_pallets' => 64,
+            'peaks_count' => 1,
+            'peak_1' => 880,
             'received_at' => '2026-06-26',
             'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
@@ -45,9 +48,13 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSee('Vista operativa por partida y fecha de entrada')
+            ->assertSee('Vista operativa agregada por lote y fecha de entrada')
             ->assertSee('SKU-STOCK-01')
-            ->assertSee('LOT-001');
+            ->assertSee('LOT-001')
+            ->assertSee('70.000')
+            ->assertSee('64')
+            ->assertSee('880')
+            ->assertDontSee('Codigo pallet');
     }
 
     public function test_cliente_cannot_view_stock_index(): void
@@ -67,7 +74,8 @@ class StockOverviewTest extends TestCase
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-BATCH-01',
-            'description' => 'Artículo con partida',
+            'description' => 'Articulo con partida',
+            'units_per_pallet' => 700,
         ]);
 
         StockPallet::query()->create([
@@ -75,8 +83,11 @@ class StockOverviewTest extends TestCase
             'item_id' => $item->id,
             'lot' => 'LOT-B1',
             'location_text' => 'A1-02',
-            'pallet_code' => 'PAL-BATCH-001',
             'quantity_units' => 500,
+            'units_per_pallet' => 700,
+            'full_pallets' => 0,
+            'peaks_count' => 1,
+            'peak_1' => 500,
             'received_at' => '2026-06-20',
             'status' => StockPallet::STATUS_BLOCKED,
             'blocked_reason' => 'Retenido por calidad',
@@ -106,6 +117,7 @@ class StockOverviewTest extends TestCase
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-LOC-01',
+            'units_per_pallet' => 700,
         ]);
 
         StockPallet::query()->create([
@@ -114,8 +126,9 @@ class StockOverviewTest extends TestCase
             'lot' => 'LOT-LOC',
             'location_id' => $location->id,
             'location_text' => 'ANTIGUA',
-            'pallet_code' => 'PAL-LOC-001',
             'quantity_units' => 700,
+            'units_per_pallet' => 700,
+            'full_pallets' => 1,
             'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
         ]);
@@ -152,8 +165,11 @@ class StockOverviewTest extends TestCase
             'item_id' => $itemWithStock->id,
             'lot' => 'LOT-WITH',
             'location_text' => 'A2-01',
-            'pallet_code' => 'PAL-WITH-001',
             'quantity_units' => 400,
+            'units_per_pallet' => 700,
+            'full_pallets' => 0,
+            'peaks_count' => 1,
+            'peak_1' => 400,
             'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
         ]);

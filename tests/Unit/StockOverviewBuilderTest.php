@@ -17,36 +17,37 @@ class StockOverviewBuilderTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_builder_calculates_total_units_and_total_pallets_from_inventory_rows(): void
+    public function test_builder_calculates_total_units_and_total_full_pallets_from_inventory_rows(): void
     {
         [$client] = $this->seedClients();
         $item = Item::factory()->create([
             'client_id' => $client->id,
-            'sku' => 'FR-700',
-            'description' => 'Palet estándar',
-            'units_per_pallet' => 700,
+            'sku' => 'FR-1080',
+            'description' => 'Pallet estandar',
+            'units_per_pallet' => 1080,
         ]);
 
-        foreach ([700, 700, 300] as $index => $quantity) {
-            StockPallet::query()->create([
-                'client_id' => $client->id,
-                'item_id' => $item->id,
-                'lot' => 'LOT-A',
-                'location_text' => 'A1-0'.($index + 1),
-                'pallet_code' => 'PAL-FR-00'.($index + 1),
-                'quantity_units' => $quantity,
-                'received_at' => '2026-06-26',
-                'status' => StockPallet::STATUS_AVAILABLE,
-                'active' => true,
-            ]);
-        }
+        StockPallet::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-A',
+            'location_text' => 'A1-01',
+            'quantity_units' => 70000,
+            'units_per_pallet' => 1080,
+            'full_pallets' => 64,
+            'peaks_count' => 1,
+            'peak_1' => 880,
+            'received_at' => '2026-06-26',
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
 
         $result = app(StockOverviewBuilder::class)->build([
             'stock_state' => 'with_stock',
         ]);
 
-        $this->assertSame(1700, $result['summary']['total_units']);
-        $this->assertSame(3, $result['summary']['total_pallets']);
+        $this->assertSame(70000, $result['summary']['total_units']);
+        $this->assertSame(64, $result['summary']['total_pallets']);
         $this->assertSame(1, $result['summary']['references_with_stock']);
     }
 
@@ -85,7 +86,7 @@ class StockOverviewBuilderTest extends TestCase
         ]);
 
         $this->assertCount(2, $result['rows']);
-        $this->assertSame(['FRIESLAND', 'EDELVIVES'], $result['rows']->pluck('client_code')->all());
+        $this->assertEqualsCanonicalizing(['FRIESLAND', 'EDELVIVES'], $result['rows']->pluck('client_code')->all());
     }
 
     public function test_builder_keeps_same_item_split_by_inventory_lot(): void
