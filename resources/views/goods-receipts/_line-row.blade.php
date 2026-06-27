@@ -2,18 +2,35 @@
 
 <tr data-line-row>
     <td>
-        <select name="lines[{{ $index }}][item_id]" class="auth-input" data-line-item>
-            <option value="">Sin articulo</option>
-            @foreach ($items as $item)
-                <option
-                    value="{{ $item->id }}"
-                    data-item-client-id="{{ $item->client_id }}"
-                    @selected((string) ($row['item_id'] ?? null) === (string) $item->id)
+        <div
+            class="ajax-autocomplete"
+            data-ajax-autocomplete
+            data-endpoint="{{ $searchEndpoint }}"
+            data-min-chars="2"
+            data-empty-message="Escribe al menos 2 caracteres para buscar artículos."
+            data-no-results-message="Sin resultados"
+            data-searching-message="Buscando..."
+            data-error-message="Error al buscar"
+            data-receipt-item-picker
+        >
+            <div class="ajax-autocomplete-control">
+                <input type="hidden" name="lines[{{ $index }}][item_id]" value="{{ $row['item_id'] ?? '' }}" data-line-item-id>
+                <input
+                    type="text"
+                    name="lines[{{ $index }}][item_search]"
+                    value="{{ old('lines.'.$index.'.item_search', $row['item_search'] ?? '') }}"
+                    class="auth-input"
+                    autocomplete="off"
+                    placeholder="Buscar artículo"
+                    data-autocomplete-input
                 >
-                    {{ $item->sku }} / {{ $item->description }}
-                </option>
-            @endforeach
-        </select>
+                <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear {{ blank($row['item_id'] ?? null) ? 'hidden' : '' }}>Limpiar</button>
+            </div>
+            <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+            </div>
+        </div>
         @error("lines.$index.item_id")
             <small class="form-error">{{ $message }}</small>
         @enderror

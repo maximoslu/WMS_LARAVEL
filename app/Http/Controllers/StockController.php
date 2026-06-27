@@ -18,11 +18,13 @@ class StockController extends Controller
     {
         $overview = $this->overviewBuilder->build($request->only([
             'client_id',
+            'item_id',
             'search',
             'lot',
             'stock_state',
             'batch_status',
             'location',
+            'location_id',
         ]));
 
         return view('stock.index', [
@@ -30,6 +32,9 @@ class StockController extends Controller
             'summary' => $overview['summary'],
             'filters' => $overview['filters'],
             'clients' => Client::query()->orderBy('name')->get(),
+            'itemSearchEndpoint' => route('ajax.items'),
+            'lotSearchEndpoint' => route('ajax.lots'),
+            'locationSearchEndpoint' => route('ajax.locations'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }

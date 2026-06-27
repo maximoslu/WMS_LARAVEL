@@ -37,6 +37,7 @@
             action="{{ route('merchandise-requests.store') }}"
             data-merchandise-request-form
             data-search-endpoint="{{ $searchEndpoint }}"
+            data-client-id="{{ $client?->id }}"
         >
             @csrf
 
@@ -71,22 +72,50 @@
                     </div>
 
                     <section class="merchandise-request-search-panel" aria-label="Buscador de mercancía">
-                        <label class="auth-field">
-                            <span>Buscar mercancía</span>
-                            <input
-                                type="search"
-                                class="auth-input"
-                                placeholder="Buscar por SKU, referencia o descripción..."
-                                autocomplete="off"
-                                data-request-search
-                            >
-                        </label>
+                        <div class="merchandise-request-picker" aria-label="Selector de mercancía">
+                            <div class="auth-field">
+                                <span>Buscar mercancía</span>
+                                <div
+                                    class="ajax-autocomplete"
+                                    data-ajax-autocomplete
+                                    data-endpoint="{{ $searchEndpoint }}"
+                                    data-min-chars="2"
+                                    data-empty-message="Escribe al menos 2 caracteres para buscar en tu catálogo activo."
+                                    data-no-results-message="Sin resultados"
+                                    data-searching-message="Buscando..."
+                                    data-error-message="Error al buscar"
+                                    data-request-item-picker
+                                >
+                                    <div class="ajax-autocomplete-control">
+                                        <input
+                                            type="text"
+                                            class="auth-input"
+                                            placeholder="Buscar por SKU, referencia o descripción..."
+                                            autocomplete="off"
+                                            data-autocomplete-input
+                                        >
+                                        <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
+                                    </div>
+                                    <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                                        <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                                        <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <label class="auth-field merchandise-request-picker-quantity">
+                                <span>Pallets</span>
+                                <input type="number" min="1" step="1" value="1" class="auth-input" data-request-picker-quantity>
+                            </label>
+
+                            <button type="button" class="button-primary compact-button btn-compact" data-request-add-selected>
+                                Añadir al pedido
+                            </button>
+                        </div>
 
                         <p class="helper-text" data-request-search-feedback>
                             Escribe al menos 2 caracteres para buscar en tu catálogo activo.
                         </p>
-
-                        <div class="merchandise-request-results" data-request-results></div>
                     </section>
 
                     <div class="merchandise-request-hidden-inputs" data-request-hidden-inputs>

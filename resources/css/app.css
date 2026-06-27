@@ -3928,6 +3928,82 @@ body.brand-body.app-shell-body .pagination-card {
     width: 100%;
 }
 
+.ajax-autocomplete {
+    position: relative;
+}
+
+.ajax-autocomplete-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ajax-autocomplete-control .auth-input {
+    width: 100%;
+}
+
+.ajax-autocomplete-clear {
+    border: 0;
+    background: transparent;
+    color: var(--brand-soft);
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.ajax-autocomplete-panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    right: 0;
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.7rem;
+    border: 1px solid rgba(53, 83, 107, 0.14);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(21, 41, 59, 0.12);
+}
+
+.ajax-autocomplete-status {
+    font-size: 0.78rem;
+    color: var(--brand-soft);
+}
+
+.ajax-autocomplete-list {
+    display: grid;
+    gap: 0.45rem;
+    max-height: 16rem;
+    overflow-y: auto;
+}
+
+.ajax-autocomplete-option {
+    display: grid;
+    gap: 0.18rem;
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid rgba(53, 83, 107, 0.1);
+    border-radius: 12px;
+    background: rgba(247, 249, 251, 0.92);
+    color: var(--brand-ink);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ajax-autocomplete-option small {
+    color: var(--brand-soft);
+}
+
+.ajax-autocomplete-option.is-active,
+.ajax-autocomplete-option:hover,
+.ajax-autocomplete-option:focus-visible {
+    border-color: rgba(35, 84, 136, 0.28);
+    background: rgba(219, 234, 247, 0.88);
+    outline: none;
+}
+
 @media (min-width: 1024px) {
     .merchandise-request-builder {
         grid-template-columns: minmax(0, 1.6fr) minmax(22rem, 0.9fr);

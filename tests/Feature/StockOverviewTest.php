@@ -183,6 +183,71 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('SKU-CON-STOCK');
     }
 
+    public function test_stock_view_can_filter_by_selected_item_lot_and_location(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $warehouse = Warehouse::factory()->create();
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'A9-01',
+        ]);
+
+        $matchingItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-FILTRO',
+            'description' => 'Coincide',
+            'units_per_pallet' => 1080,
+        ]);
+
+        $otherItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-OTRO',
+            'description' => 'No coincide',
+        ]);
+
+        StockPallet::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $matchingItem->id,
+            'lot' => 'LOTE-FILTRO',
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'quantity_units' => 70000,
+            'units_per_pallet' => 1080,
+            'full_pallets' => 64,
+            'peaks_count' => 1,
+            'peak_1' => 880,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
+
+        StockPallet::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $otherItem->id,
+            'lot' => 'LOTE-OTRO',
+            'location_text' => 'B1-99',
+            'quantity_units' => 500,
+            'units_per_pallet' => 500,
+            'full_pallets' => 1,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', [
+                'item_id' => $matchingItem->id,
+                'lot' => 'LOTE-FILTRO',
+                'location_id' => $location->id,
+            ]))
+            ->assertOk()
+            ->assertSee('SKU-FILTRO')
+            ->assertSee('LOTE-FILTRO')
+            ->assertSee('A9-01')
+            ->assertDontSee('SKU-OTRO');
+    }
+
     /**
      * @return array{0: Client, 1: Client}
      */

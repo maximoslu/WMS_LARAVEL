@@ -48,22 +48,28 @@ class GoodsDispatchController extends Controller
 
     public function create(Request $request): View
     {
+        $oldQuantities = collect(old('quantities', []))
+            ->filter(fn ($quantity, $itemId) => is_numeric((string) $itemId) && (int) $quantity > 0);
+
         return view('dispatches.create', [
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
-            'items' => Item::query()->where('active', true)->with('client')->orderBy('sku')->get(),
-            'itemsCatalog' => Item::query()
-                ->where('active', true)
+            'selectedItems' => Item::query()
+                ->whereIn('id', $oldQuantities->keys()->map(fn ($itemId) => (int) $itemId))
                 ->orderBy('sku')
                 ->get()
                 ->map(fn (Item $item): array => [
                     'id' => $item->id,
-                    'client_id' => $item->client_id,
+                    'label' => $item->sku.' - '.$item->description,
+                    'value' => $item->sku,
                     'sku' => $item->sku,
                     'description' => $item->description,
                     'units_per_pallet' => $item->units_per_pallet,
+                    'client_id' => $item->client_id,
+                    'requested_pallets' => (int) $oldQuantities->get((string) $item->id, 0),
                 ])
                 ->values()
                 ->all(),
+            'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -201,19 +207,7 @@ class GoodsDispatchController extends Controller
 
         return view('dispatches.show', [
             'dispatch' => $goodsDispatch,
-            'itemsCatalog' => Item::query()
-                ->where('client_id', $goodsDispatch->client_id)
-                ->where('active', true)
-                ->orderBy('sku')
-                ->get()
-                ->map(fn (Item $item): array => [
-                    'id' => $item->id,
-                    'sku' => $item->sku,
-                    'description' => $item->description,
-                    'units_per_pallet' => $item->units_per_pallet,
-                ])
-                ->values()
-                ->all(),
+            'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }

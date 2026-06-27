@@ -58,6 +58,7 @@ class StockOverviewBuilder
             ->where('active', true)
             ->whereHas('item')
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
+            ->when($filters['item_id'] !== null, fn (Builder $query) => $query->where('item_id', $filters['item_id']))
             ->when($filters['search'] !== '', function (Builder $query) use ($filters): void {
                 $query->whereHas('item', function (Builder $query) use ($filters): void {
                     $query->where(function (Builder $query) use ($filters): void {
@@ -68,6 +69,7 @@ class StockOverviewBuilder
                 });
             })
             ->when($filters['lot'] !== '', fn (Builder $query) => $query->where('lot', 'like', '%'.$filters['lot'].'%'))
+            ->when($filters['location_id'] !== null, fn (Builder $query) => $query->where('location_id', $filters['location_id']))
             ->when($filters['location'] !== '', function (Builder $query) use ($filters): void {
                 $query->where(function (Builder $query) use ($filters): void {
                     $query
@@ -112,9 +114,15 @@ class StockOverviewBuilder
             'client_id' => isset($filters['client_id']) && (int) $filters['client_id'] > 0
                 ? (int) $filters['client_id']
                 : null,
+            'item_id' => isset($filters['item_id']) && (int) $filters['item_id'] > 0
+                ? (int) $filters['item_id']
+                : null,
             'search' => trim((string) ($filters['search'] ?? '')),
             'lot' => trim((string) ($filters['lot'] ?? '')),
             'location' => trim((string) ($filters['location'] ?? '')),
+            'location_id' => isset($filters['location_id']) && (int) $filters['location_id'] > 0
+                ? (int) $filters['location_id']
+                : null,
             'batch_status' => in_array((string) ($filters['batch_status'] ?? 'all'), ['all', ...StockPallet::statuses()], true)
                 ? (string) ($filters['batch_status'] ?? 'all')
                 : 'all',

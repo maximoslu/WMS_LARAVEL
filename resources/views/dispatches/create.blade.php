@@ -18,7 +18,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('dispatches.store') }}" data-goods-dispatch-form>
+    <form method="POST" action="{{ route('dispatches.store') }}" data-goods-dispatch-form data-search-endpoint="{{ $searchEndpoint }}">
         @csrf
 
         <div class="dispatch-builder">
@@ -43,17 +43,29 @@
                 </label>
 
                 <section class="merchandise-request-picker" aria-label="Selector de salida">
-                    <label class="auth-field">
+                    <div class="auth-field">
                         <span>Mercancia</span>
-                        <select class="auth-input" data-dispatch-picker-item>
-                            <option value="">Selecciona una referencia</option>
-                            @foreach ($items as $item)
-                                <option value="{{ $item->id }}" data-item-client-id="{{ $item->client_id }}">
-                                    {{ $item->client?->name }} · {{ $item->sku }} - {{ $item->description }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </label>
+                        <div
+                            class="ajax-autocomplete"
+                            data-ajax-autocomplete
+                            data-endpoint="{{ $searchEndpoint }}"
+                            data-min-chars="2"
+                            data-empty-message="Escribe al menos 2 caracteres para buscar referencias."
+                            data-no-results-message="Sin resultados"
+                            data-searching-message="Buscando..."
+                            data-error-message="Error al buscar"
+                            data-dispatch-item-picker
+                        >
+                            <div class="ajax-autocomplete-control">
+                                <input type="text" class="auth-input" autocomplete="off" placeholder="Buscar por SKU o descripción" data-autocomplete-input>
+                                <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
+                            </div>
+                            <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                                <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                                <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                            </div>
+                        </div>
+                    </div>
 
                     <label class="auth-field merchandise-request-picker-quantity">
                         <span>Pallets</span>
@@ -77,7 +89,7 @@
                     @endforeach
                 </div>
 
-                <script type="application/json" data-dispatch-items>@json($itemsCatalog)</script>
+                <script type="application/json" data-dispatch-items>@json($selectedItems)</script>
 
                 <label class="auth-field">
                     <span>Observaciones</span>

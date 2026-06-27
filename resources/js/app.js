@@ -30,13 +30,11 @@ const setupAppDrawer = () => {
         });
     };
 
-    const openDrawer = () => syncState(true);
     const closeDrawer = () => syncState(false);
 
     toggles.forEach((toggle) => {
         toggle.addEventListener('click', () => {
-            const isOpen = body.classList.contains('drawer-open');
-            syncState(!isOpen);
+            syncState(!body.classList.contains('drawer-open'));
         });
     });
 
@@ -62,29 +60,724 @@ const setupAppDrawer = () => {
     syncState(false);
 };
 
+const parseJsonNode = (selector, scope = document) => {
+    const node = scope.querySelector(selector);
+
+    if (!node) {
+        return [];
+    }
+
+    try {
+        return JSON.parse(node.textContent ?? '[]');
+    } catch {
+        return [];
+    }
+};
+
+const escapeHtml = (value) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+const formatNumber = new Intl.NumberFormat('es-ES');
+
+const parsePositiveInteger = (value, allowZero = false) => {
+    const normalized = String(value ?? '').trim();
+    const pattern = allowZero ? /^(0|[1-9]\d*)$/ : /^[1-9]\d*$/;
+
+    if (!pattern.test(normalized)) {
+        return allowZero && normalized === '' ? 0 : NaN;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+
+    return Number.isFinite(parsed) ? parsed : NaN;
+};
+
+const createAutocomplete = (root, options = {}) => {
+    if (!root || root.dataset.autocompleteBound === 'true') {
+        return null;
+    }
+
+    const input = root.querySelector('[data-autocomplete-input]');
+    const clearButton = root.querySelector('[data-autocomplete-clear]');
+    const panel = root.querySelector('[data-autocomplete-panel]');
+    const status = root.querySelector('[data-autocomplete-status]');
+    const list = root.querySelector('[data-autocomplete-list]');
+    const endpoint = root.dataset.endpoint;
+
+    if (!input || !clearButton || !panel || !status || !list || !endpoint) {
+        return null;
+    }
+
+    const minChars = Number.parseInt(root.dataset.minChars ?? '2', 10);
+    const messages = {
+        empty: root.dataset.emptyMessage ?? 'Escribe al menos 2 caracteres...',
+        searching: root.dataset.searchingMessage ?? 'Buscando...',
+        noResults: root.dataset.noResultsMessage ?? 'Sin resultados',
+        error: root.dataset.errorMessage ?? 'Error al buscar',
+    };
+
+    let timer = null;
+    let controller = null;
+    let results = [];
+    let highlightedIndex = -1;
+    let selectedLabel = input.value.trim();
+
+    const setStatus = (message) => {
+        status.textContent = message;
+    };
+
+    const openPanel = () => {
+        panel.hidden = false;
+        root.classList.add('is-open');
+    };
+
+    const closePanel = () => {
+        panel.hidden = true;
+        root.classList.remove('is-open');
+        highlightedIndex = -1;
+        renderResults();
+    };
+
+    const updateClearButton = () => {
+        clearButton.hidden = input.value.trim() === '' && !options.hasSelection?.();
+    };
+
+    const setSelection = (item) => {
+        selectedLabel = item?.label ?? '';
+        input.value = item?.label ?? '';
+        updateClearButton();
+
+        if (item) {
+            options.onSelect?.(item);
+        } else {
+            options.onClear?.();
+        }
+
+        closePanel();
+    };
+
+    const renderResults = () => {
+        list.innerHTML = results.map((item, index) => `
+            <button
+                type="button"
+                class="ajax-autocomplete-option${index === highlightedIndex ? ' is-active' : ''}"
+                data-autocomplete-option
+                data-index="${index}"
+                role="option"
+                aria-selected="${index === highlightedIndex ? 'true' : 'false'}"
+            >
+                <strong>${escapeHtml(item.label ?? item.value ?? '')}</strong>
+                ${item.meta ? `<small>${escapeHtml(item.meta)}</small>` : ''}
+            </button>
+        `).join('');
+    };
+
+    const fetchResults = async () => {
+        const query = input.value.trim();
+
+        if (query.length < minChars) {
+            results = [];
+            setStatus(messages.empty);
+            renderResults();
+            closePanel();
+            return;
+        }
+
+        controller?.abort();
+        controller = new AbortController();
+        setStatus(messages.searching);
+        results = [];
+        renderResults();
+        openPanel();
+
+        try {
+            const params = new URLSearchParams({
+                q: query,
+                ...(options.buildParams?.() ?? {}),
+            });
+
+            const response = await fetch(`${endpoint}?${params.toString()}`, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                throw new Error('autocomplete_failed');
+            }
+
+            const payload = await response.json();
+            results = Array.isArray(payload.data) ? payload.data : [];
+            highlightedIndex = results.length > 0 ? 0 : -1;
+            setStatus(results.length > 0 ? '' : messages.noResults);
+            renderResults();
+            openPanel();
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return;
+            }
+
+            results = [];
+            highlightedIndex = -1;
+            setStatus(messages.error);
+            renderResults();
+            openPanel();
+        }
+    };
+
+    input.addEventListener('input', () => {
+        window.clearTimeout(timer);
+
+        if (input.value.trim() !== selectedLabel) {
+            selectedLabel = '';
+            options.onInputChange?.(input.value.trim());
+        }
+
+        updateClearButton();
+        timer = window.setTimeout(fetchResults, 300);
+    });
+
+    input.addEventListener('focus', () => {
+        if (results.length > 0 || status.textContent !== '') {
+            openPanel();
+        }
+    });
+
+    input.addEventListener('keydown', (event) => {
+        if (panel.hidden || results.length === 0) {
+            if (event.key === 'ArrowDown' && input.value.trim().length >= minChars) {
+                openPanel();
+            }
+
+            return;
+        }
+
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            highlightedIndex = highlightedIndex < results.length - 1 ? highlightedIndex + 1 : 0;
+            renderResults();
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            highlightedIndex = highlightedIndex > 0 ? highlightedIndex - 1 : results.length - 1;
+            renderResults();
+        }
+
+        if (event.key === 'Enter' && highlightedIndex >= 0) {
+            event.preventDefault();
+            setSelection(results[highlightedIndex]);
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closePanel();
+        }
+    });
+
+    list.addEventListener('click', (event) => {
+        const option = event.target.closest('[data-autocomplete-option]');
+
+        if (!option) {
+            return;
+        }
+
+        const index = Number.parseInt(option.dataset.index ?? '-1', 10);
+
+        if (results[index]) {
+            setSelection(results[index]);
+        }
+    });
+
+    clearButton.addEventListener('click', () => {
+        input.value = '';
+        selectedLabel = '';
+        results = [];
+        setSelection(null);
+        setStatus(messages.empty);
+        updateClearButton();
+        input.focus();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!root.contains(event.target)) {
+            closePanel();
+        }
+    });
+
+    root.dataset.autocompleteBound = 'true';
+    setStatus(messages.empty);
+    updateClearButton();
+
+    return {
+        root,
+        input,
+        clear: () => {
+            input.value = '';
+            selectedLabel = '';
+            results = [];
+            options.onClear?.();
+            updateClearButton();
+            closePanel();
+        },
+        setItem: (item) => setSelection(item),
+    };
+};
+
+const setupStockFilters = () => {
+    const form = document.querySelector('.stock-filters');
+
+    if (!form || form.dataset.stockFiltersBound === 'true') {
+        return;
+    }
+
+    const clientSelect = form.querySelector('select[name="client_id"]');
+    const itemIdInput = form.querySelector('[data-stock-item-id]');
+    const searchValueInput = form.querySelector('[data-stock-search-value]');
+    const lotValueInput = form.querySelector('[data-stock-lot-value]');
+    const locationIdInput = form.querySelector('[data-stock-location-id]');
+    const locationValueInput = form.querySelector('[data-stock-location-value]');
+    const batchStatusSelect = form.querySelector('select[name="batch_status"]');
+
+    createAutocomplete(form.querySelector('[data-stock-item-filter]'), {
+        buildParams: () => ({
+            client_id: clientSelect?.value ?? '',
+            active_only: '0',
+            limit: '10',
+        }),
+        hasSelection: () => (itemIdInput?.value ?? '') !== '',
+        onSelect: (item) => {
+            if (itemIdInput) {
+                itemIdInput.value = String(item.id);
+            }
+
+            if (searchValueInput) {
+                searchValueInput.value = item.value ?? item.label ?? '';
+            }
+        },
+        onInputChange: (value) => {
+            if (itemIdInput) {
+                itemIdInput.value = '';
+            }
+
+            if (searchValueInput) {
+                searchValueInput.value = value;
+            }
+        },
+        onClear: () => {
+            if (itemIdInput) {
+                itemIdInput.value = '';
+            }
+
+            if (searchValueInput) {
+                searchValueInput.value = '';
+            }
+        },
+    });
+
+    createAutocomplete(form.querySelector('[data-stock-lot-filter]'), {
+        buildParams: () => ({
+            client_id: clientSelect?.value ?? '',
+            item_id: itemIdInput?.value ?? '',
+            stock_status: batchStatusSelect?.value === 'all' ? '' : (batchStatusSelect?.value ?? ''),
+            limit: '10',
+        }),
+        hasSelection: () => (lotValueInput?.value ?? '') !== '',
+        onSelect: (item) => {
+            if (lotValueInput) {
+                lotValueInput.value = item.value ?? item.label ?? '';
+            }
+        },
+        onInputChange: (value) => {
+            if (lotValueInput) {
+                lotValueInput.value = value;
+            }
+        },
+        onClear: () => {
+            if (lotValueInput) {
+                lotValueInput.value = '';
+            }
+        },
+    });
+
+    createAutocomplete(form.querySelector('[data-stock-location-filter]'), {
+        buildParams: () => ({
+            limit: '10',
+        }),
+        hasSelection: () => (locationIdInput?.value ?? '') !== '' || (locationValueInput?.value ?? '') !== '',
+        onSelect: (item) => {
+            if (locationIdInput) {
+                locationIdInput.value = String(item.id);
+            }
+
+            if (locationValueInput) {
+                locationValueInput.value = item.value ?? item.label ?? '';
+            }
+        },
+        onInputChange: (value) => {
+            if (locationIdInput) {
+                locationIdInput.value = '';
+            }
+
+            if (locationValueInput) {
+                locationValueInput.value = value;
+            }
+        },
+        onClear: () => {
+            if (locationIdInput) {
+                locationIdInput.value = '';
+            }
+
+            if (locationValueInput) {
+                locationValueInput.value = '';
+            }
+        },
+    });
+
+    form.dataset.stockFiltersBound = 'true';
+};
+
+const setupMerchandiseRequestBuilder = () => {
+    const form = document.querySelector('[data-merchandise-request-form]');
+
+    if (!form || form.dataset.requestBuilderBound === 'true') {
+        return;
+    }
+
+    const summaryRows = form.querySelector('[data-request-summary-rows]');
+    const summaryEmpty = form.querySelector('[data-request-summary-empty]');
+    const summaryLines = form.querySelector('[data-request-summary-lines]');
+    const summaryPallets = form.querySelector('[data-request-summary-pallets]');
+    const hiddenInputs = form.querySelector('[data-request-hidden-inputs]');
+    const feedback = form.querySelector('[data-request-search-feedback]');
+    const quantityInput = form.querySelector('[data-request-picker-quantity]');
+    const addButton = form.querySelector('[data-request-add-selected]');
+    const submitButton = form.querySelector('[data-request-submit]');
+    const cache = new Map(parseJsonNode('[data-request-selected-items]', form).map((item) => [String(item.id), item]));
+    let selectedItemId = '';
+
+    const setFeedback = (message, type = 'default') => {
+        feedback.textContent = message;
+        feedback.classList.toggle('helper-text--error', type === 'error');
+        feedback.classList.toggle('helper-text--success', type === 'success');
+    };
+
+    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-request-hidden-quantity][data-item-id="${itemId}"]`);
+
+    const upsertHiddenInput = (itemId, pallets) => {
+        let hiddenInput = hiddenInputFor(itemId);
+
+        if (pallets <= 0) {
+            hiddenInput?.remove();
+            return;
+        }
+
+        if (!hiddenInput) {
+            hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = `quantities[${itemId}]`;
+            hiddenInput.dataset.requestHiddenQuantity = 'true';
+            hiddenInput.dataset.itemId = itemId;
+            hiddenInputs.append(hiddenInput);
+        }
+
+        hiddenInput.value = String(pallets);
+    };
+
+    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-request-hidden-quantity]'))
+        .map((input) => {
+            const item = cache.get(String(input.dataset.itemId));
+            const pallets = parsePositiveInteger(input.value);
+
+            if (!item || !Number.isFinite(pallets) || pallets <= 0) {
+                return null;
+            }
+
+            return {
+                ...item,
+                pallets,
+            };
+        })
+        .filter(Boolean);
+
+    const renderSummary = () => {
+        const lines = selectedItems();
+        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
+
+        summaryLines.textContent = formatNumber.format(lines.length);
+        summaryPallets.textContent = formatNumber.format(totalPallets);
+        summaryEmpty.hidden = lines.length > 0;
+        submitButton.disabled = lines.length === 0;
+
+        summaryRows.innerHTML = lines.map((line) => `
+            <article class="merchandise-request-summary-row">
+                <div class="merchandise-request-summary-main">
+                    <strong>${escapeHtml(line.sku)}</strong>
+                    <span>${escapeHtml(line.description)}</span>
+                    <small>${escapeHtml(line.units_per_pallet)} uds/pallet</small>
+                </div>
+                <label class="auth-field merchandise-request-summary-field">
+                    <span>Pallets</span>
+                    <input type="number" min="1" step="1" value="${escapeHtml(line.pallets)}" class="auth-input merchandise-request-summary-input" data-request-summary-quantity data-item-id="${escapeHtml(line.id)}">
+                </label>
+                <button type="button" class="button-secondary compact-button btn-compact" data-request-summary-remove data-item-id="${escapeHtml(line.id)}">
+                    Quitar
+                </button>
+            </article>
+        `).join('');
+    };
+
+    const autocomplete = createAutocomplete(form.querySelector('[data-request-item-picker]'), {
+        buildParams: () => ({
+            client_id: form.dataset.clientId ?? '',
+            active_only: '1',
+            limit: '10',
+        }),
+        hasSelection: () => selectedItemId !== '',
+        onSelect: (item) => {
+            selectedItemId = String(item.id);
+            cache.set(String(item.id), item);
+            setFeedback(`${item.sku} lista para añadir al pedido.`, 'success');
+        },
+        onInputChange: () => {
+            selectedItemId = '';
+            setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
+        },
+        onClear: () => {
+            selectedItemId = '';
+            setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
+        },
+    });
+
+    addButton.addEventListener('click', () => {
+        const pallets = parsePositiveInteger(quantityInput.value);
+        const item = cache.get(selectedItemId);
+
+        if (!item || !Number.isFinite(pallets) || pallets <= 0) {
+            setFeedback('Selecciona una mercancía y una cantidad entera mayor que cero.', 'error');
+            return;
+        }
+
+        upsertHiddenInput(selectedItemId, pallets);
+        renderSummary();
+        setFeedback(`${item.sku} se ha añadido al pedido con ${formatNumber.format(pallets)} pallets.`, 'success');
+        quantityInput.value = '1';
+        autocomplete?.clear();
+    });
+
+    summaryRows.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-request-summary-quantity]');
+
+        if (!input) {
+            return;
+        }
+
+        const pallets = parsePositiveInteger(input.value);
+        upsertHiddenInput(input.dataset.itemId, Number.isFinite(pallets) ? pallets : 0);
+        renderSummary();
+    });
+
+    summaryRows.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-request-summary-remove]');
+
+        if (!button) {
+            return;
+        }
+
+        upsertHiddenInput(button.dataset.itemId, 0);
+        renderSummary();
+        setFeedback('Línea eliminada del pedido.');
+    });
+
+    renderSummary();
+    form.dataset.requestBuilderBound = 'true';
+};
+
+const setupGoodsDispatchBuilder = () => {
+    const form = document.querySelector('[data-goods-dispatch-form]');
+
+    if (!form || form.dataset.dispatchBuilderBound === 'true') {
+        return;
+    }
+
+    const clientSelect = form.querySelector('[data-dispatch-client]');
+    const quantityInput = form.querySelector('[data-dispatch-picker-quantity]');
+    const feedback = form.querySelector('[data-dispatch-picker-feedback]');
+    const addButton = form.querySelector('[data-dispatch-add-selected]');
+    const hiddenInputs = form.querySelector('[data-dispatch-hidden-inputs]');
+    const summaryRows = form.querySelector('[data-dispatch-summary-rows]');
+    const summaryEmpty = form.querySelector('[data-dispatch-summary-empty]');
+    const summaryLines = form.querySelector('[data-dispatch-summary-lines]');
+    const summaryPallets = form.querySelector('[data-dispatch-summary-pallets]');
+    const submitButton = form.querySelector('[data-dispatch-submit]');
+    const cache = new Map(parseJsonNode('[data-dispatch-items]', form).map((item) => [String(item.id), item]));
+    let selectedItemId = '';
+
+    const setFeedback = (message, type = 'default') => {
+        feedback.textContent = message;
+        feedback.classList.toggle('helper-text--error', type === 'error');
+        feedback.classList.toggle('helper-text--success', type === 'success');
+    };
+
+    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-dispatch-hidden-quantity][data-item-id="${itemId}"]`);
+
+    const upsertHiddenInput = (itemId, pallets) => {
+        let hiddenInput = hiddenInputFor(itemId);
+
+        if (pallets <= 0) {
+            hiddenInput?.remove();
+            return;
+        }
+
+        if (!hiddenInput) {
+            hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = `quantities[${itemId}]`;
+            hiddenInput.dataset.dispatchHiddenQuantity = 'true';
+            hiddenInput.dataset.itemId = itemId;
+            hiddenInputs.append(hiddenInput);
+        }
+
+        hiddenInput.value = String(pallets);
+    };
+
+    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-dispatch-hidden-quantity]'))
+        .map((input) => {
+            const item = cache.get(String(input.dataset.itemId));
+            const pallets = parsePositiveInteger(input.value);
+
+            if (!item || !Number.isFinite(pallets) || pallets <= 0) {
+                return null;
+            }
+
+            return {
+                ...item,
+                pallets,
+            };
+        })
+        .filter(Boolean);
+
+    const renderSummary = () => {
+        const lines = selectedItems();
+        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
+
+        summaryLines.textContent = formatNumber.format(lines.length);
+        summaryPallets.textContent = formatNumber.format(totalPallets);
+        summaryEmpty.hidden = lines.length > 0;
+        submitButton.disabled = lines.length === 0;
+
+        summaryRows.innerHTML = lines.map((line) => `
+            <tr>
+                <td>
+                    <div class="stock-cell-main">
+                        <strong>${escapeHtml(line.sku)}</strong>
+                        <span class="users-table-email">${escapeHtml(line.description)} · ${escapeHtml(line.units_per_pallet)} uds/pallet</span>
+                    </div>
+                </td>
+                <td>
+                    <input type="number" min="1" step="1" value="${escapeHtml(line.pallets)}" class="auth-input merchandise-request-summary-input" data-dispatch-summary-quantity data-item-id="${escapeHtml(line.id)}">
+                </td>
+                <td>
+                    <button type="button" class="button-secondary compact-button btn-table" data-dispatch-summary-remove data-item-id="${escapeHtml(line.id)}">
+                        Eliminar
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    };
+
+    const autocomplete = createAutocomplete(form.querySelector('[data-dispatch-item-picker]'), {
+        buildParams: () => ({
+            client_id: clientSelect?.value ?? '',
+            active_only: '1',
+            limit: '10',
+        }),
+        hasSelection: () => selectedItemId !== '',
+        onSelect: (item) => {
+            selectedItemId = String(item.id);
+            cache.set(String(item.id), item);
+            setFeedback(`${item.sku} lista para añadir a la salida.`, 'success');
+        },
+        onInputChange: () => {
+            selectedItemId = '';
+        },
+        onClear: () => {
+            selectedItemId = '';
+        },
+    });
+
+    clientSelect?.addEventListener('change', () => {
+        selectedItemId = '';
+        autocomplete?.clear();
+        setFeedback('Selecciona o cambia el cliente y busca después la referencia correcta.');
+    });
+
+    addButton.addEventListener('click', () => {
+        if (!clientSelect?.value) {
+            setFeedback('Selecciona un cliente antes de buscar referencias.', 'error');
+            return;
+        }
+
+        const pallets = parsePositiveInteger(quantityInput.value);
+        const item = cache.get(selectedItemId);
+
+        if (!item || !Number.isFinite(pallets) || pallets <= 0) {
+            setFeedback('Selecciona una referencia y una cantidad entera mayor que cero.', 'error');
+            return;
+        }
+
+        upsertHiddenInput(selectedItemId, pallets);
+        renderSummary();
+        setFeedback(`${item.sku} se ha añadido a la salida.`, 'success');
+        quantityInput.value = '1';
+        autocomplete?.clear();
+    });
+
+    summaryRows.addEventListener('input', (event) => {
+        const input = event.target.closest('[data-dispatch-summary-quantity]');
+
+        if (!input) {
+            return;
+        }
+
+        const pallets = parsePositiveInteger(input.value);
+        upsertHiddenInput(input.dataset.itemId, Number.isFinite(pallets) ? pallets : 0);
+        renderSummary();
+    });
+
+    summaryRows.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-dispatch-summary-remove]');
+
+        if (!button) {
+            return;
+        }
+
+        upsertHiddenInput(button.dataset.itemId, 0);
+        renderSummary();
+    });
+
+    renderSummary();
+    form.dataset.dispatchBuilderBound = 'true';
+};
+
 const setupGoodsReceiptLines = () => {
     const form = document.querySelector('[data-goods-receipt-form]');
     const container = document.querySelector('[data-receipt-lines]');
     const addButton = document.querySelector('[data-add-line]');
     const template = document.querySelector('[data-line-template]');
     const clientSelect = document.querySelector('[data-receipt-client]');
-    const itemsCatalogNode = document.querySelector('[data-goods-receipt-items]');
 
-    if (!form || !container || !addButton || !template || !clientSelect || !itemsCatalogNode || container.dataset.linesBound === 'true') {
+    if (!form || !container || !addButton || !template || !clientSelect || container.dataset.linesBound === 'true') {
         return;
     }
 
-    let itemsCatalog = [];
-
-    try {
-        itemsCatalog = JSON.parse(itemsCatalogNode.textContent ?? '[]');
-    } catch {
-        itemsCatalog = [];
-    }
-
-    const itemsById = new Map(itemsCatalog.map((item) => [String(item.id), item]));
     const rowCount = () => container.querySelectorAll('[data-line-row]').length;
-    const currentClientId = () => clientSelect.value;
 
     const markAutofilled = (field, isAutofilled) => {
         if (!field) {
@@ -114,82 +807,20 @@ const setupGoodsReceiptLines = () => {
             return;
         }
 
-        const palletCount = Math.floor(quantity / unitsPerPallet);
+        palletCountField.value = String(Math.floor(quantity / unitsPerPallet));
         const picoUnits = quantity % unitsPerPallet;
-
-        palletCountField.value = String(palletCount);
         picoField.value = picoUnits > 0 ? String(picoUnits) : '';
     };
 
-    const syncItemOptionsForRow = (row) => {
-        const itemSelect = row.querySelector('[data-line-item]');
+    const clearAutofilledFields = (row) => {
+        ['[data-line-sku]', '[data-line-description]', '[data-line-units]'].forEach((selector) => {
+            const field = row.querySelector(selector);
 
-        if (!itemSelect) {
-            return;
-        }
-
-        const clientId = currentClientId();
-
-        itemSelect.querySelectorAll('option[data-item-client-id]').forEach((option) => {
-            const matchesClient = clientId === '' || option.dataset.itemClientId === clientId;
-            option.hidden = !matchesClient;
-            option.disabled = !matchesClient;
-        });
-
-        if (itemSelect.value !== '') {
-            const selectedOption = itemSelect.selectedOptions[0];
-
-            if (selectedOption?.disabled) {
-                itemSelect.value = '';
-                ['[data-line-sku]', '[data-line-description]', '[data-line-units]'].forEach((selector) => {
-                    const field = row.querySelector(selector);
-
-                    if (field?.dataset.autofilled === 'true') {
-                        field.value = '';
-                        markAutofilled(field, false);
-                    }
-                });
-
-                recalculateRow(row);
+            if (field?.dataset.autofilled === 'true') {
+                field.value = '';
+                markAutofilled(field, false);
             }
-        }
-    };
-
-    const applyItemToRow = (row) => {
-        const itemSelect = row.querySelector('[data-line-item]');
-        const skuField = row.querySelector('[data-line-sku]');
-        const descriptionField = row.querySelector('[data-line-description]');
-        const unitsField = row.querySelector('[data-line-units]');
-        const locationField = row.querySelector('[data-line-location]');
-
-        if (!itemSelect || !skuField || !descriptionField || !unitsField) {
-            return;
-        }
-
-        const item = itemsById.get(itemSelect.value);
-
-        if (!item) {
-            [skuField, descriptionField, unitsField].forEach((field) => {
-                if (field.dataset.autofilled === 'true') {
-                    markAutofilled(field, false);
-                }
-            });
-
-            recalculateRow(row);
-            return;
-        }
-
-        skuField.value = item.sku ?? '';
-        descriptionField.value = item.description ?? '';
-        unitsField.value = item.units_per_pallet ? String(item.units_per_pallet) : '';
-
-        markAutofilled(skuField, true);
-        markAutofilled(descriptionField, true);
-        markAutofilled(unitsField, true);
-
-        if (locationField && !locationField.value && item.default_location_id) {
-            locationField.value = String(item.default_location_id);
-        }
+        });
 
         recalculateRow(row);
     };
@@ -199,18 +830,60 @@ const setupGoodsReceiptLines = () => {
             return;
         }
 
-        syncItemOptionsForRow(row);
-        applyItemToRow(row);
-        recalculateRow(row);
-
-        const itemSelect = row.querySelector('[data-line-item]');
-        const quantityField = row.querySelector('[data-line-quantity]');
-        const unitsField = row.querySelector('[data-line-units]');
+        const itemIdField = row.querySelector('[data-line-item-id]');
         const skuField = row.querySelector('[data-line-sku]');
         const descriptionField = row.querySelector('[data-line-description]');
+        const unitsField = row.querySelector('[data-line-units]');
+        const locationField = row.querySelector('[data-line-location]');
+        const quantityField = row.querySelector('[data-line-quantity]');
 
-        itemSelect?.addEventListener('change', () => {
-            applyItemToRow(row);
+        createAutocomplete(row.querySelector('[data-receipt-item-picker]'), {
+            buildParams: () => ({
+                client_id: clientSelect.value ?? '',
+                active_only: '1',
+                limit: '10',
+            }),
+            hasSelection: () => (itemIdField?.value ?? '') !== '',
+            onSelect: (item) => {
+                if (itemIdField) {
+                    itemIdField.value = String(item.id);
+                }
+
+                if (skuField) {
+                    skuField.value = item.sku ?? '';
+                    markAutofilled(skuField, true);
+                }
+
+                if (descriptionField) {
+                    descriptionField.value = item.description ?? '';
+                    markAutofilled(descriptionField, true);
+                }
+
+                if (unitsField) {
+                    unitsField.value = item.units_per_pallet ? String(item.units_per_pallet) : '';
+                    markAutofilled(unitsField, true);
+                }
+
+                if (locationField && !locationField.value && item.default_location_id) {
+                    locationField.value = String(item.default_location_id);
+                }
+
+                recalculateRow(row);
+            },
+            onInputChange: () => {
+                if (itemIdField) {
+                    itemIdField.value = '';
+                }
+
+                clearAutofilledFields(row);
+            },
+            onClear: () => {
+                if (itemIdField) {
+                    itemIdField.value = '';
+                }
+
+                clearAutofilledFields(row);
+            },
         });
 
         [quantityField, unitsField].forEach((field) => {
@@ -230,20 +903,14 @@ const setupGoodsReceiptLines = () => {
         });
 
         row.dataset.rowBound = 'true';
+        recalculateRow(row);
     };
 
     const resetRow = (row) => {
         row.querySelectorAll('input, select, textarea').forEach((field) => {
-            if (field instanceof HTMLInputElement && field.type === 'number') {
-                field.value = '';
-                markAutofilled(field, false);
-                return;
-            }
-
             if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
                 field.value = '';
                 markAutofilled(field, false);
-                return;
             }
 
             if (field instanceof HTMLSelectElement) {
@@ -255,13 +922,9 @@ const setupGoodsReceiptLines = () => {
     };
 
     addButton.addEventListener('click', () => {
-        const nextIndex = rowCount();
-        const markup = template.innerHTML.replaceAll('__INDEX__', String(nextIndex));
+        const markup = template.innerHTML.replaceAll('__INDEX__', String(rowCount()));
         container.insertAdjacentHTML('beforeend', markup);
-        const rows = container.querySelectorAll('[data-line-row]');
-        const newRow = rows[rows.length - 1];
-
-        bindRow(newRow);
+        bindRow(container.querySelectorAll('[data-line-row]')[rowCount() - 1]);
     });
 
     container.addEventListener('click', (event) => {
@@ -285,592 +948,47 @@ const setupGoodsReceiptLines = () => {
         row.remove();
     });
 
+    container.querySelectorAll('[data-line-row]').forEach(bindRow);
+
     clientSelect.addEventListener('change', () => {
         container.querySelectorAll('[data-line-row]').forEach((row) => {
-            syncItemOptionsForRow(row);
-        });
-    });
+            const itemIdField = row.querySelector('[data-line-item-id]');
 
-    container.querySelectorAll('[data-line-row]').forEach((row) => {
-        bindRow(row);
+            if (itemIdField?.value) {
+                itemIdField.value = '';
+            }
+        });
     });
 
     container.dataset.linesBound = 'true';
 };
 
-const setupMerchandiseRequestBuilder = () => {
-    const form = document.querySelector('[data-merchandise-request-form]');
+const bindDispatchExtraAutocomplete = (row, clientId, endpoint) => {
+    const itemIdField = row.querySelector('[data-dispatch-extra-item-id]');
 
-    if (!form || form.dataset.requestBuilderBound === 'true') {
-        return;
-    }
-
-    const summaryRows = form.querySelector('[data-request-summary-rows]');
-    const summaryEmpty = form.querySelector('[data-request-summary-empty]');
-    const summaryLines = form.querySelector('[data-request-summary-lines]');
-    const summaryPallets = form.querySelector('[data-request-summary-pallets]');
-    const hiddenInputs = form.querySelector('[data-request-hidden-inputs]');
-    const searchInput = form.querySelector('[data-request-search]');
-    const searchFeedback = form.querySelector('[data-request-search-feedback]');
-    const resultsNode = form.querySelector('[data-request-results]');
-    const submitButton = form.querySelector('[data-request-submit]');
-    const selectedItemsNode = form.querySelector('[data-request-selected-items]');
-    const searchEndpoint = form.dataset.searchEndpoint;
-
-    if (
-        !summaryRows
-        || !summaryEmpty
-        || !summaryLines
-        || !summaryPallets
-        || !hiddenInputs
-        || !searchInput
-        || !searchFeedback
-        || !resultsNode
-        || !submitButton
-        || !selectedItemsNode
-        || !searchEndpoint
-    ) {
-        return;
-    }
-
-    const formatNumber = new Intl.NumberFormat('es-ES');
-    const itemCache = new Map();
-    let searchResults = [];
-    let searchTimer = null;
-    let currentRequest = null;
-
-    const escapeHtml = (value) => String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-
-    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-request-hidden-quantity][data-item-id="${itemId}"]`);
-
-    const parsePositiveInteger = (value) => {
-        const normalized = String(value ?? '').trim();
-
-        if (!/^[1-9]\d*$/.test(normalized)) {
-            return 0;
-        }
-
-        const parsed = Number.parseInt(normalized, 10);
-
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-    };
-
-    const setFeedback = (message, type = 'default') => {
-        searchFeedback.textContent = message;
-        searchFeedback.classList.toggle('helper-text--error', type === 'error');
-        searchFeedback.classList.toggle('helper-text--success', type === 'success');
-    };
-
-    const rememberItem = (item) => {
-        if (!item || !item.id) {
-            return;
-        }
-
-        itemCache.set(String(item.id), item);
-    };
-
-    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-request-hidden-quantity]'))
-        .map((input) => {
-            const itemId = input.dataset.itemId;
-            const item = itemCache.get(String(itemId));
-            const pallets = parsePositiveInteger(input.value);
-
-            if (!itemId || !item || pallets <= 0) {
-                return null;
+    createAutocomplete(row.querySelector('[data-dispatch-extra-picker]'), {
+        buildParams: () => ({
+            client_id: clientId,
+            active_only: '1',
+            limit: '10',
+        }),
+        hasSelection: () => (itemIdField?.value ?? '') !== '',
+        onSelect: (item) => {
+            if (itemIdField) {
+                itemIdField.value = String(item.id);
             }
-
-            return {
-                itemId,
-                sku: item.sku ?? '',
-                description: item.description ?? '',
-                unitsPerPallet: item.units_per_pallet ?? '',
-                pallets,
-            };
-        })
-        .filter(Boolean);
-
-    const upsertHiddenInput = (itemId, pallets) => {
-        if (!itemId) {
-            return;
-        }
-
-        let hiddenInput = hiddenInputFor(itemId);
-
-        if (pallets <= 0) {
-            hiddenInput?.remove();
-            return;
-        }
-
-        if (!hiddenInput) {
-            hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = `quantities[${itemId}]`;
-            hiddenInput.dataset.requestHiddenQuantity = 'true';
-            hiddenInput.dataset.itemId = itemId;
-            hiddenInputs.append(hiddenInput);
-        }
-
-        hiddenInput.value = String(pallets);
-    };
-
-    const renderSummary = () => {
-        const lines = selectedItems();
-        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
-
-        summaryLines.textContent = formatNumber.format(lines.length);
-        summaryPallets.textContent = formatNumber.format(totalPallets);
-        summaryEmpty.hidden = lines.length > 0;
-        submitButton.disabled = lines.length === 0;
-
-        if (lines.length === 0) {
-            summaryRows.innerHTML = '';
-            return;
-        }
-
-        summaryRows.innerHTML = lines.map((line) => `
-            <article class="merchandise-request-summary-row">
-                <div class="merchandise-request-summary-main">
-                    <strong>${escapeHtml(line.sku)}</strong>
-                    <span>${escapeHtml(line.description)}</span>
-                    <small>${escapeHtml(line.unitsPerPallet)} uds/pallet</small>
-                </div>
-                <label class="auth-field merchandise-request-summary-field">
-                    <span>Pallets</span>
-                    <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value="${escapeHtml(line.pallets)}"
-                        class="auth-input merchandise-request-summary-input"
-                        data-summary-quantity
-                        data-item-id="${escapeHtml(line.itemId)}"
-                    >
-                </label>
-                <button
-                    type="button"
-                    class="button-secondary compact-button btn-compact"
-                    data-summary-remove
-                    data-item-id="${escapeHtml(line.itemId)}"
-                >
-                    Quitar
-                </button>
-            </article>
-        `).join('');
-    };
-
-    const renderResults = () => {
-        const query = searchInput.value.trim();
-
-        if (query.length < 2) {
-            resultsNode.innerHTML = `
-                <div class="merchandise-request-results-empty">
-                    Empieza a escribir para buscar mercancías activas sin cargar todo el catálogo.
-                </div>
-            `;
-            return;
-        }
-
-        if (searchResults.length === 0) {
-            resultsNode.innerHTML = `
-                <div class="merchandise-request-results-empty">
-                    No hay resultados para "${escapeHtml(query)}".
-                </div>
-            `;
-            return;
-        }
-
-        resultsNode.innerHTML = searchResults.map((item) => {
-            const selected = hiddenInputFor(String(item.id));
-            const currentPallets = selected ? selected.value : '1';
-
-            return `
-                <article class="merchandise-request-result-row ${selected ? 'is-selected' : ''}">
-                    <div class="merchandise-request-result-main">
-                        <strong>${escapeHtml(item.sku)}</strong>
-                        <span>${escapeHtml(item.description)}</span>
-                        <small>${escapeHtml(item.units_per_pallet)} uds/pallet</small>
-                    </div>
-                    <label class="auth-field merchandise-request-result-quantity">
-                        <span>Pallets</span>
-                        <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value="${escapeHtml(currentPallets)}"
-                            class="auth-input"
-                            data-result-quantity
-                            data-item-id="${escapeHtml(item.id)}"
-                        >
-                    </label>
-                    <button
-                        type="button"
-                        class="button-primary compact-button btn-compact"
-                        data-result-add
-                        data-item-id="${escapeHtml(item.id)}"
-                    >
-                        ${selected ? 'Actualizar' : 'A�adir'}
-                    </button>
-                </article>
-            `;
-        }).join('');
-    };
-
-    const addItemToRequest = (itemId, pallets) => {
-        const normalizedPallets = parsePositiveInteger(pallets);
-        const item = itemCache.get(String(itemId));
-
-        if (!itemId || !item || normalizedPallets <= 0) {
-            setFeedback('Indica una cantidad v�lida de pallets antes de a�adir la mercanc�a.', 'error');
-            return;
-        }
-
-        upsertHiddenInput(itemId, normalizedPallets);
-        renderSummary();
-        renderResults();
-        setFeedback(`${item.sku} se ha a�adido al pedido con ${formatNumber.format(normalizedPallets)} pallets.`, 'success');
-    };
-
-    const performSearch = async () => {
-        const query = searchInput.value.trim();
-
-        if (query.length < 2) {
-            searchResults = [];
-            setFeedback('Escribe al menos 2 caracteres para buscar en tu cat�logo activo.');
-            renderResults();
-            return;
-        }
-
-        currentRequest?.abort();
-        currentRequest = new AbortController();
-        setFeedback('Buscando mercanc�as...');
-
-        try {
-            const response = await fetch(`${searchEndpoint}?search=${encodeURIComponent(query)}`, {
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                signal: currentRequest.signal,
-            });
-
-            if (!response.ok) {
-                throw new Error('search_failed');
+        },
+        onInputChange: () => {
+            if (itemIdField) {
+                itemIdField.value = '';
             }
-
-            const payload = await response.json();
-            searchResults = Array.isArray(payload.data) ? payload.data : [];
-            searchResults.forEach(rememberItem);
-            setFeedback(
-                searchResults.length > 0
-                    ? `${formatNumber.format(searchResults.length)} resultados encontrados.`
-                    : 'No se han encontrado mercanc�as con ese criterio.',
-                searchResults.length > 0 ? 'success' : 'default',
-            );
-            renderResults();
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                return;
+        },
+        onClear: () => {
+            if (itemIdField) {
+                itemIdField.value = '';
             }
-
-            searchResults = [];
-            setFeedback('No se ha podido completar la b�squeda. Int�ntalo de nuevo en unos segundos.', 'error');
-            renderResults();
-        }
-    };
-
-    searchInput.addEventListener('input', () => {
-        window.clearTimeout(searchTimer);
-        searchTimer = window.setTimeout(() => {
-            performSearch();
-        }, 250);
+        },
     });
-
-    resultsNode.addEventListener('input', (event) => {
-        const input = event.target.closest('[data-result-quantity]');
-
-        if (!input) {
-            return;
-        }
-
-        if (parsePositiveInteger(input.value) <= 0 && input.value !== '') {
-            setFeedback('Usa solo cantidades enteras y mayores que cero.', 'error');
-        }
-    });
-
-    resultsNode.addEventListener('click', (event) => {
-        const button = event.target.closest('[data-result-add]');
-
-        if (!button) {
-            return;
-        }
-
-        const quantityInput = resultsNode.querySelector(`[data-result-quantity][data-item-id="${button.dataset.itemId}"]`);
-        addItemToRequest(button.dataset.itemId, quantityInput?.value ?? '0');
-    });
-
-    summaryRows.addEventListener('input', (event) => {
-        const input = event.target.closest('[data-summary-quantity]');
-
-        if (!input) {
-            return;
-        }
-
-        const pallets = parsePositiveInteger(input.value);
-
-        upsertHiddenInput(input.dataset.itemId, pallets);
-        renderSummary();
-        renderResults();
-    });
-
-    summaryRows.addEventListener('click', (event) => {
-        const button = event.target.closest('[data-summary-remove]');
-
-        if (!button) {
-            return;
-        }
-
-        upsertHiddenInput(button.dataset.itemId, 0);
-        renderSummary();
-        renderResults();
-        setFeedback('L�nea eliminada del pedido. Puedes volver a a�adirla cuando quieras.');
-    });
-
-    try {
-        const initialItems = JSON.parse(selectedItemsNode.textContent ?? '[]');
-
-        if (Array.isArray(initialItems)) {
-            initialItems.forEach(rememberItem);
-        }
-    } catch {
-        // Ignore invalid bootstrap data and keep search working.
-    }
-
-    form.dataset.requestBuilderBound = 'true';
-    renderSummary();
-    renderResults();
-};
-
-const setupGoodsDispatchBuilder = () => {
-    const form = document.querySelector('[data-goods-dispatch-form]');
-
-    if (!form || form.dataset.dispatchBuilderBound === 'true') {
-        return;
-    }
-
-    const clientSelect = form.querySelector('[data-dispatch-client]');
-    const pickerSelect = form.querySelector('[data-dispatch-picker-item]');
-    const pickerQuantity = form.querySelector('[data-dispatch-picker-quantity]');
-    const pickerFeedback = form.querySelector('[data-dispatch-picker-feedback]');
-    const pickerAddButton = form.querySelector('[data-dispatch-add-selected]');
-    const hiddenInputs = form.querySelector('[data-dispatch-hidden-inputs]');
-    const summaryRows = form.querySelector('[data-dispatch-summary-rows]');
-    const summaryEmpty = form.querySelector('[data-dispatch-summary-empty]');
-    const summaryLines = form.querySelector('[data-dispatch-summary-lines]');
-    const summaryPallets = form.querySelector('[data-dispatch-summary-pallets]');
-    const submitButton = form.querySelector('[data-dispatch-submit]');
-    const itemsCatalogNode = form.querySelector('[data-dispatch-items]');
-
-    if (
-        !clientSelect
-        || !pickerSelect
-        || !pickerQuantity
-        || !pickerFeedback
-        || !pickerAddButton
-        || !hiddenInputs
-        || !summaryRows
-        || !summaryEmpty
-        || !summaryLines
-        || !summaryPallets
-        || !submitButton
-        || !itemsCatalogNode
-    ) {
-        return;
-    }
-
-    let itemsCatalog = [];
-
-    try {
-        itemsCatalog = JSON.parse(itemsCatalogNode.textContent ?? '[]');
-    } catch {
-        itemsCatalog = [];
-    }
-
-    const itemsById = new Map(itemsCatalog.map((item) => [String(item.id), item]));
-    const formatNumber = new Intl.NumberFormat('es-ES');
-
-    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-dispatch-hidden-quantity][data-item-id="${itemId}"]`);
-
-    const parsePositiveInteger = (value) => {
-        const normalized = String(value ?? '').trim();
-
-        if (!/^[1-9]\d*$/.test(normalized)) {
-            return 0;
-        }
-
-        const parsed = Number.parseInt(normalized, 10);
-
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-    };
-
-    const setFeedback = (message, type = 'default') => {
-        pickerFeedback.textContent = message;
-        pickerFeedback.classList.toggle('helper-text--error', type === 'error');
-        pickerFeedback.classList.toggle('helper-text--success', type === 'success');
-    };
-
-    const syncPickerOptions = () => {
-        const currentClientId = clientSelect.value;
-
-        pickerSelect.querySelectorAll('option[data-item-client-id]').forEach((option) => {
-            const matchesClient = currentClientId !== '' && option.dataset.itemClientId === currentClientId;
-            option.hidden = !matchesClient;
-            option.disabled = !matchesClient;
-        });
-
-        if (pickerSelect.selectedOptions[0]?.disabled) {
-            pickerSelect.value = '';
-        }
-    };
-
-    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-dispatch-hidden-quantity]'))
-        .map((input) => {
-            const item = itemsById.get(input.dataset.itemId);
-            const pallets = parsePositiveInteger(input.value);
-
-            if (!item || pallets <= 0) {
-                return null;
-            }
-
-            return {
-                itemId: String(item.id),
-                sku: item.sku ?? '',
-                description: item.description ?? '',
-                unitsPerPallet: item.units_per_pallet ?? '',
-                pallets,
-            };
-        })
-        .filter(Boolean);
-
-    const upsertHiddenInput = (itemId, pallets) => {
-        let hiddenInput = hiddenInputFor(itemId);
-
-        if (pallets <= 0) {
-            hiddenInput?.remove();
-            return;
-        }
-
-        if (!hiddenInput) {
-            hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = `quantities[${itemId}]`;
-            hiddenInput.dataset.dispatchHiddenQuantity = 'true';
-            hiddenInput.dataset.itemId = itemId;
-            hiddenInputs.append(hiddenInput);
-        }
-
-        hiddenInput.value = String(pallets);
-    };
-
-    const renderSummary = () => {
-        const lines = selectedItems();
-        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
-
-        summaryLines.textContent = formatNumber.format(lines.length);
-        summaryPallets.textContent = formatNumber.format(totalPallets);
-        summaryEmpty.hidden = lines.length > 0;
-        submitButton.disabled = lines.length === 0;
-
-        if (lines.length === 0) {
-            summaryRows.innerHTML = '';
-            return;
-        }
-
-        summaryRows.innerHTML = lines.map((line) => `
-            <tr>
-                <td>
-                    <div class="stock-cell-main">
-                        <strong>${line.sku}</strong>
-                        <span class="users-table-email">${line.description} · ${line.unitsPerPallet} uds/pallet</span>
-                    </div>
-                </td>
-                <td>
-                    <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value="${line.pallets}"
-                        class="auth-input merchandise-request-summary-input"
-                        data-dispatch-summary-quantity
-                        data-item-id="${line.itemId}"
-                    >
-                </td>
-                <td>
-                    <button type="button" class="button-secondary compact-button btn-table" data-dispatch-summary-remove data-item-id="${line.itemId}">
-                        Eliminar
-                    </button>
-                </td>
-            </tr>
-        `).join('');
-    };
-
-    const addItem = () => {
-        if (clientSelect.value === '') {
-            setFeedback('Selecciona un cliente antes de anadir referencias a la salida.', 'error');
-            return;
-        }
-
-        const itemId = pickerSelect.value;
-        const pallets = parsePositiveInteger(pickerQuantity.value);
-
-        if (!itemId || pallets <= 0) {
-            setFeedback('Indica una referencia valida y una cantidad entera mayor que cero.', 'error');
-            return;
-        }
-
-        upsertHiddenInput(itemId, pallets);
-        renderSummary();
-
-        const item = itemsById.get(itemId);
-        setFeedback(`${item?.sku ?? 'La referencia'} se ha anadido a la salida.`, 'success');
-    };
-
-    clientSelect.addEventListener('change', () => {
-        syncPickerOptions();
-        setFeedback('Cliente seleccionado. Ya puedes anadir referencias a la salida.');
-    });
-
-    pickerAddButton.addEventListener('click', addItem);
-
-    summaryRows.addEventListener('input', (event) => {
-        const input = event.target.closest('[data-dispatch-summary-quantity]');
-
-        if (!input) {
-            return;
-        }
-
-        upsertHiddenInput(input.dataset.itemId, parsePositiveInteger(input.value));
-        renderSummary();
-    });
-
-    summaryRows.addEventListener('click', (event) => {
-        const button = event.target.closest('[data-dispatch-summary-remove]');
-
-        if (!button) {
-            return;
-        }
-
-        upsertHiddenInput(button.dataset.itemId, 0);
-        renderSummary();
-    });
-
-    syncPickerOptions();
-    renderSummary();
-    form.dataset.dispatchBuilderBound = 'true';
 };
 
 const setupDispatchLoadingEditor = () => {
@@ -883,18 +1001,26 @@ const setupDispatchLoadingEditor = () => {
     const rowsContainer = form.querySelector('[data-dispatch-loading-rows]');
     const addButton = form.querySelector('[data-dispatch-loading-add]');
     const template = form.querySelector('[data-dispatch-loading-row-template]');
+    const endpoint = form.dataset.searchEndpoint ?? '';
+    const clientId = form.dataset.clientId ?? '';
 
-    if (!rowsContainer || !addButton || !template) {
+    if (!rowsContainer || !addButton || !template || !endpoint) {
         return;
     }
 
     let counter = rowsContainer.querySelectorAll('[data-dispatch-loading-row]').length;
 
+    rowsContainer.querySelectorAll('[data-dispatch-loading-row]').forEach((row) => {
+        if (row.querySelector('[data-dispatch-extra-picker]')) {
+            bindDispatchExtraAutocomplete(row, clientId, endpoint);
+        }
+    });
+
     addButton.addEventListener('click', () => {
         const key = `new_${counter}`;
-        const markup = template.innerHTML.replaceAll('__KEY__', key);
-
-        rowsContainer.insertAdjacentHTML('beforeend', markup);
+        rowsContainer.insertAdjacentHTML('beforeend', template.innerHTML.replaceAll('__KEY__', key));
+        const newRow = rowsContainer.querySelectorAll('[data-dispatch-loading-row]')[rowsContainer.querySelectorAll('[data-dispatch-loading-row]').length - 1];
+        bindDispatchExtraAutocomplete(newRow, clientId, endpoint);
         counter += 1;
     });
 
@@ -923,18 +1049,17 @@ const setupDispatchLoadingEditor = () => {
     form.dataset.loadingEditorBound = 'true';
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        setupAppDrawer();
-        setupGoodsReceiptLines();
-        setupMerchandiseRequestBuilder();
-        setupGoodsDispatchBuilder();
-        setupDispatchLoadingEditor();
-    }, { once: true });
-} else {
+const boot = () => {
     setupAppDrawer();
+    setupStockFilters();
     setupGoodsReceiptLines();
     setupMerchandiseRequestBuilder();
     setupGoodsDispatchBuilder();
     setupDispatchLoadingEditor();
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+} else {
+    boot();
 }

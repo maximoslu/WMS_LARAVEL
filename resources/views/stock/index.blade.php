@@ -62,27 +62,70 @@
                 </select>
             </label>
 
-            <label class="auth-field">
+            <div class="auth-field">
                 <span>SKU o descripcion</span>
-                <input
-                    type="text"
-                    name="search"
-                    value="{{ $filters['search'] }}"
-                    class="auth-input"
-                    placeholder="Buscar referencia"
+                <div
+                    class="ajax-autocomplete"
+                    data-ajax-autocomplete
+                    data-endpoint="{{ $itemSearchEndpoint }}"
+                    data-min-chars="2"
+                    data-empty-message="Escribe al menos 2 caracteres para buscar referencias."
+                    data-no-results-message="Sin resultados"
+                    data-searching-message="Buscando..."
+                    data-error-message="Error al buscar"
+                    data-stock-item-filter
                 >
-            </label>
+                    <div class="ajax-autocomplete-control">
+                        <input type="hidden" name="item_id" value="{{ $filters['item_id'] ?? '' }}" data-stock-item-id>
+                        <input type="hidden" name="search" value="{{ $filters['search'] }}" data-stock-search-value>
+                        <input
+                            type="text"
+                            value="{{ $filters['search'] }}"
+                            class="auth-input"
+                            placeholder="Buscar referencia"
+                            autocomplete="off"
+                            data-autocomplete-input
+                        >
+                        <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
+                    </div>
+                    <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                        <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                        <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                    </div>
+                </div>
+            </div>
 
-            <label class="auth-field">
+            <div class="auth-field">
                 <span>Lote</span>
-                <input
-                    type="text"
-                    name="lot"
-                    value="{{ $filters['lot'] }}"
-                    class="auth-input"
-                    placeholder="Filtrar por lote"
+                <div
+                    class="ajax-autocomplete"
+                    data-ajax-autocomplete
+                    data-endpoint="{{ $lotSearchEndpoint }}"
+                    data-min-chars="2"
+                    data-empty-message="Escribe al menos 2 caracteres para buscar lotes."
+                    data-no-results-message="Sin resultados"
+                    data-searching-message="Buscando..."
+                    data-error-message="Error al buscar"
+                    data-stock-lot-filter
                 >
-            </label>
+                    <div class="ajax-autocomplete-control">
+                        <input type="hidden" name="lot" value="{{ $filters['lot'] }}" data-stock-lot-value>
+                        <input
+                            type="text"
+                            value="{{ $filters['lot'] }}"
+                            class="auth-input"
+                            placeholder="Filtrar por lote"
+                            autocomplete="off"
+                            data-autocomplete-input
+                        >
+                        <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
+                    </div>
+                    <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                        <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                        <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                    </div>
+                </div>
+            </div>
 
             <label class="auth-field">
                 <span>Estado de stock</span>
@@ -103,16 +146,38 @@
                 </select>
             </label>
 
-            <label class="auth-field">
+            <div class="auth-field">
                 <span>Ubicacion</span>
-                <input
-                    type="text"
-                    name="location"
-                    value="{{ $filters['location'] }}"
-                    class="auth-input"
-                    placeholder="Buscar ubicacion"
+                <div
+                    class="ajax-autocomplete"
+                    data-ajax-autocomplete
+                    data-endpoint="{{ $locationSearchEndpoint }}"
+                    data-min-chars="2"
+                    data-empty-message="Escribe al menos 2 caracteres para buscar ubicaciones."
+                    data-no-results-message="Sin resultados"
+                    data-searching-message="Buscando..."
+                    data-error-message="Error al buscar"
+                    data-stock-location-filter
                 >
-            </label>
+                    <div class="ajax-autocomplete-control">
+                        <input type="hidden" name="location_id" value="{{ $filters['location_id'] ?? '' }}" data-stock-location-id>
+                        <input type="hidden" name="location" value="{{ $filters['location'] }}" data-stock-location-value>
+                        <input
+                            type="text"
+                            value="{{ $filters['location'] }}"
+                            class="auth-input"
+                            placeholder="Buscar ubicacion"
+                            autocomplete="off"
+                            data-autocomplete-input
+                        >
+                        <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
+                    </div>
+                    <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                        <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                        <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                    </div>
+                </div>
+            </div>
 
             <div class="stock-filter-actions action-buttons page-actions-compact">
                 <button type="submit" class="button-primary compact-button btn-compact">Filtrar</button>

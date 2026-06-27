@@ -136,7 +136,7 @@
             {{ $dispatch->hasLoadingDifferences() ? 'Hay diferencias entre pedido y carga real.' : 'No hay diferencias registradas por ahora.' }}
         </div>
 
-        <form method="POST" action="{{ route('dispatches.confirm-loading', $dispatch) }}" class="dispatch-loading-form" data-dispatch-loading-editor>
+        <form method="POST" action="{{ route('dispatches.confirm-loading', $dispatch) }}" class="dispatch-loading-form" data-dispatch-loading-editor data-client-id="{{ $dispatch->client_id }}" data-search-endpoint="{{ $searchEndpoint }}">
             @csrf
             @method('PATCH')
 
@@ -214,14 +214,36 @@
                                 </td>
                                 <td>
                                     <label class="sr-only" for="dispatch-extra-item-{{ $rowKey }}">Mercancia extra</label>
-                                    <select id="dispatch-extra-item-{{ $rowKey }}" name="lines[{{ $rowKey }}][item_id]" class="auth-input" required>
-                                        <option value="">Selecciona una referencia</option>
-                                        @foreach ($itemsCatalog as $item)
-                                            <option value="{{ $item['id'] }}" @selected((string) ($payload['item_id'] ?? '') === (string) $item['id'])>
-                                                {{ $item['sku'] }} - {{ $item['description'] }}
-                                            </option>
-                                        @endforeach
-                                    </select>
+                                    <div
+                                        class="ajax-autocomplete"
+                                        data-ajax-autocomplete
+                                        data-endpoint="{{ $searchEndpoint }}"
+                                        data-min-chars="2"
+                                        data-empty-message="Escribe al menos 2 caracteres para buscar referencias."
+                                        data-no-results-message="Sin resultados"
+                                        data-searching-message="Buscando..."
+                                        data-error-message="Error al buscar"
+                                        data-dispatch-extra-picker
+                                    >
+                                        <div class="ajax-autocomplete-control">
+                                            <input type="hidden" name="lines[{{ $rowKey }}][item_id]" value="{{ $payload['item_id'] ?? '' }}" data-dispatch-extra-item-id>
+                                            <input
+                                                id="dispatch-extra-item-{{ $rowKey }}"
+                                                type="text"
+                                                name="lines[{{ $rowKey }}][item_search]"
+                                                value="{{ $payload['item_search'] ?? '' }}"
+                                                class="auth-input"
+                                                autocomplete="off"
+                                                placeholder="Buscar por SKU o descripción"
+                                                data-autocomplete-input
+                                            >
+                                            <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear {{ blank($payload['item_id'] ?? null) ? 'hidden' : '' }}>Limpiar</button>
+                                        </div>
+                                        <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                                            <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                                            <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td>0</td>
                                 <td>
@@ -269,12 +291,35 @@
                     </td>
                     <td>
                         <label class="sr-only" for="dispatch-extra-item-__KEY__">Mercancia extra</label>
-                        <select id="dispatch-extra-item-__KEY__" name="lines[__KEY__][item_id]" class="auth-input" required>
-                            <option value="">Selecciona una referencia</option>
-                            @foreach ($itemsCatalog as $item)
-                                <option value="{{ $item['id'] }}">{{ $item['sku'] }} - {{ $item['description'] }}</option>
-                            @endforeach
-                        </select>
+                        <div
+                            class="ajax-autocomplete"
+                            data-ajax-autocomplete
+                            data-endpoint="{{ $searchEndpoint }}"
+                            data-min-chars="2"
+                            data-empty-message="Escribe al menos 2 caracteres para buscar referencias."
+                            data-no-results-message="Sin resultados"
+                            data-searching-message="Buscando..."
+                            data-error-message="Error al buscar"
+                            data-dispatch-extra-picker
+                        >
+                            <div class="ajax-autocomplete-control">
+                                <input type="hidden" name="lines[__KEY__][item_id]" value="" data-dispatch-extra-item-id>
+                                <input
+                                    id="dispatch-extra-item-__KEY__"
+                                    type="text"
+                                    name="lines[__KEY__][item_search]"
+                                    class="auth-input"
+                                    autocomplete="off"
+                                    placeholder="Buscar por SKU o descripción"
+                                    data-autocomplete-input
+                                >
+                                <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
+                            </div>
+                            <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                                <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                                <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                            </div>
+                        </div>
                     </td>
                     <td>0</td>
                     <td>

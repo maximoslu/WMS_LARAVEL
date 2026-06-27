@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccessRequestController;
+use App\Http\Controllers\AjaxSearchController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -41,6 +42,15 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware('auth')->group(function (): void {
+    Route::get('/ajax/items', [AjaxSearchController::class, 'items'])
+        ->name('ajax.items');
+    Route::get('/ajax/clients', [AjaxSearchController::class, 'clients'])
+        ->name('ajax.clients');
+    Route::get('/ajax/locations', [AjaxSearchController::class, 'locations'])
+        ->name('ajax.locations');
+    Route::get('/ajax/lots', [AjaxSearchController::class, 'lots'])
+        ->name('ajax.lots');
+
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/perfil', [ProfileController::class, 'edit'])->name('profile.edit');

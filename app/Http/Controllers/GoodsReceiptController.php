@@ -217,23 +217,9 @@ class GoodsReceiptController extends Controller
             'receipt' => $receipt,
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('active', true)->orderBy('name')->get(),
-            'items' => Item::query()->where('active', true)->with('client')->orderBy('sku')->get(),
-            'itemsCatalog' => Item::query()
-                ->where('active', true)
-                ->orderBy('sku')
-                ->get()
-                ->map(fn (Item $item): array => [
-                    'id' => $item->id,
-                    'client_id' => $item->client_id,
-                    'sku' => $item->sku,
-                    'description' => $item->description,
-                    'units_per_pallet' => $item->units_per_pallet,
-                    'default_location_id' => $item->default_location_id,
-                ])
-                ->values()
-                ->all(),
             'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
             'lineValues' => $this->lineValues($request, $receipt),
+            'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ];
     }
@@ -253,6 +239,7 @@ class GoodsReceiptController extends Controller
             return $receipt->lines
                 ->map(fn (GoodsReceiptLine $line): array => [
                     'item_id' => $line->item_id,
+                    'item_search' => $line->item ? $line->item->sku.' - '.$line->item->description : null,
                     'sku' => $line->sku,
                     'description' => $line->description,
                     'lot' => $line->lot,
@@ -268,6 +255,7 @@ class GoodsReceiptController extends Controller
 
         return [[
             'item_id' => null,
+            'item_search' => null,
             'sku' => null,
             'description' => null,
             'lot' => null,

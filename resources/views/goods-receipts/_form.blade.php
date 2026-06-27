@@ -173,5 +173,3 @@
         </form>
     </section>
 </div>
-
-<script type="application/json" data-goods-receipt-items>@json($itemsCatalog)</script>

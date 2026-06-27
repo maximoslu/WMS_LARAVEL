@@ -109,7 +109,7 @@ class MerchandiseRequestController extends Controller
                 ->values()
                 ->all(),
             'client' => $user->client,
-            'searchEndpoint' => route('merchandise-requests.items.search'),
+            'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
