@@ -118,7 +118,7 @@
         @enderror
     </td>
     <td>
-        <select name="lines[{{ $index }}][location_id]" class="auth-input">
+        <select name="lines[{{ $index }}][location_id]" class="auth-input" data-line-location>
             <option value="">Sin ubicacion</option>
             @foreach ($locations as $location)
                 <option value="{{ $location->id }}" @selected((string) ($row['location_id'] ?? null) === (string) $location->id)>

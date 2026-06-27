@@ -42,6 +42,11 @@ class Location extends Model
         return $this->hasMany(StockPallet::class);
     }
 
+    public function defaultItems(): HasMany
+    {
+        return $this->hasMany(Item::class, 'default_location_id');
+    }
+
     public function goodsReceiptLines(): HasMany
     {
         return $this->hasMany(GoodsReceiptLine::class);

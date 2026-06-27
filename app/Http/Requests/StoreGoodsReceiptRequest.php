@@ -50,7 +50,7 @@ class StoreGoodsReceiptRequest extends FormRequest
                     'item_id' => $itemId,
                     'sku' => $this->normalizeNullableUpper($line['sku'] ?? null) ?? $item?->sku,
                     'description' => $this->normalizeNullableText($line['description'] ?? null) ?? $item?->description,
-                    'lot' => $this->normalizeNullableUpper($line['lot'] ?? null) ?? $this->normalizeNullableUpper($item?->lot),
+                    'lot' => $this->normalizeNullableUpper($line['lot'] ?? null),
                     'quantity_units' => $quantityUnits,
                     'units_per_pallet' => $unitsPerPallet,
                     'pallet_count' => $palletCount ?? 0,
@@ -132,10 +132,16 @@ class StoreGoodsReceiptRequest extends FormRequest
                 $picoUnits = isset($line['pico_units']) ? (int) $line['pico_units'] : null;
 
                 if ($itemId > 0) {
-                    $itemClientId = Item::query()->whereKey($itemId)->value('client_id');
+                    $itemData = Item::query()
+                        ->whereKey($itemId)
+                        ->first(['client_id', 'active']);
 
-                    if ((int) $itemClientId !== $clientId) {
+                    if ((int) ($itemData?->client_id ?? 0) !== $clientId) {
                         $validator->errors()->add("lines.$index.item_id", 'El articulo debe pertenecer al mismo cliente que la entrada.');
+                    }
+
+                    if (! ($itemData?->active ?? false)) {
+                        $validator->errors()->add("lines.$index.item_id", 'El artículo seleccionado no está activo para nuevas entradas.');
                     }
                 }
 

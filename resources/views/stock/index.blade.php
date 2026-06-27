@@ -9,18 +9,18 @@
         <span>/</span>
         <span>Stock</span>
         <span>/</span>
-        <span>Stock actual</span>
+        <span>Inventario por partidas</span>
     </nav>
 
     <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">Stock actual</h2>
-            <span class="sr-only">Vista operativa por articulo</span>
-            <span class="ops-page-meta">{{ $rows->count() }} referencias en pantalla</span>
+            <h2 class="ops-page-title page-title-compact">Inventario por partidas</h2>
+            <span class="sr-only">Vista operativa por partida y fecha de entrada</span>
+            <span class="ops-page-meta">{{ $rows->count() }} filas en pantalla</span>
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons ops-toolbar-links">
-            <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact">Articulos</a>
+            <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact">Artículos</a>
             <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact">Ubicaciones</a>
         </div>
     </section>
@@ -39,12 +39,12 @@
             <span>{{ number_format($summary['total_units'], 0, ',', '.') }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Total palets</strong>
+            <strong>Total pallets</strong>
             <span>{{ number_format($summary['total_pallets'], 0, ',', '.') }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Total picos</strong>
-            <span>{{ number_format($summary['total_peaks'], 0, ',', '.') }}</span>
+            <strong>Partidas bloqueadas</strong>
+            <span>{{ number_format($summary['blocked_batches'], 0, ',', '.') }}</span>
         </article>
     </section>
 
@@ -63,13 +63,13 @@
             </label>
 
             <label class="auth-field">
-                <span>SKU o descripcion</span>
+                <span>SKU o descripción</span>
                 <input
                     type="text"
                     name="search"
                     value="{{ $filters['search'] }}"
                     class="auth-input"
-                    placeholder="Buscar referencia o descripcion"
+                    placeholder="Buscar referencia"
                 >
             </label>
 
@@ -85,7 +85,7 @@
             </label>
 
             <label class="auth-field">
-                <span>Estado</span>
+                <span>Estado de stock</span>
                 <select name="stock_state" class="auth-input">
                     <option value="with_stock" @selected($filters['stock_state'] === 'with_stock')>Con stock</option>
                     <option value="without_stock" @selected($filters['stock_state'] === 'without_stock')>Sin stock</option>
@@ -94,21 +94,23 @@
             </label>
 
             <label class="auth-field">
-                <span>Picos</span>
-                <select name="peak_state" class="auth-input">
-                    <option value="all" @selected($filters['peak_state'] === 'all')>Todos</option>
-                    <option value="with_peaks" @selected($filters['peak_state'] === 'with_peaks')>Solo con picos</option>
+                <span>Estado de partida</span>
+                <select name="batch_status" class="auth-input">
+                    <option value="all" @selected($filters['batch_status'] === 'all')>Todos</option>
+                    <option value="available" @selected($filters['batch_status'] === 'available')>Disponible</option>
+                    <option value="blocked" @selected($filters['batch_status'] === 'blocked')>Bloqueado</option>
+                    <option value="obsolete" @selected($filters['batch_status'] === 'obsolete')>Obsoleto</option>
                 </select>
             </label>
 
             <label class="auth-field">
-                <span>Ubicacion</span>
+                <span>Ubicación</span>
                 <input
                     type="text"
                     name="location"
                     value="{{ $filters['location'] }}"
                     class="auth-input"
-                    placeholder="Buscar ubicacion"
+                    placeholder="Buscar ubicación"
                 >
             </label>
 
@@ -122,31 +124,28 @@
     @if ($rows->isEmpty())
         <article class="surface-card item-empty-state compact-card">
             <span class="status-chip small-badge badge-compact">Sin resultados</span>
-            <h3>No hay referencias para estos filtros</h3>
-            <p>Ajusta los filtros para recuperar referencias con o sin stock.</p>
+            <h3>No hay partidas para estos filtros</h3>
+            <p>Ajusta cliente, lote, estado o ubicación para recuperar inventario o referencias sin stock.</p>
         </article>
     @else
         <section class="surface-card stock-table-shell compact-card stock-desktop-table">
             <div class="data-table-wrap stock-table-wrap">
-                <table class="data-table stock-table table-compact" aria-label="Vista operativa de stock">
+                <table class="data-table stock-table table-compact" aria-label="Vista operativa de stock por partidas">
                     <thead>
                         <tr>
                             <th>Cliente</th>
                             <th>SKU</th>
-                            <th>Descripcion</th>
-                            <th>Cantidad total</th>
+                            <th>Descripción</th>
                             <th>Lote</th>
-                            <th>Uds/palet</th>
-                            <th>Palets completos</th>
-                            <th>Picos</th>
-                            <th>Pico 1</th>
-                            <th>Pico 2</th>
-                            <th>Pico 3</th>
-                            <th>Pico 4</th>
-                            <th>Pico 5</th>
-                            <th>Mas picos</th>
-                            <th>Total palets</th>
-                            <th>Detalle</th>
+                            <th>Fecha entrada</th>
+                            <th>Estado artículo</th>
+                            <th>Estado partida</th>
+                            <th>Ubicación</th>
+                            <th>Ubicación por defecto</th>
+                            <th>Código pallet</th>
+                            <th>Unidades</th>
+                            <th>Uds/pallet</th>
+                            <th>Motivo bloqueo</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -158,59 +157,26 @@
                                         <span>{{ $row['client_code'] }}</span>
                                     </div>
                                 </td>
-                                <td>
-                                    <div class="stock-cell-main">
-                                        <strong>{{ $row['sku'] }}</strong>
-                                        @unless ($row['item_active'])
-                                            <span class="stock-badge small-badge badge-compact">Inactivo</span>
-                                        @endunless
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="stock-cell-main">
-                                        <strong>{{ $row['description'] }}</strong>
-                                        <span>{{ $row['location_summary'] !== '' ? 'Ubic.: '.$row['location_summary'] : 'Sin ubicacion' }}</span>
-                                    </div>
-                                </td>
-                                <td class="stock-total">{{ number_format($row['total_units'], 0, ',', '.') }}</td>
+                                <td><strong>{{ $row['sku'] }}</strong></td>
+                                <td>{{ $row['description'] }}</td>
                                 <td>{{ $row['lot_label'] }}</td>
-                                <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
-                                <td>{{ number_format($row['full_pallets'], 0, ',', '.') }}</td>
+                                <td>{{ $row['received_at'] ?? '-' }}</td>
                                 <td>
-                                    <span class="stock-badge small-badge badge-compact{{ $row['pico_count'] > 0 ? ' stock-badge-pico' : '' }}">
-                                        {{ number_format($row['pico_count'], 0, ',', '.') }}
+                                    <span class="status-badge item-status-badge item-status-badge--{{ $row['item_status'] }}">
+                                        {{ $row['item_status_label'] }}
                                     </span>
                                 </td>
-                                @foreach ($row['pico_columns'] as $peak)
-                                    <td>{{ $peak !== null ? number_format($peak, 0, ',', '.') : '-' }}</td>
-                                @endforeach
                                 <td>
-                                    @if ($row['peak_overflow_count'] > 0)
-                                        <span class="stock-badge small-badge badge-compact stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
-                                    @else
-                                        <span class="text-muted">-</span>
-                                    @endif
+                                    <span class="status-badge batch-status-badge{{ $row['batch_status'] ? ' batch-status-badge--'.$row['batch_status'] : '' }}">
+                                        {{ $row['batch_status_label'] }}
+                                    </span>
                                 </td>
-                                <td>{{ number_format($row['total_pallets'], 0, ',', '.') }}</td>
-                                <td>
-                                    @if ($row['has_peaks'])
-                                        <details class="pico-details">
-                                            <summary>Ver picos</summary>
-                                            <ul class="pico-detail-list">
-                                                @foreach ($row['peak_details'] as $peak)
-                                                    <li>
-                                                        <strong>{{ $peak['pallet_code'] ?: 'Sin codigo' }}</strong>
-                                                        <span>{{ $peak['location_label'] !== '' ? $peak['location_label'] : 'Sin ubicacion' }}</span>
-                                                        <span>{{ number_format($peak['quantity_units'], 0, ',', '.') }} uds</span>
-                                                        <span>Diferencia: {{ $peak['difference_units'] > 0 ? '+' : '' }}{{ number_format($peak['difference_units'], 0, ',', '.') }}</span>
-                                                    </li>
-                                                @endforeach
-                                            </ul>
-                                        </details>
-                                    @else
-                                        <span class="text-muted">Sin picos</span>
-                                    @endif
-                                </td>
+                                <td>{{ $row['location_label'] }}</td>
+                                <td>{{ $row['default_location_label'] }}</td>
+                                <td>{{ $row['pallet_code'] }}</td>
+                                <td class="stock-total">{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
+                                <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
+                                <td>{{ $row['blocked_reason'] ?: '-' }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -218,7 +184,7 @@
             </div>
         </section>
 
-        <section class="stock-mobile-list" aria-label="Vista movil de stock">
+        <section class="stock-mobile-list" aria-label="Vista móvil de stock">
             @foreach ($rows as $row)
                 <article class="surface-card stock-mobile-card compact-card">
                     <div class="stock-cell-main">
@@ -228,54 +194,47 @@
 
                     <p>{{ $row['description'] }}</p>
 
+                    <div class="stock-pill-list">
+                        <span class="status-badge item-status-badge item-status-badge--{{ $row['item_status'] }}">
+                            {{ $row['item_status_label'] }}
+                        </span>
+                        <span class="status-badge batch-status-badge{{ $row['batch_status'] ? ' batch-status-badge--'.$row['batch_status'] : '' }}">
+                            {{ $row['batch_status_label'] }}
+                        </span>
+                    </div>
+
                     <div class="stock-mobile-metrics">
                         <div>
-                            <span>Total unidades</span>
-                            <strong class="stock-total">{{ number_format($row['total_units'], 0, ',', '.') }}</strong>
+                            <span>Entrada</span>
+                            <strong>{{ $row['received_at'] ?? '-' }}</strong>
                         </div>
                         <div>
-                            <span>Uds/palet</span>
+                            <span>Ubicación</span>
+                            <strong>{{ $row['location_label'] }}</strong>
+                        </div>
+                        <div>
+                            <span>Uds/pallet</span>
                             <strong>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</strong>
                         </div>
                         <div>
-                            <span>Palets completos</span>
-                            <strong>{{ number_format($row['full_pallets'], 0, ',', '.') }}</strong>
-                        </div>
-                        <div>
-                            <span>Total palets</span>
-                            <strong>{{ number_format($row['total_pallets'], 0, ',', '.') }}</strong>
+                            <span>Unidades</span>
+                            <strong class="stock-total">{{ number_format($row['quantity_units'], 0, ',', '.') }}</strong>
                         </div>
                     </div>
 
-                    <div class="stock-pill-list">
-                        <span class="stock-badge small-badge badge-compact{{ $row['pico_count'] > 0 ? ' stock-badge-pico' : '' }}">
-                            Picos: {{ number_format($row['pico_count'], 0, ',', '.') }}
-                        </span>
-                        @if ($row['peak_overflow_count'] > 0)
-                            <span class="stock-badge small-badge badge-compact stock-badge-pico">+{{ $row['peak_overflow_count'] }} picos</span>
-                        @endif
-                        <span class="stock-badge small-badge badge-compact">
-                            {{ $row['location_summary'] !== '' ? $row['location_summary'] : 'Sin ubicacion' }}
-                        </span>
-                    </div>
+                    @if ($row['default_location_label'] !== 'Sin ubicación por defecto')
+                        <p class="users-table-email">Ubicación por defecto: {{ $row['default_location_label'] }}</p>
+                    @endif
 
-                    @if ($row['has_peaks'])
-                        <details class="pico-details">
-                            <summary>Ver picos</summary>
-                            <ul class="pico-detail-list">
-                                @foreach ($row['peak_details'] as $peak)
-                                    <li>
-                                        <strong>{{ $peak['pallet_code'] ?: 'Sin codigo' }}</strong>
-                                        <span>{{ $peak['location_label'] !== '' ? $peak['location_label'] : 'Sin ubicacion' }}</span>
-                                        <span>{{ number_format($peak['quantity_units'], 0, ',', '.') }} uds</span>
-                                        <span>Diferencia: {{ $peak['difference_units'] > 0 ? '+' : '' }}{{ number_format($peak['difference_units'], 0, ',', '.') }}</span>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        </details>
+                    @if ($row['blocked_reason'])
+                        <p class="users-table-email">Bloqueo: {{ $row['blocked_reason'] }}</p>
                     @endif
                 </article>
             @endforeach
         </section>
     @endif
+
+    <div class="dispatch-inline-help">
+        Pendiente definir estrategia FIFO/FEFO para sugerencia automática de salida.
+    </div>
 @endsection

@@ -5,6 +5,7 @@ namespace App\Services\GoodsReceipts;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
 use App\Models\Item;
+use App\Models\StockPallet;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -85,8 +86,10 @@ class GoodsReceiptConfirmationService
                 'location_id' => $line->location_id,
                 'location_text' => $line->location?->code,
                 'pallet_code' => sprintf('GR-%d-L%d-P%d', $receipt->id, $line->id, $index),
+                'lot' => $line->lot,
                 'quantity_units' => $unitsPerPallet,
                 'received_at' => $receipt->received_at,
+                'status' => StockPallet::STATUS_AVAILABLE,
                 'active' => true,
             ]);
         }
@@ -98,8 +101,10 @@ class GoodsReceiptConfirmationService
                 'location_id' => $line->location_id,
                 'location_text' => $line->location?->code,
                 'pallet_code' => sprintf('GR-%d-L%d-X1', $receipt->id, $line->id),
+                'lot' => $line->lot,
                 'quantity_units' => $picoUnits,
                 'received_at' => $receipt->received_at,
+                'status' => StockPallet::STATUS_AVAILABLE,
                 'active' => true,
             ]);
         }
@@ -108,7 +113,7 @@ class GoodsReceiptConfirmationService
             'item_id' => $item->id,
             'sku' => $line->sku ?? $item->sku,
             'description' => $line->description ?? $item->description,
-            'lot' => $line->lot ?? $item->lot,
+            'lot' => $line->lot,
             'units_per_pallet' => $unitsPerPallet,
             'pallet_count' => $fullPallets,
             'pico_units' => $picoUnits > 0 ? $picoUnits : null,
@@ -130,26 +135,21 @@ class GoodsReceiptConfirmationService
         $sku = $line->sku;
         $description = $line->description;
         $unitsPerPallet = (int) ($line->units_per_pallet ?? 0);
-        $lot = $line->lot;
-
         if ($sku === null || $description === null || $unitsPerPallet <= 0) {
             throw ValidationException::withMessages([
                 'goods_receipt' => "La linea {$line->id} necesita articulo o datos suficientes para crearlo (SKU, descripcion y unidades por palet).",
             ]);
         }
 
-        $lotKey = $lot ?? '';
-
         return Item::query()->firstOrCreate(
             [
                 'client_id' => $receipt->client_id,
                 'sku' => $sku,
-                'lot_key' => $lotKey,
             ],
             [
                 'description' => $description,
-                'lot' => $lot,
                 'units_per_pallet' => $unitsPerPallet,
+                'status' => Item::STATUS_ACTIVE,
                 'active' => true,
             ]
         );

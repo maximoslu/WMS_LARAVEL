@@ -103,7 +103,6 @@ class MerchandiseRequestController extends Controller
                     'id' => $item->id,
                     'sku' => $item->sku,
                     'description' => $item->description,
-                    'lot' => $item->lot,
                     'units_per_pallet' => $item->units_per_pallet,
                     'requested_pallets' => (int) $oldQuantities->get((string) $item->id, 0),
                 ])
@@ -134,19 +133,15 @@ class MerchandiseRequestController extends Controller
             ->where(function (Builder $query) use ($search): void {
                 $query
                     ->where('sku', 'like', '%'.$search.'%')
-                    ->orWhere('description', 'like', '%'.$search.'%')
-                    ->orWhere('lot', 'like', '%'.$search.'%')
-                    ->orWhere('lot_key', 'like', '%'.$search.'%');
+                    ->orWhere('description', 'like', '%'.$search.'%');
             })
             ->orderBy('sku')
-            ->orderBy('lot_key')
             ->limit(15)
             ->get()
             ->map(fn (Item $item): array => [
                 'id' => $item->id,
                 'sku' => $item->sku,
                 'description' => $item->description,
-                'lot' => $item->lot,
                 'units_per_pallet' => $item->units_per_pallet,
             ])
             ->values()
@@ -186,7 +181,7 @@ class MerchandiseRequestController extends Controller
 
                 $requestModel->lines()->create([
                     'item_id' => $item->id,
-                    'lot' => $item->lot,
+                    'lot' => null,
                     'units_per_pallet' => $item->units_per_pallet,
                     'requested_pallets' => $line['requested_pallets'],
                     'requested_units' => $line['requested_pallets'] * $item->units_per_pallet,

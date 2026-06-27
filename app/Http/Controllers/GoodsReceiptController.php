@@ -227,8 +227,8 @@ class GoodsReceiptController extends Controller
                     'client_id' => $item->client_id,
                     'sku' => $item->sku,
                     'description' => $item->description,
-                    'lot' => $item->lot,
                     'units_per_pallet' => $item->units_per_pallet,
+                    'default_location_id' => $item->default_location_id,
                 ])
                 ->values()
                 ->all(),

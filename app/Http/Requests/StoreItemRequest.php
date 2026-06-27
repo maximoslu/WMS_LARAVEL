@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Item;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class StoreItemRequest extends FormRequest
@@ -15,13 +16,11 @@ class StoreItemRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $lot = $this->normalizeNullableUpper($this->input('lot'));
-
         $this->merge([
             'sku' => $this->normalizeUpper($this->input('sku')),
             'description' => $this->normalizeText($this->input('description')),
-            'lot' => $lot,
-            'lot_key' => $lot ?? '',
+            'status' => (string) $this->input('status', Item::STATUS_ACTIVE),
+            'default_location_id' => $this->normalizeNullableInteger($this->input('default_location_id')),
         ]);
     }
 
@@ -31,10 +30,9 @@ class StoreItemRequest extends FormRequest
             'client_id' => ['required', 'exists:clients,id'],
             'sku' => ['required', 'string', 'max:100'],
             'description' => ['required', 'string', 'max:255'],
-            'lot' => ['nullable', 'string', 'max:100'],
-            'lot_key' => ['nullable', 'string', 'max:100'],
             'units_per_pallet' => ['required', 'integer', 'min:1'],
-            'active' => ['nullable', 'boolean'],
+            'status' => ['required', Rule::in(Item::statuses())],
+            'default_location_id' => ['nullable', 'exists:locations,id'],
         ];
     }
 
@@ -48,11 +46,10 @@ class StoreItemRequest extends FormRequest
             $exists = Item::query()
                 ->where('client_id', $this->integer('client_id'))
                 ->where('sku', (string) $this->string('sku'))
-                ->where('lot_key', (string) ($this->input('lot_key') ?? ''))
                 ->exists();
 
             if ($exists) {
-                $validator->errors()->add('sku', 'Ya existe un articulo con el mismo SKU y lote para este cliente.');
+                $validator->errors()->add('sku', 'Ya existe un artículo con el mismo SKU para este cliente.');
             }
         });
     }
@@ -67,6 +64,15 @@ class StoreItemRequest extends FormRequest
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : mb_strtoupper($normalized);
+    }
+
+    private function normalizeNullableInteger(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? (int) $value : null;
     }
 
     private function normalizeText(mixed $value): string

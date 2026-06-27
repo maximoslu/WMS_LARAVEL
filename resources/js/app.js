@@ -141,7 +141,7 @@ const setupGoodsReceiptLines = () => {
 
             if (selectedOption?.disabled) {
                 itemSelect.value = '';
-                ['[data-line-sku]', '[data-line-description]', '[data-line-units]', '[data-line-lot]'].forEach((selector) => {
+                ['[data-line-sku]', '[data-line-description]', '[data-line-units]'].forEach((selector) => {
                     const field = row.querySelector(selector);
 
                     if (field?.dataset.autofilled === 'true') {
@@ -159,17 +159,17 @@ const setupGoodsReceiptLines = () => {
         const itemSelect = row.querySelector('[data-line-item]');
         const skuField = row.querySelector('[data-line-sku]');
         const descriptionField = row.querySelector('[data-line-description]');
-        const lotField = row.querySelector('[data-line-lot]');
         const unitsField = row.querySelector('[data-line-units]');
+        const locationField = row.querySelector('[data-line-location]');
 
-        if (!itemSelect || !skuField || !descriptionField || !lotField || !unitsField) {
+        if (!itemSelect || !skuField || !descriptionField || !unitsField) {
             return;
         }
 
         const item = itemsById.get(itemSelect.value);
 
         if (!item) {
-            [skuField, descriptionField, lotField, unitsField].forEach((field) => {
+            [skuField, descriptionField, unitsField].forEach((field) => {
                 if (field.dataset.autofilled === 'true') {
                     markAutofilled(field, false);
                 }
@@ -183,14 +183,13 @@ const setupGoodsReceiptLines = () => {
         descriptionField.value = item.description ?? '';
         unitsField.value = item.units_per_pallet ? String(item.units_per_pallet) : '';
 
-        if (!lotField.value && item.lot) {
-            lotField.value = item.lot;
-            markAutofilled(lotField, true);
-        }
-
         markAutofilled(skuField, true);
         markAutofilled(descriptionField, true);
         markAutofilled(unitsField, true);
+
+        if (locationField && !locationField.value && item.default_location_id) {
+            locationField.value = String(item.default_location_id);
+        }
 
         recalculateRow(row);
     };
@@ -209,7 +208,6 @@ const setupGoodsReceiptLines = () => {
         const unitsField = row.querySelector('[data-line-units]');
         const skuField = row.querySelector('[data-line-sku]');
         const descriptionField = row.querySelector('[data-line-description]');
-        const lotField = row.querySelector('[data-line-lot]');
 
         itemSelect?.addEventListener('change', () => {
             applyItemToRow(row);
@@ -225,7 +223,7 @@ const setupGoodsReceiptLines = () => {
             });
         });
 
-        [skuField, descriptionField, lotField].forEach((field) => {
+        [skuField, descriptionField].forEach((field) => {
             field?.addEventListener('input', () => {
                 markAutofilled(field, false);
             });
@@ -390,7 +388,6 @@ const setupMerchandiseRequestBuilder = () => {
                 itemId,
                 sku: item.sku ?? '',
                 description: item.description ?? '',
-                lot: item.lot || 'Sin lote',
                 unitsPerPallet: item.units_per_pallet ?? '',
                 pallets,
             };
@@ -440,7 +437,7 @@ const setupMerchandiseRequestBuilder = () => {
                 <div class="merchandise-request-summary-main">
                     <strong>${escapeHtml(line.sku)}</strong>
                     <span>${escapeHtml(line.description)}</span>
-                    <small>${escapeHtml(line.lot)} · ${escapeHtml(line.unitsPerPallet)} uds/pallet</small>
+                    <small>${escapeHtml(line.unitsPerPallet)} uds/pallet</small>
                 </div>
                 <label class="auth-field merchandise-request-summary-field">
                     <span>Pallets</span>
@@ -472,7 +469,7 @@ const setupMerchandiseRequestBuilder = () => {
         if (query.length < 2) {
             resultsNode.innerHTML = `
                 <div class="merchandise-request-results-empty">
-                    Empieza a escribir para buscar mercancías activas sin cargar todo el catálogo.
+                    Empieza a escribir para buscar mercancÃ­as activas sin cargar todo el catÃ¡logo.
                 </div>
             `;
             return;
@@ -496,7 +493,7 @@ const setupMerchandiseRequestBuilder = () => {
                     <div class="merchandise-request-result-main">
                         <strong>${escapeHtml(item.sku)}</strong>
                         <span>${escapeHtml(item.description)}</span>
-                        <small>Lote: ${escapeHtml(item.lot || 'Sin lote')} · ${escapeHtml(item.units_per_pallet)} uds/pallet</small>
+                        <small>${escapeHtml(item.units_per_pallet)} uds/pallet</small>
                     </div>
                     <label class="auth-field merchandise-request-result-quantity">
                         <span>Pallets</span>
@@ -516,7 +513,7 @@ const setupMerchandiseRequestBuilder = () => {
                         data-result-add
                         data-item-id="${escapeHtml(item.id)}"
                     >
-                        ${selected ? 'Actualizar' : 'Añadir'}
+                        ${selected ? 'Actualizar' : 'Aï¿½adir'}
                     </button>
                 </article>
             `;
@@ -528,14 +525,14 @@ const setupMerchandiseRequestBuilder = () => {
         const item = itemCache.get(String(itemId));
 
         if (!itemId || !item || normalizedPallets <= 0) {
-            setFeedback('Indica una cantidad válida de pallets antes de añadir la mercancía.', 'error');
+            setFeedback('Indica una cantidad vï¿½lida de pallets antes de aï¿½adir la mercancï¿½a.', 'error');
             return;
         }
 
         upsertHiddenInput(itemId, normalizedPallets);
         renderSummary();
         renderResults();
-        setFeedback(`${item.sku} se ha añadido al pedido con ${formatNumber.format(normalizedPallets)} pallets.`, 'success');
+        setFeedback(`${item.sku} se ha aï¿½adido al pedido con ${formatNumber.format(normalizedPallets)} pallets.`, 'success');
     };
 
     const performSearch = async () => {
@@ -543,14 +540,14 @@ const setupMerchandiseRequestBuilder = () => {
 
         if (query.length < 2) {
             searchResults = [];
-            setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
+            setFeedback('Escribe al menos 2 caracteres para buscar en tu catï¿½logo activo.');
             renderResults();
             return;
         }
 
         currentRequest?.abort();
         currentRequest = new AbortController();
-        setFeedback('Buscando mercancías...');
+        setFeedback('Buscando mercancï¿½as...');
 
         try {
             const response = await fetch(`${searchEndpoint}?search=${encodeURIComponent(query)}`, {
@@ -571,7 +568,7 @@ const setupMerchandiseRequestBuilder = () => {
             setFeedback(
                 searchResults.length > 0
                     ? `${formatNumber.format(searchResults.length)} resultados encontrados.`
-                    : 'No se han encontrado mercancías con ese criterio.',
+                    : 'No se han encontrado mercancï¿½as con ese criterio.',
                 searchResults.length > 0 ? 'success' : 'default',
             );
             renderResults();
@@ -581,7 +578,7 @@ const setupMerchandiseRequestBuilder = () => {
             }
 
             searchResults = [];
-            setFeedback('No se ha podido completar la búsqueda. Inténtalo de nuevo en unos segundos.', 'error');
+            setFeedback('No se ha podido completar la bï¿½squeda. Intï¿½ntalo de nuevo en unos segundos.', 'error');
             renderResults();
         }
     };
@@ -640,7 +637,7 @@ const setupMerchandiseRequestBuilder = () => {
         upsertHiddenInput(button.dataset.itemId, 0);
         renderSummary();
         renderResults();
-        setFeedback('Línea eliminada del pedido. Puedes volver a añadirla cuando quieras.');
+        setFeedback('Lï¿½nea eliminada del pedido. Puedes volver a aï¿½adirla cuando quieras.');
     });
 
     try {
@@ -753,7 +750,6 @@ const setupGoodsDispatchBuilder = () => {
                 itemId: String(item.id),
                 sku: item.sku ?? '',
                 description: item.description ?? '',
-                lot: item.lot ?? 'Sin lote',
                 unitsPerPallet: item.units_per_pallet ?? '',
                 pallets,
             };
@@ -799,7 +795,7 @@ const setupGoodsDispatchBuilder = () => {
                 <td>
                     <div class="stock-cell-main">
                         <strong>${line.sku}</strong>
-                        <span class="users-table-email">${line.description} Â· ${line.lot} Â· ${line.unitsPerPallet} uds/pallet</span>
+                        <span class="users-table-email">${line.description} Â· ${line.unitsPerPallet} uds/pallet</span>
                     </div>
                 </td>
                 <td>
@@ -942,6 +938,3 @@ if (document.readyState === 'loading') {
     setupGoodsDispatchBuilder();
     setupDispatchLoadingEditor();
 }
-
-
-

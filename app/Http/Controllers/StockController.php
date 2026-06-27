@@ -21,7 +21,7 @@ class StockController extends Controller
             'search',
             'lot',
             'stock_state',
-            'peak_state',
+            'batch_status',
             'location',
         ]));
 

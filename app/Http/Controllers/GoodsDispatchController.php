@@ -60,7 +60,6 @@ class GoodsDispatchController extends Controller
                     'client_id' => $item->client_id,
                     'sku' => $item->sku,
                     'description' => $item->description,
-                    'lot' => $item->lot,
                     'units_per_pallet' => $item->units_per_pallet,
                 ])
                 ->values()
@@ -97,7 +96,7 @@ class GoodsDispatchController extends Controller
                     'item_id' => $item->id,
                     'sku' => $item->sku,
                     'description' => $item->description,
-                    'lot' => $item->lot,
+                    'lot' => null,
                     'units_per_pallet' => $item->units_per_pallet,
                     'pallets' => $line['pallets'],
                     'requested_units' => $line['pallets'] * $item->units_per_pallet,
@@ -211,7 +210,6 @@ class GoodsDispatchController extends Controller
                     'id' => $item->id,
                     'sku' => $item->sku,
                     'description' => $item->description,
-                    'lot' => $item->lot,
                     'units_per_pallet' => $item->units_per_pallet,
                 ])
                 ->values()

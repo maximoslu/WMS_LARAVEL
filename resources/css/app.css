@@ -1221,9 +1221,15 @@ button {
     color: var(--brand-success);
 }
 
-.item-state--inactive {
+.item-state--inactive,
+.item-state--blocked {
     background: var(--brand-danger-bg);
     color: var(--brand-danger);
+}
+
+.item-state--obsolete {
+    background: rgba(70, 93, 115, 0.14);
+    color: var(--brand-slate-dark);
 }
 
 .item-card-metadata {
@@ -1561,6 +1567,42 @@ button {
 .status-badge--inactive {
     background: var(--brand-danger-bg);
     color: var(--brand-danger);
+}
+
+.item-status-badge--active {
+    background: var(--brand-success-bg);
+    color: var(--brand-success);
+    border: 1px solid rgba(20, 101, 60, 0.14);
+}
+
+.item-status-badge--blocked {
+    background: #f5dede;
+    color: #8f2020;
+    border: 1px solid rgba(143, 32, 32, 0.14);
+}
+
+.item-status-badge--obsolete {
+    background: #e3e8ed;
+    color: #314353;
+    border: 1px solid rgba(49, 67, 83, 0.14);
+}
+
+.batch-status-badge--available {
+    background: #deefe4;
+    color: #14653c;
+    border: 1px solid rgba(20, 101, 60, 0.14);
+}
+
+.batch-status-badge--blocked {
+    background: #fff3d6;
+    color: #8a4b00;
+    border: 1px solid rgba(138, 75, 0, 0.14);
+}
+
+.batch-status-badge--obsolete {
+    background: #e3e8ed;
+    color: #314353;
+    border: 1px solid rgba(49, 67, 83, 0.14);
 }
 
 .pagination-card nav {

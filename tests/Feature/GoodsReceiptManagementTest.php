@@ -164,7 +164,7 @@ class GoodsReceiptManagementTest extends TestCase
             'client_id' => $client->id,
             'sku' => 'CAJA0001',
             'description' => 'Caja de prueba',
-            'lot' => 'LOT-CAJA',
+            'lot' => null,
             'lot_key' => 'LOT-CAJA',
             'units_per_pallet' => 700,
         ]);
@@ -198,7 +198,7 @@ class GoodsReceiptManagementTest extends TestCase
             'item_id' => $item->id,
             'sku' => 'CAJA0001',
             'description' => 'Caja de prueba',
-            'lot' => 'LOT-CAJA',
+            'lot' => null,
             'units_per_pallet' => 700,
             'pallet_count' => 21,
             'pico_units' => 300,
@@ -395,18 +395,22 @@ class GoodsReceiptManagementTest extends TestCase
             'goods_receipt_id' => $receipt->id,
             'quantity_units' => 1000,
             'location_id' => $location->id,
+            'lot' => 'LOT-CF1',
+            'status' => 'available',
             'active' => true,
         ]);
         $this->assertDatabaseHas('stock_pallets', [
             'goods_receipt_id' => $receipt->id,
             'quantity_units' => 500,
             'location_id' => $location->id,
+            'lot' => 'LOT-CF1',
+            'status' => 'available',
             'active' => true,
         ]);
         $this->assertDatabaseHas('items', [
             'client_id' => $client->id,
             'sku' => 'SKU-CONF-001',
-            'lot_key' => 'LOT-CF1',
+            'lot_key' => '',
         ]);
 
         $this->actingAs($user)
@@ -434,7 +438,9 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSee('SKU-STOCK-001');
+            ->assertSee('SKU-STOCK-001')
+            ->assertSee('LOT-STK')
+            ->assertSee('26/06/2026');
     }
 
     public function test_confirming_15000_units_with_700_units_per_pallet_generates_21_full_pallets_and_one_peak(): void
@@ -488,12 +494,14 @@ class GoodsReceiptManagementTest extends TestCase
             'goods_receipt_id' => $receipt->id,
             'quantity_units' => 700,
             'location_id' => $location->id,
+            'lot' => null,
             'active' => true,
         ]);
         $this->assertDatabaseHas('stock_pallets', [
             'goods_receipt_id' => $receipt->id,
             'quantity_units' => 300,
             'location_id' => $location->id,
+            'lot' => null,
             'active' => true,
         ]);
     }

@@ -15,16 +15,16 @@ class ItemFactory extends Factory
 
     public function definition(): array
     {
-        $lot = fake()->boolean(60) ? strtoupper(fake()->bothify('LOT-###')) : null;
-
         return [
             'client_id' => Client::factory(),
             'sku' => strtoupper(fake()->bothify('SKU-####')),
             'description' => fake()->sentence(4),
-            'lot' => $lot,
-            'lot_key' => $lot ?? '',
+            'lot' => null,
+            'lot_key' => '',
             'units_per_pallet' => fake()->numberBetween(1, 1500),
             'active' => true,
+            'status' => Item::STATUS_ACTIVE,
+            'default_location_id' => null,
         ];
     }
 
@@ -32,6 +32,23 @@ class ItemFactory extends Factory
     {
         return $this->state(fn () => [
             'active' => false,
+            'status' => Item::STATUS_BLOCKED,
+        ]);
+    }
+
+    public function blocked(): static
+    {
+        return $this->state(fn () => [
+            'active' => false,
+            'status' => Item::STATUS_BLOCKED,
+        ]);
+    }
+
+    public function obsolete(): static
+    {
+        return $this->state(fn () => [
+            'active' => false,
+            'status' => Item::STATUS_OBSOLETE,
         ]);
     }
 }

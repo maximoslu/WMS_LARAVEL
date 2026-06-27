@@ -24,8 +24,11 @@ class StockPalletFactory extends Factory
             'location_id' => null,
             'location_text' => fake()->optional()->bothify('PAS-## / HUE-##'),
             'pallet_code' => strtoupper(fake()->bothify('PAL-#####')),
+            'lot' => fake()->optional()->bothify('LOT-###'),
             'quantity_units' => fake()->numberBetween(1, 1500),
             'received_at' => fake()->optional()->date(),
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'blocked_reason' => null,
             'active' => true,
         ];
     }

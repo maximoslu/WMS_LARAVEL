@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\Warehouse;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -64,9 +66,8 @@ class ItemManagementTest extends TestCase
                 'client_id' => $client->id,
                 'sku' => ' fr-100 ',
                 'description' => ' Palet leche entera ',
-                'lot' => ' lote-a1 ',
                 'units_per_pallet' => 700,
-                'active' => '1',
+                'status' => Item::STATUS_ACTIVE,
             ])
             ->assertRedirect(route('items.index'));
 
@@ -74,9 +75,8 @@ class ItemManagementTest extends TestCase
             'client_id' => $client->id,
             'sku' => 'FR-100',
             'description' => 'Palet leche entera',
-            'lot' => 'LOTE-A1',
-            'lot_key' => 'LOTE-A1',
             'units_per_pallet' => 700,
+            'status' => Item::STATUS_ACTIVE,
             'active' => true,
         ]);
     }
@@ -191,15 +191,14 @@ class ItemManagementTest extends TestCase
                 'client_id' => $client->id,
                 'sku' => 'SKU-0001',
                 'description' => 'Articulo invalido',
-                'lot' => '',
                 'units_per_pallet' => 0,
-                'active' => '1',
+                'status' => Item::STATUS_ACTIVE,
             ])
             ->assertRedirect(route('items.create'))
             ->assertSessionHasErrors('units_per_pallet');
     }
 
-    public function test_duplicate_sku_and_lot_is_not_allowed_within_same_client(): void
+    public function test_duplicate_sku_is_not_allowed_within_same_client(): void
     {
         $this->seedBaseData();
 
@@ -209,8 +208,6 @@ class ItemManagementTest extends TestCase
         Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-DUP',
-            'lot' => null,
-            'lot_key' => '',
         ]);
 
         $this->actingAs($user)
@@ -219,9 +216,8 @@ class ItemManagementTest extends TestCase
                 'client_id' => $client->id,
                 'sku' => 'sku-dup',
                 'description' => 'Duplicado',
-                'lot' => '',
                 'units_per_pallet' => 100,
-                'active' => '1',
+                'status' => Item::STATUS_ACTIVE,
             ])
             ->assertRedirect(route('items.create'))
             ->assertSessionHasErrors('sku');
@@ -238,8 +234,6 @@ class ItemManagementTest extends TestCase
         Item::factory()->create([
             'client_id' => $firstClient->id,
             'sku' => 'SKU-COMUN',
-            'lot' => null,
-            'lot_key' => '',
         ]);
 
         $this->actingAs($user)
@@ -247,9 +241,8 @@ class ItemManagementTest extends TestCase
                 'client_id' => $secondClient->id,
                 'sku' => 'sku-comun',
                 'description' => 'SKU compartido entre clientes',
-                'lot' => '',
                 'units_per_pallet' => 480,
-                'active' => '1',
+                'status' => Item::STATUS_ACTIVE,
             ])
             ->assertRedirect(route('items.index'));
 
@@ -266,6 +259,99 @@ class ItemManagementTest extends TestCase
         ]);
 
         $this->assertTrue($item->client->is($client));
+    }
+
+    public function test_item_form_does_not_show_lot_field(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $item = Item::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('items.create'))
+            ->assertOk()
+            ->assertDontSee('name="lot"', false);
+
+        $this->actingAs($user)
+            ->get(route('items.edit', $item))
+            ->assertOk()
+            ->assertDontSee('name="lot"', false);
+    }
+
+    public function test_item_can_be_updated_to_blocked_and_obsolete(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $item = Item::factory()->create([
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('items.update', $item), [
+                'client_id' => $item->client_id,
+                'sku' => $item->sku,
+                'description' => $item->description,
+                'units_per_pallet' => $item->units_per_pallet,
+                'status' => Item::STATUS_BLOCKED,
+                'default_location_id' => '',
+            ])
+            ->assertRedirect(route('items.index'));
+
+        $this->assertDatabaseHas('items', [
+            'id' => $item->id,
+            'status' => Item::STATUS_BLOCKED,
+            'active' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('items.update', $item), [
+                'client_id' => $item->client_id,
+                'sku' => $item->sku,
+                'description' => $item->description,
+                'units_per_pallet' => $item->units_per_pallet,
+                'status' => Item::STATUS_OBSOLETE,
+                'default_location_id' => '',
+            ])
+            ->assertRedirect(route('items.index'));
+
+        $this->assertDatabaseHas('items', [
+            'id' => $item->id,
+            'status' => Item::STATUS_OBSOLETE,
+            'active' => false,
+        ]);
+    }
+
+    public function test_item_can_store_optional_default_location(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $warehouse = Warehouse::factory()->create();
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'A1-01',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('items.store'), [
+                'client_id' => $client->id,
+                'sku' => 'SKU-LOC-ITEM',
+                'description' => 'Con ubicación por defecto',
+                'units_per_pallet' => 500,
+                'status' => Item::STATUS_ACTIVE,
+                'default_location_id' => $location->id,
+            ])
+            ->assertRedirect(route('items.index'));
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $client->id,
+            'sku' => 'SKU-LOC-ITEM',
+            'default_location_id' => $location->id,
+        ]);
     }
 
     private function seedBaseData(): void

@@ -62,8 +62,9 @@
                 <label class="auth-field">
                     <span>Estado</span>
                     <select name="status" class="auth-input">
-                        <option value="active" @selected($filters['status'] === 'active')>Solo activos</option>
-                        <option value="inactive" @selected($filters['status'] === 'inactive')>Solo inactivos</option>
+                        <option value="active" @selected($filters['status'] === 'active')>Activos</option>
+                        <option value="blocked" @selected($filters['status'] === 'blocked')>Bloqueados</option>
+                        <option value="obsolete" @selected($filters['status'] === 'obsolete')>Obsoletos</option>
                         <option value="all" @selected($filters['status'] === 'all')>Todos</option>
                     </select>
                 </label>
@@ -95,7 +96,7 @@
         <article class="surface-card item-empty-state compact-card">
             <span class="status-chip small-badge badge-compact">Sin resultados</span>
             <h3>No hay articulos con estos filtros</h3>
-            <p>Ajusta cliente, estado o texto de busqueda para localizar articulos existentes.</p>
+            <p>Ajusta cliente, estado o texto de búsqueda para localizar artículos existentes.</p>
         </article>
     @elseif ($isCardsView)
         <section class="items-grid" aria-label="Vista tarjetas de articulos">
@@ -106,8 +107,8 @@
                             <span class="module-tag small-badge badge-compact">{{ $item->client->name }}</span>
                             <h3>{{ $item->sku }}</h3>
                         </div>
-                        <span class="item-state {{ $item->active ? 'item-state--active' : 'item-state--inactive' }}">
-                            {{ $item->active ? 'Activo' : 'Inactivo' }}
+                        <span class="item-state item-state--{{ $item->status }}">
+                            {{ $item->statusLabel() }}
                         </span>
                     </div>
 
@@ -115,11 +116,11 @@
 
                     <dl class="item-card-metadata">
                         <div>
-                            <dt>Lote</dt>
-                            <dd>{{ $item->lot ?: 'Sin lote' }}</dd>
+                            <dt>Ubicación por defecto</dt>
+                            <dd>{{ $item->defaultLocation?->code ?: 'Sin ubicación' }}</dd>
                         </div>
                         <div>
-                            <dt>Cantidad por palet</dt>
+                            <dt>Cantidad por pallet</dt>
                             <dd>{{ number_format($item->units_per_pallet, 0, ',', '.') }} uds/palet</dd>
                         </div>
                     </dl>
@@ -132,7 +133,7 @@
                                 @csrf
                                 @method('PATCH')
                                 <button type="submit" class="button-secondary compact-button btn-table">
-                                    {{ $item->active ? 'Desactivar' : 'Activar' }}
+                                    {{ $item->status === \App\Models\Item::STATUS_ACTIVE ? 'Bloquear' : 'Activar' }}
                                 </button>
                             </form>
                         </div>
@@ -149,7 +150,7 @@
                             <th>Cliente</th>
                             <th>SKU</th>
                             <th>Descripcion</th>
-                            <th>Lote</th>
+                            <th>Ubicación por defecto</th>
                             <th>Cantidad por palet</th>
                             <th>Estado</th>
                             <th>Acciones</th>
@@ -161,11 +162,11 @@
                                 <td>{{ $item->client->name }}</td>
                                 <td><strong>{{ $item->sku }}</strong></td>
                                 <td>{{ $item->description }}</td>
-                                <td>{{ $item->lot ?: 'Sin lote' }}</td>
+                                <td>{{ $item->defaultLocation?->code ?: 'Sin ubicación' }}</td>
                                 <td>{{ number_format($item->units_per_pallet, 0, ',', '.') }} uds/palet</td>
                                 <td>
-                                    <span class="status-badge {{ $item->active ? 'status-badge--active' : 'status-badge--inactive' }}">
-                                        {{ $item->active ? 'Activo' : 'Inactivo' }}
+                                    <span class="status-badge item-status-badge item-status-badge--{{ $item->status }}">
+                                        {{ $item->statusLabel() }}
                                     </span>
                                 </td>
                                 <td>
@@ -177,7 +178,7 @@
                                                 @csrf
                                                 @method('PATCH')
                                                 <button type="submit" class="button-secondary compact-button btn-table">
-                                                    {{ $item->active ? 'Desactivar' : 'Activar' }}
+                                                    {{ $item->status === \App\Models\Item::STATUS_ACTIVE ? 'Bloquear' : 'Activar' }}
                                                 </button>
                                             </form>
                                         </div>

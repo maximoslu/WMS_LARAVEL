@@ -17,13 +17,13 @@ class StockOverviewBuilderTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_builder_calculates_total_units_full_pallets_peaks_and_total_pallets(): void
+    public function test_builder_calculates_total_units_and_total_pallets_from_inventory_rows(): void
     {
         [$client] = $this->seedClients();
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'FR-700',
-            'description' => 'Palet estandar',
+            'description' => 'Palet estándar',
             'units_per_pallet' => 700,
         ]);
 
@@ -31,25 +31,23 @@ class StockOverviewBuilderTest extends TestCase
             StockPallet::query()->create([
                 'client_id' => $client->id,
                 'item_id' => $item->id,
+                'lot' => 'LOT-A',
                 'location_text' => 'A1-0'.($index + 1),
                 'pallet_code' => 'PAL-FR-00'.($index + 1),
                 'quantity_units' => $quantity,
+                'received_at' => '2026-06-26',
+                'status' => StockPallet::STATUS_AVAILABLE,
                 'active' => true,
             ]);
         }
 
         $result = app(StockOverviewBuilder::class)->build([
-            'stock_state' => 'all',
+            'stock_state' => 'with_stock',
         ]);
 
-        $row = $result['rows']->firstWhere('sku', 'FR-700');
-
-        $this->assertNotNull($row);
-        $this->assertSame(1700, $row['total_units']);
-        $this->assertSame(2, $row['full_pallets']);
-        $this->assertSame(1, $row['pico_count']);
-        $this->assertSame(3, $row['total_pallets']);
-        $this->assertSame([300], $row['pico_quantities']);
+        $this->assertSame(1700, $result['summary']['total_units']);
+        $this->assertSame(3, $result['summary']['total_pallets']);
+        $this->assertSame(1, $result['summary']['references_with_stock']);
     }
 
     public function test_builder_separates_same_sku_across_clients(): void
@@ -60,126 +58,86 @@ class StockOverviewBuilderTest extends TestCase
             'client_id' => $friesland->id,
             'sku' => 'SKU-COMUN',
             'description' => 'Producto FR',
-            'units_per_pallet' => 700,
         ]);
 
         $edItem = Item::factory()->create([
             'client_id' => $edelvives->id,
             'sku' => 'SKU-COMUN',
             'description' => 'Producto ED',
-            'units_per_pallet' => 420,
         ]);
 
-        StockPallet::query()->create([
+        StockPallet::factory()->create([
             'client_id' => $friesland->id,
             'item_id' => $frItem->id,
-            'location_text' => 'A1-01',
-            'pallet_code' => 'PAL-COMUN-FR',
+            'lot' => 'FR-LOT',
             'quantity_units' => 700,
-            'active' => true,
         ]);
 
-        StockPallet::query()->create([
+        StockPallet::factory()->create([
             'client_id' => $edelvives->id,
             'item_id' => $edItem->id,
-            'location_text' => 'B1-01',
-            'pallet_code' => 'PAL-COMUN-ED',
+            'lot' => 'ED-LOT',
             'quantity_units' => 180,
-            'active' => true,
         ]);
 
         $result = app(StockOverviewBuilder::class)->build([
-            'stock_state' => 'all',
+            'stock_state' => 'with_stock',
         ]);
 
-        $frRow = $result['rows']->firstWhere('client_code', 'FRIESLAND');
-        $edRow = $result['rows']->firstWhere('client_code', 'EDELVIVES');
-
-        $this->assertNotNull($frRow);
-        $this->assertNotNull($edRow);
-        $this->assertSame('SKU-COMUN', $frRow['sku']);
-        $this->assertSame('SKU-COMUN', $edRow['sku']);
-        $this->assertSame(700, $frRow['total_units']);
-        $this->assertSame(180, $edRow['total_units']);
+        $this->assertCount(2, $result['rows']);
+        $this->assertSame(['FRIESLAND', 'EDELVIVES'], $result['rows']->pluck('client_code')->all());
     }
 
-    public function test_builder_keeps_same_sku_split_by_lot(): void
+    public function test_builder_keeps_same_item_split_by_inventory_lot(): void
     {
         [$client] = $this->seedClients();
 
-        $lotA = Item::factory()->create([
+        $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-LOTE',
-            'description' => 'Lote A',
+            'description' => 'Producto con lotes',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
             'lot' => 'LOT-A',
-            'lot_key' => 'LOT-A',
-            'units_per_pallet' => 500,
-        ]);
-
-        $lotB = Item::factory()->create([
-            'client_id' => $client->id,
-            'sku' => 'SKU-LOTE',
-            'description' => 'Lote B',
-            'lot' => 'LOT-B',
-            'lot_key' => 'LOT-B',
-            'units_per_pallet' => 500,
-        ]);
-
-        StockPallet::query()->create([
-            'client_id' => $client->id,
-            'item_id' => $lotA->id,
-            'location_text' => 'A3-01',
-            'pallet_code' => 'PAL-LOTE-A',
             'quantity_units' => 500,
-            'active' => true,
         ]);
 
-        StockPallet::query()->create([
+        StockPallet::factory()->create([
             'client_id' => $client->id,
-            'item_id' => $lotB->id,
-            'location_text' => 'A3-02',
-            'pallet_code' => 'PAL-LOTE-B',
+            'item_id' => $item->id,
+            'lot' => 'LOT-B',
             'quantity_units' => 300,
-            'active' => true,
         ]);
 
-        $result = app(StockOverviewBuilder::class)->build([
-            'stock_state' => 'all',
-        ]);
-
-        $rows = $result['rows']->where('sku', 'SKU-LOTE')->values();
+        $rows = app(StockOverviewBuilder::class)->build([
+            'stock_state' => 'with_stock',
+        ])['rows']->where('sku', 'SKU-LOTE')->values();
 
         $this->assertCount(2, $rows);
         $this->assertSame(['LOT-A', 'LOT-B'], $rows->pluck('lot')->all());
     }
 
-    public function test_builder_reports_peak_overflow_and_full_detail(): void
+    public function test_builder_reports_without_stock_items_when_requested(): void
     {
         [$client] = $this->seedClients();
+
         $item = Item::factory()->create([
             'client_id' => $client->id,
-            'sku' => 'SKU-PEAKS',
-            'units_per_pallet' => 700,
+            'sku' => 'SKU-SIN-STOCK',
         ]);
 
-        foreach ([100, 110, 120, 130, 140, 150, 160] as $index => $quantity) {
-            StockPallet::query()->create([
-                'client_id' => $client->id,
-                'item_id' => $item->id,
-                'location_text' => 'P-0'.($index + 1),
-                'pallet_code' => 'PAL-DET-0'.($index + 1),
-                'quantity_units' => $quantity,
-                'active' => true,
-            ]);
-        }
+        $rows = app(StockOverviewBuilder::class)->build([
+            'stock_state' => 'without_stock',
+        ])['rows'];
 
-        $row = app(StockOverviewBuilder::class)->build(['stock_state' => 'all'])['rows']->firstWhere('sku', 'SKU-PEAKS');
+        $row = $rows->firstWhere('sku', $item->sku);
 
         $this->assertNotNull($row);
-        $this->assertSame(2, $row['peak_overflow_count']);
-        $this->assertCount(7, $row['peak_details']);
-        $this->assertSame(100, $row['peak_details'][0]['quantity_units']);
-        $this->assertSame(-600, $row['peak_details'][0]['difference_units']);
+        $this->assertFalse($row['has_stock']);
+        $this->assertSame('Sin stock', $row['batch_status_label']);
     }
 
     public function test_builder_prefers_location_code_over_legacy_text(): void
@@ -195,23 +153,22 @@ class StockOverviewBuilderTest extends TestCase
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-LOC',
-            'units_per_pallet' => 500,
         ]);
 
-        StockPallet::query()->create([
+        StockPallet::factory()->create([
             'client_id' => $client->id,
             'item_id' => $item->id,
             'location_id' => $location->id,
             'location_text' => 'LEGACY-TEXT',
-            'pallet_code' => 'PAL-LOC-01',
             'quantity_units' => 500,
-            'active' => true,
         ]);
 
-        $row = app(StockOverviewBuilder::class)->build(['stock_state' => 'all'])['rows']->firstWhere('sku', 'SKU-LOC');
+        $row = app(StockOverviewBuilder::class)->build([
+            'stock_state' => 'with_stock',
+        ])['rows']->firstWhere('sku', 'SKU-LOC');
 
         $this->assertNotNull($row);
-        $this->assertSame('A1-REAL', $row['location_summary']);
+        $this->assertSame('A1-REAL', $row['location_label']);
     }
 
     /**

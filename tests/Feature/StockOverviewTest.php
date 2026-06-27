@@ -31,9 +31,12 @@ class StockOverviewTest extends TestCase
         StockPallet::query()->create([
             'client_id' => $client->id,
             'item_id' => $item->id,
+            'lot' => 'LOT-001',
             'location_text' => 'A1-01',
             'pallet_code' => 'PAL-STOCK-001',
             'quantity_units' => 700,
+            'received_at' => '2026-06-26',
+            'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
         ]);
 
@@ -42,8 +45,9 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSee('Vista operativa por articulo')
-            ->assertSee('SKU-STOCK-01');
+            ->assertSee('Vista operativa por partida y fecha de entrada')
+            ->assertSee('SKU-STOCK-01')
+            ->assertSee('LOT-001');
     }
 
     public function test_cliente_cannot_view_stock_index(): void
@@ -57,35 +61,36 @@ class StockOverviewTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_stock_view_shows_peak_quantities(): void
+    public function test_stock_view_shows_received_at_and_batch_status(): void
     {
         [$client] = $this->seedBaseData();
         $item = Item::factory()->create([
             'client_id' => $client->id,
-            'sku' => 'SKU-PICO-01',
-            'description' => 'Articulo con pico',
-            'units_per_pallet' => 700,
+            'sku' => 'SKU-BATCH-01',
+            'description' => 'Artículo con partida',
         ]);
 
-        foreach ([700, 300] as $index => $quantity) {
-            StockPallet::query()->create([
-                'client_id' => $client->id,
-                'item_id' => $item->id,
-                'location_text' => 'A1-0'.($index + 1),
-                'pallet_code' => 'PAL-PICO-00'.($index + 1),
-                'quantity_units' => $quantity,
-                'active' => true,
-            ]);
-        }
+        StockPallet::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-B1',
+            'location_text' => 'A1-02',
+            'pallet_code' => 'PAL-BATCH-001',
+            'quantity_units' => 500,
+            'received_at' => '2026-06-20',
+            'status' => StockPallet::STATUS_BLOCKED,
+            'blocked_reason' => 'Retenido por calidad',
+            'active' => true,
+        ]);
 
         $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSee('SKU-PICO-01')
-            ->assertSee('300')
-            ->assertSee('Picos');
+            ->assertSee('20/06/2026')
+            ->assertSee('Bloqueado')
+            ->assertSee('Retenido por calidad');
     }
 
     public function test_stock_view_shows_location_code_when_location_id_exists(): void
@@ -101,16 +106,17 @@ class StockOverviewTest extends TestCase
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-LOC-01',
-            'units_per_pallet' => 700,
         ]);
 
         StockPallet::query()->create([
             'client_id' => $client->id,
             'item_id' => $item->id,
+            'lot' => 'LOT-LOC',
             'location_id' => $location->id,
             'location_text' => 'ANTIGUA',
             'pallet_code' => 'PAL-LOC-001',
             'quantity_units' => 700,
+            'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
         ]);
 
@@ -123,39 +129,6 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('ANTIGUA');
     }
 
-    public function test_stock_view_shows_peak_overflow_and_detail_for_more_than_five_peaks(): void
-    {
-        [$client] = $this->seedBaseData();
-
-        $item = Item::factory()->create([
-            'client_id' => $client->id,
-            'sku' => 'SKU-PICOS-07',
-            'description' => 'Articulo con muchos picos',
-            'units_per_pallet' => 700,
-        ]);
-
-        foreach ([100, 110, 120, 130, 140, 150, 160] as $index => $quantity) {
-            StockPallet::query()->create([
-                'client_id' => $client->id,
-                'item_id' => $item->id,
-                'location_text' => 'PX-0'.($index + 1),
-                'pallet_code' => 'PAL-PICOS-0'.($index + 1),
-                'quantity_units' => $quantity,
-                'active' => true,
-            ]);
-        }
-
-        $user = $this->makeUserWithRole(Role::ALMACEN);
-
-        $this->actingAs($user)
-            ->get(route('stock.index'))
-            ->assertOk()
-            ->assertSee('+2 picos')
-            ->assertSee('Ver picos')
-            ->assertSee('100 uds')
-            ->assertSee('160 uds');
-    }
-
     public function test_stock_view_can_filter_references_without_stock(): void
     {
         [$client] = $this->seedBaseData();
@@ -164,14 +137,12 @@ class StockOverviewTest extends TestCase
             'client_id' => $client->id,
             'sku' => 'SKU-CON-STOCK',
             'description' => 'Con stock',
-            'units_per_pallet' => 400,
         ]);
 
         $withoutStock = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-SIN-STOCK',
             'description' => 'Sin stock',
-            'units_per_pallet' => 500,
         ]);
 
         $itemWithStock = Item::query()->where('sku', 'SKU-CON-STOCK')->firstOrFail();
@@ -179,9 +150,11 @@ class StockOverviewTest extends TestCase
         StockPallet::query()->create([
             'client_id' => $client->id,
             'item_id' => $itemWithStock->id,
+            'lot' => 'LOT-WITH',
             'location_text' => 'A2-01',
             'pallet_code' => 'PAL-WITH-001',
             'quantity_units' => 400,
+            'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
         ]);
 

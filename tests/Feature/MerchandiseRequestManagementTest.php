@@ -33,7 +33,7 @@ class MerchandiseRequestManagementTest extends TestCase
             ->get(route('merchandise-requests.create'))
             ->assertOk()
             ->assertSee('Solicitar mercancía')
-            ->assertSee('Buscar por SKU, referencia, lote o descripción...')
+            ->assertSee('Buscar por SKU, referencia o descripción...')
             ->assertDontSee('CAJA000X');
     }
 
@@ -103,7 +103,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->assertDatabaseHas('merchandise_request_lines', [
             'merchandise_request_id' => $request->id,
             'item_id' => $item->id,
-            'lot' => $item->lot,
+            'lot' => null,
             'requested_pallets' => 4,
             'requested_units' => 2800,
         ]);
@@ -299,14 +299,14 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $matchingRequest->lines()->create([
             'item_id' => $matchingItem->id,
-            'lot' => $matchingItem->lot,
+            'lot' => null,
             'units_per_pallet' => $matchingItem->units_per_pallet,
             'requested_pallets' => 2,
             'requested_units' => $matchingItem->units_per_pallet * 2,
         ]);
         $otherRequest->lines()->create([
             'item_id' => $otherItem->id,
-            'lot' => $otherItem->lot,
+            'lot' => null,
             'units_per_pallet' => $otherItem->units_per_pallet,
             'requested_pallets' => 1,
             'requested_units' => $otherItem->units_per_pallet,
@@ -320,6 +320,45 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertOk()
             ->assertSee($matchingRequest->referenceCode())
             ->assertDontSee($otherRequest->referenceCode());
+    }
+
+    public function test_ajax_search_excludes_blocked_and_obsolete_items(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'ACTIVO001',
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'BLOQ001',
+            'status' => Item::STATUS_BLOCKED,
+            'active' => false,
+        ]);
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'OBSO001',
+            'status' => Item::STATUS_OBSOLETE,
+            'active' => false,
+        ]);
+
+        $response = $this->actingAs($cliente)
+            ->getJson(route('merchandise-requests.items.search', [
+                'search' => '001',
+            ]))
+            ->assertOk();
+
+        $skus = collect($response->json('data'))->pluck('sku')->all();
+
+        $this->assertContains('ACTIVO001', $skus);
+        $this->assertNotContains('BLOQ001', $skus);
+        $this->assertNotContains('OBSO001', $skus);
     }
 
     public function test_internal_roles_can_view_received_requests(): void

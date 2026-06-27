@@ -6,6 +6,7 @@ use App\Http\Requests\StoreItemRequest;
 use App\Http\Requests\UpdateItemRequest;
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class ItemController extends Controller
         $view = in_array($view, ['list', 'cards'], true) ? $view : 'list';
 
         $items = Item::query()
-            ->with('client')
+            ->with(['client', 'defaultLocation.warehouse'])
             ->when($clientFilter > 0, fn ($query) => $query->where('client_id', $clientFilter))
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($query) use ($search): void {
@@ -31,11 +32,9 @@ class ItemController extends Controller
                         ->orWhere('description', 'like', '%'.$search.'%');
                 });
             })
-            ->when($status === 'active', fn ($query) => $query->where('active', true))
-            ->when($status === 'inactive', fn ($query) => $query->where('active', false))
+            ->when($status !== 'all', fn ($query) => $query->where('status', $status))
             ->orderBy('client_id')
             ->orderBy('sku')
-            ->orderBy('lot_key')
             ->paginate($view === 'cards' ? 12 : 20)
             ->withQueryString();
 
@@ -45,7 +44,7 @@ class ItemController extends Controller
             'filters' => [
                 'client_id' => $clientFilter > 0 ? $clientFilter : null,
                 'search' => $search,
-                'status' => in_array($status, ['all', 'active', 'inactive'], true) ? $status : 'active',
+                'status' => in_array($status, [...Item::statuses(), 'all'], true) ? $status : Item::STATUS_ACTIVE,
                 'view' => $view,
             ],
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
@@ -56,9 +55,11 @@ class ItemController extends Controller
     {
         return view('items.create', [
             'item' => new Item([
+                'status' => Item::STATUS_ACTIVE,
                 'active' => true,
             ]),
             'clients' => Client::query()->orderBy('name')->get(),
+            'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -77,6 +78,7 @@ class ItemController extends Controller
         return view('items.edit', [
             'item' => $item,
             'clients' => Client::query()->orderBy('name')->get(),
+            'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -93,14 +95,16 @@ class ItemController extends Controller
     public function toggleActive(Request $request, Item $item): RedirectResponse
     {
         $item->update([
-            'active' => ! $item->active,
+            'status' => $item->status === Item::STATUS_ACTIVE
+                ? Item::STATUS_BLOCKED
+                : Item::STATUS_ACTIVE,
         ]);
 
         return redirect()
             ->route('items.index')
-            ->with('status', $item->active
-                ? 'Articulo activado correctamente.'
-                : 'Articulo desactivado correctamente.');
+            ->with('status', $item->fresh()->status === Item::STATUS_ACTIVE
+                ? 'Artículo activado correctamente.'
+                : 'Artículo bloqueado correctamente.');
     }
 
     /**
@@ -113,10 +117,10 @@ class ItemController extends Controller
             'client_id' => $validated['client_id'],
             'sku' => $validated['sku'],
             'description' => $validated['description'],
-            'lot' => $validated['lot'],
-            'lot_key' => $validated['lot_key'] ?? '',
             'units_per_pallet' => $validated['units_per_pallet'],
-            'active' => (bool) ($validated['active'] ?? false),
+            'status' => $validated['status'],
+            'default_location_id' => $validated['default_location_id'] ?? null,
+            'active' => $validated['status'] === Item::STATUS_ACTIVE,
         ];
     }
 }

@@ -15,7 +15,7 @@
         <div class="app-copy">
             <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
             <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar articulo' : 'Nuevo articulo' }}</h2>
-            <p>Define cliente, SKU, lote y paletizado estandar.</p>
+            <p>Define cliente, SKU, estado, ubicación por defecto opcional y paletizado estándar.</p>
         </div>
     </div>
 
@@ -72,16 +72,15 @@
             </label>
 
             <label class="auth-field">
-                <span>Lote</span>
-                <input
-                    type="text"
-                    name="lot"
-                    value="{{ old('lot', $item->lot) }}"
-                    class="auth-input"
-                    maxlength="100"
-                    placeholder="Opcional"
-                >
-                @error('lot')
+                <span>Estado</span>
+                <select name="status" class="auth-input" required>
+                    @foreach (\App\Models\Item::statusOptions() as $status => $label)
+                        <option value="{{ $status }}" @selected(old('status', $item->status ?? \App\Models\Item::STATUS_ACTIVE) === $status)>
+                            {{ $label }}
+                        </option>
+                    @endforeach
+                </select>
+                @error('status')
                     <small class="form-error">{{ $message }}</small>
                 @enderror
             </label>
@@ -101,17 +100,32 @@
                     <small class="form-error">{{ $message }}</small>
                 @enderror
             </label>
-        </div>
 
-        <label class="toggle-field">
-            <input type="hidden" name="active" value="0">
-            <input type="checkbox" name="active" value="1" @checked(old('active', $item->active ?? true))>
-            <span>Articulo activo para operativa y alta de stock futura</span>
-        </label>
+            <label class="auth-field item-form-field--full">
+                <span>Ubicación por defecto</span>
+                <select name="default_location_id" class="auth-input">
+                    <option value="">Sin ubicación por defecto</option>
+                    @foreach ($locations as $location)
+                        <option value="{{ $location->id }}" @selected((string) old('default_location_id', $item->default_location_id) === (string) $location->id)>
+                            {{ $location->code }}{{ $location->warehouse ? ' / '.$location->warehouse->code : '' }}
+                        </option>
+                    @endforeach
+                </select>
+                <small class="helper-text">Opcional. Sirve como referencia inicial para entradas y operativa.</small>
+                @error('default_location_id')
+                    <small class="form-error">{{ $message }}</small>
+                @enderror
+            </label>
+        </div>
 
         <div class="item-form-hint">
             <strong>Nota operativa</strong>
-            <p>La cantidad por palet fija el estandar de referencia para stock y picos.</p>
+            <p>El lote se asigna en las entradas de mercancía. Un mismo artículo puede tener varias partidas o lotes.</p>
+        </div>
+
+        <div class="item-form-hint">
+            <strong>Referencia maestra</strong>
+            <p>El artículo define la referencia. Los lotes y fechas de entrada se gestionan en el inventario y en las entradas.</p>
         </div>
 
         <div class="item-form-actions action-buttons">

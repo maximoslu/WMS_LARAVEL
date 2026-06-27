@@ -46,7 +46,7 @@
                         <div>
                             <strong>Preparar pedido</strong>
                             <p class="merchandise-request-summary-copy">
-                                Busca por SKU, referencia, lote o descripción, añade pallets y revisa el pedido antes de enviarlo.
+                                Busca por SKU, referencia o descripción, añade pallets y revisa el pedido antes de enviarlo.
                             </p>
                         </div>
                         <span class="ops-page-meta">Búsqueda dinámica para catálogos grandes</span>
@@ -76,7 +76,7 @@
                             <input
                                 type="search"
                                 class="auth-input"
-                                placeholder="Buscar por SKU, referencia, lote o descripción..."
+                                placeholder="Buscar por SKU, referencia o descripción..."
                                 autocomplete="off"
                                 data-request-search
                             >
