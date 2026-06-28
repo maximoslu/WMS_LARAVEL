@@ -84,6 +84,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/stock', [StockController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.index');
+    Route::get('/stock/partidas/{stockPallet}/editar', [StockController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.batches.edit');
+    Route::put('/stock/partidas/{stockPallet}', [StockController::class, 'update'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.batches.update');
     Route::get('/stock/importar', [StockImportController::class, 'index'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('stock.import');

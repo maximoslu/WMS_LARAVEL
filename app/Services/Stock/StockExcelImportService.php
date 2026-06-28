@@ -435,7 +435,7 @@ class StockExcelImportService
                         }
                     }
 
-                    if ($parsedRow['warning_group'] !== null && $parsedRow['skip'] === false && $parsedRow['row'] === null) {
+                    if ($parsedRow['warning_group'] !== null && $parsedRow['skip'] === false) {
                         $this->applyWarningCounters($totals, $parsedRow['warning_group']['key']);
                         $this->addGroupedMessage(
                             $warningGroups,
@@ -624,6 +624,7 @@ class StockExcelImportService
 
         $peakUnits = array_sum($peaks);
         $hasPositiveStock = ($quantityFromFile ?? 0) > 0 || ($fullPalletsFromFile ?? 0) > 0 || $peakUnits > 0;
+        $isBobinasSheet = $this->canonicalSheetName($sheetName) === 'BOBINAS';
 
         if (! $hasPositiveStock) {
             return [
@@ -643,6 +644,42 @@ class StockExcelImportService
         }
 
         if ($unitsPerPallet <= 0) {
+            if ($isBobinasSheet && ($quantityFromFile ?? 0) > 0) {
+                $rowData = [
+                    'sku' => $sku,
+                    'description' => $description,
+                    'lot' => $lot,
+                    'location_text' => $locationText,
+                    'quantity_units' => (int) $quantityFromFile,
+                    'units_per_pallet' => 0,
+                    'full_pallets' => 0,
+                    'peaks_count' => 0,
+                    'received_at' => $this->dateValue($values[$headerMap['received_at'] ?? -1] ?? null),
+                    'status' => $status,
+                    'blocked_reason' => $blockedReason,
+                    'source_sheet' => $sheetName,
+                ];
+
+                foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+                    $rowData['peak_'.$peakNumber] = 0;
+                }
+
+                return [
+                    'row' => $rowData,
+                    'catalog_item' => $catalogItem,
+                    'skip' => false,
+                    'message' => null,
+                    'warning' => null,
+                    'warning_group' => [
+                        'key' => 'bobinas_missing_units_'.$sheetName,
+                        'summary' => 'Se han importado :count filas de '.$sheetName.' sin unidades por pallet validas, conservando solo el stock operativo.',
+                        'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' importada sin unidades por pallet validas para SKU '.$sku.'. Se conserva la cantidad total sin desglose de pallets.',
+                    ],
+                    'error' => null,
+                    'error_group' => null,
+                ];
+            }
+
             return [
                 'row' => null,
                 'catalog_item' => $catalogItem,

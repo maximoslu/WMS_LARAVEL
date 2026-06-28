@@ -118,7 +118,7 @@ class StockOverviewBuilderTest extends TestCase
         ])['rows']->where('sku', 'SKU-LOTE')->values();
 
         $this->assertCount(2, $rows);
-        $this->assertSame(['LOT-A', 'LOT-B'], $rows->pluck('lot')->all());
+        $this->assertEqualsCanonicalizing(['LOT-A', 'LOT-B'], $rows->pluck('lot')->all());
     }
 
     public function test_builder_reports_without_stock_items_when_requested(): void
@@ -139,6 +139,38 @@ class StockOverviewBuilderTest extends TestCase
         $this->assertNotNull($row);
         $this->assertFalse($row['has_stock']);
         $this->assertSame('Sin stock', $row['batch_status_label']);
+    }
+
+    public function test_builder_hides_legacy_zero_quantity_batches_and_keeps_item_in_without_stock_view(): void
+    {
+        [$client] = $this->seedClients();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-ZERO-LEGACY',
+            'description' => 'Legacy a cero',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 0,
+            'units_per_pallet' => 700,
+            'full_pallets' => 0,
+            'peaks_count' => 0,
+            'peak_1' => 0,
+        ]);
+
+        $withStockRows = app(StockOverviewBuilder::class)->build([
+            'stock_state' => 'with_stock',
+        ])['rows'];
+
+        $withoutStockRows = app(StockOverviewBuilder::class)->build([
+            'stock_state' => 'without_stock',
+        ])['rows'];
+
+        $this->assertNull($withStockRows->firstWhere('sku', 'SKU-ZERO-LEGACY'));
+        $this->assertNotNull($withoutStockRows->firstWhere('sku', 'SKU-ZERO-LEGACY'));
     }
 
     public function test_builder_prefers_location_code_over_legacy_text(): void

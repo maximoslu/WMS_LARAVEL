@@ -286,7 +286,7 @@ class StockImportTest extends TestCase
 
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
-            'BOBINAS' => [
+            'STOCK' => [
                 ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Pico 1'],
                 ['FR-VALID', 'Valida', 'LOT-1', 1200, 600, 2, 0],
                 ['FR-INVALID', 'Invalida', 'LOT-2', 300, null, 0, 0],
@@ -318,6 +318,46 @@ class StockImportTest extends TestCase
             'client_id' => $friesland->id,
             'sku' => 'FR-INVALID',
         ]);
+    }
+
+    public function test_bobinas_positive_quantity_without_units_per_pallet_is_imported_as_operational_stock(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'BOBINAS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FILM0727', 'Film tecnico', 'LOT-FILM', 1100, null, 0],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('conservando solo el stock operativo')
+            ->assertSee('FILM0727')
+            ->assertSee('LOT-FILM')
+            ->assertSee('1.100');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $this->assertSame(0, $stockImport->summary_json['invalid_rows_ignored']);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $item = Item::query()->where('client_id', $friesland->id)->where('sku', 'FILM0727')->firstOrFail();
+        $stock = StockPallet::query()->where('item_id', $item->id)->firstOrFail();
+
+        $this->assertSame(1100, $stock->quantity_units);
+        $this->assertSame(0, $stock->units_per_pallet);
+        $this->assertSame(0, $stock->full_pallets);
+        $this->assertSame(0, $stock->peaks_count);
     }
 
     public function test_repeated_sku_with_two_lots_creates_one_item_and_two_stock_batches(): void

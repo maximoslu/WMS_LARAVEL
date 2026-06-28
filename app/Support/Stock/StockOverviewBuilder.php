@@ -63,6 +63,12 @@ class StockOverviewBuilder
             ])
             ->where('active', true)
             ->whereHas('item')
+            ->where(function (Builder $query): void {
+                $query
+                    ->where('quantity_units', '>', 0)
+                    ->orWhere('full_pallets', '>', 0)
+                    ->orWhere('peaks_count', '>', 0);
+            })
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
             ->when($filters['item_id'] !== null, fn (Builder $query) => $query->where('item_id', $filters['item_id']))
             ->when($filters['search'] !== '', function (Builder $query) use ($filters): void {
@@ -104,7 +110,16 @@ class StockOverviewBuilder
                         ->orWhere('description', 'like', '%'.$filters['search'].'%');
                 });
             })
-            ->whereDoesntHave('stockPallets', fn (Builder $query) => $query->where('active', true))
+            ->whereDoesntHave('stockPallets', function (Builder $query): void {
+                $query
+                    ->where('active', true)
+                    ->where(function (Builder $query): void {
+                        $query
+                            ->where('quantity_units', '>', 0)
+                            ->orWhere('full_pallets', '>', 0)
+                            ->orWhere('peaks_count', '>', 0);
+                    });
+            })
             ->orderBy('client_id')
             ->orderBy('sku');
     }
@@ -148,6 +163,7 @@ class StockOverviewBuilder
         $defaultLocation = $item?->defaultLocation;
 
         return [
+            'id' => $pallet->id,
             'row_type' => 'stock',
             'client_id' => $pallet->client_id,
             'client_name' => $pallet->client?->name ?? $item?->client?->name ?? 'Cliente',
@@ -167,7 +183,14 @@ class StockOverviewBuilder
             'location_label' => $this->locationLabel($pallet) ?: 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($defaultLocation),
             'quantity_units' => (int) $pallet->quantity_units,
-            'units_per_pallet' => max(1, (int) ($pallet->units_per_pallet ?? $item?->units_per_pallet ?? 1)),
+            'units_per_pallet' => $pallet->units_per_pallet !== null
+                ? (int) $pallet->units_per_pallet
+                : (int) ($item?->units_per_pallet ?? 0),
+            'units_per_pallet_label' => $this->unitsPerPalletLabel(
+                $pallet->units_per_pallet !== null
+                    ? (int) $pallet->units_per_pallet
+                    : (int) ($item?->units_per_pallet ?? 0),
+            ),
             'full_pallets' => (int) $pallet->full_pallets,
             'peaks_count' => (int) $pallet->peaks_count,
             'peak_1' => (int) $pallet->peak_1,
@@ -190,6 +213,7 @@ class StockOverviewBuilder
     private function buildWithoutStockRow(Item $item): array
     {
         return [
+            'id' => null,
             'row_type' => 'master_without_stock',
             'client_id' => $item->client_id,
             'client_name' => $item->client->name,
@@ -209,7 +233,8 @@ class StockOverviewBuilder
             'location_label' => 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($item->defaultLocation),
             'quantity_units' => 0,
-            'units_per_pallet' => max(1, (int) $item->units_per_pallet),
+            'units_per_pallet' => (int) $item->units_per_pallet,
+            'units_per_pallet_label' => $this->unitsPerPalletLabel((int) $item->units_per_pallet),
             'full_pallets' => 0,
             'peaks_count' => 0,
             'peak_1' => 0,
@@ -246,5 +271,12 @@ class StockOverviewBuilder
         $warehouseCode = $location->warehouse?->code;
 
         return trim($location->code.($warehouseCode ? ' / '.$warehouseCode : ''));
+    }
+
+    private function unitsPerPalletLabel(int $unitsPerPallet): string
+    {
+        return $unitsPerPallet > 0
+            ? number_format($unitsPerPallet, 0, ',', '.')
+            : 'Sin dato';
     }
 }

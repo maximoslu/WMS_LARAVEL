@@ -140,6 +140,13 @@ class StockPallet extends Model
                         $stockPallet->{'peak_'.$peakNumber} = $breakdown['peak_'.$peakNumber] ?? 0;
                     }
                 }
+            } else {
+                $stockPallet->full_pallets = 0;
+                $stockPallet->peaks_count = 0;
+
+                foreach (range(1, self::MAX_PEAK_COLUMNS) as $peakNumber) {
+                    $stockPallet->{'peak_'.$peakNumber} = 0;
+                }
             }
         });
     }

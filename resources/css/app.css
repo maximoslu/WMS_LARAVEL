@@ -1315,6 +1315,7 @@ button {
 .stock-filters {
     display: grid;
     gap: 1rem;
+    overflow: visible;
 }
 
 .stock-filter-actions {
@@ -1326,6 +1327,18 @@ button {
     overflow-x: auto;
     overflow-y: hidden;
     border-radius: 18px;
+}
+
+.stock-filter-card {
+    position: relative;
+    overflow: visible;
+    z-index: 6;
+}
+
+.stock-table-shell,
+.stock-mobile-list {
+    position: relative;
+    z-index: 1;
 }
 
 .stock-table {
@@ -3930,6 +3943,7 @@ body.brand-body.app-shell-body .pagination-card {
 
 .ajax-autocomplete {
     position: relative;
+    z-index: 8;
 }
 
 .ajax-autocomplete-control {
@@ -3954,7 +3968,7 @@ body.brand-body.app-shell-body .pagination-card {
 
 .ajax-autocomplete-panel {
     position: absolute;
-    z-index: 30;
+    z-index: 80;
     top: calc(100% + 0.35rem);
     left: 0;
     right: 0;

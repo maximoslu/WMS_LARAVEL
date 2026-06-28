@@ -183,6 +183,113 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('SKU-CON-STOCK');
     }
 
+    public function test_superadmin_sees_edit_batch_action_and_can_open_edit_screen(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-EDIT-STOCK',
+            'description' => 'Editable',
+            'units_per_pallet' => 500,
+        ]);
+
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-EDIT',
+            'quantity_units' => 500,
+            'units_per_pallet' => 500,
+            'full_pallets' => 1,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee(route('stock.batches.edit', $stockPallet));
+
+        $this->actingAs($user)
+            ->get(route('stock.batches.edit', $stockPallet))
+            ->assertOk()
+            ->assertSee('Editar partida de stock')
+            ->assertSee('SKU-EDIT-STOCK');
+    }
+
+    public function test_non_superadmin_cannot_edit_stock_batches(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-NO-EDIT',
+        ]);
+
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.batches.edit', $stockPallet))
+            ->assertForbidden();
+    }
+
+    public function test_superadmin_can_update_stock_batch_and_keep_operational_stock_without_pallet_breakdown(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $warehouse = Warehouse::factory()->create();
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'C1-07',
+        ]);
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-UPD-STOCK',
+            'description' => 'Editable',
+            'units_per_pallet' => 800,
+        ]);
+
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-OLD',
+            'quantity_units' => 1600,
+            'units_per_pallet' => 800,
+            'full_pallets' => 2,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->put(route('stock.batches.update', $stockPallet), [
+                'lot' => 'LOT-NEW',
+                'quantity_units' => 1100,
+                'units_per_pallet' => 0,
+                'location_id' => $location->id,
+                'location_text' => '',
+                'received_at' => '2026-06-28',
+                'status' => StockPallet::STATUS_AVAILABLE,
+                'blocked_reason' => '',
+            ])
+            ->assertRedirect(route('stock.index', ['client_id' => $client->id]));
+
+        $stockPallet->refresh();
+
+        $this->assertSame('LOT-NEW', $stockPallet->lot);
+        $this->assertSame(1100, $stockPallet->quantity_units);
+        $this->assertSame(0, $stockPallet->units_per_pallet);
+        $this->assertSame(0, $stockPallet->full_pallets);
+        $this->assertSame(0, $stockPallet->peaks_count);
+        $this->assertSame($location->id, $stockPallet->location_id);
+        $this->assertSame('C1-07', $stockPallet->location_text);
+    }
+
     public function test_stock_view_can_filter_by_selected_item_lot_and_location(): void
     {
         [$client] = $this->seedBaseData();

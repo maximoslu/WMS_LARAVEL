@@ -225,6 +225,9 @@
                             <th>Ubicacion</th>
                             <th>Ubicacion por defecto</th>
                             <th>Motivo bloqueo</th>
+                            @if (auth()->user()?->isSuperAdmin())
+                                <th>Acciones</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -241,7 +244,7 @@
                                 <td class="stock-total">{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
                                 <td>{{ $row['lot_label'] }}</td>
                                 <td>{{ $row['received_at'] ?? '-' }}</td>
-                                <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
+                                <td>{{ $row['units_per_pallet_label'] }}</td>
                                 <td>{{ number_format($row['full_pallets'], 0, ',', '.') }}</td>
                                 <td>{{ number_format($row['peaks_count'], 0, ',', '.') }}</td>
                                 <td>{{ number_format($row['peak_1'], 0, ',', '.') }}</td>
@@ -267,6 +270,15 @@
                                 <td>{{ $row['location_label'] }}</td>
                                 <td>{{ $row['default_location_label'] }}</td>
                                 <td>{{ $row['blocked_reason'] ?: '-' }}</td>
+                                @if (auth()->user()?->isSuperAdmin())
+                                    <td>
+                                        @if ($row['row_type'] === 'stock' && $row['item_id'])
+                                            <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar</a>
+                                        @else
+                                            -
+                                        @endif
+                                    </td>
+                                @endif
                             </tr>
                         @endforeach
                     </tbody>
@@ -304,7 +316,7 @@
                         </div>
                         <div>
                             <span>Uds/pallet</span>
-                            <strong>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</strong>
+                            <strong>{{ $row['units_per_pallet_label'] }}</strong>
                         </div>
                         <div>
                             <span>Unidades</span>
@@ -330,6 +342,12 @@
 
                     @if ($row['blocked_reason'])
                         <p class="users-table-email">Bloqueo: {{ $row['blocked_reason'] }}</p>
+                    @endif
+
+                    @if (auth()->user()?->isSuperAdmin() && $row['row_type'] === 'stock' && $row['item_id'])
+                        <div class="item-form-actions action-buttons">
+                            <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar partida</a>
+                        </div>
                     @endif
                 </article>
             @endforeach

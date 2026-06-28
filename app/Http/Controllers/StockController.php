@@ -3,10 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
-use App\Support\Stock\StockOverviewBuilder;
+use App\Models\Location;
+use App\Models\StockPallet;
 use App\Support\WmsNavigation;
+use Illuminate\Http\RedirectResponse;
+use App\Support\Stock\StockOverviewBuilder;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use App\Http\Requests\UpdateStockPalletRequest;
 
 class StockController extends Controller
 {
@@ -37,5 +41,33 @@ class StockController extends Controller
             'locationSearchEndpoint' => route('ajax.locations'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
+    }
+
+    public function edit(Request $request, StockPallet $stockPallet): View
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $stockPallet->loadMissing(['client', 'item', 'location.warehouse']);
+
+        return view('stock.edit', [
+            'stockPallet' => $stockPallet,
+            'locations' => Location::query()
+                ->where('active', true)
+                ->with('warehouse')
+                ->orderBy('code')
+                ->get(),
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
+        ]);
+    }
+
+    public function update(UpdateStockPalletRequest $request, StockPallet $stockPallet): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $stockPallet->update($request->payload());
+
+        return redirect()
+            ->route('stock.index', ['client_id' => $stockPallet->client_id])
+            ->with('status', 'Partida de stock actualizada correctamente.');
     }
 }
