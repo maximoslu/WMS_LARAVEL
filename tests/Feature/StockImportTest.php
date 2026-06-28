@@ -110,7 +110,7 @@ class StockImportTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Errores reales')
-            ->assertSee('Refs excluidas')
+            ->assertSee('Articulos detectados')
             ->assertSee('Confirmar importacion');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
@@ -231,6 +231,8 @@ class StockImportTest extends TestCase
 
         $this->assertSame(0, $stockImport->summary_json['real_errors']);
         $this->assertSame(1, $stockImport->summary_json['skipped_rows']);
+        $this->assertSame(2, $stockImport->summary_json['catalog_items_detected']);
+        $this->assertSame(1, $stockImport->summary_json['catalog_items_without_stock']);
 
         $this->actingAs($user)
             ->post(route('stock.import.confirm'), [
@@ -238,9 +240,14 @@ class StockImportTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseMissing('items', [
+        $this->assertDatabaseHas('items', [
             'client_id' => $friesland->id,
             'sku' => 'FR-ZERO',
+        ]);
+
+        $this->assertDatabaseMissing('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'LOT-0',
         ]);
     }
 
@@ -307,9 +314,76 @@ class StockImportTest extends TestCase
             'sku' => 'FR-VALID',
         ]);
 
-        $this->assertDatabaseMissing('items', [
+        $this->assertDatabaseHas('items', [
             'client_id' => $friesland->id,
             'sku' => 'FR-INVALID',
+        ]);
+    }
+
+    public function test_repeated_sku_with_two_lots_creates_one_item_and_two_stock_batches(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Pico 1'],
+                ['SKU 11', 'FECULA DE PATATA', 'LOT-A', 8000, 1000, 8, 0],
+                ['SKU 11', 'FECULA DE PATATA', 'LOT-B', 8000, 1000, 8, 0],
+                ['CAJA0008', 'Caja 8', 'LOT-C', 0, 500, 0, 0],
+                ['CAJA0019', 'Caja 19', 'LOT-D', 0, 500, 0, 0],
+                ['CAJA0023', 'Caja 23', 'LOT-E', 0, 500, 0, 0],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('Partidas de stock que se importaran')
+            ->assertSee('SKU 11')
+            ->assertSee('LOT-A')
+            ->assertSee('LOT-B')
+            ->assertDontSee('LOT-C')
+            ->assertDontSee('LOT-D')
+            ->assertDontSee('LOT-E')
+            ->assertDontSee('CAJA0008')
+            ->assertDontSee('CAJA0019')
+            ->assertDontSee('CAJA0023');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(4, $stockImport->summary_json['catalog_items_detected']);
+        $this->assertSame(3, $stockImport->summary_json['catalog_items_without_stock']);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $this->assertSame(1, Item::query()->where('client_id', $friesland->id)->where('sku', 'SKU 11')->count());
+        $this->assertSame(2, StockPallet::query()->whereHas('item', fn ($query) => $query->where('sku', 'SKU 11'))->count());
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $friesland->id,
+            'sku' => 'CAJA0008',
+        ]);
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $friesland->id,
+            'sku' => 'CAJA0019',
+        ]);
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $friesland->id,
+            'sku' => 'CAJA0023',
+        ]);
+
+        $this->assertDatabaseMissing('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'LOT-C',
         ]);
     }
 

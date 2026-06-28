@@ -183,29 +183,47 @@ class StockExcelImportService
                 ->keyBy(fn (Item $item): string => Str::upper(trim($item->sku)));
 
             $importedRows = 0;
+            $createdItems = 0;
+            $updatedItems = 0;
+
+            foreach ($preview['catalog_items'] as $catalogItem) {
+                $skuKey = Str::upper($catalogItem['sku']);
+                $item = $existingItems[$skuKey] ?? null;
+
+                if ($item === null) {
+                    $item = Item::query()->create([
+                        'client_id' => $lockedImport->client_id,
+                        'sku' => $catalogItem['sku'],
+                        'description' => $catalogItem['description'],
+                        'lot' => null,
+                        'lot_key' => '',
+                        'units_per_pallet' => $catalogItem['units_per_pallet'] ?? 1,
+                        'active' => true,
+                        'status' => Item::STATUS_ACTIVE,
+                    ]);
+
+                    $existingItems[$skuKey] = $item;
+                    $createdItems++;
+                } else {
+                    $changes = [
+                        'description' => $catalogItem['description'],
+                    ];
+
+                    if (($catalogItem['units_per_pallet'] ?? 0) > 0) {
+                        $changes['units_per_pallet'] = $catalogItem['units_per_pallet'];
+                    }
+
+                    $item->forceFill($changes)->save();
+                    $updatedItems++;
+                }
+            }
 
             foreach ($preview['rows'] as $row) {
                 $skuKey = Str::upper($row['sku']);
                 $item = $existingItems[$skuKey] ?? null;
 
                 if ($item === null) {
-                    $item = Item::query()->create([
-                        'client_id' => $lockedImport->client_id,
-                        'sku' => $row['sku'],
-                        'description' => $row['description'],
-                        'lot' => $row['lot'],
-                        'lot_key' => (string) ($row['lot'] ?? ''),
-                        'units_per_pallet' => $row['units_per_pallet'],
-                        'active' => true,
-                        'status' => Item::STATUS_ACTIVE,
-                    ]);
-
-                    $existingItems[$skuKey] = $item;
-                } else {
-                    $item->forceFill([
-                        'description' => $row['description'],
-                        'units_per_pallet' => $row['units_per_pallet'],
-                    ])->save();
+                    throw new InvalidArgumentException('No se ha podido resolver el articulo maestro para SKU '.$row['sku'].'.');
                 }
 
                 $attributes = [
@@ -255,6 +273,8 @@ class StockExcelImportService
             return [
                 'imported_rows' => $importedRows,
                 'skipped_rows' => $preview['totals']['skipped_rows'],
+                'created_items' => $createdItems,
+                'updated_items' => $updatedItems,
             ];
         });
     }
@@ -262,6 +282,7 @@ class StockExcelImportService
     /**
      * @return array{
      *     rows: list<array<string, mixed>>,
+     *     catalog_items: list<array<string, mixed>>,
      *     sample_rows: list<array<string, mixed>>,
      *     detected_sheets: array<string, mixed>,
      *     warnings: list<string>,
@@ -284,6 +305,7 @@ class StockExcelImportService
             ->keyBy(fn (Item $item): string => Str::upper(trim($item->sku)));
 
         $rows = [];
+        $catalogItems = [];
         $warnings = [];
         $rowErrors = [];
         $fatalErrors = [];
@@ -307,6 +329,10 @@ class StockExcelImportService
             'missing_sku_rows' => 0,
             'real_errors' => 0,
             'invalid_rows_ignored' => 0,
+            'catalog_items_detected' => 0,
+            'catalog_items_created' => 0,
+            'catalog_items_updated' => 0,
+            'catalog_items_without_stock' => 0,
         ];
 
         try {
@@ -391,6 +417,34 @@ class StockExcelImportService
                         continue;
                     }
 
+                    if ($parsedRow['catalog_item'] !== null) {
+                        $catalogKey = Str::upper($parsedRow['catalog_item']['sku']);
+                        $alreadySeen = array_key_exists($catalogKey, $catalogItems);
+
+                        if (! $alreadySeen) {
+                            $catalogItems[$catalogKey] = $parsedRow['catalog_item'];
+                            $totals['catalog_items_detected']++;
+
+                            if ($existingItems->has($catalogKey)) {
+                                $totals['catalog_items_updated']++;
+                            } else {
+                                $totals['catalog_items_created']++;
+                            }
+                        } else {
+                            $catalogItems[$catalogKey] = $this->mergeCatalogItems($catalogItems[$catalogKey], $parsedRow['catalog_item']);
+                        }
+                    }
+
+                    if ($parsedRow['warning_group'] !== null && $parsedRow['skip'] === false && $parsedRow['row'] === null) {
+                        $this->applyWarningCounters($totals, $parsedRow['warning_group']['key']);
+                        $this->addGroupedMessage(
+                            $warningGroups,
+                            $parsedRow['warning_group']['key'],
+                            $parsedRow['warning_group']['summary'],
+                            $parsedRow['warning_group']['detail'],
+                        );
+                    }
+
                     if ($parsedRow['error'] !== null) {
                         $totals['skipped_rows']++;
                         $totals['real_errors']++;
@@ -405,6 +459,16 @@ class StockExcelImportService
                             );
                         } else {
                             $rowErrors[] = $parsedRow['error'];
+                        }
+
+                        continue;
+                    }
+
+                    if ($parsedRow['row'] === null) {
+                        $totals['skipped_rows']++;
+
+                        if ($parsedRow['catalog_item'] !== null) {
+                            $totals['catalog_items_without_stock']++;
                         }
 
                         continue;
@@ -445,6 +509,7 @@ class StockExcelImportService
 
         return [
             'rows' => $rows,
+            'catalog_items' => array_values($catalogItems),
             'sample_rows' => array_slice($rows, 0, 10),
             'detected_sheets' => $detectedSheets,
             'warnings' => $compiledWarnings,
@@ -462,6 +527,7 @@ class StockExcelImportService
      * @param  \Illuminate\Support\Collection<string, Item>  $existingItems
      * @return array{
      *     row: array<string, mixed>|null,
+     *     catalog_item: array<string, mixed>|null,
      *     skip: bool,
      *     message: ?string,
      *     warning: ?string,
@@ -486,6 +552,7 @@ class StockExcelImportService
             if ($this->rowHasNonEmptyData($values, $headerMap, ['sku'])) {
                 return [
                     'row' => null,
+                    'catalog_item' => null,
                     'skip' => true,
                     'message' => null,
                     'warning' => null,
@@ -501,6 +568,7 @@ class StockExcelImportService
 
             return [
                 'row' => null,
+                'catalog_item' => null,
                 'skip' => true,
                 'message' => null,
                 'warning' => null,
@@ -513,6 +581,7 @@ class StockExcelImportService
         if ($this->shouldIgnoreSku($sku)) {
             return [
                 'row' => null,
+                'catalog_item' => null,
                 'skip' => true,
                 'message' => null,
                 'warning' => null,
@@ -536,15 +605,36 @@ class StockExcelImportService
             $blockedReason = 'Importado desde pestana BLOQUEADO';
         }
 
-        if (($quantityFromFile ?? 0) <= 0 && ! $this->hasPositivePeakValues($values, $headerMap)) {
+        $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null)
+            ?? (int) ($existingItem?->units_per_pallet ?? 0);
+
+        $catalogItem = [
+            'sku' => $sku,
+            'description' => $description,
+            'units_per_pallet' => $unitsPerPallet > 0 ? $unitsPerPallet : null,
+            'source_sheet' => $sheetName,
+        ];
+
+        $fullPalletsFromFile = $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null);
+        $peaks = [];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $peaks[$peakNumber] = max(0, $this->integerValue($values[$headerMap['peak_'.$peakNumber] ?? -1] ?? null) ?? 0);
+        }
+
+        $peakUnits = array_sum($peaks);
+        $hasPositiveStock = ($quantityFromFile ?? 0) > 0 || ($fullPalletsFromFile ?? 0) > 0 || $peakUnits > 0;
+
+        if (! $hasPositiveStock) {
             return [
                 'row' => null,
-                'skip' => true,
+                'catalog_item' => $catalogItem,
+                'skip' => false,
                 'message' => null,
                 'warning' => null,
                 'warning_group' => [
                     'key' => 'non_positive_stock_'.$sheetName,
-                    'summary' => 'Se han ignorado :count filas sin stock positivo en '.$sheetName.'.',
+                    'summary' => 'Se han omitido :count filas sin stock positivo en '.$sheetName.'.',
                     'detail' => null,
                 ],
                 'error' => null,
@@ -552,12 +642,10 @@ class StockExcelImportService
             ];
         }
 
-        $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null)
-            ?? (int) ($existingItem?->units_per_pallet ?? 0);
-
         if ($unitsPerPallet <= 0) {
             return [
                 'row' => null,
+                'catalog_item' => $catalogItem,
                 'skip' => false,
                 'message' => null,
                 'warning' => null,
@@ -571,15 +659,6 @@ class StockExcelImportService
             ];
         }
 
-        $fullPalletsFromFile = $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null);
-
-        $peaks = [];
-
-        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-            $peaks[$peakNumber] = max(0, $this->integerValue($values[$headerMap['peak_'.$peakNumber] ?? -1] ?? null) ?? 0);
-        }
-
-        $peakUnits = array_sum($peaks);
         $explicitTotal = $fullPalletsFromFile !== null
             ? ($fullPalletsFromFile * $unitsPerPallet) + $peakUnits
             : null;
@@ -594,6 +673,7 @@ class StockExcelImportService
         if ($quantityUnits <= 0 && $quantityFromFile === null && $peakUnits === 0) {
             return [
                 'row' => null,
+                'catalog_item' => $catalogItem,
                 'skip' => true,
                 'message' => null,
                 'warning' => null,
@@ -610,6 +690,7 @@ class StockExcelImportService
         if ($quantityUnits < $peakUnits) {
             return [
                 'row' => null,
+                'catalog_item' => $catalogItem,
                 'skip' => false,
                 'message' => null,
                 'warning' => null,
@@ -658,6 +739,7 @@ class StockExcelImportService
 
         return [
             'row' => $rowData,
+            'catalog_item' => $catalogItem,
             'skip' => false,
             'message' => $message,
             'warning' => null,
@@ -913,6 +995,23 @@ class StockExcelImportService
         }
 
         return $compiled;
+    }
+
+    /**
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $incoming
+     * @return array<string, mixed>
+     */
+    private function mergeCatalogItems(array $existing, array $incoming): array
+    {
+        return [
+            'sku' => $existing['sku'],
+            'description' => $incoming['description'] !== '' ? $incoming['description'] : $existing['description'],
+            'units_per_pallet' => ($incoming['units_per_pallet'] ?? 0) > 0
+                ? $incoming['units_per_pallet']
+                : $existing['units_per_pallet'],
+            'source_sheet' => $existing['source_sheet'],
+        ];
     }
 
     /**

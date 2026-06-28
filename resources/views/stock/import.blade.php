@@ -67,40 +67,40 @@
                 <span>{{ number_format($preview['totals']['total_rows'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Filas disponibles</strong>
-                <span>{{ number_format($preview['totals']['available_rows'], 0, ',', '.') }}</span>
+                <strong>Articulos detectados</strong>
+                <span>{{ number_format($preview['totals']['catalog_items_detected'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Filas bloqueadas</strong>
+                <strong>Articulos nuevos</strong>
+                <span>{{ number_format($preview['totals']['catalog_items_created'], 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Articulos actualizados</strong>
+                <span>{{ number_format($preview['totals']['catalog_items_updated'], 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Partidas de stock</strong>
+                <span>{{ number_format($preview['rows'] ? count($preview['rows']) : 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Partidas bloqueadas</strong>
                 <span>{{ number_format($preview['totals']['blocked_rows'], 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Articulos sin stock</strong>
+                <span>{{ number_format($preview['totals']['catalog_items_without_stock'], 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Filas invalidas omitidas</strong>
+                <span>{{ number_format($preview['totals']['invalid_rows_ignored'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
                 <strong>Filas ignoradas</strong>
                 <span>{{ number_format($preview['totals']['skipped_rows'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Refs excluidas</strong>
-                <span>{{ number_format($preview['totals']['excluded_rows'], 0, ',', '.') }}</span>
-            </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Filas vacias</strong>
-                <span>{{ number_format($preview['totals']['empty_rows_ignored'], 0, ',', '.') }}</span>
-            </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
                 <strong>Errores reales</strong>
                 <span>{{ number_format($preview['totals']['real_errors'], 0, ',', '.') }}</span>
-            </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Total unidades</strong>
-                <span>{{ number_format($preview['totals']['total_units'], 0, ',', '.') }}</span>
-            </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Pallets completos</strong>
-                <span>{{ number_format($preview['totals']['total_full_pallets'], 0, ',', '.') }}</span>
-            </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Unidades en picos</strong>
-                <span>{{ number_format($preview['totals']['total_peak_units'], 0, ',', '.') }}</span>
             </article>
         </section>
 
@@ -110,6 +110,7 @@
             <p>Ignoradas: {{ implode(', ', $preview['detected_sheets']['ignored']) ?: 'Ninguna' }}</p>
             <p>No soportadas: {{ implode(', ', $preview['detected_sheets']['unsupported']) ?: 'Ninguna' }}</p>
             <p>Se han ignorado referencias internas que empiezan por * o _.</p>
+            <p>Las referencias con SKU valido se crearan o actualizaran como articulos aunque no tengan stock.</p>
         </section>
 
         @if ($preview['warnings'] !== [])
@@ -147,11 +148,11 @@
         @endif
 
         <section class="surface-card stock-table-shell compact-card">
-            <h3>Muestra previa</h3>
+            <h3>Partidas de stock que se importaran</h3>
             @if ($preview['sample_rows'] === [])
                 <p>No hay filas validas para importar.</p>
             @else
-                <p>La muestra previa solo incluye filas que realmente se importaran.</p>
+                <p>La muestra previa solo incluye partidas de stock con cantidad o desglose positivo.</p>
                 <div class="data-table-wrap stock-table-wrap">
                     <table class="data-table stock-table table-compact" aria-label="Muestra del Excel">
                         <thead>
