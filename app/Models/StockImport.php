@@ -11,6 +11,8 @@ class StockImport extends Model
 {
     use HasFactory;
 
+    public const STATUS_PENDING_CONFIRMATION = 'pending_confirmation';
+
     public const STATUS_PREVIEWED = 'previewed';
 
     public const STATUS_IMPORTING = 'importing';
@@ -66,5 +68,17 @@ class StockImport extends Model
     public function stockPallets(): HasMany
     {
         return $this->hasMany(StockPallet::class);
+    }
+
+    public static function statusLabelFor(?string $status): string
+    {
+        return match ($status) {
+            self::STATUS_PENDING_CONFIRMATION,
+            self::STATUS_PREVIEWED => 'Previsualizada',
+            self::STATUS_IMPORTED => 'Importada',
+            self::STATUS_FAILED => 'Fallida',
+            self::STATUS_IMPORTING => 'Importando',
+            default => 'Previsualizada',
+        };
     }
 }

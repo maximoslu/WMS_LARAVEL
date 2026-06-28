@@ -123,11 +123,23 @@
             </section>
         @endif
 
-        @if ($preview['errors'] !== [])
+        @if ($preview['fatal_errors'] !== [])
             <section class="surface-card compact-card">
-                <h3>Errores</h3>
+                <h3>Errores fatales</h3>
                 <ul>
-                    @foreach ($preview['errors'] as $error)
+                    @foreach ($preview['fatal_errors'] as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </section>
+        @endif
+
+        @if ($preview['row_errors'] !== [])
+            <section class="surface-card compact-card">
+                <h3>Filas invalidas omitidas</h3>
+                <p>Estas filas no se importaran, pero no bloquean la importacion mientras existan filas validas.</p>
+                <ul>
+                    @foreach ($preview['row_errors'] as $error)
                         <li>{{ $error }}</li>
                     @endforeach
                 </ul>
@@ -136,46 +148,60 @@
 
         <section class="surface-card stock-table-shell compact-card">
             <h3>Muestra previa</h3>
-            <p>Confirmar esta importacion reemplazara solo el stock actual del cliente {{ $stockImport->client->name }}.</p>
-            <div class="data-table-wrap stock-table-wrap">
-                <table class="data-table stock-table table-compact" aria-label="Muestra del Excel">
-                    <thead>
-                        <tr>
-                            <th>Hoja</th>
-                            <th>SKU</th>
-                            <th>Descripcion</th>
-                            <th>Lote</th>
-                            <th>Cantidad</th>
-                            <th>Uds/pallet</th>
-                            <th>Pallets</th>
-                            <th>Picos</th>
-                            <th>Bloqueo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($preview['sample_rows'] as $row)
+            @if ($preview['sample_rows'] === [])
+                <p>No hay filas validas para importar.</p>
+            @else
+                <p>La muestra previa solo incluye filas que realmente se importaran.</p>
+                <div class="data-table-wrap stock-table-wrap">
+                    <table class="data-table stock-table table-compact" aria-label="Muestra del Excel">
+                        <thead>
                             <tr>
-                                <td>{{ $row['source_sheet'] }}</td>
-                                <td>{{ $row['sku'] }}</td>
-                                <td>{{ $row['description'] }}</td>
-                                <td>{{ $row['lot'] ?: '-' }}</td>
-                                <td>{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
-                                <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
-                                <td>{{ number_format($row['full_pallets'], 0, ',', '.') }}</td>
-                                <td>{{ number_format($row['peaks_count'], 0, ',', '.') }}</td>
-                                <td>{{ $row['blocked_reason'] ?: '-' }}</td>
+                                <th>Hoja</th>
+                                <th>SKU</th>
+                                <th>Descripcion</th>
+                                <th>Lote</th>
+                                <th>Cantidad</th>
+                                <th>Uds/pallet</th>
+                                <th>Pallets</th>
+                                <th>Picos</th>
+                                <th>Bloqueo</th>
                             </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            @foreach ($preview['sample_rows'] as $row)
+                                <tr>
+                                    <td>{{ $row['source_sheet'] }}</td>
+                                    <td>{{ $row['sku'] }}</td>
+                                    <td>{{ $row['description'] }}</td>
+                                    <td>{{ $row['lot'] ?: '-' }}</td>
+                                    <td>{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
+                                    <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
+                                    <td>{{ number_format($row['full_pallets'], 0, ',', '.') }}</td>
+                                    <td>{{ number_format($row['peaks_count'], 0, ',', '.') }}</td>
+                                    <td>{{ $row['blocked_reason'] ?: '-' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </section>
 
-            @if ($preview['errors'] === [])
-                <form method="POST" action="{{ route('stock.import.confirm') }}" class="stock-filter-actions action-buttons page-actions-compact" style="margin-top: 1rem;">
+        <section class="surface-card compact-card">
+            @if ($preview['can_confirm'])
+                <h3>Confirmacion</h3>
+                <p>Esta accion sustituira el stock actual del cliente {{ $stockImport->client->name }} por el contenido del Excel previsualizado.</p>
+                @if ($preview['row_errors'] !== [])
+                    <p>Las filas invalidas detectadas seran omitidas y no bloquearan la importacion.</p>
+                @endif
+                <form method="POST" action="{{ route('stock.import.confirm') }}" class="stock-filter-actions action-buttons page-actions-compact" onsubmit="return confirm('Seguro que quieres reemplazar el stock de este cliente?');">
                     @csrf
                     <input type="hidden" name="stock_import_id" value="{{ $stockImport->id }}">
-                    <button type="submit" class="button-primary compact-button btn-compact">Confirmar y sustituir stock del cliente</button>
+                    <button type="submit" class="button-primary compact-button btn-compact">Confirmar importacion</button>
                 </form>
+            @else
+                <h3>Confirmacion</h3>
+                <p>No hay filas validas para importar.</p>
             @endif
         </section>
     @endif
@@ -200,7 +226,7 @@
                             <td>{{ $import->created_at?->format('d/m/Y H:i') }}</td>
                             <td>{{ $import->client?->name ?? '-' }}</td>
                             <td>{{ $import->original_filename }}</td>
-                            <td>{{ $import->status }}</td>
+                            <td>{{ \App\Models\StockImport::statusLabelFor($import->status) }}</td>
                             <td>{{ number_format($import->total_rows, 0, ',', '.') }}</td>
                             <td>{{ number_format($import->imported_rows, 0, ',', '.') }}</td>
                         </tr>

@@ -70,6 +70,8 @@ class StockImportController extends Controller
             ->with('client')
             ->findOrFail($validated['stock_import_id']);
 
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
         try {
             $result = $this->stockExcelImportService->confirm($stockImport, $request->user());
         } catch (Throwable $exception) {

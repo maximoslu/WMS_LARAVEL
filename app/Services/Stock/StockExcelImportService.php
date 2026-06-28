@@ -20,7 +20,7 @@ use OpenSpout\Reader\Common\Creator\ReaderFactory;
 
 class StockExcelImportService
 {
-    private const MAX_DETAILED_MESSAGES = 20;
+    private const MAX_DETAILED_MESSAGES = 5;
 
     /**
      * @var array<string, string>
@@ -86,12 +86,16 @@ class StockExcelImportService
 
         $preview = $this->parseWorkbook(Storage::disk('local')->path($storedPath), $client);
 
+        $status = $preview['fatal_errors'] !== []
+            ? StockImport::STATUS_FAILED
+            : StockImport::STATUS_PENDING_CONFIRMATION;
+
         $stockImport = StockImport::query()->create([
             'client_id' => $client->id,
             'uploaded_by' => $user->id,
             'original_filename' => $file->getClientOriginalName(),
             'stored_path' => $storedPath,
-            'status' => empty($preview['errors']) ? StockImport::STATUS_PREVIEWED : StockImport::STATUS_FAILED,
+            'status' => $status,
             'total_rows' => $preview['totals']['total_rows'],
             'imported_rows' => 0,
             'skipped_rows' => $preview['totals']['skipped_rows'],
@@ -100,7 +104,7 @@ class StockExcelImportService
             'detected_sheets_json' => $preview['detected_sheets'],
             'summary_json' => $preview['totals'],
             'warnings_json' => $preview['warnings'],
-            'errors_json' => $preview['errors'],
+            'errors_json' => $preview['all_errors'],
         ]);
 
         return [
@@ -114,18 +118,43 @@ class StockExcelImportService
      */
     public function confirm(StockImport $stockImport, User $user): array
     {
+        if ($stockImport->status === StockImport::STATUS_IMPORTED) {
+            throw new InvalidArgumentException('Esta importacion ya fue confirmada previamente.');
+        }
+
+        if ($stockImport->status === StockImport::STATUS_FAILED) {
+            throw new InvalidArgumentException('No se puede confirmar una importacion fallida.');
+        }
+
+        if (! in_array($stockImport->status, [StockImport::STATUS_PREVIEWED, StockImport::STATUS_PENDING_CONFIRMATION], true)) {
+            throw new InvalidArgumentException('Esta importacion no esta disponible para confirmar.');
+        }
+
+        if (! Storage::disk('local')->exists($stockImport->stored_path)) {
+            $stockImport->forceFill([
+                'status' => StockImport::STATUS_FAILED,
+                'errors_json' => ['El fichero temporal de la importacion ya no existe. Vuelve a subir el Excel.'],
+            ])->save();
+
+            throw new InvalidArgumentException('El fichero temporal de la importacion ya no existe. Vuelve a subir el Excel.');
+        }
+
         $path = Storage::disk('local')->path($stockImport->stored_path);
         $preview = $this->parseWorkbook($path, $stockImport->client);
 
-        if ($preview['errors'] !== []) {
+        if ($preview['fatal_errors'] !== []) {
             $stockImport->forceFill([
                 'status' => StockImport::STATUS_FAILED,
-                'errors_json' => $preview['errors'],
+                'errors_json' => $preview['all_errors'],
                 'warnings_json' => $preview['warnings'],
                 'summary_json' => $preview['totals'],
             ])->save();
 
-            throw new InvalidArgumentException('La previsualizacion contiene errores y no se puede confirmar.');
+            throw new InvalidArgumentException('La importacion contiene errores fatales y no se puede confirmar.');
+        }
+
+        if ($preview['can_confirm'] !== true) {
+            throw new InvalidArgumentException('No hay filas validas para importar.');
         }
 
         return $this->db->transaction(function () use ($stockImport, $user, $preview): array {
@@ -138,10 +167,6 @@ class StockExcelImportService
                 ->where('client_id', $lockedImport->client_id)
                 ->lockForUpdate()
                 ->get();
-
-            if ($lockedImport->status === StockImport::STATUS_IMPORTED) {
-                throw new InvalidArgumentException('Esta importacion ya fue confirmada previamente.');
-            }
 
             $lockedImport->forceFill([
                 'status' => StockImport::STATUS_IMPORTING,
@@ -223,7 +248,7 @@ class StockExcelImportService
                 'detected_sheets_json' => $preview['detected_sheets'],
                 'summary_json' => $preview['totals'],
                 'warnings_json' => $preview['warnings'],
-                'errors_json' => [],
+                'errors_json' => $preview['row_errors'],
                 'imported_at' => now(),
             ])->save();
 
@@ -240,7 +265,11 @@ class StockExcelImportService
      *     sample_rows: list<array<string, mixed>>,
      *     detected_sheets: array<string, mixed>,
      *     warnings: list<string>,
+     *     row_errors: list<string>,
+     *     fatal_errors: list<string>,
      *     errors: list<string>,
+     *     all_errors: list<string>,
+     *     can_confirm: bool,
      *     totals: array<string, int>
      * }
      */
@@ -256,7 +285,8 @@ class StockExcelImportService
 
         $rows = [];
         $warnings = [];
-        $errors = [];
+        $rowErrors = [];
+        $fatalErrors = [];
         $warningGroups = [];
         $errorGroups = [];
         $detectedSheets = [
@@ -276,6 +306,7 @@ class StockExcelImportService
             'empty_rows_ignored' => 0,
             'missing_sku_rows' => 0,
             'real_errors' => 0,
+            'invalid_rows_ignored' => 0,
         ];
 
         try {
@@ -322,7 +353,7 @@ class StockExcelImportService
                         $headerMap = $this->buildHeaderMap($row);
 
                         if (! isset($headerMap['sku'])) {
-                            $errors[] = 'La hoja '.$sheetName.' no contiene una columna de SKU/referencia.';
+                            $fatalErrors[] = 'La hoja '.$sheetName.' no contiene una columna de SKU/referencia.';
                             break;
                         }
 
@@ -363,6 +394,7 @@ class StockExcelImportService
                     if ($parsedRow['error'] !== null) {
                         $totals['skipped_rows']++;
                         $totals['real_errors']++;
+                        $totals['invalid_rows_ignored']++;
 
                         if ($parsedRow['error_group'] !== null) {
                             $this->addGroupedMessage(
@@ -372,7 +404,7 @@ class StockExcelImportService
                                 $parsedRow['error_group']['detail'],
                             );
                         } else {
-                            $errors[] = $parsedRow['error'];
+                            $rowErrors[] = $parsedRow['error'];
                         }
 
                         continue;
@@ -399,19 +431,28 @@ class StockExcelImportService
         }
 
         if ($detectedSheets['processed'] === []) {
-            $errors[] = 'No se han encontrado hojas importables. Usa STOCK, BOBINAS o BLOQUEADO.';
+            $fatalErrors[] = 'No se han encontrado hojas importables. Usa STOCK, BOBINAS o BLOQUEADO.';
         }
 
         if ($totals['excluded_rows'] > 0) {
             $warnings[] = 'Se han ignorado referencias internas que empiezan por * o _.';
         }
 
+        $compiledWarnings = array_values(array_unique(array_merge($warnings, $this->compileGroupedMessages($warningGroups))));
+        $compiledRowErrors = array_values(array_unique(array_merge($rowErrors, $this->compileGroupedMessages($errorGroups))));
+        $compiledFatalErrors = array_values(array_unique($fatalErrors));
+        $canConfirm = $rows !== [] && $compiledFatalErrors === [];
+
         return [
             'rows' => $rows,
             'sample_rows' => array_slice($rows, 0, 10),
             'detected_sheets' => $detectedSheets,
-            'warnings' => array_values(array_unique(array_merge($warnings, $this->compileGroupedMessages($warningGroups)))),
-            'errors' => array_values(array_unique(array_merge($errors, $this->compileGroupedMessages($errorGroups)))),
+            'warnings' => $compiledWarnings,
+            'row_errors' => $compiledRowErrors,
+            'fatal_errors' => $compiledFatalErrors,
+            'errors' => array_values(array_merge($compiledFatalErrors, $compiledRowErrors)),
+            'all_errors' => array_values(array_merge($compiledFatalErrors, $compiledRowErrors)),
+            'can_confirm' => $canConfirm,
             'totals' => $totals,
         ];
     }
@@ -521,11 +562,11 @@ class StockExcelImportService
                 'message' => null,
                 'warning' => null,
                 'warning_group' => null,
-                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' sin unidades por pallet validas para SKU '.$sku.'.',
+                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' no se importara por no tener unidades por pallet validas para SKU '.$sku.'.',
                 'error_group' => [
                     'key' => 'invalid_units_'.$sheetName,
-                    'summary' => 'Se han encontrado :count filas con unidades por pallet no validas en '.$sheetName.'.',
-                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' sin unidades por pallet validas para SKU '.$sku.'.',
+                    'summary' => 'Se han encontrado :count filas en '.$sheetName.' que no se importaran por no tener unidades por pallet validas.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' no se importara por no tener unidades por pallet validas para SKU '.$sku.'.',
                 ],
             ];
         }
@@ -862,6 +903,12 @@ class StockExcelImportService
 
             foreach ($group['details'] as $detail) {
                 $compiled[] = $detail;
+            }
+
+            $remaining = $group['count'] - count($group['details']);
+
+            if ($remaining > 0) {
+                $compiled[] = 'y '.$remaining.' mas.';
             }
         }
 

@@ -78,6 +78,7 @@ class StockImportTest extends TestCase
 
         $this->assertSame(['STOCK', 'BOBINAS', 'BLOQUEADO'], $stockImport->detected_sheets_json['processed']);
         $this->assertSame(['ETIQUETAS'], $stockImport->detected_sheets_json['ignored']);
+        $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->status);
     }
 
     public function test_preview_normalizes_excel_headers_for_units_and_peaks(): void
@@ -109,7 +110,8 @@ class StockImportTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Errores reales')
-            ->assertSee('Refs excluidas');
+            ->assertSee('Refs excluidas')
+            ->assertSee('Confirmar importacion');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
 
@@ -161,8 +163,8 @@ class StockImportTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Se han ignorado referencias internas que empiezan por * o _.')
-            ->assertDontSee('sin unidades por pallet validas para SKU ***BLOQUEADO***')
-            ->assertDontSee('sin unidades por pallet validas para SKU _BANDEJA23');
+            ->assertDontSee('no se importara por no tener unidades por pallet validas para SKU ***BLOQUEADO***')
+            ->assertDontSee('no se importara por no tener unidades por pallet validas para SKU _BANDEJA23');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
 
@@ -222,7 +224,8 @@ class StockImportTest extends TestCase
             ]);
 
         $response->assertOk()
-            ->assertDontSee('sin unidades por pallet validas para SKU FR-ZERO');
+            ->assertDontSee('no se importara por no tener unidades por pallet validas para SKU FR-ZERO')
+            ->assertDontSee('FR-ZERO');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
 
@@ -238,6 +241,75 @@ class StockImportTest extends TestCase
         $this->assertDatabaseMissing('items', [
             'client_id' => $friesland->id,
             'sku' => 'FR-ZERO',
+        ]);
+    }
+
+    public function test_preview_without_valid_rows_does_not_show_confirm_button(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['***VARIOS***', 'Interna', 'LOT-X', 0, null, 0],
+                ['_BANDEJA23', 'Interna', 'LOT-Y', 0, null, 0],
+                ['', 'Sin sku', 'LOT-Z', 0, null, 0],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('No hay filas validas para importar.')
+            ->assertDontSee('Confirmar importacion');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->status);
+    }
+
+    public function test_invalid_rows_do_not_block_confirmation_when_valid_rows_exist(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'BOBINAS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Pico 1'],
+                ['FR-VALID', 'Valida', 'LOT-1', 1200, 600, 2, 0],
+                ['FR-INVALID', 'Invalida', 'LOT-2', 300, null, 0, 0],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('Filas invalidas omitidas')
+            ->assertSee('Confirmar importacion');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $this->assertSame(1, $stockImport->summary_json['invalid_rows_ignored']);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $friesland->id,
+            'sku' => 'FR-VALID',
+        ]);
+
+        $this->assertDatabaseMissing('items', [
+            'client_id' => $friesland->id,
+            'sku' => 'FR-INVALID',
         ]);
     }
 
@@ -379,6 +451,93 @@ class StockImportTest extends TestCase
             ->assertSee('880')
             ->assertDontSee('FR-OLD')
             ->assertDontSee('Codigo pallet');
+    }
+
+    public function test_cannot_confirm_failed_import(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $stockImport = StockImport::query()->create([
+            'client_id' => $friesland->id,
+            'uploaded_by' => $user->id,
+            'original_filename' => 'bad.xlsx',
+            'stored_path' => 'missing.xlsx',
+            'status' => StockImport::STATUS_FAILED,
+            'total_rows' => 0,
+            'imported_rows' => 0,
+            'skipped_rows' => 0,
+            'available_rows' => 0,
+            'blocked_rows' => 0,
+            'detected_sheets_json' => [],
+            'summary_json' => [],
+            'warnings_json' => [],
+            'errors_json' => ['fallo'],
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('stock.import.confirm'), [
+                'stock_import_id' => $stockImport->id,
+            ])
+            ->assertSessionHasErrors();
+    }
+
+    public function test_cannot_confirm_import_twice(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $stockImport = StockImport::query()->create([
+            'client_id' => $friesland->id,
+            'uploaded_by' => $user->id,
+            'original_filename' => 'done.xlsx',
+            'stored_path' => 'done.xlsx',
+            'status' => StockImport::STATUS_IMPORTED,
+            'total_rows' => 1,
+            'imported_rows' => 1,
+            'skipped_rows' => 0,
+            'available_rows' => 1,
+            'blocked_rows' => 0,
+            'detected_sheets_json' => [],
+            'summary_json' => [],
+            'warnings_json' => [],
+            'errors_json' => [],
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('stock.import.confirm'), [
+                'stock_import_id' => $stockImport->id,
+            ])
+            ->assertSessionHasErrors();
+    }
+
+    public function test_grouped_warnings_are_limited_to_five_examples(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $rows = [['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets']];
+
+        foreach (range(1, 8) as $index) {
+            $rows[] = ['', 'Sin sku '.$index, 'LOT-'.$index, 10, 10, 1];
+        }
+
+        $rows[] = ['FR-VALID', 'Valida', 'LOT-OK', 10, 10, 1];
+
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $rows,
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('Se han ignorado 8 filas sin SKU valido en STOCK.')
+            ->assertSee('y 3 mas.')
+            ->assertDontSee('Fila 8 de STOCK ignorada por no tener SKU.');
     }
 
     /**
