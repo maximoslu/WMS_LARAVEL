@@ -22,6 +22,9 @@
         <div class="ops-page-actions page-actions-compact action-buttons ops-toolbar-links">
             <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact">Articulos</a>
             <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact">Ubicaciones</a>
+            @if (auth()->user()?->isSuperAdmin())
+                <a href="{{ route('stock.import') }}" class="button-primary compact-button btn-compact">Importar stock</a>
+            @endif
         </div>
     </section>
 
@@ -215,6 +218,8 @@
                             <th>Pico 6</th>
                             <th>Pico 7</th>
                             <th>Pico 8</th>
+                            <th>Pico 9</th>
+                            <th>Pico 10</th>
                             <th>Estado articulo</th>
                             <th>Estado partida</th>
                             <th>Ubicacion</th>
@@ -247,6 +252,8 @@
                                 <td>{{ number_format($row['peak_6'], 0, ',', '.') }}</td>
                                 <td>{{ number_format($row['peak_7'], 0, ',', '.') }}</td>
                                 <td>{{ number_format($row['peak_8'], 0, ',', '.') }}</td>
+                                <td>{{ number_format($row['peak_9'], 0, ',', '.') }}</td>
+                                <td>{{ number_format($row['peak_10'], 0, ',', '.') }}</td>
                                 <td>
                                     <span class="status-badge item-status-badge item-status-badge--{{ $row['item_status'] }}">
                                         {{ $row['item_status_label'] }}

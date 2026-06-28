@@ -6,6 +6,8 @@ use InvalidArgumentException;
 
 class StockBatchCalculator
 {
+    public const MAX_PEAK_COLUMNS = 10;
+
     public static function calculateFullPallets(int $totalUnits, int $unitsPerPallet): int
     {
         self::guard($totalUnits, $unitsPerPallet);
@@ -26,7 +28,7 @@ class StockBatchCalculator
     public static function calculatePeaks(int $totalUnits, int $unitsPerPallet): array
     {
         $remainder = self::calculateRemainderPeak($totalUnits, $unitsPerPallet);
-        $peaks = array_fill(0, 8, 0);
+        $peaks = array_fill(0, self::MAX_PEAK_COLUMNS, 0);
 
         if ($remainder > 0) {
             $peaks[0] = $remainder;
@@ -47,7 +49,9 @@ class StockBatchCalculator
      *     peak_5: int,
      *     peak_6: int,
      *     peak_7: int,
-     *     peak_8: int
+     *     peak_8: int,
+     *     peak_9: int,
+     *     peak_10: int
      * }
      */
     public static function calculateBreakdown(int $totalUnits, int $unitsPerPallet): array
@@ -67,6 +71,8 @@ class StockBatchCalculator
             'peak_6' => $peaks[5],
             'peak_7' => $peaks[6],
             'peak_8' => $peaks[7],
+            'peak_9' => $peaks[8],
+            'peak_10' => $peaks[9],
         ];
     }
 

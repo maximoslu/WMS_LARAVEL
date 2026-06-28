@@ -14,6 +14,8 @@ class StockPallet extends Model
     /** @use HasFactory<StockPalletFactory> */
     use HasFactory;
 
+    public const MAX_PEAK_COLUMNS = 10;
+
     public const STATUS_AVAILABLE = 'available';
 
     public const STATUS_BLOCKED = 'blocked';
@@ -24,6 +26,7 @@ class StockPallet extends Model
         'client_id',
         'item_id',
         'goods_receipt_id',
+        'stock_import_id',
         'location_id',
         'location_text',
         'pallet_code',
@@ -40,9 +43,13 @@ class StockPallet extends Model
         'peak_6',
         'peak_7',
         'peak_8',
+        'peak_9',
+        'peak_10',
         'received_at',
+        'imported_at',
         'status',
         'blocked_reason',
+        'source_sheet',
         'notes',
         'active',
     ];
@@ -62,7 +69,10 @@ class StockPallet extends Model
             'peak_6' => 'integer',
             'peak_7' => 'integer',
             'peak_8' => 'integer',
+            'peak_9' => 'integer',
+            'peak_10' => 'integer',
             'received_at' => 'date',
+            'imported_at' => 'datetime',
             'active' => 'boolean',
         ];
     }
@@ -105,21 +115,31 @@ class StockPallet extends Model
                 : self::STATUS_AVAILABLE;
 
             if ((int) $stockPallet->units_per_pallet > 0 && (int) $stockPallet->quantity_units >= 0) {
-                $breakdown = StockBatchCalculator::calculateBreakdown(
-                    (int) $stockPallet->quantity_units,
-                    (int) $stockPallet->units_per_pallet,
-                );
+                $explicitPeaks = self::explicitPeaks($stockPallet);
 
-                $stockPallet->full_pallets = $breakdown['full_pallets'];
-                $stockPallet->peaks_count = $breakdown['peaks_count'];
-                $stockPallet->peak_1 = $breakdown['peak_1'];
-                $stockPallet->peak_2 = $breakdown['peak_2'];
-                $stockPallet->peak_3 = $breakdown['peak_3'];
-                $stockPallet->peak_4 = $breakdown['peak_4'];
-                $stockPallet->peak_5 = $breakdown['peak_5'];
-                $stockPallet->peak_6 = $breakdown['peak_6'];
-                $stockPallet->peak_7 = $breakdown['peak_7'];
-                $stockPallet->peak_8 = $breakdown['peak_8'];
+                if ($explicitPeaks !== []) {
+                    $peakTotal = array_sum($explicitPeaks);
+                    $remainingUnits = max(0, (int) $stockPallet->quantity_units - $peakTotal);
+
+                    $stockPallet->full_pallets = intdiv($remainingUnits, (int) $stockPallet->units_per_pallet);
+                    $stockPallet->peaks_count = count(array_filter($explicitPeaks, fn (int $value): bool => $value > 0));
+
+                    foreach (range(1, self::MAX_PEAK_COLUMNS) as $peakNumber) {
+                        $stockPallet->{'peak_'.$peakNumber} = $explicitPeaks[$peakNumber] ?? 0;
+                    }
+                } else {
+                    $breakdown = StockBatchCalculator::calculateBreakdown(
+                        (int) $stockPallet->quantity_units,
+                        (int) $stockPallet->units_per_pallet,
+                    );
+
+                    $stockPallet->full_pallets = $breakdown['full_pallets'];
+                    $stockPallet->peaks_count = $breakdown['peaks_count'];
+
+                    foreach (range(1, self::MAX_PEAK_COLUMNS) as $peakNumber) {
+                        $stockPallet->{'peak_'.$peakNumber} = $breakdown['peak_'.$peakNumber] ?? 0;
+                    }
+                }
             }
         });
     }
@@ -137,6 +157,11 @@ class StockPallet extends Model
     public function goodsReceipt(): BelongsTo
     {
         return $this->belongsTo(GoodsReceipt::class);
+    }
+
+    public function stockImport(): BelongsTo
+    {
+        return $this->belongsTo(StockImport::class);
     }
 
     public function location(): BelongsTo
@@ -176,5 +201,23 @@ class StockPallet extends Model
     public function statusLabel(): string
     {
         return self::statusLabelFor($this->status);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private static function explicitPeaks(self $stockPallet): array
+    {
+        $peaks = [];
+
+        foreach (range(1, self::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $value = max(0, (int) ($stockPallet->{'peak_'.$peakNumber} ?? 0));
+
+            if ($value > 0) {
+                $peaks[$peakNumber] = $value;
+            }
+        }
+
+        return $peaks;
     }
 }

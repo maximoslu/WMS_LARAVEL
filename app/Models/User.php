@@ -103,6 +103,11 @@ class User extends Authenticatable
         return $this->hasMany(GoodsDispatch::class, 'created_by');
     }
 
+    public function stockImports(): HasMany
+    {
+        return $this->hasMany(StockImport::class, 'uploaded_by');
+    }
+
     public function hasRole(string $slug): bool
     {
         return $this->role?->slug === $slug;

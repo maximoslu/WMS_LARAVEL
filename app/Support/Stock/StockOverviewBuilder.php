@@ -79,6 +79,7 @@ class StockOverviewBuilder
             })
             ->when($filters['batch_status'] !== 'all', fn (Builder $query) => $query->where('status', $filters['batch_status']))
             ->orderBy('received_at')
+            ->orderBy('lot')
             ->orderBy('id');
     }
 
@@ -171,6 +172,8 @@ class StockOverviewBuilder
             'peak_6' => (int) $pallet->peak_6,
             'peak_7' => (int) $pallet->peak_7,
             'peak_8' => (int) $pallet->peak_8,
+            'peak_9' => (int) $pallet->peak_9,
+            'peak_10' => (int) $pallet->peak_10,
             'has_stock' => true,
         ];
     }
@@ -211,6 +214,8 @@ class StockOverviewBuilder
             'peak_6' => 0,
             'peak_7' => 0,
             'peak_8' => 0,
+            'peak_9' => 0,
+            'peak_10' => 0,
             'has_stock' => false,
         ];
     }

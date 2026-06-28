@@ -16,6 +16,7 @@ use App\Http\Controllers\ModulePlaceholderController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\StockImportController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarehouseController;
@@ -83,6 +84,15 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/stock', [StockController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.index');
+    Route::get('/stock/importar', [StockImportController::class, 'index'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.import');
+    Route::post('/stock/importar/previsualizar', [StockImportController::class, 'preview'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.import.preview');
+    Route::post('/stock/importar/confirmar', [StockImportController::class, 'confirm'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.import.confirm');
     Route::get('/ubicaciones', [LocationController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.index');

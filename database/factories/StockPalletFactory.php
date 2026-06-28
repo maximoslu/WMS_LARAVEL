@@ -42,9 +42,13 @@ class StockPalletFactory extends Factory
             'peak_6' => 0,
             'peak_7' => 0,
             'peak_8' => 0,
+            'peak_9' => 0,
+            'peak_10' => 0,
             'received_at' => fake()->optional()->date(),
+            'imported_at' => null,
             'status' => StockPallet::STATUS_AVAILABLE,
             'blocked_reason' => null,
+            'source_sheet' => null,
             'notes' => null,
             'active' => true,
         ];
