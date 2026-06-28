@@ -20,6 +20,8 @@ use OpenSpout\Reader\Common\Creator\ReaderFactory;
 
 class StockExcelImportService
 {
+    private const MAX_DETAILED_MESSAGES = 20;
+
     /**
      * @var array<string, string>
      */
@@ -34,6 +36,33 @@ class StockExcelImportService
      */
     private const IGNORED_SHEETS = [
         'ETIQUETAS',
+    ];
+
+    /**
+     * @var array<string, list<string>>
+     */
+    private const HEADER_SYNONYMS = [
+        'sku' => ['sku', 'referencia', 'codigo', 'codigo producto', 'articulo'],
+        'description' => ['descripcion', 'descripcion articulo', 'producto', 'articulo descripcion'],
+        'lot' => ['lote', 'partida', 'batch'],
+        'location_text' => ['ubicacion', 'localizacion'],
+        'units_per_pallet' => [
+            'unidades x palet',
+            'unidades x pallet',
+            'unidades/palet',
+            'unidades/pallet',
+            'uds/palet',
+            'uds/pallet',
+            'uds palet',
+            'uds pallet',
+            'unidades por palet',
+            'unidades por pallet',
+        ],
+        'quantity_units' => ['cantidad', 'unidades', 'stock', 'uds', 'existencias', 'total unidades'],
+        'full_pallets' => ['palets', 'pallets', 'palets completos', 'pallets completos'],
+        'peaks_count' => ['picos'],
+        'received_at' => ['fecha entrada', 'fecha'],
+        'blocked_reason' => ['motivo bloqueo', 'bloqueo', 'observaciones bloqueo'],
     ];
 
     public function __construct(
@@ -228,6 +257,8 @@ class StockExcelImportService
         $rows = [];
         $warnings = [];
         $errors = [];
+        $warningGroups = [];
+        $errorGroups = [];
         $detectedSheets = [
             'processed' => [],
             'ignored' => [],
@@ -241,6 +272,10 @@ class StockExcelImportService
             'total_units' => 0,
             'total_full_pallets' => 0,
             'total_peak_units' => 0,
+            'excluded_rows' => 0,
+            'empty_rows_ignored' => 0,
+            'missing_sku_rows' => 0,
+            'real_errors' => 0,
         ];
 
         try {
@@ -269,6 +304,17 @@ class StockExcelImportService
                     $lineNumber++;
 
                     if ($row->isEmpty()) {
+                        if ($headerMap !== null) {
+                            $totals['skipped_rows']++;
+                            $totals['empty_rows_ignored']++;
+                            $this->addGroupedMessage(
+                                $warningGroups,
+                                'empty_rows_'.$sheetName,
+                                'Se han ignorado :count filas vacias en '.$sheetName.'.',
+                                'Fila vacia ignorada en '.$sheetName.'.',
+                            );
+                        }
+
                         continue;
                     }
 
@@ -297,16 +343,37 @@ class StockExcelImportService
                     if ($parsedRow['skip']) {
                         $totals['skipped_rows']++;
 
-                        if ($parsedRow['message'] !== null) {
-                            $warnings[] = $parsedRow['message'];
+                        if ($parsedRow['warning'] !== null) {
+                            $warnings[] = $parsedRow['warning'];
+                        }
+
+                        if ($parsedRow['warning_group'] !== null) {
+                            $this->applyWarningCounters($totals, $parsedRow['warning_group']['key']);
+                            $this->addGroupedMessage(
+                                $warningGroups,
+                                $parsedRow['warning_group']['key'],
+                                $parsedRow['warning_group']['summary'],
+                                $parsedRow['warning_group']['detail'],
+                            );
                         }
 
                         continue;
                     }
 
                     if ($parsedRow['error'] !== null) {
-                        $errors[] = $parsedRow['error'];
                         $totals['skipped_rows']++;
+                        $totals['real_errors']++;
+
+                        if ($parsedRow['error_group'] !== null) {
+                            $this->addGroupedMessage(
+                                $errorGroups,
+                                $parsedRow['error_group']['key'],
+                                $parsedRow['error_group']['summary'],
+                                $parsedRow['error_group']['detail'],
+                            );
+                        } else {
+                            $errors[] = $parsedRow['error'];
+                        }
 
                         continue;
                     }
@@ -335,12 +402,16 @@ class StockExcelImportService
             $errors[] = 'No se han encontrado hojas importables. Usa STOCK, BOBINAS o BLOQUEADO.';
         }
 
+        if ($totals['excluded_rows'] > 0) {
+            $warnings[] = 'Se han ignorado referencias internas que empiezan por * o _.';
+        }
+
         return [
             'rows' => $rows,
             'sample_rows' => array_slice($rows, 0, 10),
             'detected_sheets' => $detectedSheets,
-            'warnings' => array_values(array_unique($warnings)),
-            'errors' => array_values(array_unique($errors)),
+            'warnings' => array_values(array_unique(array_merge($warnings, $this->compileGroupedMessages($warningGroups)))),
+            'errors' => array_values(array_unique(array_merge($errors, $this->compileGroupedMessages($errorGroups)))),
             'totals' => $totals,
         ];
     }
@@ -348,7 +419,15 @@ class StockExcelImportService
     /**
      * @param  array<string, int>  $headerMap
      * @param  \Illuminate\Support\Collection<string, Item>  $existingItems
-     * @return array{row: array<string, mixed>|null, skip: bool, message: ?string, error: ?string}
+     * @return array{
+     *     row: array<string, mixed>|null,
+     *     skip: bool,
+     *     message: ?string,
+     *     warning: ?string,
+     *     warning_group: ?array{key: string, summary: string, detail: ?string},
+     *     error: ?string,
+     *     error_group: ?array{key: string, summary: string, detail: ?string}
+     * }
      */
     private function parseDataRow(
         Row $row,
@@ -360,13 +439,49 @@ class StockExcelImportService
     ): array {
         $values = $row->toArray();
         $sku = $this->stringValue($values[$headerMap['sku']] ?? null);
+        $quantityFromFile = $this->integerValue($values[$headerMap['quantity_units'] ?? -1] ?? null);
 
         if ($sku === '') {
+            if ($this->rowHasNonEmptyData($values, $headerMap, ['sku'])) {
+                return [
+                    'row' => null,
+                    'skip' => true,
+                    'message' => null,
+                    'warning' => null,
+                    'warning_group' => [
+                        'key' => 'missing_sku_'.$sheetName,
+                        'summary' => 'Se han ignorado :count filas sin SKU valido en '.$sheetName.'.',
+                        'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' ignorada por no tener SKU.',
+                    ],
+                    'error' => null,
+                    'error_group' => null,
+                ];
+            }
+
             return [
                 'row' => null,
                 'skip' => true,
-                'message' => 'Fila '.$lineNumber.' de '.$sheetName.' ignorada por no tener SKU.',
+                'message' => null,
+                'warning' => null,
+                'warning_group' => null,
                 'error' => null,
+                'error_group' => null,
+            ];
+        }
+
+        if ($this->shouldIgnoreSku($sku)) {
+            return [
+                'row' => null,
+                'skip' => true,
+                'message' => null,
+                'warning' => null,
+                'warning_group' => [
+                    'key' => 'excluded_sku_'.$sheetName,
+                    'summary' => 'Se han ignorado :count referencias internas o excluidas en '.$sheetName.'.',
+                    'detail' => null,
+                ],
+                'error' => null,
+                'error_group' => null,
             ];
         }
 
@@ -380,6 +495,22 @@ class StockExcelImportService
             $blockedReason = 'Importado desde pestana BLOQUEADO';
         }
 
+        if (($quantityFromFile ?? 0) <= 0 && ! $this->hasPositivePeakValues($values, $headerMap)) {
+            return [
+                'row' => null,
+                'skip' => true,
+                'message' => null,
+                'warning' => null,
+                'warning_group' => [
+                    'key' => 'non_positive_stock_'.$sheetName,
+                    'summary' => 'Se han ignorado :count filas sin stock positivo en '.$sheetName.'.',
+                    'detail' => null,
+                ],
+                'error' => null,
+                'error_group' => null,
+            ];
+        }
+
         $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null)
             ?? (int) ($existingItem?->units_per_pallet ?? 0);
 
@@ -388,12 +519,18 @@ class StockExcelImportService
                 'row' => null,
                 'skip' => false,
                 'message' => null,
+                'warning' => null,
+                'warning_group' => null,
                 'error' => 'Fila '.$lineNumber.' de '.$sheetName.' sin unidades por pallet validas para SKU '.$sku.'.',
+                'error_group' => [
+                    'key' => 'invalid_units_'.$sheetName,
+                    'summary' => 'Se han encontrado :count filas con unidades por pallet no validas en '.$sheetName.'.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' sin unidades por pallet validas para SKU '.$sku.'.',
+                ],
             ];
         }
 
         $fullPalletsFromFile = $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null);
-        $quantityFromFile = $this->integerValue($values[$headerMap['quantity_units'] ?? -1] ?? null);
 
         $peaks = [];
 
@@ -417,8 +554,15 @@ class StockExcelImportService
             return [
                 'row' => null,
                 'skip' => true,
-                'message' => 'Fila '.$lineNumber.' de '.$sheetName.' ignorada por no tener stock positivo.',
+                'message' => null,
+                'warning' => null,
+                'warning_group' => [
+                    'key' => 'non_positive_stock_'.$sheetName,
+                    'summary' => 'Se han ignorado :count filas sin stock positivo en '.$sheetName.'.',
+                    'detail' => null,
+                ],
                 'error' => null,
+                'error_group' => null,
             ];
         }
 
@@ -427,7 +571,14 @@ class StockExcelImportService
                 'row' => null,
                 'skip' => false,
                 'message' => null,
+                'warning' => null,
+                'warning_group' => null,
                 'error' => 'Fila '.$lineNumber.' de '.$sheetName.' con picos superiores a la cantidad total para SKU '.$sku.'.',
+                'error_group' => [
+                    'key' => 'invalid_peaks_'.$sheetName,
+                    'summary' => 'Se han encontrado :count filas con picos inconsistentes en '.$sheetName.'.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con picos superiores a la cantidad total para SKU '.$sku.'.',
+                ],
             ];
         }
 
@@ -468,7 +619,10 @@ class StockExcelImportService
             'row' => $rowData,
             'skip' => false,
             'message' => $message,
+            'warning' => null,
+            'warning_group' => null,
             'error' => null,
+            'error_group' => null,
         ];
     }
 
@@ -480,23 +634,25 @@ class StockExcelImportService
         $map = [];
 
         foreach ($row->toArray() as $index => $value) {
-            $normalized = $this->normalizeHeader($this->stringValue($value));
+            $normalized = $this->normalizeHeaderLabel($this->stringValue($value));
+            $canonical = $this->canonicalizeHeaderAlias($normalized);
 
-            if ($normalized === '') {
+            if ($canonical === '') {
                 continue;
             }
 
             $field = match (true) {
-                in_array($normalized, ['sku', 'referencia', 'codigo', 'codigoproducto', 'articulo'], true) => 'sku',
-                in_array($normalized, ['descripcion', 'descripcionarticulo', 'producto', 'articulodescripcion'], true) => 'description',
-                in_array($normalized, ['lote', 'partida', 'batch'], true) => 'lot',
-                in_array($normalized, ['ubicacion', 'localizacion'], true) => 'location_text',
-                in_array($normalized, ['udsxpallet', 'udspallet', 'unidadesxpallet', 'unidadespallet', 'unidadesporpallet'], true) => 'units_per_pallet',
-                in_array($normalized, ['cantidad', 'unidades', 'stock', 'uds', 'existencias', 'totalunidades'], true) => 'quantity_units',
-                in_array($normalized, ['pallets', 'palets', 'palletscompletos', 'paletscompletos'], true) => 'full_pallets',
-                in_array($normalized, ['fechaentrada', 'fecha'], true) => 'received_at',
-                in_array($normalized, ['motivobloqueo', 'bloqueo', 'observacionesbloqueo'], true) => 'blocked_reason',
-                preg_match('/^(pico|peak)(\d{1,2})$/', $normalized, $matches) === 1
+                $this->matchesHeaderAlias('sku', $canonical) => 'sku',
+                $this->matchesHeaderAlias('description', $canonical) => 'description',
+                $this->matchesHeaderAlias('lot', $canonical) => 'lot',
+                $this->matchesHeaderAlias('location_text', $canonical) => 'location_text',
+                $this->matchesHeaderAlias('units_per_pallet', $canonical) => 'units_per_pallet',
+                $this->matchesHeaderAlias('quantity_units', $canonical) => 'quantity_units',
+                $this->matchesHeaderAlias('full_pallets', $canonical) => 'full_pallets',
+                $this->matchesHeaderAlias('peaks_count', $canonical) => 'peaks_count',
+                $this->matchesHeaderAlias('received_at', $canonical) => 'received_at',
+                $this->matchesHeaderAlias('blocked_reason', $canonical) => 'blocked_reason',
+                preg_match('/^(pico|peak)\s*(\d{1,2})$/', $canonical, $matches) === 1
                     && (int) $matches[2] >= 1
                     && (int) $matches[2] <= StockPallet::MAX_PEAK_COLUMNS => 'peak_'.(int) $matches[2],
                 default => null,
@@ -512,12 +668,49 @@ class StockExcelImportService
 
     private function canonicalSheetName(string $sheetName): string
     {
-        return Str::upper($this->normalizeHeader($sheetName));
+        return Str::upper($this->normalizeHeaderToken($sheetName));
     }
 
-    private function normalizeHeader(string $value): string
+    private function normalizeHeaderLabel(string $value): string
     {
-        return Str::lower(Str::of($value)->ascii()->replaceMatches('/[^A-Za-z0-9]+/', '')->toString());
+        $normalized = preg_replace('/\s+/u', ' ', trim(Str::of($value)
+            ->replaceMatches('/[\x{00A0}\x{200B}-\x{200D}\x{FEFF}]/u', ' ')
+            ->ascii()
+            ->lower()
+            ->toString()));
+
+        return $normalized !== null ? trim($normalized) : '';
+    }
+
+    private function normalizeHeaderToken(string $value): string
+    {
+        return str_replace(' ', '', $this->canonicalizeHeaderAlias($this->normalizeHeaderLabel($value)));
+    }
+
+    private function canonicalizeHeaderAlias(string $normalized): string
+    {
+        if ($normalized === '') {
+            return '';
+        }
+
+        $normalized = str_replace(['/', '-', '_'], ' ', $normalized);
+        $normalized = preg_replace('/\s*[x]\s*/u', ' x ', $normalized) ?? $normalized;
+        $normalized = preg_replace('/\s+/u', ' ', trim($normalized)) ?? trim($normalized);
+        $normalized = str_replace('pallet', 'palet', $normalized);
+        $normalized = str_replace('palets', 'palet', $normalized);
+
+        return trim((string) $normalized);
+    }
+
+    private function matchesHeaderAlias(string $field, string $canonical): bool
+    {
+        foreach (self::HEADER_SYNONYMS[$field] ?? [] as $alias) {
+            if ($this->canonicalizeHeaderAlias($this->normalizeHeaderLabel($alias)) === $canonical) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function stringValue(mixed $value): string
@@ -557,6 +750,15 @@ class StockExcelImportService
             : null;
     }
 
+    private function shouldIgnoreSku(string $sku): bool
+    {
+        $trimmedSku = trim($sku);
+
+        return $trimmedSku === ''
+            || Str::startsWith($trimmedSku, '*')
+            || Str::startsWith($trimmedSku, '_');
+    }
+
     private function dateValue(mixed $value): ?string
     {
         if ($value instanceof DateTimeInterface) {
@@ -588,5 +790,101 @@ class StockExcelImportService
         }
 
         return $total;
+    }
+
+    /**
+     * @param  array<int, mixed>  $values
+     * @param  array<string, int>  $headerMap
+     * @param  list<string>  $ignoredFields
+     */
+    private function rowHasNonEmptyData(array $values, array $headerMap, array $ignoredFields = []): bool
+    {
+        foreach ($headerMap as $field => $index) {
+            if (in_array($field, $ignoredFields, true)) {
+                continue;
+            }
+
+            if ($this->stringValue($values[$index] ?? null) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, mixed>  $values
+     * @param  array<string, int>  $headerMap
+     */
+    private function hasPositivePeakValues(array $values, array $headerMap): bool
+    {
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $value = $this->integerValue($values[$headerMap['peak_'.$peakNumber] ?? -1] ?? null) ?? 0;
+
+            if ($value > 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, array{count: int, summary: string, details: list<string>}>  $groups
+     */
+    private function addGroupedMessage(array &$groups, string $key, string $summary, ?string $detail): void
+    {
+        if (! isset($groups[$key])) {
+            $groups[$key] = [
+                'count' => 0,
+                'summary' => $summary,
+                'details' => [],
+            ];
+        }
+
+        $groups[$key]['count']++;
+
+        if ($detail !== null && count($groups[$key]['details']) < self::MAX_DETAILED_MESSAGES) {
+            $groups[$key]['details'][] = $detail;
+        }
+    }
+
+    /**
+     * @param  array<string, array{count: int, summary: string, details: list<string>}>  $groups
+     * @return list<string>
+     */
+    private function compileGroupedMessages(array $groups): array
+    {
+        $compiled = [];
+
+        foreach ($groups as $group) {
+            $compiled[] = str_replace(':count', (string) $group['count'], $group['summary']);
+
+            foreach ($group['details'] as $detail) {
+                $compiled[] = $detail;
+            }
+        }
+
+        return $compiled;
+    }
+
+    /**
+     * @param  array<string, int>  $totals
+     */
+    private function applyWarningCounters(array &$totals, string $key): void
+    {
+        if (str_starts_with($key, 'excluded_sku_')) {
+            $totals['excluded_rows']++;
+            return;
+        }
+
+        if (str_starts_with($key, 'empty_rows_')) {
+            $totals['empty_rows_ignored']++;
+            return;
+        }
+
+        if (str_starts_with($key, 'missing_sku_')) {
+            $totals['missing_sku_rows']++;
+        }
     }
 }

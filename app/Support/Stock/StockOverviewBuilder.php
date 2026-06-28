@@ -19,7 +19,13 @@ class StockOverviewBuilder
 
         $stockRows = $this->stockQuery($normalizedFilters)
             ->get()
-            ->map(fn (StockPallet $pallet): array => $this->buildStockRow($pallet));
+            ->map(fn (StockPallet $pallet): array => $this->buildStockRow($pallet))
+            ->sortBy([
+                ['received_at_raw', 'asc'],
+                ['sku', 'asc'],
+                ['lot', 'asc'],
+            ])
+            ->values();
 
         $withoutStockRows = $this->withoutStockQuery($normalizedFilters)
             ->get()

@@ -79,6 +79,18 @@
                 <span>{{ number_format($preview['totals']['skipped_rows'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Refs excluidas</strong>
+                <span>{{ number_format($preview['totals']['excluded_rows'], 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Filas vacias</strong>
+                <span>{{ number_format($preview['totals']['empty_rows_ignored'], 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Errores reales</strong>
+                <span>{{ number_format($preview['totals']['real_errors'], 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
                 <strong>Total unidades</strong>
                 <span>{{ number_format($preview['totals']['total_units'], 0, ',', '.') }}</span>
             </article>
@@ -97,6 +109,7 @@
             <p>Importables: {{ implode(', ', $preview['detected_sheets']['processed']) ?: 'Ninguna' }}</p>
             <p>Ignoradas: {{ implode(', ', $preview['detected_sheets']['ignored']) ?: 'Ninguna' }}</p>
             <p>No soportadas: {{ implode(', ', $preview['detected_sheets']['unsupported']) ?: 'Ninguna' }}</p>
+            <p>Se han ignorado referencias internas que empiezan por * o _.</p>
         </section>
 
         @if ($preview['warnings'] !== [])

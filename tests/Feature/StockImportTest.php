@@ -80,6 +80,167 @@ class StockImportTest extends TestCase
         $this->assertSame(['ETIQUETAS'], $stockImport->detected_sheets_json['ignored']);
     }
 
+    public function test_preview_normalizes_excel_headers_for_units_and_peaks(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                [' REFERENCIA ', 'DESCRIPCION', 'LOTE', 'CANTIDAD', ' UNIDADES x PALET ', 'PALETS', 'PICO 5 ', 'UBICACION'],
+                ['FR-PALET', 'Cabecera palet', 'LOT-1', 5000, 1000, 4, 25, 'A1-01'],
+            ],
+            'BOBINAS' => [
+                ['REFERENCIA', 'DESCRIPCION', 'LOTE', 'CANTIDAD', 'UNIDADES x PALLET', 'PALLETS', 'PICO 1', 'PICO 10'],
+                ['FR-PALLET', 'Cabecera pallet', 'LOT-2', 1500, 1000, 1, 200, 300],
+            ],
+            'BLOQUEADO' => [
+                ['REFERENCIA', 'DESCRIPCION', 'LOTE', 'CANTIDAD', 'UDS/PALET', 'PALETS'],
+                ['FR-UDS', 'Cabecera uds', 'LOT-3', 600, 600, 1],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post(route('stock.import.preview'), [
+                'client_id' => $friesland->id,
+                'file' => $file,
+            ]);
+
+        $response->assertOk()
+            ->assertSee('Errores reales')
+            ->assertSee('Refs excluidas');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(0, $stockImport->summary_json['real_errors']);
+        $this->assertSame(0, $stockImport->summary_json['excluded_rows']);
+
+        $this->actingAs($user)
+            ->post(route('stock.import.confirm'), [
+                'stock_import_id' => $stockImport->id,
+            ])
+            ->assertRedirect(route('stock.index', ['client_id' => $friesland->id]));
+
+        $stockWithPalet = StockPallet::query()->whereHas('item', fn ($query) => $query->where('sku', 'FR-PALET'))->firstOrFail();
+        $stockWithPallet = StockPallet::query()->whereHas('item', fn ($query) => $query->where('sku', 'FR-PALLET'))->firstOrFail();
+        $stockWithUds = StockPallet::query()->whereHas('item', fn ($query) => $query->where('sku', 'FR-UDS'))->firstOrFail();
+
+        $this->assertSame(1000, $stockWithPalet->units_per_pallet);
+        $this->assertSame(25, $stockWithPalet->peak_5);
+        $this->assertSame('A1-01', $stockWithPalet->location_text);
+
+        $this->assertSame(1000, $stockWithPallet->units_per_pallet);
+        $this->assertSame(200, $stockWithPallet->peak_1);
+        $this->assertSame(300, $stockWithPallet->peak_10);
+
+        $this->assertSame(600, $stockWithUds->units_per_pallet);
+        $this->assertSame(StockPallet::STATUS_BLOCKED, $stockWithUds->status);
+    }
+
+    public function test_preview_ignores_internal_references_starting_with_asterisk_or_underscore_without_errors(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['***BLOQUEADO***', 'Interna', 'LOT-X', 200, null, 0],
+                ['_BANDEJA23', 'Interna 2', 'LOT-Y', 100, null, 0],
+                ['FR-VALID', 'Valida', 'LOT-Z', 1000, 1000, 1],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post(route('stock.import.preview'), [
+                'client_id' => $friesland->id,
+                'file' => $file,
+            ]);
+
+        $response->assertOk()
+            ->assertSee('Se han ignorado referencias internas que empiezan por * o _.')
+            ->assertDontSee('sin unidades por pallet validas para SKU ***BLOQUEADO***')
+            ->assertDontSee('sin unidades por pallet validas para SKU _BANDEJA23');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(2, $stockImport->summary_json['excluded_rows']);
+        $this->assertSame(0, $stockImport->summary_json['real_errors']);
+
+        $this->actingAs($user)
+            ->post(route('stock.import.confirm'), [
+                'stock_import_id' => $stockImport->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('items', [
+            'client_id' => $friesland->id,
+            'sku' => '***BLOQUEADO***',
+        ]);
+
+        $this->assertDatabaseMissing('items', [
+            'client_id' => $friesland->id,
+            'sku' => '_BANDEJA23',
+        ]);
+
+        $this->assertDatabaseMissing('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'LOT-X',
+        ]);
+
+        $this->assertDatabaseMissing('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'LOT-Y',
+        ]);
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $friesland->id,
+            'sku' => 'FR-VALID',
+        ]);
+    }
+
+    public function test_quantity_zero_is_ignored_without_units_per_pallet_error(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-ZERO', 'Sin stock', 'LOT-0', 0, null, 0],
+                ['FR-VALID', 'Con stock', 'LOT-1', 1200, 600, 2],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post(route('stock.import.preview'), [
+                'client_id' => $friesland->id,
+                'file' => $file,
+            ]);
+
+        $response->assertOk()
+            ->assertDontSee('sin unidades por pallet validas para SKU FR-ZERO');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(0, $stockImport->summary_json['real_errors']);
+        $this->assertSame(1, $stockImport->summary_json['skipped_rows']);
+
+        $this->actingAs($user)
+            ->post(route('stock.import.confirm'), [
+                'stock_import_id' => $stockImport->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('items', [
+            'client_id' => $friesland->id,
+            'sku' => 'FR-ZERO',
+        ]);
+    }
+
     public function test_confirm_import_creates_item_masters_and_preserves_multi_peak_rows(): void
     {
         [$friesland] = $this->seedBaseData();
