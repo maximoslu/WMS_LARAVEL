@@ -187,24 +187,24 @@ class DailyOperationsTest extends TestCase
             ->assertDontSee('Proveedor A');
     }
 
-    public function test_manual_descarga_generates_truck_management(): void
+    public function test_manual_descarga_generates_truck_management_and_counts_as_movement(): void
     {
-        $this->assertManualOperationGeneratesTruckManagement(DailyOperationLine::SECTION_DESCARGA, 35, 'Generada por Descarga.');
+        $this->assertManualOperationAssociations(DailyOperationLine::SECTION_DESCARGA, 35, true, false);
     }
 
-    public function test_manual_carga_generates_truck_management(): void
+    public function test_manual_carga_generates_truck_management_and_counts_as_movement(): void
     {
-        $this->assertManualOperationGeneratesTruckManagement(DailyOperationLine::SECTION_CARGA, 20, 'Generada por Carga.');
+        $this->assertManualOperationAssociations(DailyOperationLine::SECTION_CARGA, 20, true, false);
     }
 
-    public function test_manual_envio_generates_truck_management(): void
+    public function test_manual_envio_generates_truck_management_and_trip_and_counts_as_movement(): void
     {
-        $this->assertManualOperationGeneratesTruckManagement(DailyOperationLine::SECTION_ENVIO, 20, 'Generada por Envío.');
+        $this->assertManualOperationAssociations(DailyOperationLine::SECTION_ENVIO, 20, true, true);
     }
 
-    public function test_manual_viaje_de_camion_generates_truck_management(): void
+    public function test_manual_viaje_de_camion_generates_truck_management_but_does_not_count_as_movement(): void
     {
-        $this->assertManualOperationGeneratesTruckManagement(DailyOperationLine::SECTION_VIAJE_CAMION, 2, 'Generada por Viaje de camión.');
+        $this->assertManualOperationAssociations(DailyOperationLine::SECTION_VIAJE_CAMION, 2, true, false);
     }
 
     public function test_manual_gestion_camion_does_not_generate_another_truck_management(): void
@@ -233,7 +233,35 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->count());
     }
 
-    public function test_updating_manual_line_does_not_duplicate_associated_truck_management(): void
+    public function test_almacenaje_and_truck_management_do_not_count_as_pallet_movement(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.day.upsert'), [
+                'client_id' => $client->id,
+                'operation_date' => '2026-07-07',
+                'opening_pallets' => 50,
+            ])
+            ->assertRedirect();
+
+        $this->storeLine($user, $client, '2026-07-07', DailyOperationLine::SECTION_ALMACENAJE, 'Base', 50);
+        $this->storeLine($user, $client, '2026-07-07', DailyOperationLine::SECTION_GESTION_CAMION, 'Manual', 2);
+        $this->storeLine($user, $client, '2026-07-07', DailyOperationLine::SECTION_HORAS_OPERARIO, 'Refuerzo', 4);
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-07')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(0, $day->moved_pallets_today);
+        $this->assertSame(50, $day->stored_pallets_today);
+        $this->assertSame(50, $day->expected_pallets_tomorrow);
+    }
+
+    public function test_updating_manual_line_does_not_duplicate_associated_lines(): void
     {
         $this->seed(RoleSeeder::class);
         $user = $this->makeUserWithRole(Role::ALMACEN);
@@ -243,7 +271,7 @@ class DailyOperationsTest extends TestCase
             ->post(route('daily-operations.lines.store'), [
                 'client_id' => $client->id,
                 'operation_date' => '2026-07-03',
-                'section' => DailyOperationLine::SECTION_CARGA,
+                'section' => DailyOperationLine::SECTION_ENVIO,
                 'counterparty_name' => 'Pedido X',
                 'pallets' => 20,
                 'observations' => 'Inicial',
@@ -251,14 +279,14 @@ class DailyOperationsTest extends TestCase
             ->assertRedirect();
 
         $line = DailyOperationLine::query()
-            ->where('section', DailyOperationLine::SECTION_CARGA)
+            ->where('section', DailyOperationLine::SECTION_ENVIO)
             ->firstOrFail();
 
         $this->actingAs($user)
             ->put(route('daily-operations.lines.update', $line), [
                 'client_id' => $client->id,
                 'operation_date' => '2026-07-03',
-                'section' => DailyOperationLine::SECTION_CARGA,
+                'section' => DailyOperationLine::SECTION_ENVIO,
                 'counterparty_name' => 'Pedido X',
                 'pallets' => 21,
                 'observations' => 'Ajustada',
@@ -274,37 +302,82 @@ class DailyOperationsTest extends TestCase
                 ->where('parent_line_id', $line->id)
                 ->count()
         );
+
+        $this->assertSame(
+            1,
+            DailyOperationLine::query()
+                ->where('day_id', $line->day_id)
+                ->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)
+                ->where('source_type', DailyOperationLine::SOURCE_MANUAL_LINE)
+                ->where('parent_line_id', $line->id)
+                ->count()
+        );
     }
 
-    public function test_daily_totals_follow_operational_billing_rules(): void
+    public function test_deleting_parent_line_removes_associated_automatic_lines(): void
     {
         $this->seed(RoleSeeder::class);
         $user = $this->makeUserWithRole(Role::ALMACEN);
         $client = Client::factory()->create();
 
         $this->actingAs($user)
+            ->post(route('daily-operations.lines.store'), [
+                'client_id' => $client->id,
+                'operation_date' => '2026-07-08',
+                'section' => DailyOperationLine::SECTION_ENVIO,
+                'counterparty_name' => 'Pedido X',
+                'pallets' => 10,
+                'observations' => 'Manual',
+            ])
+            ->assertRedirect();
+
+        $parentLine = DailyOperationLine::query()
+            ->where('section', DailyOperationLine::SECTION_ENVIO)
+            ->firstOrFail();
+
+        $this->assertSame(3, DailyOperationLine::query()->where('day_id', $parentLine->day_id)->count());
+
+        $this->actingAs($user)
+            ->delete(route('daily-operations.lines.destroy', $parentLine))
+            ->assertRedirect();
+
+        $this->assertSame(0, DailyOperationLine::query()->where('day_id', $parentLine->day_id)->count());
+    }
+
+    public function test_daily_totals_follow_operational_billing_rules(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'Friesland']);
+
+        $this->actingAs($user)
             ->post(route('daily-operations.day.upsert'), [
                 'client_id' => $client->id,
                 'operation_date' => '2026-07-04',
-                'opening_pallets' => 1000,
+                'opening_pallets' => 104,
                 'notes' => 'Base inicial',
             ])
             ->assertRedirect();
 
-        $this->storeLine($user, $client, '2026-07-04', DailyOperationLine::SECTION_DESCARGA, 'SAICA', 100);
-        $this->storeLine($user, $client, '2026-07-04', DailyOperationLine::SECTION_ENVIO, 'Pedido X', 50);
-        $this->storeLine($user, $client, '2026-07-04', DailyOperationLine::SECTION_GESTION_CAMION, 'Manual extra', 1);
-        $this->storeLine($user, $client, '2026-07-04', DailyOperationLine::SECTION_VIAJE_CAMION, 'Pedido X', 2);
+        $this->storeLine($user, $client, '2026-07-04', DailyOperationLine::SECTION_DESCARGA, 'Entrada A', 11);
+        $this->storeLine($user, $client, '2026-07-04', DailyOperationLine::SECTION_CARGA, 'Carga B', 12);
+        $this->storeLine($user, $client, '2026-07-04', DailyOperationLine::SECTION_ENVIO, 'Pedido X', 10);
 
         $day = DailyOperationDay::query()
             ->whereDate('operation_date', '2026-07-04')
             ->where('client_id', $client->id)
             ->firstOrFail();
 
-        $this->assertSame(1000, $day->opening_pallets);
-        $this->assertSame(1100, $day->stored_pallets_today);
-        $this->assertSame(150, $day->moved_pallets_today);
-        $this->assertSame(1050, $day->expected_pallets_tomorrow);
+        $this->assertSame(104, $day->opening_pallets);
+        $this->assertSame(115, $day->stored_pallets_today);
+        $this->assertSame(33, $day->moved_pallets_today);
+        $this->assertSame(93, $day->expected_pallets_tomorrow);
+
+        $this->assertSame(11, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
+        $this->assertSame(12, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_CARGA)->sum('pallets'));
+        $this->assertSame(10, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
+        $this->assertSame(3, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
     }
 
     public function test_recalculate_builds_automatic_lines_and_preserves_manual_lines_without_duplicates(): void
@@ -466,11 +539,12 @@ class DailyOperationsTest extends TestCase
             ->assertSee('Gestión de camión')
             ->assertSee('Viaje de camión')
             ->assertSee('Envío')
+            ->assertSee('Horas operario')
             ->assertSee('daily-ops-toolbar', false)
             ->assertSee('daily-ops-summary-form', false);
     }
 
-    private function assertManualOperationGeneratesTruckManagement(string $section, int $pallets, string $observation): void
+    private function assertManualOperationAssociations(string $section, int $pallets, bool $expectsManagement, bool $expectsTrip): void
     {
         $this->seed(RoleSeeder::class);
         $user = $this->makeUserWithRole(Role::ALMACEN);
@@ -492,15 +566,20 @@ class DailyOperationsTest extends TestCase
             ->where('counterparty_name', 'Pedido X')
             ->firstOrFail();
 
-        $this->assertDatabaseHas('daily_operation_lines', [
-            'day_id' => $parentLine->day_id,
-            'section' => DailyOperationLine::SECTION_GESTION_CAMION,
-            'counterparty_name' => 'Pedido X',
-            'pallets' => 1,
-            'parent_line_id' => $parentLine->id,
-            'source_type' => DailyOperationLine::SOURCE_MANUAL_LINE,
-            'observations' => $observation,
-        ]);
+        $managementCount = DailyOperationLine::query()
+            ->where('day_id', $parentLine->day_id)
+            ->where('section', DailyOperationLine::SECTION_GESTION_CAMION)
+            ->where('parent_line_id', $parentLine->id)
+            ->count();
+
+        $tripCount = DailyOperationLine::query()
+            ->where('day_id', $parentLine->day_id)
+            ->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)
+            ->where('parent_line_id', $parentLine->id)
+            ->count();
+
+        $this->assertSame($expectsManagement ? 1 : 0, $managementCount);
+        $this->assertSame($expectsTrip ? 1 : 0, $tripCount);
     }
 
     private function storeLine(User $user, Client $client, string $date, string $section, string $counterpartyName, int $pallets): void

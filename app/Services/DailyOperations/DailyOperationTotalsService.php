@@ -8,6 +8,20 @@ use Illuminate\Support\Carbon;
 
 class DailyOperationTotalsService
 {
+    /**
+     * @return array<string, int>
+     */
+    public function sectionBreakdown(DailyOperationDay $day): array
+    {
+        $day->loadMissing('lines');
+
+        return collect(DailyOperationLine::sections())
+            ->mapWithKeys(fn (string $section): array => [
+                $section => (int) $day->lines->where('section', $section)->sum('pallets'),
+            ])
+            ->all();
+    }
+
     public function syncDay(DailyOperationDay $day, ?int $openingPallets = null, ?string $notes = null, ?int $updatedBy = null): DailyOperationDay
     {
         $day->loadMissing('lines');
@@ -23,12 +37,11 @@ class DailyOperationTotalsService
         }
 
         $opening = max(0, (int) $opening);
-        $inbound = (int) $day->lines
-            ->whereIn('section', DailyOperationLine::movementInboundSections())
-            ->sum('pallets');
-        $outbound = (int) $day->lines
-            ->whereIn('section', DailyOperationLine::movementOutboundSections())
-            ->sum('pallets');
+        $breakdown = $this->sectionBreakdown($day);
+        $inbound = (int) collect(DailyOperationLine::movementInboundSections())
+            ->sum(fn (string $section): int => (int) ($breakdown[$section] ?? 0));
+        $outbound = (int) collect(DailyOperationLine::movementOutboundSections())
+            ->sum(fn (string $section): int => (int) ($breakdown[$section] ?? 0));
 
         $day->fill([
             'opening_pallets' => $opening,

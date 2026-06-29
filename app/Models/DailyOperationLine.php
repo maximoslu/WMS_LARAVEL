@@ -14,6 +14,7 @@ class DailyOperationLine extends Model
     public const SECTION_DESCARGA = 'descarga';
     public const SECTION_CARGA = 'carga';
     public const SECTION_ENVIO = 'envio';
+    public const SECTION_HORAS_OPERARIO = 'horas_operario';
     public const SECTION_GESTION_CAMION = 'gestion_camion';
     public const SECTION_VIAJE_CAMION = 'viaje_camion';
     public const SECTION_ALMACENAJE = 'almacenaje';
@@ -81,6 +82,7 @@ class DailyOperationLine extends Model
             self::SECTION_DESCARGA,
             self::SECTION_CARGA,
             self::SECTION_ENVIO,
+            self::SECTION_HORAS_OPERARIO,
             self::SECTION_GESTION_CAMION,
             self::SECTION_VIAJE_CAMION,
             self::SECTION_ALMACENAJE,
@@ -98,6 +100,7 @@ class DailyOperationLine extends Model
             self::SECTION_DESCARGA => 'Descarga',
             self::SECTION_CARGA => 'Carga',
             self::SECTION_ENVIO => 'Envío',
+            self::SECTION_HORAS_OPERARIO => 'Horas operario',
             self::SECTION_GESTION_CAMION => 'Gestión de camión',
             self::SECTION_VIAJE_CAMION => 'Viaje de camión',
             self::SECTION_ALMACENAJE => 'Almacenaje',
@@ -111,6 +114,9 @@ class DailyOperationLine extends Model
         return self::sectionOptions()[$this->section] ?? ucfirst($this->section);
     }
 
+    /**
+     * @return list<string>
+     */
     public static function movementInboundSections(): array
     {
         return [
@@ -118,6 +124,9 @@ class DailyOperationLine extends Model
         ];
     }
 
+    /**
+     * @return list<string>
+     */
     public static function movementOutboundSections(): array
     {
         return [
@@ -126,6 +135,9 @@ class DailyOperationLine extends Model
         ];
     }
 
+    /**
+     * @return list<string>
+     */
     public static function sectionsThatRequireTruckManagement(): array
     {
         return [
@@ -136,9 +148,24 @@ class DailyOperationLine extends Model
         ];
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function sectionsThatRequireTruckTrip(): array
+    {
+        return [
+            self::SECTION_ENVIO,
+        ];
+    }
+
     public function requiresTruckManagement(): bool
     {
         return in_array($this->section, self::sectionsThatRequireTruckManagement(), true);
+    }
+
+    public function requiresTruckTrip(): bool
+    {
+        return in_array($this->section, self::sectionsThatRequireTruckTrip(), true);
     }
 
     public function contributesToInboundMovement(): bool

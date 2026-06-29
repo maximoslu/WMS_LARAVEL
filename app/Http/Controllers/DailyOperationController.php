@@ -51,13 +51,17 @@ class DailyOperationController extends Controller
             $lineBeingEdited = $day->lines->firstWhere('id', $editLineId);
         }
 
+        $sectionBreakdown = $day !== null
+            ? $this->totalsService->sectionBreakdown($day)
+            : collect(DailyOperationLine::sections())->mapWithKeys(fn (string $section) => [$section => 0])->all();
+
         return view('daily-operations.index', [
             'day' => $day,
             'clients' => $clients,
             'selectedClient' => $selectedClient,
             'selectedDate' => $selectedDate,
             'sectionOptions' => DailyOperationLine::sectionOptions(),
-            'sectionTotals' => $day?->sectionTotals() ?? collect(DailyOperationLine::sections())->mapWithKeys(fn (string $section) => [$section => 0])->all(),
+            'sectionTotals' => $sectionBreakdown,
             'canManage' => $request->user()?->canAccessRole(Role::ALMACEN) === true,
             'lineBeingEdited' => $lineBeingEdited,
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
@@ -114,7 +118,7 @@ class DailyOperationController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
-        $this->lineAutomationService->syncTruckManagementForManualLine($line, (int) $request->user()->id);
+        $this->lineAutomationService->syncAssociatedLinesForManualLine($line, (int) $request->user()->id);
         $this->totalsService->syncDay($day->fresh(['lines']), null, null, (int) $request->user()->id);
 
         return redirect()
@@ -155,7 +159,7 @@ class DailyOperationController extends Controller
         $previousDay = $dailyOperationLine->day;
 
         if ($dailyOperationLine->source_type !== DailyOperationLine::SOURCE_MANUAL_LINE) {
-            $this->lineAutomationService->removeTruckManagementForManualLine($dailyOperationLine);
+            $this->lineAutomationService->removeAssociatedAutoLinesForManualLine($dailyOperationLine);
         }
 
         $day = $this->firstOrCreateDay($targetDate, (int) $validated['client_id'], (int) $request->user()->id);
@@ -169,7 +173,7 @@ class DailyOperationController extends Controller
         ]);
 
         if ($dailyOperationLine->source_type !== DailyOperationLine::SOURCE_MANUAL_LINE) {
-            $this->lineAutomationService->syncTruckManagementForManualLine($dailyOperationLine->fresh(), (int) $request->user()->id);
+            $this->lineAutomationService->syncAssociatedLinesForManualLine($dailyOperationLine->fresh(), (int) $request->user()->id);
         }
 
         if ($previousDay !== null && $previousDay->id !== $day->id) {
@@ -193,7 +197,7 @@ class DailyOperationController extends Controller
         $clientId = $dailyOperationLine->day?->client_id;
 
         if ($dailyOperationLine->source_type !== DailyOperationLine::SOURCE_MANUAL_LINE) {
-            $this->lineAutomationService->removeTruckManagementForManualLine($dailyOperationLine);
+            $this->lineAutomationService->removeAssociatedAutoLinesForManualLine($dailyOperationLine);
         }
 
         $dailyOperationLine->delete();

@@ -127,9 +127,10 @@
                     <li>Los pallets movidos solo cuentan en descarga, carga y envío.</li>
                     <li>La gestión de camión y el viaje de camión se facturan aparte y no alteran stock.</li>
                     <li>El almacenaje facturable del día es pallets iniciales más descargas del día.</li>
+                    <li>Las horas operario quedan preparadas como línea operativa específica.</li>
                 </ul>
 
-                <p class="helper-text">TODO: configurar horarios reales de empresa para avisos de solicitud de mercancía.</p>
+                <p class="helper-text">TODO: configurar horarios reales de empresa para avisos de solicitud de mercancía y tarifas de horas operario.</p>
             </article>
         </section>
 
@@ -181,7 +182,7 @@
             <article class="surface-card compact-card daily-ops-card daily-ops-card--entry">
                 <div class="ops-index-heading">
                     <strong>{{ $lineBeingEdited ? 'Editar línea operativa' : 'Nueva línea operativa' }}</strong>
-                    <span class="ops-page-meta">Descarga, carga, envío, gestión de camión, viaje de camión y servicios</span>
+                    <span class="ops-page-meta">Descarga, carga, envío, gestión de camión, viaje de camión, horas operario y servicios</span>
                 </div>
 
                 <form
@@ -213,7 +214,7 @@
                         </label>
 
                         <label class="auth-field">
-                            <span>Unidades facturables</span>
+                            <span>{{ old('section', $lineBeingEdited?->section) === \App\Models\DailyOperationLine::SECTION_HORAS_OPERARIO ? 'Horas' : 'Unidades facturables' }}</span>
                             <input type="number" min="0" name="pallets" value="{{ old('pallets', $lineBeingEdited?->pallets) }}" class="auth-input" required>
                         </label>
 
@@ -231,14 +232,14 @@
                     </div>
                 </form>
 
-                <p class="helper-text">Las líneas manuales de descarga, carga, envío y viaje de camión crean una gestión de camión asociada si todavía no existe.</p>
+                <p class="helper-text">Las líneas manuales de descarga, carga y viaje crean gestión de camión asociada. Los envíos además crean un viaje de camión inicial editable.</p>
             </article>
         </section>
 
         <section class="surface-card compact-card daily-ops-card daily-ops-card--ledger">
             <div class="ops-index-heading">
                 <strong>Movimiento diario</strong>
-                <span class="ops-status badge-compact">{{ number_format($day?->linesTotal() ?? 0, 0, ',', '.') }} uds. registradas</span>
+                <span class="ops-status badge-compact">{{ number_format($day?->lines?->count() ?? 0, 0, ',', '.') }} líneas registradas</span>
             </div>
 
             <div class="daily-ops-totals">
