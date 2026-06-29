@@ -6,7 +6,6 @@ use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsReceipt;
-use App\Models\StockPallet;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -47,9 +46,6 @@ class DailyOperationRecalculationService
                 ->delete();
 
             $sortOrder = $manualSortOrder;
-            $receiptPalletsTotal = 0;
-            $dispatchPalletsTotal = 0;
-
             $receipts = GoodsReceipt::query()
                 ->with(['supplier', 'lines'])
                 ->where('client_id', $clientId)
@@ -60,7 +56,6 @@ class DailyOperationRecalculationService
 
             foreach ($receipts as $receipt) {
                 $receiptPallets = max(0, (int) $receipt->lines->sum('pallet_count'));
-                $receiptPalletsTotal += $receiptPallets;
 
                 if ($receiptPallets > 0) {
                     $this->createAutoLine(
@@ -114,8 +109,6 @@ class DailyOperationRecalculationService
                     $dispatchPallets = max(0, $dispatch->palletsCount());
                 }
 
-                $dispatchPalletsTotal += $dispatchPallets;
-
                 if ($dispatchPallets > 0) {
                     $this->createAutoLine(
                         $day,
@@ -155,19 +148,15 @@ class DailyOperationRecalculationService
                 );
             }
 
-            $activeStockPallets = (int) StockPallet::query()
-                ->where('client_id', $clientId)
-                ->where('active', true)
-                ->where('status', StockPallet::STATUS_AVAILABLE)
-                ->count();
+            $stockBase = $this->totalsService->stockBaseForClient($clientId);
 
-            if ($activeStockPallets > 0) {
+            if ($stockBase > 0) {
                 $this->createAutoLine(
                     $day,
                     ++$sortOrder,
                     DailyOperationLine::SECTION_ALMACENAJE,
-                    'Stock activo del cliente',
-                    $activeStockPallets,
+                    'Stock base del cliente',
+                    $stockBase,
                     'Base facturable de almacenaje para la fecha '.$date.'.',
                     DailyOperationLine::SOURCE_STOCK_SNAPSHOT,
                     null,
@@ -175,9 +164,7 @@ class DailyOperationRecalculationService
                 );
             }
 
-            $openingPallets = max(0, $activeStockPallets + $dispatchPalletsTotal - $receiptPalletsTotal);
-
-            return $this->totalsService->syncDay($day, $openingPallets, $day->notes, $userId);
+            return $this->totalsService->syncDay($day, null, $day->notes, $userId);
         });
     }
 

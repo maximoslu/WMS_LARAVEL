@@ -81,9 +81,10 @@ class DailyOperationsTest extends TestCase
 
         $day->refresh();
 
-        $this->assertSame(112, $day->stored_pallets_today);
+        $this->assertSame(0, $day->opening_pallets);
+        $this->assertSame(12, $day->stored_pallets_today);
         $this->assertSame(12, $day->moved_pallets_today);
-        $this->assertSame(112, $day->expected_pallets_tomorrow);
+        $this->assertSame(12, $day->expected_pallets_tomorrow);
 
         $this->assertDatabaseHas('daily_operation_lines', [
             'day_id' => $day->id,
@@ -133,7 +134,7 @@ class DailyOperationsTest extends TestCase
             ->assertOk()
             ->assertSee('Cliente Sur')
             ->assertSee('57')
-            ->assertSee('Pallets iniciales')
+            ->assertSee('STOCK BASE CLIENTE')
             ->assertSee('50');
     }
 
@@ -243,9 +244,10 @@ class DailyOperationsTest extends TestCase
             ->post(route('daily-operations.day.upsert'), [
                 'client_id' => $client->id,
                 'operation_date' => '2026-07-07',
-                'opening_pallets' => 50,
             ])
             ->assertRedirect();
+
+        $this->createStockBase($client, 50);
 
         $this->storeLine($user, $client, '2026-07-07', DailyOperationLine::SECTION_ALMACENAJE, 'Base', 50);
         $this->storeLine($user, $client, '2026-07-07', DailyOperationLine::SECTION_GESTION_CAMION, 'Manual', 2);
@@ -256,6 +258,7 @@ class DailyOperationsTest extends TestCase
             ->where('client_id', $client->id)
             ->firstOrFail();
 
+        $this->assertSame(50, $day->opening_pallets);
         $this->assertSame(0, $day->moved_pallets_today);
         $this->assertSame(50, $day->stored_pallets_today);
         $this->assertSame(50, $day->expected_pallets_tomorrow);
@@ -349,13 +352,46 @@ class DailyOperationsTest extends TestCase
         $this->seed(RoleSeeder::class);
         $user = $this->makeUserWithRole(Role::ALMACEN);
         $client = Client::factory()->create(['name' => 'Friesland']);
+        $otherClient = Client::factory()->create(['name' => 'Edelvives']);
+
+        $this->createStockBase($client, 2000);
+        $this->createStockPallet($client, 30, StockPallet::STATUS_BLOCKED);
+        $this->createStockPallet($client, 3, StockPallet::STATUS_AVAILABLE);
+        $this->createStockPallet($client, 99, StockPallet::STATUS_OBSOLETE);
+        $this->createStockPallet($client, 0, StockPallet::STATUS_AVAILABLE);
+        $this->createStockBase($otherClient, 500);
+
+        $obsoleteItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'status' => Item::STATUS_OBSOLETE,
+            'active' => false,
+            'units_per_pallet' => 1,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $obsoleteItem->id,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'quantity_units' => 40,
+            'units_per_pallet' => 1,
+            'full_pallets' => 40,
+            'peaks_count' => 0,
+            'peak_1' => 0,
+        ]);
 
         $this->actingAs($user)
             ->post(route('daily-operations.day.upsert'), [
                 'client_id' => $client->id,
                 'operation_date' => '2026-07-04',
-                'opening_pallets' => 104,
                 'notes' => 'Base inicial',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.day.upsert'), [
+                'client_id' => $otherClient->id,
+                'operation_date' => '2026-07-04',
+                'notes' => 'Base aislada',
             ])
             ->assertRedirect();
 
@@ -368,10 +404,18 @@ class DailyOperationsTest extends TestCase
             ->where('client_id', $client->id)
             ->firstOrFail();
 
-        $this->assertSame(104, $day->opening_pallets);
-        $this->assertSame(115, $day->stored_pallets_today);
+        $otherDay = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-04')
+            ->where('client_id', $otherClient->id)
+            ->firstOrFail();
+
+        $otherDay->refresh();
+
+        $this->assertSame(2033, $day->opening_pallets);
+        $this->assertSame(2044, $day->stored_pallets_today);
         $this->assertSame(33, $day->moved_pallets_today);
-        $this->assertSame(93, $day->expected_pallets_tomorrow);
+        $this->assertSame(2022, $day->expected_pallets_tomorrow);
+        $this->assertSame(500, $otherDay->opening_pallets);
 
         $this->assertSame(11, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
         $this->assertSame(12, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_CARGA)->sum('pallets'));
@@ -452,12 +496,8 @@ class DailyOperationsTest extends TestCase
             'is_extra_line' => false,
         ]);
 
-        StockPallet::factory()->count(2)->create([
-            'item_id' => $item->id,
-            'client_id' => $client->id,
-            'status' => StockPallet::STATUS_AVAILABLE,
-            'active' => true,
-        ]);
+        $this->createStockPallet($client, 1, StockPallet::STATUS_AVAILABLE, $item);
+        $this->createStockPallet($client, 1, StockPallet::STATUS_BLOCKED, $item);
 
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
@@ -468,10 +508,10 @@ class DailyOperationsTest extends TestCase
 
         $day->refresh();
 
-        $this->assertSame(0, $day->opening_pallets);
-        $this->assertSame(5, $day->stored_pallets_today);
+        $this->assertSame(2, $day->opening_pallets);
+        $this->assertSame(7, $day->stored_pallets_today);
         $this->assertSame(8, $day->moved_pallets_today);
-        $this->assertSame(2, $day->expected_pallets_tomorrow);
+        $this->assertSame(4, $day->expected_pallets_tomorrow);
 
         $this->assertDatabaseHas('daily_operation_lines', [
             'day_id' => $day->id,
@@ -503,6 +543,14 @@ class DailyOperationsTest extends TestCase
             'section' => DailyOperationLine::SECTION_VIAJE_CAMION,
             'counterparty_name' => 'Friesland',
             'pallets' => 1,
+            'is_auto_generated' => true,
+        ]);
+
+        $this->assertDatabaseHas('daily_operation_lines', [
+            'day_id' => $day->id,
+            'section' => DailyOperationLine::SECTION_ALMACENAJE,
+            'counterparty_name' => 'Stock base del cliente',
+            'pallets' => 2,
             'is_auto_generated' => true,
         ]);
 
@@ -540,6 +588,8 @@ class DailyOperationsTest extends TestCase
             ->assertSee('Viaje de camión')
             ->assertSee('Envío')
             ->assertSee('Horas operario')
+            ->assertSee('STOCK BASE CLIENTE')
+            ->assertSee('Stock base calculado desde inventario actual del cliente.')
             ->assertSee('daily-ops-toolbar', false)
             ->assertSee('daily-ops-summary-form', false);
     }
@@ -594,6 +644,33 @@ class DailyOperationsTest extends TestCase
                 'observations' => 'Automática de test',
             ])
             ->assertRedirect();
+    }
+
+    private function createStockBase(Client $client, int $pallets): void
+    {
+        if ($pallets > 0) {
+            $this->createStockPallet($client, $pallets, StockPallet::STATUS_AVAILABLE);
+        }
+    }
+
+    private function createStockPallet(Client $client, int $fullPallets, string $status, ?Item $item = null): void
+    {
+        $item ??= Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 1,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'status' => $status,
+            'quantity_units' => max(0, $fullPallets),
+            'units_per_pallet' => 1,
+            'full_pallets' => max(0, $fullPallets),
+            'peaks_count' => 0,
+            'peak_1' => 0,
+            'active' => true,
+        ]);
     }
 
     private function makeUserWithRole(string $roleSlug): User

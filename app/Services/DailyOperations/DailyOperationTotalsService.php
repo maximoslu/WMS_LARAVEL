@@ -4,7 +4,8 @@ namespace App\Services\DailyOperations;
 
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
-use Illuminate\Support\Carbon;
+use App\Models\Item;
+use App\Models\StockPallet;
 
 class DailyOperationTotalsService
 {
@@ -26,17 +27,10 @@ class DailyOperationTotalsService
     {
         $day->loadMissing('lines');
 
-        $opening = $openingPallets;
+        $opening = $day->client_id !== null
+            ? $this->stockBaseForClient((int) $day->client_id)
+            : max(0, (int) $openingPallets);
 
-        if ($opening === null) {
-            $opening = $day->opening_pallets;
-        }
-
-        if ($opening === null) {
-            $opening = $this->previousExpectedPallets($day) ?? 0;
-        }
-
-        $opening = max(0, (int) $opening);
         $breakdown = $this->sectionBreakdown($day);
         $inbound = (int) collect(DailyOperationLine::movementInboundSections())
             ->sum(fn (string $section): int => (int) ($breakdown[$section] ?? 0));
@@ -55,16 +49,19 @@ class DailyOperationTotalsService
         return $day->fresh(['client', 'creator', 'updater', 'lines.creator']);
     }
 
-    private function previousExpectedPallets(DailyOperationDay $day): ?int
+    public function stockBaseForClient(int $clientId): int
     {
-        if ($day->client_id === null || $day->operation_date === null) {
-            return null;
-        }
-
-        return DailyOperationDay::query()
-            ->where('client_id', $day->client_id)
-            ->whereDate('operation_date', '<', Carbon::parse($day->operation_date)->toDateString())
-            ->orderByDesc('operation_date')
-            ->value('expected_pallets_tomorrow');
+        return (int) StockPallet::query()
+            ->where('client_id', $clientId)
+            ->where('active', true)
+            ->where('status', '!=', StockPallet::STATUS_OBSOLETE)
+            ->whereHas('item', fn ($query) => $query->where('status', '!=', Item::STATUS_OBSOLETE))
+            ->where(function ($query): void {
+                $query
+                    ->where('quantity_units', '>', 0)
+                    ->orWhere('full_pallets', '>', 0)
+                    ->orWhere('peaks_count', '>', 0);
+            })
+            ->sum('full_pallets');
     }
 }

@@ -73,24 +73,24 @@
     @else
         <section class="daily-ops-summary daily-ops-summary--metrics">
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
-                <strong>Pallets iniciales</strong>
+                <strong>STOCK BASE CLIENTE</strong>
                 <span>{{ number_format($day?->opening_pallets ?? 0, 0, ',', '.') }}</span>
-                <small>Base inicial del día para el cliente.</small>
+                <small>Stock base calculado desde inventario actual del cliente.</small>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
-                <strong>Almacenaje facturable</strong>
+                <strong>ALMACENAJE FACTURABLE</strong>
                 <span>{{ number_format($day?->stored_pallets_today ?? 0, 0, ',', '.') }}</span>
-                <small>Iniciales más descargas del día.</small>
+                <small>Stock base cliente mas descargas del dia.</small>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
-                <strong>Pallets movidos hoy</strong>
+                <strong>PALLETS MOVIDOS HOY</strong>
                 <span>{{ number_format($day?->moved_pallets_today ?? 0, 0, ',', '.') }}</span>
-                <small>Descargas más cargas y envíos.</small>
+                <small>Descargas mas cargas y envios del dia.</small>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
-                <strong>Base prevista mañana</strong>
+                <strong>BASE PREVISTA MANANA</strong>
                 <span>{{ number_format($day?->expected_pallets_tomorrow ?? 0, 0, ',', '.') }}</span>
-                <small>Iniciales + entradas - salidas.</small>
+                <small>Stock base mas descargas menos cargas y envios.</small>
             </article>
         </section>
 
@@ -119,14 +119,15 @@
             <article class="surface-card compact-card daily-ops-card daily-ops-card--note">
                 <div class="ops-index-heading">
                     <strong>Reglas actuales</strong>
-                    <span class="ops-page-meta">Facturación operativa del día</span>
+                    <span class="ops-page-meta">Facturacion operativa del dia</span>
                 </div>
 
                 <ul class="audit-note-list daily-ops-note-list">
                     <li>Cada descarga, carga, envío y viaje de camión genera gestión de camión asociada.</li>
                     <li>Los pallets movidos solo cuentan en descarga, carga y envío.</li>
                     <li>La gestión de camión y el viaje de camión se facturan aparte y no alteran stock.</li>
-                    <li>El almacenaje facturable del día es pallets iniciales más descargas del día.</li>
+                    <li>El stock base sale del inventario actual del cliente, incluyendo bloqueados y excluyendo obsoletos o stock cero.</li>
+                    <li>El almacenaje facturable del día es stock base cliente más descargas del día.</li>
                     <li>Las horas operario quedan preparadas como línea operativa específica.</li>
                 </ul>
 
@@ -147,12 +148,11 @@
                     <input type="hidden" name="client_id" value="{{ $selectedClient->id }}">
 
                     <div class="daily-ops-summary-panel">
-                        <label class="auth-field">
-                            <span>Pallets iniciales</span>
-                            <input type="number" min="0" name="opening_pallets" value="{{ old('opening_pallets', $day?->opening_pallets) }}" class="auth-input">
-                        </label>
-
                         <div class="daily-ops-derived-grid">
+                            <article class="daily-ops-derived-card">
+                                <strong>Stock base cliente</strong>
+                                <span>{{ number_format($day?->opening_pallets ?? 0, 0, ',', '.') }}</span>
+                            </article>
                             <article class="daily-ops-derived-card">
                                 <strong>Almacenaje facturable</strong>
                                 <span>{{ number_format($day?->stored_pallets_today ?? 0, 0, ',', '.') }}</span>
@@ -162,10 +162,12 @@
                                 <span>{{ number_format($day?->moved_pallets_today ?? 0, 0, ',', '.') }}</span>
                             </article>
                             <article class="daily-ops-derived-card">
-                                <strong>Previstos mañana</strong>
+                                <strong>Base prevista manana</strong>
                                 <span>{{ number_format($day?->expected_pallets_tomorrow ?? 0, 0, ',', '.') }}</span>
                             </article>
                         </div>
+
+                        <p class="helper-text">Stock base calculado desde inventario actual del cliente. El ajuste manual queda reservado para una fase posterior.</p>
 
                         <label class="auth-field item-form-field--full">
                             <span>Notas operativas</span>
@@ -174,7 +176,7 @@
                     </div>
 
                     <div class="item-form-actions action-buttons daily-ops-summary-actions">
-                        <button type="submit" class="button-secondary compact-button btn-compact">Guardar base del día</button>
+                        <button type="submit" class="button-secondary compact-button btn-compact">Guardar notas del dia</button>
                     </div>
                 </form>
             </article>
