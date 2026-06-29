@@ -3446,6 +3446,10 @@ body.brand-body.app-shell-body .pagination-card {
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
+.daily-ops-summary--metrics {
+    margin-top: 0.2rem;
+}
+
 .daily-ops-toolbar,
 .daily-ops-card--recalc,
 .daily-ops-card--note,
@@ -3455,6 +3459,15 @@ body.brand-body.app-shell-body .pagination-card {
 }
 
 .daily-ops-toolbar {
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem;
+    background:
+        linear-gradient(180deg, rgba(253, 254, 255, 0.98), rgba(246, 249, 251, 0.98));
+}
+
+.daily-ops-toolbar-main,
+.daily-ops-toolbar-form {
     display: grid;
     gap: 1rem;
 }
@@ -3468,10 +3481,19 @@ body.brand-body.app-shell-body .pagination-card {
 .daily-ops-toolbar-note {
     display: grid;
     gap: 0.35rem;
-    padding: 0.95rem 1rem;
-    border-radius: 14px;
+    padding: 1.1rem 1.15rem;
+    border-radius: 18px;
+    border: 1px solid rgba(53, 83, 107, 0.08);
     background: linear-gradient(135deg, rgba(235, 243, 248, 0.92), rgba(246, 249, 251, 0.98));
     color: #385062;
+}
+
+.daily-ops-toolbar-note strong {
+    font-size: 1rem;
+}
+
+.daily-ops-toolbar-actions {
+    justify-content: flex-start;
 }
 
 .daily-ops-toolbar-note span,
@@ -3480,14 +3502,35 @@ body.brand-body.app-shell-body .pagination-card {
     line-height: 1.55;
 }
 
+.daily-ops-metric-card {
+    gap: 0.45rem;
+    padding: 1rem 1.05rem;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    box-shadow: 0 18px 40px rgba(18, 32, 44, 0.05);
+}
+
+.daily-ops-metric-card span {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+
+.daily-ops-metric-card small {
+    color: #5f7382;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
 .daily-ops-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
 }
 
 .daily-ops-card {
     display: grid;
     gap: 0.9rem;
-    padding: 1.05rem;
+    padding: 1.2rem;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    box-shadow: 0 18px 40px rgba(18, 32, 44, 0.05);
 }
 
 .daily-ops-card--note {
@@ -3495,8 +3538,58 @@ body.brand-body.app-shell-body .pagination-card {
         linear-gradient(180deg, rgba(244, 248, 250, 0.96), rgba(249, 251, 252, 0.96));
 }
 
+.daily-ops-summary-panel,
+.daily-ops-summary-form,
+.daily-ops-entry-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.daily-ops-entry-grid {
+    gap: 1rem;
+}
+
+.daily-ops-select {
+    min-height: 2.75rem;
+    padding-right: 2.4rem;
+    background-color: #fff;
+}
+
+.daily-ops-derived-grid {
+    display: grid;
+    gap: 0.8rem;
+    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+}
+
+.daily-ops-derived-card {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.9rem 0.95rem;
+    border-radius: 14px;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    background: rgba(246, 249, 251, 0.92);
+}
+
+.daily-ops-derived-card strong {
+    color: #486072;
+    font-size: 0.8rem;
+}
+
+.daily-ops-derived-card span {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #203646;
+}
+
+.daily-ops-recalc-actions,
+.daily-ops-summary-actions,
+.daily-ops-entry-actions {
+    justify-content: flex-start;
+}
+
 .daily-ops-totals {
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 0.85rem;
 }
 
 .daily-ops-origin-chip {
@@ -3525,8 +3618,35 @@ body.brand-body.app-shell-body .pagination-card {
     padding-left: 1rem;
 }
 
+.daily-ops-note-list li + li {
+    margin-top: 0.45rem;
+}
+
 .daily-ops-table {
     min-width: 56rem;
+}
+
+.daily-ops-table-wrap {
+    display: block;
+}
+
+.daily-ops-mobile-list {
+    display: none;
+}
+
+.daily-ops-mobile-card {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1rem;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    box-shadow: 0 18px 40px rgba(18, 32, 44, 0.04);
+}
+
+.daily-ops-mobile-card-head,
+.daily-ops-mobile-card-body,
+.daily-ops-mobile-card-actions {
+    display: grid;
+    gap: 0.6rem;
 }
 
 .goods-receipt-ai-dump {
@@ -3565,13 +3685,18 @@ body.brand-body.app-shell-body .pagination-card {
     }
 
     .daily-ops-toolbar {
-        grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
+        grid-template-columns: minmax(0, 1.28fr) minmax(18rem, 0.72fr);
         align-items: start;
     }
 
     .daily-ops-recalc-grid {
         grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
         align-items: start;
+    }
+
+    .daily-ops-toolbar-grid {
+        grid-template-columns: minmax(13rem, 1fr) minmax(11rem, 14rem);
+        align-items: end;
     }
 }
 
@@ -3604,6 +3729,42 @@ body.brand-body.app-shell-body .pagination-card {
 
     .goods-receipts-table {
         min-width: 64rem;
+    }
+
+    .daily-ops-toolbar,
+    .daily-ops-card {
+        padding: 0.95rem;
+    }
+
+    .daily-ops-toolbar-actions,
+    .daily-ops-recalc-actions,
+    .daily-ops-summary-actions,
+    .daily-ops-entry-actions,
+    .daily-ops-mobile-card-actions {
+        align-items: stretch;
+    }
+
+    .daily-ops-toolbar-actions .button-primary,
+    .daily-ops-recalc-actions .button-primary,
+    .daily-ops-summary-actions .button-secondary,
+    .daily-ops-entry-actions .button-primary,
+    .daily-ops-entry-actions .button-secondary,
+    .daily-ops-mobile-card-actions .button-secondary {
+        width: 100%;
+    }
+
+    .daily-ops-table-wrap {
+        display: none;
+    }
+
+    .daily-ops-mobile-list {
+        display: grid;
+        gap: 0.85rem;
+    }
+
+    .daily-ops-origin-chip {
+        min-width: 0;
+        width: fit-content;
     }
 }
 

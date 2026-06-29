@@ -9,7 +9,9 @@ use App\Models\Client;
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\Role;
+use App\Services\DailyOperations\DailyOperationLineAutomationService;
 use App\Services\DailyOperations\DailyOperationRecalculationService;
+use App\Services\DailyOperations\DailyOperationTotalsService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +21,9 @@ use Illuminate\View\View;
 class DailyOperationController extends Controller
 {
     public function __construct(
+        private readonly DailyOperationLineAutomationService $lineAutomationService,
         private readonly DailyOperationRecalculationService $recalculationService,
+        private readonly DailyOperationTotalsService $totalsService,
     ) {}
 
     public function index(Request $request): View
@@ -75,14 +79,12 @@ class DailyOperationController extends Controller
             $day->created_by = $request->user()->id;
         }
 
-        $day->fill([
-            'opening_pallets' => $validated['opening_pallets'] ?? null,
-            'stored_pallets_today' => $validated['stored_pallets_today'] ?? null,
-            'moved_pallets_today' => $validated['moved_pallets_today'] ?? null,
-            'expected_pallets_tomorrow' => $validated['expected_pallets_tomorrow'] ?? null,
-            'notes' => $validated['notes'] ?? null,
-            'updated_by' => $request->user()->id,
-        ])->save();
+        $day = $this->totalsService->syncDay(
+            $day,
+            isset($validated['opening_pallets']) ? (int) $validated['opening_pallets'] : null,
+            $validated['notes'] ?? null,
+            (int) $request->user()->id,
+        );
 
         return redirect()
             ->route('daily-operations.index', ['date' => $validated['operation_date'], 'client_id' => $validated['client_id']])
@@ -98,16 +100,22 @@ class DailyOperationController extends Controller
 
         $sortOrder = (int) $day->lines()->max('sort_order') + 1;
 
-        $day->lines()->create([
+        $line = $day->lines()->create([
             'section' => $validated['section'],
             'counterparty_name' => $validated['counterparty_name'],
             'pallets' => $validated['pallets'],
             'observations' => $validated['observations'] ?? null,
             'without_booking' => false,
             'is_auto_generated' => false,
+            'source_type' => null,
+            'source_id' => null,
+            'parent_line_id' => null,
             'sort_order' => $sortOrder,
             'created_by' => $request->user()->id,
         ]);
+
+        $this->lineAutomationService->syncTruckManagementForManualLine($line, (int) $request->user()->id);
+        $this->totalsService->syncDay($day->fresh(['lines']), null, null, (int) $request->user()->id);
 
         return redirect()
             ->route('daily-operations.index', ['date' => $validated['operation_date'], 'client_id' => $validated['client_id']])
@@ -140,10 +148,15 @@ class DailyOperationController extends Controller
     public function updateLine(UpdateDailyOperationLineRequest $request, DailyOperationLine $dailyOperationLine): RedirectResponse
     {
         abort_unless($request->user()?->canAccessRole(Role::ALMACEN), 403);
-        abort_if($dailyOperationLine->is_auto_generated, 422, 'Las lineas automaticas se recalculan desde la operativa y no se editan manualmente.');
+        abort_if(! $dailyOperationLine->canBeManuallyManaged(), 422, 'Las lineas automaticas de operativa real se recalculan desde la operativa y no se editan manualmente.');
 
         $validated = $request->validated();
         $targetDate = $validated['operation_date'] ?? $dailyOperationLine->day?->operation_date?->toDateString() ?? now()->toDateString();
+        $previousDay = $dailyOperationLine->day;
+
+        if ($dailyOperationLine->source_type !== DailyOperationLine::SOURCE_MANUAL_LINE) {
+            $this->lineAutomationService->removeTruckManagementForManualLine($dailyOperationLine);
+        }
 
         $day = $this->firstOrCreateDay($targetDate, (int) $validated['client_id'], (int) $request->user()->id);
 
@@ -155,6 +168,16 @@ class DailyOperationController extends Controller
             'observations' => $validated['observations'] ?? null,
         ]);
 
+        if ($dailyOperationLine->source_type !== DailyOperationLine::SOURCE_MANUAL_LINE) {
+            $this->lineAutomationService->syncTruckManagementForManualLine($dailyOperationLine->fresh(), (int) $request->user()->id);
+        }
+
+        if ($previousDay !== null && $previousDay->id !== $day->id) {
+            $this->totalsService->syncDay($previousDay->fresh(['lines']), null, null, (int) $request->user()->id);
+        }
+
+        $this->totalsService->syncDay($day->fresh(['lines']), null, null, (int) $request->user()->id);
+
         return redirect()
             ->route('daily-operations.index', ['date' => $targetDate, 'client_id' => $validated['client_id']])
             ->with('status', 'Linea diaria actualizada correctamente.');
@@ -163,11 +186,20 @@ class DailyOperationController extends Controller
     public function destroyLine(Request $request, DailyOperationLine $dailyOperationLine): RedirectResponse
     {
         abort_unless($request->user()?->canAccessRole(Role::ALMACEN), 403);
-        abort_if($dailyOperationLine->is_auto_generated, 422, 'Las lineas automaticas se eliminan recalculando la operativa.');
+        abort_if(! $dailyOperationLine->canBeManuallyManaged(), 422, 'Las lineas automaticas de operativa real se eliminan recalculando la operativa.');
 
+        $day = $dailyOperationLine->day;
         $date = $dailyOperationLine->day?->operation_date?->toDateString() ?? now()->toDateString();
         $clientId = $dailyOperationLine->day?->client_id;
+
+        if ($dailyOperationLine->source_type !== DailyOperationLine::SOURCE_MANUAL_LINE) {
+            $this->lineAutomationService->removeTruckManagementForManualLine($dailyOperationLine);
+        }
+
         $dailyOperationLine->delete();
+        if ($day !== null) {
+            $this->totalsService->syncDay($day->fresh(['lines']), null, null, (int) $request->user()->id);
+        }
 
         return redirect()
             ->route('daily-operations.index', ['date' => $date, 'client_id' => $clientId])

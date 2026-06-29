@@ -15,7 +15,7 @@
     <section class="surface-card ops-page-header page-header-compact compact-card daily-ops-hero-card">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Operaciones diarias</h2>
-            <span class="ops-page-meta">Control operativo y base de facturacion diaria por cliente.</span>
+            <span class="ops-page-meta">Base operativa diaria por cliente para almacenaje, movimientos y servicios asociados.</span>
         </div>
     </section>
 
@@ -31,33 +31,35 @@
         </div>
     @endif
 
-    <section class="surface-card compact-card daily-ops-date-card daily-ops-toolbar">
-        <form method="GET" action="{{ route('daily-operations.index') }}" class="item-form">
-            <div class="form-grid daily-ops-toolbar-grid">
-                <label class="auth-field">
-                    <span>Cliente</span>
-                    <select name="client_id" class="auth-input" required>
-                        @foreach ($clients as $client)
-                            <option value="{{ $client->id }}" @selected((string) $selectedClient?->id === (string) $client->id)>{{ $client->name }}</option>
-                        @endforeach
-                    </select>
-                </label>
+    <section class="surface-card compact-card daily-ops-toolbar">
+        <div class="daily-ops-toolbar-main">
+            <form method="GET" action="{{ route('daily-operations.index') }}" class="item-form daily-ops-toolbar-form">
+                <div class="form-grid daily-ops-toolbar-grid">
+                    <label class="auth-field">
+                        <span>Cliente</span>
+                        <select name="client_id" class="auth-input daily-ops-select" required>
+                            @foreach ($clients as $client)
+                                <option value="{{ $client->id }}" @selected((string) $selectedClient?->id === (string) $client->id)>{{ $client->name }}</option>
+                            @endforeach
+                        </select>
+                    </label>
 
-                <label class="auth-field">
-                    <span>Fecha operativa</span>
-                    <input type="date" name="date" value="{{ $selectedDate->format('Y-m-d') }}" class="auth-input">
-                </label>
-            </div>
+                    <label class="auth-field">
+                        <span>Fecha operativa</span>
+                        <input type="date" name="date" value="{{ $selectedDate->format('Y-m-d') }}" class="auth-input">
+                    </label>
+                </div>
 
-            <div class="item-form-actions action-buttons daily-ops-toolbar-actions">
-                <button type="submit" class="button-primary compact-button btn-compact">Ver dia</button>
-            </div>
-        </form>
+                <div class="item-form-actions action-buttons daily-ops-toolbar-actions">
+                    <button type="submit" class="button-primary compact-button btn-compact">Ver día</button>
+                </div>
+            </form>
+        </div>
 
         @if ($selectedClient)
             <aside class="daily-ops-toolbar-note">
                 <strong>{{ $selectedClient->name }}</strong>
-                <span>El recalcado conserva las lineas manuales y reconstruye solo la base automatica para la fecha seleccionada.</span>
+                <span>Los cálculos se mantienen aislados por cliente y fecha. Las líneas manuales se conservan y el recálculo solo reconstruye la parte automática de la operativa real.</span>
             </aside>
         @endif
     </section>
@@ -69,34 +71,38 @@
             </div>
         </section>
     @else
-        <section class="daily-ops-summary">
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+        <section class="daily-ops-summary daily-ops-summary--metrics">
+            <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
                 <strong>Pallets iniciales</strong>
                 <span>{{ number_format($day?->opening_pallets ?? 0, 0, ',', '.') }}</span>
+                <small>Base inicial del día para el cliente.</small>
             </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Pallets almacenados hoy</strong>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
+                <strong>Almacenaje facturable</strong>
                 <span>{{ number_format($day?->stored_pallets_today ?? 0, 0, ',', '.') }}</span>
+                <small>Iniciales más descargas del día.</small>
             </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+            <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
                 <strong>Pallets movidos hoy</strong>
                 <span>{{ number_format($day?->moved_pallets_today ?? 0, 0, ',', '.') }}</span>
+                <small>Descargas más cargas y envíos.</small>
             </article>
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Pallets previstos manana</strong>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
+                <strong>Base prevista mañana</strong>
                 <span>{{ number_format($day?->expected_pallets_tomorrow ?? 0, 0, ',', '.') }}</span>
+                <small>Iniciales + entradas - salidas.</small>
             </article>
         </section>
 
         <section class="daily-ops-recalc-grid">
             <article class="surface-card compact-card daily-ops-card daily-ops-card--recalc">
                 <div class="ops-index-heading">
-                    <strong>Recalculo desde operativa</strong>
-                    <span class="ops-page-meta">Entradas confirmadas, salidas enviadas/completadas y stock activo</span>
+                    <strong>Recálculo desde operativa</strong>
+                    <span class="ops-page-meta">Entradas confirmadas, envíos expedidos y stock activo del cliente</span>
                 </div>
 
                 <p class="daily-ops-recalc-copy">
-                    Genera automaticamente descarga, carga, gestion camion, viaje camion y almacenaje sin duplicar lineas ya recalculadas.
+                    Genera automáticamente descargas, envíos, gestiones de camión y viajes de camión sin duplicar líneas ya recalculadas. Las líneas manuales se mantienen.
                 </p>
 
                 <form method="POST" action="{{ route('daily-operations.recalculate') }}" class="item-form">
@@ -104,7 +110,7 @@
                     <input type="hidden" name="operation_date" value="{{ $selectedDate->format('Y-m-d') }}">
                     <input type="hidden" name="client_id" value="{{ $selectedClient->id }}">
 
-                    <div class="item-form-actions action-buttons">
+                    <div class="item-form-actions action-buttons daily-ops-recalc-actions">
                         <button type="submit" class="button-primary compact-button btn-compact">Recalcular desde operativa</button>
                     </div>
                 </form>
@@ -113,74 +119,75 @@
             <article class="surface-card compact-card daily-ops-card daily-ops-card--note">
                 <div class="ops-index-heading">
                     <strong>Reglas actuales</strong>
-                    <span class="ops-page-meta">Base semi-automatica para facturacion</span>
+                    <span class="ops-page-meta">Facturación operativa del día</span>
                 </div>
 
                 <ul class="audit-note-list daily-ops-note-list">
-                    <li>Las lineas manuales se conservan.</li>
-                    <li>Las lineas automaticas se regeneran sin duplicados.</li>
-                    <li>El resumen diario se actualiza con una aproximacion editable.</li>
+                    <li>Cada descarga, carga, envío y viaje de camión genera gestión de camión asociada.</li>
+                    <li>Los pallets movidos solo cuentan en descarga, carga y envío.</li>
+                    <li>La gestión de camión y el viaje de camión se facturan aparte y no alteran stock.</li>
+                    <li>El almacenaje facturable del día es pallets iniciales más descargas del día.</li>
                 </ul>
 
-                <p class="helper-text">TODO: marcar sin booking y conectar con reglas reales de avisos/horarios de empresa.</p>
+                <p class="helper-text">TODO: configurar horarios reales de empresa para avisos de solicitud de mercancía.</p>
             </article>
         </section>
 
         <section class="daily-ops-grid">
-            <article class="surface-card compact-card daily-ops-card">
+            <article class="surface-card compact-card daily-ops-card daily-ops-card--summary">
                 <div class="ops-index-heading">
-                    <strong>Resumen del dia</strong>
-                    <span class="ops-page-meta">{{ $selectedDate->format('d/m/Y') }} - {{ $selectedClient->name }}</span>
+                    <strong>Resumen del día</strong>
+                    <span class="ops-page-meta">{{ $selectedDate->format('d/m/Y') }} · {{ $selectedClient->name }}</span>
                 </div>
 
-                <form method="POST" action="{{ route('daily-operations.day.upsert') }}" class="item-form">
+                <form method="POST" action="{{ route('daily-operations.day.upsert') }}" class="item-form daily-ops-summary-form">
                     @csrf
                     <input type="hidden" name="operation_date" value="{{ $selectedDate->format('Y-m-d') }}">
                     <input type="hidden" name="client_id" value="{{ $selectedClient->id }}">
 
-                    <div class="form-grid">
+                    <div class="daily-ops-summary-panel">
                         <label class="auth-field">
                             <span>Pallets iniciales</span>
                             <input type="number" min="0" name="opening_pallets" value="{{ old('opening_pallets', $day?->opening_pallets) }}" class="auth-input">
                         </label>
 
-                        <label class="auth-field">
-                            <span>Pallets almacenados hoy</span>
-                            <input type="number" min="0" name="stored_pallets_today" value="{{ old('stored_pallets_today', $day?->stored_pallets_today) }}" class="auth-input">
-                        </label>
-
-                        <label class="auth-field">
-                            <span>Pallets movidos hoy</span>
-                            <input type="number" min="0" name="moved_pallets_today" value="{{ old('moved_pallets_today', $day?->moved_pallets_today) }}" class="auth-input">
-                        </label>
-
-                        <label class="auth-field">
-                            <span>Pallets previstos manana</span>
-                            <input type="number" min="0" name="expected_pallets_tomorrow" value="{{ old('expected_pallets_tomorrow', $day?->expected_pallets_tomorrow) }}" class="auth-input">
-                        </label>
+                        <div class="daily-ops-derived-grid">
+                            <article class="daily-ops-derived-card">
+                                <strong>Almacenaje facturable</strong>
+                                <span>{{ number_format($day?->stored_pallets_today ?? 0, 0, ',', '.') }}</span>
+                            </article>
+                            <article class="daily-ops-derived-card">
+                                <strong>Movidos hoy</strong>
+                                <span>{{ number_format($day?->moved_pallets_today ?? 0, 0, ',', '.') }}</span>
+                            </article>
+                            <article class="daily-ops-derived-card">
+                                <strong>Previstos mañana</strong>
+                                <span>{{ number_format($day?->expected_pallets_tomorrow ?? 0, 0, ',', '.') }}</span>
+                            </article>
+                        </div>
 
                         <label class="auth-field item-form-field--full">
                             <span>Notas operativas</span>
-                            <textarea name="notes" rows="4" class="auth-input">{{ old('notes', $day?->notes) }}</textarea>
+                            <textarea name="notes" rows="5" class="auth-input">{{ old('notes', $day?->notes) }}</textarea>
                         </label>
                     </div>
 
-                    <div class="item-form-actions action-buttons">
-                        <button type="submit" class="button-secondary compact-button btn-compact">Guardar resumen</button>
+                    <div class="item-form-actions action-buttons daily-ops-summary-actions">
+                        <button type="submit" class="button-secondary compact-button btn-compact">Guardar base del día</button>
                     </div>
                 </form>
             </article>
 
-            <article class="surface-card compact-card daily-ops-card">
+            <article class="surface-card compact-card daily-ops-card daily-ops-card--entry">
                 <div class="ops-index-heading">
-                    <strong>{{ $lineBeingEdited ? 'Editar linea' : 'Nueva linea operativa' }}</strong>
-                    <span class="ops-page-meta">Descarga, carga, gestion, camion, almacenaje o transporte</span>
+                    <strong>{{ $lineBeingEdited ? 'Editar línea operativa' : 'Nueva línea operativa' }}</strong>
+                    <span class="ops-page-meta">Descarga, carga, envío, gestión de camión, viaje de camión y servicios</span>
                 </div>
 
                 <form
                     method="POST"
                     action="{{ $lineBeingEdited ? route('daily-operations.lines.update', $lineBeingEdited) : route('daily-operations.lines.store') }}"
-                    class="item-form"
+                    class="item-form daily-ops-entry-form"
                 >
                     @csrf
                     @if ($lineBeingEdited)
@@ -190,10 +197,10 @@
                     <input type="hidden" name="operation_date" value="{{ old('operation_date', $selectedDate->format('Y-m-d')) }}">
                     <input type="hidden" name="client_id" value="{{ $selectedClient->id }}">
 
-                    <div class="form-grid">
+                    <div class="form-grid daily-ops-entry-grid">
                         <label class="auth-field">
-                            <span>Seccion</span>
-                            <select name="section" class="auth-input" required>
+                            <span>Sección</span>
+                            <select name="section" class="auth-input daily-ops-select" required>
                                 @foreach ($sectionOptions as $value => $label)
                                     <option value="{{ $value }}" @selected(old('section', $lineBeingEdited?->section) === $value)>{{ $label }}</option>
                                 @endforeach
@@ -212,26 +219,26 @@
 
                         <label class="auth-field item-form-field--full">
                             <span>Observaciones</span>
-                            <textarea name="observations" rows="3" class="auth-input">{{ old('observations', $lineBeingEdited?->observations) }}</textarea>
+                            <textarea name="observations" rows="4" class="auth-input">{{ old('observations', $lineBeingEdited?->observations) }}</textarea>
                         </label>
                     </div>
 
-                    <div class="item-form-actions action-buttons">
+                    <div class="item-form-actions action-buttons daily-ops-entry-actions">
                         @if ($lineBeingEdited)
-                            <a href="{{ route('daily-operations.index', ['date' => $selectedDate->format('Y-m-d'), 'client_id' => $selectedClient->id]) }}" class="button-secondary compact-button btn-compact">Cancelar edicion</a>
+                            <a href="{{ route('daily-operations.index', ['date' => $selectedDate->format('Y-m-d'), 'client_id' => $selectedClient->id]) }}" class="button-secondary compact-button btn-compact">Cancelar edición</a>
                         @endif
-                        <button type="submit" class="button-primary compact-button btn-compact">{{ $lineBeingEdited ? 'Guardar cambios' : 'Anadir linea' }}</button>
+                        <button type="submit" class="button-primary compact-button btn-compact">{{ $lineBeingEdited ? 'Guardar cambios' : 'Añadir línea' }}</button>
                     </div>
                 </form>
 
-                <p class="helper-text">Usa lineas manuales para ajustes especiales que no deban sobrescribirse al recalcular.</p>
+                <p class="helper-text">Las líneas manuales de descarga, carga, envío y viaje de camión crean una gestión de camión asociada si todavía no existe.</p>
             </article>
         </section>
 
         <section class="surface-card compact-card daily-ops-card daily-ops-card--ledger">
             <div class="ops-index-heading">
                 <strong>Movimiento diario</strong>
-                <span class="ops-status badge-compact">{{ number_format($day?->linesTotal() ?? 0, 0, ',', '.') }} uds.</span>
+                <span class="ops-status badge-compact">{{ number_format($day?->linesTotal() ?? 0, 0, ',', '.') }} uds. registradas</span>
             </div>
 
             <div class="daily-ops-totals">
@@ -245,14 +252,14 @@
 
             @if ($day === null || $day->lines->isEmpty())
                 <div class="item-empty-state">
-                    No hay lineas registradas para esta fecha y cliente.
+                    No hay líneas registradas para esta fecha y cliente.
                 </div>
             @else
-                <div class="data-table-wrap">
-                    <table class="data-table table-compact daily-ops-table" aria-label="Lineas de operaciones diarias">
+                <div class="data-table-wrap daily-ops-table-wrap">
+                    <table class="data-table table-compact daily-ops-table" aria-label="Líneas de operaciones diarias">
                         <thead>
                             <tr>
-                                <th>Seccion</th>
+                                <th>Sección</th>
                                 <th>Contraparte</th>
                                 <th>Unidades</th>
                                 <th>Origen</th>
@@ -268,14 +275,12 @@
                                     <td>{{ number_format($line->pallets, 0, ',', '.') }}</td>
                                     <td>
                                         <span class="daily-ops-origin-chip {{ $line->is_auto_generated ? 'daily-ops-origin-chip--auto' : 'daily-ops-origin-chip--manual' }}">
-                                            {{ $line->is_auto_generated ? 'Automatica' : 'Manual' }}
+                                            {{ $line->is_auto_generated ? ($line->source_type === \App\Models\DailyOperationLine::SOURCE_MANUAL_LINE ? 'Asociada' : 'Operativa') : 'Manual' }}
                                         </span>
                                     </td>
                                     <td>{{ $line->observations ?: '-' }}</td>
                                     <td>
-                                        @if ($line->is_auto_generated)
-                                            <span class="helper-text">Se actualiza al recalcular</span>
-                                        @else
+                                        @if ($line->canBeManuallyManaged())
                                             <div class="inline-actions action-buttons">
                                                 <a href="{{ route('daily-operations.index', ['date' => $selectedDate->format('Y-m-d'), 'client_id' => $selectedClient->id, 'edit_line' => $line->id]) }}" class="button-secondary compact-button btn-table">Editar</a>
                                                 <form method="POST" action="{{ route('daily-operations.lines.destroy', $line) }}">
@@ -284,12 +289,44 @@
                                                     <button type="submit" class="button-secondary compact-button btn-table">Borrar</button>
                                                 </form>
                                             </div>
+                                        @else
+                                            <span class="helper-text">Se actualiza al recalcular</span>
                                         @endif
                                     </td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
+                </div>
+
+                <div class="daily-ops-mobile-list">
+                    @foreach ($day->lines as $line)
+                        <article class="surface-card daily-ops-mobile-card">
+                            <div class="daily-ops-mobile-card-head">
+                                <strong>{{ $line->sectionLabel() }}</strong>
+                                <span class="daily-ops-origin-chip {{ $line->is_auto_generated ? 'daily-ops-origin-chip--auto' : 'daily-ops-origin-chip--manual' }}">
+                                    {{ $line->is_auto_generated ? ($line->source_type === \App\Models\DailyOperationLine::SOURCE_MANUAL_LINE ? 'Asociada' : 'Operativa') : 'Manual' }}
+                                </span>
+                            </div>
+                            <div class="daily-ops-mobile-card-body">
+                                <div><strong>Contraparte:</strong> {{ $line->counterparty_name }}</div>
+                                <div><strong>Unidades:</strong> {{ number_format($line->pallets, 0, ',', '.') }}</div>
+                                <div><strong>Observaciones:</strong> {{ $line->observations ?: '-' }}</div>
+                            </div>
+                            <div class="daily-ops-mobile-card-actions">
+                                @if ($line->canBeManuallyManaged())
+                                    <a href="{{ route('daily-operations.index', ['date' => $selectedDate->format('Y-m-d'), 'client_id' => $selectedClient->id, 'edit_line' => $line->id]) }}" class="button-secondary compact-button btn-table">Editar</a>
+                                    <form method="POST" action="{{ route('daily-operations.lines.destroy', $line) }}">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="button-secondary compact-button btn-table">Borrar</button>
+                                    </form>
+                                @else
+                                    <span class="helper-text">Se actualiza al recalcular</span>
+                                @endif
+                            </div>
+                        </article>
+                    @endforeach
                 </div>
             @endif
         </section>

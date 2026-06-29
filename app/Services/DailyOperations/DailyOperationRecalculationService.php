@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\DB;
 
 class DailyOperationRecalculationService
 {
+    public function __construct(
+        private readonly DailyOperationTotalsService $totalsService,
+    ) {}
+
     public function rebuildForDateAndClient(string $operationDate, int $clientId, int $userId): DailyOperationDay
     {
         $date = Carbon::parse($operationDate)->toDateString();
@@ -31,13 +35,20 @@ class DailyOperationRecalculationService
                 ]);
             }
 
-            $manualSortOrder = (int) $day->lines()->where('is_auto_generated', false)->max('sort_order');
+            $manualSortOrder = (int) $day->lines()->where(function ($query): void {
+                $query
+                    ->where('is_auto_generated', false)
+                    ->orWhere('source_type', DailyOperationLine::SOURCE_MANUAL_LINE);
+            })->max('sort_order');
 
-            $day->lines()->where('is_auto_generated', true)->delete();
+            $day->lines()
+                ->where('is_auto_generated', true)
+                ->where('source_type', '!=', DailyOperationLine::SOURCE_MANUAL_LINE)
+                ->delete();
 
             $sortOrder = $manualSortOrder;
-            $storedToday = 0;
-            $movedToday = 0;
+            $receiptPalletsTotal = 0;
+            $dispatchPalletsTotal = 0;
 
             $receipts = GoodsReceipt::query()
                 ->with(['supplier', 'lines'])
@@ -49,7 +60,7 @@ class DailyOperationRecalculationService
 
             foreach ($receipts as $receipt) {
                 $receiptPallets = max(0, (int) $receipt->lines->sum('pallet_count'));
-                $storedToday += $receiptPallets;
+                $receiptPalletsTotal += $receiptPallets;
 
                 if ($receiptPallets > 0) {
                     $this->createAutoLine(
@@ -59,7 +70,7 @@ class DailyOperationRecalculationService
                         (string) ($receipt->supplier?->name ?? 'Entrada confirmada'),
                         $receiptPallets,
                         'Entrada '.$receipt->receipt_number.' confirmada.',
-                        'goods_receipt',
+                        DailyOperationLine::SOURCE_GOODS_RECEIPT,
                         (int) $receipt->id,
                         $userId,
                     );
@@ -71,8 +82,8 @@ class DailyOperationRecalculationService
                     DailyOperationLine::SECTION_GESTION_CAMION,
                     (string) ($receipt->supplier?->name ?? 'Entrada confirmada'),
                     1,
-                    'Gestion de camion asociada a la entrada '.$receipt->receipt_number.'.',
-                    'goods_receipt',
+                    'Gestión de camión asociada a la entrada '.$receipt->receipt_number.'.',
+                    DailyOperationLine::SOURCE_GOODS_RECEIPT,
                     (int) $receipt->id,
                     $userId,
                 );
@@ -103,17 +114,17 @@ class DailyOperationRecalculationService
                     $dispatchPallets = max(0, $dispatch->palletsCount());
                 }
 
-                $movedToday += $dispatchPallets;
+                $dispatchPalletsTotal += $dispatchPallets;
 
                 if ($dispatchPallets > 0) {
                     $this->createAutoLine(
                         $day,
                         ++$sortOrder,
-                        DailyOperationLine::SECTION_CARGA,
+                        DailyOperationLine::SECTION_ENVIO,
                         (string) ($dispatch->client?->name ?? 'Salida'),
                         $dispatchPallets,
-                        'Salida '.$dispatch->dispatchNumber().' en estado '.$dispatch->status.'.',
-                        'goods_dispatch',
+                        'Envío '.$dispatch->dispatchNumber().' en estado '.$dispatch->status.'.',
+                        DailyOperationLine::SOURCE_GOODS_DISPATCH,
                         (int) $dispatch->id,
                         $userId,
                     );
@@ -125,8 +136,8 @@ class DailyOperationRecalculationService
                     DailyOperationLine::SECTION_GESTION_CAMION,
                     (string) ($dispatch->client?->name ?? 'Salida'),
                     1,
-                    'Gestion de camion asociada a la salida '.$dispatch->dispatchNumber().'.',
-                    'goods_dispatch',
+                    'Gestión de camión asociada al envío '.$dispatch->dispatchNumber().'.',
+                    DailyOperationLine::SOURCE_GOODS_DISPATCH,
                     (int) $dispatch->id,
                     $userId,
                 );
@@ -137,8 +148,8 @@ class DailyOperationRecalculationService
                     DailyOperationLine::SECTION_VIAJE_CAMION,
                     (string) ($dispatch->client?->name ?? 'Salida'),
                     1,
-                    'Viaje de camion asociado a la salida '.$dispatch->dispatchNumber().'.',
-                    'goods_dispatch',
+                    'Viaje de camión asociado al envío '.$dispatch->dispatchNumber().'.',
+                    DailyOperationLine::SOURCE_GOODS_DISPATCH,
                     (int) $dispatch->id,
                     $userId,
                 );
@@ -157,22 +168,16 @@ class DailyOperationRecalculationService
                     DailyOperationLine::SECTION_ALMACENAJE,
                     'Stock activo del cliente',
                     $activeStockPallets,
-                    'Base estimada de almacenaje para la fecha '.$date.'.',
-                    'stock_snapshot',
+                    'Base facturable de almacenaje para la fecha '.$date.'.',
+                    DailyOperationLine::SOURCE_STOCK_SNAPSHOT,
                     null,
                     $userId,
                 );
             }
 
-            $day->fill([
-                'opening_pallets' => max(0, $activeStockPallets - $storedToday),
-                'stored_pallets_today' => $storedToday,
-                'moved_pallets_today' => $movedToday,
-                'expected_pallets_tomorrow' => $activeStockPallets,
-                'updated_by' => $userId,
-            ])->save();
+            $openingPallets = max(0, $activeStockPallets + $dispatchPalletsTotal - $receiptPalletsTotal);
 
-            return $day->load(['client', 'creator', 'updater', 'lines.creator']);
+            return $this->totalsService->syncDay($day, $openingPallets, $day->notes, $userId);
         });
     }
 
@@ -196,8 +201,9 @@ class DailyOperationRecalculationService
             'is_auto_generated' => true,
             'source_type' => $sourceType,
             'source_id' => $sourceId,
+            'parent_line_id' => null,
             'sort_order' => $sortOrder,
             'created_by' => $userId,
         ]);
     }
-};
+}
