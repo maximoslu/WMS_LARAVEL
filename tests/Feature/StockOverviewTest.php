@@ -217,13 +217,39 @@ class StockOverviewTest extends TestCase
             ->assertSee('SKU-EDIT-STOCK');
     }
 
-    public function test_non_superadmin_cannot_edit_stock_batches(): void
+    public function test_administracion_does_not_see_edit_batch_action_and_cannot_access_edit_route(): void
     {
         [$client] = $this->seedBaseData();
 
         $item = Item::factory()->create([
             'client_id' => $client->id,
-            'sku' => 'SKU-NO-EDIT',
+            'sku' => 'SKU-NO-EDIT-ADMIN',
+        ]);
+
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertDontSee(route('stock.batches.edit', $stockPallet));
+
+        $this->actingAs($user)
+            ->get(route('stock.batches.edit', $stockPallet))
+            ->assertForbidden();
+    }
+
+    public function test_almacen_does_not_see_edit_batch_action_and_cannot_access_edit_route(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-NO-EDIT-ALM',
         ]);
 
         $stockPallet = StockPallet::factory()->create([
@@ -232,6 +258,32 @@ class StockOverviewTest extends TestCase
         ]);
 
         $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertDontSee(route('stock.batches.edit', $stockPallet));
+
+        $this->actingAs($user)
+            ->get(route('stock.batches.edit', $stockPallet))
+            ->assertForbidden();
+    }
+
+    public function test_cliente_cannot_access_edit_stock_batch_route(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-NO-EDIT-CLI',
+        ]);
+
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE);
 
         $this->actingAs($user)
             ->get(route('stock.batches.edit', $stockPallet))
@@ -353,6 +405,123 @@ class StockOverviewTest extends TestCase
             ->assertSee('LOTE-FILTRO')
             ->assertSee('A9-01')
             ->assertDontSee('SKU-OTRO');
+    }
+
+    public function test_stock_table_does_not_show_cliente_column_and_summary_only_shows_total_pallets(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-SUMMARY',
+            'description' => 'Resumen',
+            'units_per_pallet' => 1000,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 2000,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 2,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Total pallets')
+            ->assertDontSeeText('Referencias con stock')
+            ->assertDontSeeText('Total unidades')
+            ->assertDontSeeText('Partidas bloqueadas')
+            ->assertDontSee('<th>Cliente</th>', false);
+    }
+
+    public function test_stock_view_marks_blocked_rows_with_visual_class(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-BLOCK-VISUAL',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'status' => StockPallet::STATUS_BLOCKED,
+            'blocked_reason' => 'Calidad',
+            'quantity_units' => 400,
+            'units_per_pallet' => 400,
+            'full_pallets' => 1,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('stock-row stock-row--blocked', false)
+            ->assertSee('stock-mobile-card--blocked', false);
+    }
+
+    public function test_stock_view_marks_obsolete_rows_with_visual_class(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-OBSOLETE-VISUAL',
+            'status' => Item::STATUS_OBSOLETE,
+            'active' => false,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'quantity_units' => 300,
+            'units_per_pallet' => 300,
+            'full_pallets' => 1,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('stock-row stock-row--obsolete', false)
+            ->assertSee('stock-mobile-card--obsolete', false);
+    }
+
+    public function test_stock_view_includes_mobile_card_structure(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-MOBILE',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-MOBILE',
+            'quantity_units' => 100,
+            'units_per_pallet' => 100,
+            'full_pallets' => 1,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('stock-mobile-list', false)
+            ->assertSee('stock-mobile-card', false)
+            ->assertSeeText('Lote')
+            ->assertSeeText('Pallets');
     }
 
     /**

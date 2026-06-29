@@ -32,22 +32,10 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="stock-summary kpi-strip" aria-label="Resumen de stock">
+    <section class="stock-summary stock-summary--single" aria-label="Resumen de stock">
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Referencias con stock</strong>
-            <span>{{ number_format($summary['references_with_stock'], 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Total unidades</strong>
-            <span>{{ number_format($summary['total_units'], 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Total pallets completos</strong>
+            <strong>Total pallets</strong>
             <span>{{ number_format($summary['total_pallets'], 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Partidas bloqueadas</strong>
-            <span>{{ number_format($summary['blocked_batches'], 0, ',', '.') }}</span>
         </article>
     </section>
 
@@ -201,7 +189,6 @@
                 <table class="data-table stock-table table-compact" aria-label="Vista operativa de stock por partidas">
                     <thead>
                         <tr>
-                            <th>Cliente</th>
                             <th>SKU</th>
                             <th>Descripcion</th>
                             <th>Cantidad</th>
@@ -232,13 +219,7 @@
                     </thead>
                     <tbody>
                         @foreach ($rows as $row)
-                            <tr class="stock-row">
-                                <td>
-                                    <div class="stock-cell-main">
-                                        <strong>{{ $row['client_name'] }}</strong>
-                                        <span>{{ $row['client_code'] }}</span>
-                                    </div>
-                                </td>
+                            <tr class="stock-row stock-row--{{ $row['row_visual_state'] }}">
                                 <td><strong>{{ $row['sku'] }}</strong></td>
                                 <td>{{ $row['description'] }}</td>
                                 <td class="stock-total">{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
@@ -288,10 +269,10 @@
 
         <section class="stock-mobile-list" aria-label="Vista movil de stock">
             @foreach ($rows as $row)
-                <article class="surface-card stock-mobile-card compact-card">
+                <article class="surface-card stock-mobile-card compact-card stock-mobile-card--{{ $row['row_visual_state'] }}">
                     <div class="stock-cell-main">
                         <strong>{{ $row['sku'] }}</strong>
-                        <span>{{ $row['client_name'] }} / {{ $row['lot_label'] }}</span>
+                        <span>{{ $row['lot_label'] }}</span>
                     </div>
 
                     <p>{{ $row['description'] }}</p>
@@ -329,10 +310,6 @@
                         <div>
                             <span>Picos</span>
                             <strong>{{ number_format($row['peaks_count'], 0, ',', '.') }}</strong>
-                        </div>
-                        <div>
-                            <span>Pico 1</span>
-                            <strong>{{ number_format($row['peak_1'], 0, ',', '.') }}</strong>
                         </div>
                     </div>
 

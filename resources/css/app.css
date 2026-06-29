@@ -1291,6 +1291,11 @@ button {
     gap: 0.85rem;
 }
 
+.stock-summary--single {
+    grid-template-columns: minmax(13rem, 18rem);
+    justify-content: start;
+}
+
 .stock-summary-card {
     display: grid;
     gap: 0.35rem;
@@ -1341,6 +1346,10 @@ button {
     z-index: 1;
 }
 
+.stock-mobile-list {
+    display: none;
+}
+
 .stock-table {
     width: 100%;
     min-width: 76rem;
@@ -1370,6 +1379,31 @@ button {
 
 .stock-row:hover td {
     background: rgba(20, 184, 196, 0.04);
+}
+
+.stock-row--blocked td {
+    background: rgba(214, 97, 97, 0.11);
+}
+
+.stock-row--blocked:hover td {
+    background: rgba(214, 97, 97, 0.15);
+}
+
+.stock-row--obsolete td {
+    background: rgba(231, 196, 86, 0.16);
+}
+
+.stock-row--obsolete:hover td {
+    background: rgba(231, 196, 86, 0.22);
+}
+
+.stock-row--blocked td:first-child,
+.stock-row--obsolete td:first-child {
+    box-shadow: inset 4px 0 0 rgba(137, 42, 42, 0.18);
+}
+
+.stock-row--obsolete td:first-child {
+    box-shadow: inset 4px 0 0 rgba(168, 135, 28, 0.22);
 }
 
 .stock-cell-main {
@@ -1420,8 +1454,17 @@ button {
 }
 
 .stock-mobile-list {
-    display: grid;
     gap: 1rem;
+}
+
+.stock-mobile-card--blocked {
+    background: linear-gradient(180deg, rgba(255, 245, 245, 0.98), rgba(255, 251, 251, 0.98));
+    border-color: rgba(214, 97, 97, 0.24);
+}
+
+.stock-mobile-card--obsolete {
+    background: linear-gradient(180deg, rgba(255, 251, 238, 0.98), rgba(255, 254, 248, 0.98));
+    border-color: rgba(196, 161, 53, 0.24);
 }
 
 .stock-mobile-metrics {
@@ -1443,6 +1486,10 @@ button {
     display: flex;
     flex-wrap: wrap;
     gap: 0.6rem;
+}
+
+.stock-mobile-card .item-form-actions {
+    margin-top: 0.15rem;
 }
 
 .data-toolbar,
@@ -1924,7 +1971,7 @@ textarea.auth-input {
 
 .stock-table-shell {
     max-width: 100%;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .data-table-wrap,
@@ -2285,6 +2332,10 @@ textarea.auth-input {
 @media (max-width: 767px) {
     .stock-desktop-table {
         display: none;
+    }
+
+    .stock-mobile-list {
+        display: grid;
     }
 
     .data-table {

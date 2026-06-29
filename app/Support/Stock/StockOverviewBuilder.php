@@ -203,6 +203,7 @@ class StockOverviewBuilder
             'peak_8' => (int) $pallet->peak_8,
             'peak_9' => (int) $pallet->peak_9,
             'peak_10' => (int) $pallet->peak_10,
+            'row_visual_state' => $this->rowVisualState($item?->status, $pallet->status),
             'has_stock' => true,
         ];
     }
@@ -247,6 +248,7 @@ class StockOverviewBuilder
             'peak_8' => 0,
             'peak_9' => 0,
             'peak_10' => 0,
+            'row_visual_state' => $this->rowVisualState($item->status, null),
             'has_stock' => false,
         ];
     }
@@ -278,5 +280,18 @@ class StockOverviewBuilder
         return $unitsPerPallet > 0
             ? number_format($unitsPerPallet, 0, ',', '.')
             : 'Sin dato';
+    }
+
+    private function rowVisualState(?string $itemStatus, ?string $batchStatus): string
+    {
+        if ($batchStatus === StockPallet::STATUS_BLOCKED) {
+            return 'blocked';
+        }
+
+        if ($batchStatus === StockPallet::STATUS_OBSOLETE || $itemStatus === Item::STATUS_OBSOLETE) {
+            return 'obsolete';
+        }
+
+        return 'normal';
     }
 }
