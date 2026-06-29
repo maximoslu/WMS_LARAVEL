@@ -3192,7 +3192,14 @@ body.brand-body.app-shell-body .pagination-card {
 .goods-receipt-summary,
 .goods-receipt-lines-card,
 .goods-receipt-document,
-.goods-receipt-document-form {
+.goods-receipt-document-form,
+.goods-receipts-mobile-list,
+.daily-ops-summary,
+.daily-ops-grid,
+.daily-ops-totals,
+.audit-grid,
+.audit-preview-warnings,
+.audit-note-list {
     display: grid;
     gap: 0.85rem;
     min-width: 0;
@@ -3200,6 +3207,11 @@ body.brand-body.app-shell-body .pagination-card {
 
 .goods-receipt-summary {
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.goods-receipt-summary--detail .stock-summary-card {
+    min-height: 7.1rem;
+    align-content: start;
 }
 
 .goods-receipt-grid {
@@ -3210,11 +3222,20 @@ body.brand-body.app-shell-body .pagination-card {
     display: grid;
     gap: 0.9rem;
     min-width: 0;
+    padding: 1rem 1.05rem;
 }
 
 .goods-receipt-title {
     display: grid;
     gap: 0.35rem;
+}
+
+.goods-receipt-header-card {
+    align-items: start;
+}
+
+.goods-receipt-header-actions form {
+    margin: 0;
 }
 
 .goods-receipt-form {
@@ -3359,6 +3380,78 @@ body.brand-body.app-shell-body .pagination-card {
     text-decoration: underline;
 }
 
+.goods-receipt-document-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.goods-receipts-mobile-list {
+    display: none;
+}
+
+.goods-receipts-mobile-card {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.audit-grid {
+    grid-template-columns: 1fr;
+}
+
+.audit-card {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.audit-card--side {
+    align-content: start;
+}
+
+.audit-note-list {
+    gap: 0.55rem;
+    margin: 0;
+    padding-left: 1rem;
+    list-style: disc;
+}
+
+.audit-preview-warnings {
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.audit-warning-chip,
+.daily-ops-total-chip {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.85rem 0.95rem;
+    border-radius: 12px;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    background: rgba(247, 249, 251, 0.82);
+}
+
+.daily-ops-summary {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.daily-ops-grid {
+    grid-template-columns: 1fr;
+}
+
+.daily-ops-card {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.daily-ops-totals {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.daily-ops-table {
+    min-width: 56rem;
+}
+
 .goods-receipt-ai-dump {
     margin: 0;
     padding: 0.8rem 0.9rem;
@@ -3383,13 +3476,27 @@ body.brand-body.app-shell-body .pagination-card {
         grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
         align-items: start;
     }
+
+    .audit-grid {
+        grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.85fr);
+        align-items: start;
+    }
+
+    .daily-ops-grid {
+        grid-template-columns: minmax(0, 1.05fr) minmax(19rem, 0.95fr);
+        align-items: start;
+    }
 }
 
 @media (max-width: 767px) {
+    .goods-receipt-header-actions,
     .goods-receipt-lines-tools {
         align-items: stretch;
     }
 
+    .goods-receipt-document-actions .button-secondary,
+    .goods-receipt-header-actions .button-secondary,
+    .goods-receipt-header-actions .button-primary,
     .goods-receipt-lines-tools .button-secondary {
         width: 100%;
     }
@@ -3402,6 +3509,14 @@ body.brand-body.app-shell-body .pagination-card {
 
     .goods-receipt-lines-table {
         min-width: 62rem;
+    }
+
+    .goods-receipts-mobile-list {
+        display: grid;
+    }
+
+    .goods-receipts-table {
+        min-width: 64rem;
     }
 }
 

@@ -47,6 +47,115 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_created_goods_receipt_appears_in_index_with_default_filters(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-HIST-001',
+                'external_document_number' => 'DOC-HIST-001',
+                'received_at' => '2026-06-29',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-HIST-001',
+                        'description' => 'Historico visible',
+                        'lot' => 'LOT-HIST',
+                        'quantity_units' => 1000,
+                        'units_per_pallet' => 1000,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.index'))
+            ->assertOk()
+            ->assertSee('ALB-HIST-001')
+            ->assertSee('DOC-HIST-001')
+            ->assertSee($supplier->name);
+    }
+
+    public function test_goods_receipts_index_supports_pagination_and_filters(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$clientA, $supplierA] = $this->makeReceiptContext();
+        [$clientB, $supplierB] = $this->makeReceiptContext();
+
+        foreach (range(1, 28) as $index) {
+            GoodsReceipt::factory()->create([
+                'client_id' => $index <= 14 ? $clientA->id : $clientB->id,
+                'supplier_id' => $index <= 14 ? $supplierA->id : $supplierB->id,
+                'receipt_number' => sprintf('ALB-PAG-%03d', $index),
+                'external_document_number' => sprintf('DOC-PAG-%03d', $index),
+                'status' => $index <= 14 ? GoodsReceipt::STATUS_DRAFT : GoodsReceipt::STATUS_CONFIRMED,
+                'received_at' => $index <= 14 ? '2026-06-28' : '2026-06-29',
+                'created_by' => $user->id,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.index'))
+            ->assertOk()
+            ->assertSee('ALB-PAG-028')
+            ->assertSee('ALB-PAG-004')
+            ->assertDontSee('ALB-PAG-001');
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.index', ['client_id' => $clientA->id]))
+            ->assertOk()
+            ->assertSee('ALB-PAG-014')
+            ->assertDontSee('ALB-PAG-028');
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.index', ['status' => GoodsReceipt::STATUS_CONFIRMED]))
+            ->assertOk()
+            ->assertSee('ALB-PAG-028')
+            ->assertDontSee('ALB-PAG-014');
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.index', ['search' => 'DOC-PAG-003']))
+            ->assertOk()
+            ->assertSee('DOC-PAG-003')
+            ->assertDontSee('DOC-PAG-028');
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.index', [
+                'date_from' => '2026-06-29',
+                'date_to' => '2026-06-29',
+            ]))
+            ->assertOk()
+            ->assertSee('ALB-PAG-028')
+            ->assertDontSee('ALB-PAG-014');
+    }
+
+    public function test_goods_receipt_detail_renders_refined_structure(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$receipt] = $this->createConfirmedReceipt($user, 'SKU-DETAIL-001');
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('goods-receipt-header-card', false)
+            ->assertSee('goods-receipt-card--document', false)
+            ->assertSee('Guardar documento')
+            ->assertSee('Procesar con IA (proximamente)');
+    }
+
     public function test_superadmin_can_create_supplier(): void
     {
         $this->seed(RoleSeeder::class);

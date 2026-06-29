@@ -5,8 +5,10 @@ use App\Http\Controllers\AjaxSearchController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DailyOperationController;
 use App\Http\Controllers\GoodsDispatchController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\ItemController;
@@ -172,6 +174,22 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.attach-document');
 
+    Route::get('/operaciones-diarias', [DailyOperationController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('daily-operations.index');
+    Route::post('/operaciones-diarias/dia', [DailyOperationController::class, 'upsertDay'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('daily-operations.day.upsert');
+    Route::post('/operaciones-diarias/lineas', [DailyOperationController::class, 'storeLine'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('daily-operations.lines.store');
+    Route::put('/operaciones-diarias/lineas/{dailyOperationLine}', [DailyOperationController::class, 'updateLine'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('daily-operations.lines.update');
+    Route::delete('/operaciones-diarias/lineas/{dailyOperationLine}', [DailyOperationController::class, 'destroyLine'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('daily-operations.lines.destroy');
+
     Route::get('/salidas', [GoodsDispatchController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.index');
@@ -286,10 +304,15 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('access-requests.reject');
 
-    Route::get('/auditoria', ModulePlaceholderController::class)
+    Route::get('/auditoria', [AuditController::class, 'index'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
-        ->defaults('module', 'auditoria')
-        ->name('modules.audit');
+        ->name('audit.index');
+    Route::post('/auditoria/limpieza/previsualizar', [AuditController::class, 'previewCleanup'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('audit.cleanup.preview');
+    Route::post('/auditoria/limpieza/ejecutar', [AuditController::class, 'executeCleanup'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('audit.cleanup.execute');
 
     Route::get('/backups', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::SUPERADMIN)

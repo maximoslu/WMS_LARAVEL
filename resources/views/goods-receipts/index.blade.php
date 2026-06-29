@@ -57,11 +57,11 @@
             <label class="auth-field">
                 <span>Estado</span>
                 <select name="status" class="auth-input">
+                    <option value="all" @selected($filters['status'] === 'all')>Todos</option>
                     <option value="{{ \App\Models\GoodsReceipt::STATUS_DRAFT }}" @selected($filters['status'] === \App\Models\GoodsReceipt::STATUS_DRAFT)>Borrador</option>
                     <option value="{{ \App\Models\GoodsReceipt::STATUS_PENDING_REVIEW }}" @selected($filters['status'] === \App\Models\GoodsReceipt::STATUS_PENDING_REVIEW)>Pendiente revision</option>
                     <option value="{{ \App\Models\GoodsReceipt::STATUS_CONFIRMED }}" @selected($filters['status'] === \App\Models\GoodsReceipt::STATUS_CONFIRMED)>Confirmada</option>
                     <option value="{{ \App\Models\GoodsReceipt::STATUS_CANCELLED }}" @selected($filters['status'] === \App\Models\GoodsReceipt::STATUS_CANCELLED)>Cancelada</option>
-                    <option value="all" @selected($filters['status'] === 'all')>Todos</option>
                 </select>
             </label>
 
@@ -74,6 +74,16 @@
                     class="auth-input"
                     placeholder="Albaran, documento o proveedor"
                 >
+            </label>
+
+            <label class="auth-field">
+                <span>Fecha desde</span>
+                <input type="date" name="date_from" value="{{ $filters['date_from'] }}" class="auth-input">
+            </label>
+
+            <label class="auth-field">
+                <span>Fecha hasta</span>
+                <input type="date" name="date_to" value="{{ $filters['date_to'] }}" class="auth-input">
             </label>
 
             <div class="stock-filter-actions action-buttons page-actions-compact">
@@ -99,10 +109,10 @@
                             <th>Cliente</th>
                             <th>Proveedor</th>
                             <th>Recepcion</th>
+                            <th>Creada por</th>
                             <th>Lineas</th>
                             <th>Partidas generadas</th>
                             <th>Documento</th>
-                            <th>IA</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
@@ -119,10 +129,10 @@
                                 <td>{{ $receipt->client->name }}</td>
                                 <td>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</td>
                                 <td>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</td>
+                                <td>{{ $receipt->creator?->name ?: 'Sin usuario' }}</td>
                                 <td>{{ number_format($receipt->lines_count, 0, ',', '.') }}</td>
                                 <td>{{ number_format($receipt->stock_pallets_count, 0, ',', '.') }}</td>
                                 <td>{{ $receipt->document_original_name ?: '-' }}</td>
-                                <td>{{ $receipt->aiStatusLabel() }}</td>
                                 <td>
                                     <span class="receipt-status-pill receipt-status-pill--{{ $receipt->status }}">
                                         {{ $receipt->statusLabel() }}
@@ -142,6 +152,49 @@
                     </tbody>
                 </table>
             </div>
+        </section>
+
+        <section class="goods-receipts-mobile-list" aria-label="Listado móvil de entradas">
+            @foreach ($receipts as $receipt)
+                <article class="surface-card compact-card goods-receipts-mobile-card">
+                    <div class="stock-cell-main">
+                        <strong>{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</strong>
+                        <span>{{ $receipt->external_document_number ?: 'Sin número externo' }}</span>
+                    </div>
+
+                    <div class="stock-pill-list">
+                        <span class="receipt-status-pill receipt-status-pill--{{ $receipt->status }}">{{ $receipt->statusLabel() }}</span>
+                    </div>
+
+                    <div class="stock-mobile-metrics">
+                        <div>
+                            <span>Cliente</span>
+                            <strong>{{ $receipt->client->name }}</strong>
+                        </div>
+                        <div>
+                            <span>Proveedor</span>
+                            <strong>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</strong>
+                        </div>
+                        <div>
+                            <span>Recepción</span>
+                            <strong>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</strong>
+                        </div>
+                        <div>
+                            <span>Partidas</span>
+                            <strong>{{ number_format($receipt->stock_pallets_count, 0, ',', '.') }}</strong>
+                        </div>
+                    </div>
+
+                    <p class="users-table-email">Creada por: {{ $receipt->creator?->name ?: 'Sin usuario' }}</p>
+
+                    <div class="inline-actions action-buttons">
+                        <a href="{{ route('goods-receipts.show', $receipt) }}" class="button-secondary compact-button btn-table">Ver</a>
+                        @if (! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
+                            <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-table">Editar</a>
+                        @endif
+                    </div>
+                </article>
+            @endforeach
         </section>
     @endif
 

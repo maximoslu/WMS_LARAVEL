@@ -14,7 +14,7 @@
         <span>{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</span>
     </nav>
 
-    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
+    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card goods-receipt-header-card">
         <div class="ops-page-headline">
             <div class="goods-receipt-title">
                 <h2 class="ops-page-title page-title-compact">{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</h2>
@@ -25,7 +25,7 @@
             </span>
         </div>
 
-        <div class="ops-page-actions page-actions-compact action-buttons">
+        <div class="ops-page-actions page-actions-compact action-buttons goods-receipt-header-actions">
             @if (! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
                 <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-compact">Editar</a>
 
@@ -58,7 +58,7 @@
         </div>
     @endif
 
-    <section class="goods-receipt-summary">
+    <section class="goods-receipt-summary goods-receipt-summary--detail">
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
             <strong>Cliente</strong>
             <span>{{ $receipt->client->name }}</span>
@@ -78,7 +78,7 @@
     </section>
 
     <section class="goods-receipt-grid">
-        <article class="surface-card compact-card goods-receipt-card">
+        <article class="surface-card compact-card goods-receipt-card goods-receipt-card--header">
             <div class="ops-index-heading">
                 <strong>Cabecera</strong>
                 <span class="ops-page-meta">Creada por {{ $receipt->creator?->name ?: 'Usuario no disponible' }}</span>
@@ -109,7 +109,7 @@
             </div>
         </article>
 
-        <article class="surface-card compact-card goods-receipt-card">
+        <article class="surface-card compact-card goods-receipt-card goods-receipt-card--document">
             <div class="ops-index-heading">
                 <strong>Documento e IA futura</strong>
                 <span class="receipt-status-pill receipt-status-pill--ai">{{ $receipt->aiStatusLabel() }}</span>
@@ -132,10 +132,11 @@
                         <span>Adjuntar o reemplazar documento</span>
                         <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
                     </label>
-                    <button type="submit" class="button-secondary compact-button btn-compact">Guardar documento</button>
+                    <div class="goods-receipt-document-actions action-buttons">
+                        <button type="submit" class="button-secondary compact-button btn-compact">Guardar documento</button>
+                        <button type="button" class="button-secondary compact-button btn-compact" disabled>Procesar con IA (proximamente)</button>
+                    </div>
                 </form>
-
-                <button type="button" class="button-secondary compact-button btn-compact" disabled>Procesar con IA (proximamente)</button>
 
                 @if ($receipt->ai_extracted_data)
                     <pre class="goods-receipt-ai-dump">{{ json_encode($receipt->ai_extracted_data, JSON_PRETTY_PRINT) }}</pre>

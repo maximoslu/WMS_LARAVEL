@@ -31,8 +31,10 @@ class GoodsReceiptController extends Controller
     {
         $clientFilter = $request->integer('client_id');
         $supplierFilter = $request->integer('supplier_id');
-        $status = (string) $request->string('status', GoodsReceipt::STATUS_DRAFT);
+        $status = (string) $request->string('status', 'all');
         $search = trim((string) $request->string('search'));
+        $dateFrom = trim((string) $request->string('date_from'));
+        $dateTo = trim((string) $request->string('date_to'));
 
         $receipts = GoodsReceipt::query()
             ->with(['client', 'supplier', 'creator'])
@@ -48,8 +50,10 @@ class GoodsReceiptController extends Controller
                         ->orWhereHas('supplier', fn ($query) => $query->where('name', 'like', '%'.$search.'%'));
                 });
             })
+            ->when($dateFrom !== '', fn ($query) => $query->whereDate('received_at', '>=', $dateFrom))
+            ->when($dateTo !== '', fn ($query) => $query->whereDate('received_at', '<=', $dateTo))
             ->latest('id')
-            ->paginate(20)
+            ->paginate(25)
             ->withQueryString();
 
         return view('goods-receipts.index', [
@@ -61,8 +65,10 @@ class GoodsReceiptController extends Controller
                 'supplier_id' => $supplierFilter > 0 ? $supplierFilter : null,
                 'status' => in_array($status, ['all', GoodsReceipt::STATUS_DRAFT, GoodsReceipt::STATUS_PENDING_REVIEW, GoodsReceipt::STATUS_CONFIRMED, GoodsReceipt::STATUS_CANCELLED], true)
                     ? $status
-                    : GoodsReceipt::STATUS_DRAFT,
+                    : 'all',
                 'search' => $search,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
             ],
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
