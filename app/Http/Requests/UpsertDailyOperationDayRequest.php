@@ -14,6 +14,7 @@ class UpsertDailyOperationDayRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'client_id' => ['required', 'integer', 'exists:clients,id'],
             'operation_date' => ['required', 'date'],
             'opening_pallets' => ['nullable', 'integer', 'min:0'],
             'stored_pallets_today' => ['nullable', 'integer', 'min:0'],

@@ -16,6 +16,7 @@ class StoreDailyOperationLineRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'client_id' => ['required', 'integer', 'exists:clients,id'],
             'operation_date' => ['required', 'date'],
             'section' => ['required', Rule::in(DailyOperationLine::sections())],
             'counterparty_name' => ['required', 'string', 'max:255'],

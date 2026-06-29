@@ -183,6 +183,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/operaciones-diarias/lineas', [DailyOperationController::class, 'storeLine'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('daily-operations.lines.store');
+    Route::post('/operaciones-diarias/recalcular', [DailyOperationController::class, 'recalculate'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('daily-operations.recalculate');
     Route::put('/operaciones-diarias/lineas/{dailyOperationLine}', [DailyOperationController::class, 'updateLine'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('daily-operations.lines.update');

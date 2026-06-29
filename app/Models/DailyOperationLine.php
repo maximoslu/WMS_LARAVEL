@@ -12,6 +12,9 @@ class DailyOperationLine extends Model
 
     public const SECTION_DESCARGA = 'descarga';
     public const SECTION_CARGA = 'carga';
+    public const SECTION_GESTION_CAMION = 'gestion_camion';
+    public const SECTION_VIAJE_CAMION = 'viaje_camion';
+    public const SECTION_ALMACENAJE = 'almacenaje';
     public const SECTION_GESTION = 'gestion';
     public const SECTION_TRANSPORTE = 'transporte';
 
@@ -22,6 +25,9 @@ class DailyOperationLine extends Model
         'pallets',
         'observations',
         'without_booking',
+        'is_auto_generated',
+        'source_type',
+        'source_id',
         'sort_order',
         'created_by',
     ];
@@ -31,6 +37,8 @@ class DailyOperationLine extends Model
         return [
             'pallets' => 'integer',
             'without_booking' => 'boolean',
+            'is_auto_generated' => 'boolean',
+            'source_id' => 'integer',
             'sort_order' => 'integer',
         ];
     }
@@ -53,8 +61,11 @@ class DailyOperationLine extends Model
         return [
             self::SECTION_DESCARGA,
             self::SECTION_CARGA,
-            self::SECTION_GESTION,
+            self::SECTION_GESTION_CAMION,
+            self::SECTION_VIAJE_CAMION,
+            self::SECTION_ALMACENAJE,
             self::SECTION_TRANSPORTE,
+            self::SECTION_GESTION,
         ];
     }
 
@@ -66,8 +77,11 @@ class DailyOperationLine extends Model
         return [
             self::SECTION_DESCARGA => 'Descarga',
             self::SECTION_CARGA => 'Carga',
-            self::SECTION_GESTION => 'Gestion',
+            self::SECTION_GESTION_CAMION => 'Gestion camion',
+            self::SECTION_VIAJE_CAMION => 'Viaje camion',
+            self::SECTION_ALMACENAJE => 'Almacenaje',
             self::SECTION_TRANSPORTE => 'Transporte',
+            self::SECTION_GESTION => 'Gestion',
         ];
     }
 

@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Collection;
 
 class DailyOperationDay extends Model
 {
@@ -14,6 +13,7 @@ class DailyOperationDay extends Model
 
     protected $fillable = [
         'operation_date',
+        'client_id',
         'opening_pallets',
         'stored_pallets_today',
         'moved_pallets_today',
@@ -39,6 +39,11 @@ class DailyOperationDay extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
@@ -46,7 +51,7 @@ class DailyOperationDay extends Model
 
     public function lines(): HasMany
     {
-        return $this->hasMany(DailyOperationLine::class, 'day_id');
+        return $this->hasMany(DailyOperationLine::class, 'day_id')->orderBy('sort_order')->orderBy('id');
     }
 
     /**

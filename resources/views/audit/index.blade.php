@@ -35,8 +35,12 @@
         <article class="surface-card compact-card audit-card">
             <div class="ops-index-heading">
                 <strong>Limpieza de registros</strong>
-                <span class="ops-page-meta">Previsualización obligatoria antes de borrar</span>
+                <span class="ops-page-meta">Previsualizacion obligatoria antes de borrar</span>
             </div>
+
+            <p class="audit-card-copy">
+                Revisa alcance, filtros y advertencias antes de borrar. Esta pantalla esta pensada para validar impacto y dejar una decision clara antes de escalar a SUPERADMIN.
+            </p>
 
             <form method="POST" action="{{ route('audit.cleanup.preview') }}" class="item-form">
                 @csrf
@@ -93,20 +97,20 @@
             <ul class="audit-note-list">
                 <li>Notificaciones antiguas.</li>
                 <li>Importaciones fallidas o solo previsualizadas.</li>
-                <li>Jobs fallidos históricos.</li>
+                <li>Jobs fallidos historicos.</li>
             </ul>
-            <p class="helper-text">TODO: definir política definitiva de retención, borrado de históricos cerrados y trazabilidad ampliada.</p>
+            <p class="helper-text">TODO: definir politica definitiva de retencion, borrado de historicos cerrados y trazabilidad ampliada.</p>
         </aside>
     </section>
 
     @if ($previewResult)
         <section class="surface-card compact-card audit-preview-card">
             <div class="ops-index-heading">
-                <strong>Resultado de la previsualización</strong>
+                <strong>Resultado de la previsualizacion</strong>
                 <span class="ops-status badge-compact">{{ number_format($previewResult['count'], 0, ',', '.') }} registros</span>
             </div>
 
-            <p>{{ $previewResult['description'] }}</p>
+            <p class="audit-card-copy">{{ $previewResult['description'] }}</p>
 
             <div class="audit-preview-warnings">
                 @foreach ($previewResult['warnings'] as $warning)
@@ -122,7 +126,7 @@
                     @endforeach
 
                     <label class="auth-field">
-                        <span>Confirmación obligatoria</span>
+                        <span>Confirmacion obligatoria</span>
                         <input
                             type="text"
                             name="confirmation_text"
@@ -137,7 +141,7 @@
                     </div>
                 </form>
             @else
-                <p class="helper-text">Solo SUPERADMIN puede ejecutar la limpieza real. Administración puede revisar el impacto antes de escalar.</p>
+                <p class="helper-text">Solo SUPERADMIN puede ejecutar la limpieza real. Administracion puede revisar el impacto antes de escalar.</p>
             @endif
         </section>
     @endif
