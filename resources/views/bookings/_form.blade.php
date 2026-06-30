@@ -3,7 +3,7 @@
     $formAction = $isEditing ? route('bookings.update', $booking) : route('bookings.store');
 @endphp
 
-<form method="POST" action="{{ $formAction }}" class="item-form daily-ops-entry-form">
+<form method="POST" action="{{ $formAction }}" class="item-form daily-ops-entry-form booking-form{{ $isClient ? ' booking-form--client' : ' booking-form--internal' }}">
     @csrf
     @if ($isEditing)
         @method('PUT')
@@ -38,62 +38,62 @@
             <input type="date" name="scheduled_date" value="{{ old('scheduled_date', $booking?->scheduled_date?->format('Y-m-d')) }}" class="auth-input" required>
         </label>
 
-        <label class="auth-field">
-            <span>Hora desde</span>
-            <input type="time" name="scheduled_time_from" value="{{ old('scheduled_time_from', $booking?->scheduled_time_from ? substr($booking->scheduled_time_from, 0, 5) : null) }}" class="auth-input">
+        <label class="auth-field{{ $isClient ? ' item-form-field--full' : '' }}">
+            <span>{{ $isClient ? 'Proveedor / transportista / origen' : 'Transportista' }}</span>
+            <input type="text" name="carrier_name" value="{{ old('carrier_name', $booking?->carrier_name) }}" class="auth-input" @required($isClient)>
         </label>
 
-        <label class="auth-field">
-            <span>Hora hasta</span>
-            <input type="time" name="scheduled_time_to" value="{{ old('scheduled_time_to', $booking?->scheduled_time_to ? substr($booking->scheduled_time_to, 0, 5) : null) }}" class="auth-input">
-        </label>
+        @if (! $isClient)
+            <label class="auth-field">
+                <span>Hora desde</span>
+                <input type="time" name="scheduled_time_from" value="{{ old('scheduled_time_from', $booking?->scheduled_time_from ? substr($booking->scheduled_time_from, 0, 5) : null) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Nº pallets previstos</span>
-            <input type="number" min="0" name="pallets_expected" value="{{ old('pallets_expected', $booking?->pallets_expected) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Hora hasta</span>
+                <input type="time" name="scheduled_time_to" value="{{ old('scheduled_time_to', $booking?->scheduled_time_to ? substr($booking->scheduled_time_to, 0, 5) : null) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Transportista</span>
-            <input type="text" name="carrier_name" value="{{ old('carrier_name', $booking?->carrier_name) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Nº pallets previstos</span>
+                <input type="number" min="0" name="pallets_expected" value="{{ old('pallets_expected', $booking?->pallets_expected) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Matrícula vehículo</span>
-            <input type="text" name="vehicle_plate" value="{{ old('vehicle_plate', $booking?->vehicle_plate) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Matrícula vehículo</span>
+                <input type="text" name="vehicle_plate" value="{{ old('vehicle_plate', $booking?->vehicle_plate) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Conductor</span>
-            <input type="text" name="driver_name" value="{{ old('driver_name', $booking?->driver_name) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Conductor</span>
+                <input type="text" name="driver_name" value="{{ old('driver_name', $booking?->driver_name) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Persona de contacto</span>
-            <input type="text" name="contact_name" value="{{ old('contact_name', $booking?->contact_name) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Persona de contacto</span>
+                <input type="text" name="contact_name" value="{{ old('contact_name', $booking?->contact_name) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Teléfono</span>
-            <input type="text" name="contact_phone" value="{{ old('contact_phone', $booking?->contact_phone) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Teléfono</span>
+                <input type="text" name="contact_phone" value="{{ old('contact_phone', $booking?->contact_phone) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Origen / destino</span>
-            <input type="text" name="origin_destination" value="{{ old('origin_destination', $booking?->origin_destination) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Origen / destino</span>
+                <input type="text" name="origin_destination" value="{{ old('origin_destination', $booking?->origin_destination) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Referencia documental</span>
-            <input type="text" name="document_reference" value="{{ old('document_reference', $booking?->document_reference) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Referencia documental</span>
+                <input type="text" name="document_reference" value="{{ old('document_reference', $booking?->document_reference) }}" class="auth-input">
+            </label>
 
-        <label class="auth-field">
-            <span>Muelle</span>
-            <input type="text" name="loading_dock" value="{{ old('loading_dock', $booking?->loading_dock) }}" class="auth-input">
-        </label>
+            <label class="auth-field">
+                <span>Muelle</span>
+                <input type="text" name="loading_dock" value="{{ old('loading_dock', $booking?->loading_dock) }}" class="auth-input">
+            </label>
 
-        @unless ($isClient)
             <label class="auth-field">
                 <span>Asignado a</span>
                 <select name="assigned_to" class="auth-input">
@@ -117,7 +117,7 @@
                     @endforeach
                 </select>
             </label>
-        @endunless
+        @endif
 
         <label class="auth-field item-form-field--full">
             <span>Observaciones</span>

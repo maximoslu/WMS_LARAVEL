@@ -52,6 +52,32 @@ class GoodsDispatchManagementTest extends TestCase
         }
     }
 
+    public function test_dispatch_index_uses_refined_cards_and_compact_header_actions(): void
+    {
+        $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.index'))
+            ->assertOk()
+            ->assertSee('dispatch-entry-grid--refined', false)
+            ->assertSee('dispatch-section-card', false)
+            ->assertSee('dispatch-section-action', false)
+            ->assertSee('dispatch-table-wrap', false);
+    }
+
+    public function test_dispatch_index_shows_ver_todos_as_compact_button_not_full_width_bar(): void
+    {
+        $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.index'))
+            ->assertOk()
+            ->assertSee('dispatch-section-action', false)
+            ->assertSee('Ver todos');
+    }
+
     public function test_internal_view_shows_statuses_in_spanish(): void
     {
         $this->seedBaseData();

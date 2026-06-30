@@ -80,17 +80,17 @@
             <p>La agenda mostrará aquí los próximos movimientos previstos por día.</p>
         </article>
     @else
-        <section class="ops-section-grid ops-section-grid--dashboard">
+        <section class="ops-section-grid ops-section-grid--dashboard booking-calendar-agenda">
             @foreach ($groupedBookings as $date => $bookings)
-                <article class="surface-card ops-index-card compact-card">
+                <article class="surface-card ops-index-card compact-card booking-calendar-day-card">
                     <div class="ops-section-heading ops-index-heading">
                         <strong>{{ \Illuminate\Support\Carbon::parse($date)->format('d/m/Y') }}</strong>
                         <span class="ops-status badge-compact">{{ $bookings->count() }}</span>
                     </div>
 
-                    <div class="dashboard-notification-list">
+                    <div class="dashboard-notification-list booking-calendar-day-list">
                         @foreach ($bookings as $booking)
-                            <a href="{{ route('bookings.show', $booking) }}" class="ops-index-link">
+                            <a href="{{ route('bookings.show', $booking) }}" class="dashboard-booking-chip dashboard-booking-chip--{{ $booking->status }}">
                                 <strong>{{ $booking->referenceCode() }} · {{ $booking->typeLabel() }}</strong>
                                 <span>{{ $booking->scheduledWindowLabel() }}</span>
                                 <span>{{ $booking->client?->name }} · {{ $booking->carrier_name ?: 'Sin transportista' }} · {{ number_format($booking->pallets_expected ?? 0, 0, ',', '.') }} pallets</span>

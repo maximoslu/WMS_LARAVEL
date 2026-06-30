@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\Booking;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class InternalBookingSubmittedNotification extends Notification
@@ -12,11 +13,35 @@ class InternalBookingSubmittedNotification extends Notification
 
     public function __construct(
         private readonly Booking $booking,
+        private readonly array $channels = ['database', 'mail'],
     ) {}
 
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return array_values(array_filter($this->channels, function (string $channel) use ($notifiable): bool {
+            if ($channel === 'mail') {
+                return filter_var($notifiable->email ?? null, FILTER_VALIDATE_EMAIL) !== false;
+            }
+
+            return $channel === 'database';
+        }));
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $booking = $this->booking;
+
+        return (new MailMessage)
+            ->subject('MAXIMO WMS - Nueva solicitud de booking')
+            ->greeting('Nueva solicitud de booking')
+            ->line('Se ha registrado una nueva solicitud de booking en MAXIMO WMS.')
+            ->line('Código: '.$booking->referenceCode())
+            ->line('Cliente: '.($booking->client?->name ?? 'Sin cliente'))
+            ->line('Tipo: '.$booking->typeLabel())
+            ->line('Fecha: '.$booking->scheduledWindowLabel())
+            ->line('Proveedor / transportista / origen: '.($booking->carrier_name ?: 'Sin dato'))
+            ->line('Observaciones: '.($booking->notes ?: 'Sin observaciones'))
+            ->action('Abrir booking', route('bookings.show', $booking));
     }
 
     public function toArray(object $notifiable): array

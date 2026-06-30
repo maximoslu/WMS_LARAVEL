@@ -28,6 +28,9 @@
     @endif
 
     <section class="surface-card compact-card daily-ops-card">
+        @if ($isClient)
+            <p class="helper-text">Indica únicamente el tipo, la fecha prevista, quién viene o sale y cualquier observación útil. El equipo interno completará el resto de datos operativos.</p>
+        @endif
         <p class="helper-text">TODO: preparar sincronización futura con Google Workspace Calendar cuando exista la integración corporativa.</p>
         @include('bookings._form')
     </section>

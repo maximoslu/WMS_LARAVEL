@@ -32,14 +32,7 @@ class BookingManagementTest extends TestCase
             ->post(route('bookings.store'), [
                 'type' => Booking::TYPE_ENTRY,
                 'scheduled_date' => '2026-07-02',
-                'scheduled_time_from' => '09:00',
-                'scheduled_time_to' => '10:00',
-                'pallets_expected' => 12,
-                'carrier_name' => 'Transportes Norte',
-                'vehicle_plate' => '1234ABC',
-                'driver_name' => 'Pedro',
-                'contact_name' => 'Laura',
-                'contact_phone' => '600000001',
+                'carrier_name' => 'Proveedor Norte',
                 'notes' => 'Pendiente de validacion.',
             ])
             ->assertRedirect();
@@ -49,11 +42,67 @@ class BookingManagementTest extends TestCase
         $this->assertSame($client->id, $booking->client_id);
         $this->assertSame($cliente->id, $booking->requested_by);
         $this->assertSame(Booking::STATUS_REQUESTED, $booking->status);
+        $this->assertSame('Proveedor Norte', $booking->carrier_name);
         $this->assertSame('BK-000001', $booking->referenceCode());
         Bus::assertDispatchedAfterResponse(
             ProcessBookingSubmittedNotificationsJob::class,
             fn (ProcessBookingSubmittedNotificationsJob $job): bool => $job->bookingId === $booking->id
         );
+    }
+
+    public function test_cliente_sees_simplified_booking_form(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->get(route('bookings.create'))
+            ->assertOk()
+            ->assertSee('Tipo')
+            ->assertSee('Fecha solicitada')
+            ->assertSee('Proveedor / transportista / origen')
+            ->assertSee('Observaciones');
+    }
+
+    public function test_cliente_does_not_see_internal_booking_fields_in_form(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->get(route('bookings.create'))
+            ->assertOk()
+            ->assertDontSee('Hora desde')
+            ->assertDontSee('Hora hasta')
+            ->assertDontSee('Nº pallets previstos')
+            ->assertDontSee('Matrícula vehículo')
+            ->assertDontSee('Conductor')
+            ->assertDontSee('Teléfono')
+            ->assertDontSee('Muelle')
+            ->assertDontSee('Referencia documental')
+            ->assertDontSee('Notas internas');
+    }
+
+    public function test_internal_user_can_edit_operational_booking_fields(): void
+    {
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('bookings.edit', $booking))
+            ->assertOk()
+            ->assertSee('Hora desde')
+            ->assertSee('Hora hasta')
+            ->assertSee('Nº pallets previstos')
+            ->assertSee('Matrícula vehículo')
+            ->assertSee('Conductor')
+            ->assertSee('Teléfono')
+            ->assertSee('Muelle')
+            ->assertSee('Referencia documental')
+            ->assertSee('Notas internas');
     }
 
     public function test_cliente_sees_only_own_bookings(): void
@@ -208,6 +257,22 @@ class BookingManagementTest extends TestCase
         $this->assertSame('Muelle reservado', $booking->internal_notes);
     }
 
+    public function test_dashboard_shows_booking_calendar_block(): void
+    {
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Booking::factory()->create([
+            'client_id' => $client->id,
+            'scheduled_date' => now()->addDay()->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Calendario de bookings')
+            ->assertSee('dashboard-booking-calendar-grid', false);
+    }
+
     public function test_dashboard_shows_upcoming_bookings(): void
     {
         [$client] = $this->seedBaseData();
@@ -223,6 +288,63 @@ class BookingManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Próximos bookings')
             ->assertSee($booking->referenceCode());
+    }
+
+    public function test_cliente_only_sees_own_bookings_on_dashboard(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+
+        $ownBooking = Booking::factory()->create([
+            'client_id' => $friesland->id,
+            'booking_code' => 'BK-210001',
+            'scheduled_date' => now()->addDay()->toDateString(),
+        ]);
+        $foreignBooking = Booking::factory()->create([
+            'client_id' => $edelvives->id,
+            'booking_code' => 'BK-210002',
+            'scheduled_date' => now()->addDay()->toDateString(),
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee($ownBooking->referenceCode())
+            ->assertDontSee($foreignBooking->referenceCode());
+    }
+
+    public function test_almacen_sees_bookings_from_multiple_clients_on_dashboard(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+
+        Booking::factory()->create([
+            'client_id' => $friesland->id,
+            'booking_code' => 'BK-220001',
+            'scheduled_date' => now()->addDay()->toDateString(),
+        ]);
+        Booking::factory()->create([
+            'client_id' => $edelvives->id,
+            'booking_code' => 'BK-220002',
+            'scheduled_date' => now()->addDay()->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('BK-220001')
+            ->assertSee('BK-220002');
+    }
+
+    public function test_dashboard_shows_empty_state_when_there_are_no_bookings(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('No hay bookings previstos');
     }
 
     public function test_calendar_shows_bookings_grouped_by_date(): void
@@ -252,7 +374,61 @@ class BookingManagementTest extends TestCase
             ->assertSee('BK-300002');
     }
 
-    public function test_internal_notification_is_created_when_booking_is_requested(): void
+    public function test_calendar_uses_visual_status_classes(): void
+    {
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Booking::factory()->create([
+            'client_id' => $client->id,
+            'status' => Booking::STATUS_REQUESTED,
+            'scheduled_date' => '2026-07-05',
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('bookings.calendar', [
+                'date_from' => '2026-07-01',
+                'date_to' => '2026-07-10',
+            ]))
+            ->assertOk()
+            ->assertSee('dashboard-booking-chip--solicitado', false);
+    }
+
+    public function test_google_embed_is_not_rendered_when_config_is_empty(): void
+    {
+        config()->set('wms.google_booking_calendar_embed_url', null);
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Booking::factory()->create([
+            'client_id' => $client->id,
+            'scheduled_date' => now()->addDay()->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Calendario Google Workspace')
+            ->assertDontSee('<iframe', false);
+    }
+
+    public function test_google_embed_is_rendered_when_configured(): void
+    {
+        config()->set('wms.google_booking_calendar_embed_url', 'https://calendar.google.com/calendar/embed?src=test');
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Booking::factory()->create([
+            'client_id' => $client->id,
+            'scheduled_date' => now()->addDay()->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Calendario Google Workspace')
+            ->assertSee('https://calendar.google.com/calendar/embed?src=test')
+            ->assertSee('<iframe', false);
+    }
+
+    public function test_internal_database_notification_is_created_for_superadmin_administracion_and_almacen(): void
     {
         Notification::fake();
         [$client] = $this->seedBaseData();
@@ -265,12 +441,44 @@ class BookingManagementTest extends TestCase
 
         app(BookingNotificationService::class)->deliverSubmittedNotifications($booking);
 
-        Notification::assertSentTo($almacen, InternalBookingSubmittedNotification::class);
-        Notification::assertSentTo($administracion, InternalBookingSubmittedNotification::class);
-        Notification::assertSentTo($superadmin, InternalBookingSubmittedNotification::class);
+        Notification::assertSentTo($almacen, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
+        Notification::assertSentTo($administracion, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
+        Notification::assertSentTo($superadmin, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
     }
 
-    public function test_cliente_receives_notification_when_status_changes(): void
+    public function test_booking_creation_attempts_email_for_internal_users_with_valid_email(): void
+    {
+        Notification::fake();
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+        ]);
+
+        app(BookingNotificationService::class)->deliverSubmittedNotifications($booking);
+
+        Notification::assertSentTo($almacen, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+    }
+
+    public function test_internal_booking_email_is_only_sent_to_valid_internal_addresses(): void
+    {
+        Notification::fake();
+        [$client] = $this->seedBaseData();
+        $first = $this->makeUserWithRole(Role::ALMACEN);
+        $second = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $second->update(['email' => 'email-invalido']);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+        ]);
+
+        app(BookingNotificationService::class)->deliverSubmittedNotifications($booking);
+
+        Notification::assertSentTo($first, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+        Notification::assertNotSentTo($second, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+        Notification::assertSentTo($second, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
+    }
+
+    public function test_cliente_receives_database_and_email_notification_when_status_changes(): void
     {
         Notification::fake();
         [$client] = $this->seedBaseData();
@@ -283,7 +491,8 @@ class BookingManagementTest extends TestCase
 
         app(BookingNotificationService::class)->deliverStatusChangedNotifications($booking, Booking::STATUS_REQUESTED);
 
-        Notification::assertSentTo($cliente, CustomerBookingStatusChangedNotification::class);
+        Notification::assertSentTo($cliente, CustomerBookingStatusChangedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
+        Notification::assertSentTo($cliente, CustomerBookingStatusChangedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
     }
 
     public function test_booking_routes_have_expected_permissions(): void

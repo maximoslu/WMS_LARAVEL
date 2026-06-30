@@ -6,6 +6,8 @@ return [
         'administracion@maximosl.com'
     ),
 
+    'google_booking_calendar_embed_url' => env('GOOGLE_BOOKING_CALENDAR_EMBED_URL'),
+
     'merchandise_requests' => [
         'schedule' => [
             'timezone' => env('APP_TIMEZONE', 'Europe/Madrid'),

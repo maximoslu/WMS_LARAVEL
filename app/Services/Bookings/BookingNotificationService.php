@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\CustomerBookingStatusChangedNotification;
 use App\Notifications\InternalBookingSubmittedNotification;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 class BookingNotificationService
 {
@@ -22,10 +23,38 @@ class BookingNotificationService
     {
         $booking->loadMissing(['client', 'requestedBy']);
 
-        $notification = new InternalBookingSubmittedNotification($booking);
+        $databaseNotification = new InternalBookingSubmittedNotification($booking, ['database']);
+        $mailNotification = new InternalBookingSubmittedNotification($booking, ['mail']);
 
-        foreach ($this->internalRecipients() as $recipient) {
-            $recipient->notify($notification);
+        $recipients = $this->internalRecipients();
+
+        if ($recipients->isEmpty()) {
+            Log::info('No hay usuarios internos activos para notificar un booking.', [
+                'booking_id' => $booking->id,
+            ]);
+
+            return;
+        }
+
+        foreach ($recipients as $recipient) {
+            $recipient->notify($databaseNotification);
+        }
+
+        $mailRecipients = $recipients
+            ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
+            ->unique(fn (User $recipient) => mb_strtolower((string) $recipient->email))
+            ->values();
+
+        if ($mailRecipients->isEmpty()) {
+            Log::warning('No se ha enviado email de booking porque no hay destinatarios internos con email valido.', [
+                'booking_id' => $booking->id,
+            ]);
+
+            return;
+        }
+
+        foreach ($mailRecipients as $recipient) {
+            $recipient->notify($mailNotification);
         }
     }
 
@@ -42,8 +71,37 @@ class BookingNotificationService
             return;
         }
 
-        foreach ($this->clientRecipients($booking) as $recipient) {
-            $recipient->notify(new CustomerBookingStatusChangedNotification($booking, $previousStatus));
+        $recipients = $this->clientRecipients($booking);
+
+        if ($recipients->isEmpty()) {
+            Log::info('No hay usuarios cliente para notificar cambio de estado de booking.', [
+                'booking_id' => $booking->id,
+                'status' => $booking->status,
+            ]);
+
+            return;
+        }
+
+        foreach ($recipients as $recipient) {
+            $recipient->notify(new CustomerBookingStatusChangedNotification($booking, $previousStatus, ['database']));
+        }
+
+        $mailRecipients = $recipients
+            ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
+            ->unique(fn (User $recipient) => mb_strtolower((string) $recipient->email))
+            ->values();
+
+        if ($mailRecipients->isEmpty()) {
+            Log::warning('No se ha enviado email al cliente para cambio de estado de booking por falta de email valido.', [
+                'booking_id' => $booking->id,
+                'status' => $booking->status,
+            ]);
+
+            return;
+        }
+
+        foreach ($mailRecipients as $recipient) {
+            $recipient->notify(new CustomerBookingStatusChangedNotification($booking, $previousStatus, ['mail']));
         }
     }
 
@@ -78,5 +136,10 @@ class BookingNotificationService
             ->filter(fn (User $user) => $user->active && $user->hasRole(Role::CLIENTE))
             ->unique('id')
             ->values() ?? collect();
+    }
+
+    private function hasValidEmail(User $user): bool
+    {
+        return filter_var($user->email ?? null, FILTER_VALIDATE_EMAIL) !== false;
     }
 }

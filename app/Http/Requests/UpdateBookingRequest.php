@@ -15,25 +15,27 @@ class UpdateBookingRequest extends FormRequest
 
     public function rules(): array
     {
+        $isInternal = $this->user()?->canAccessRole(\App\Models\Role::ALMACEN) === true;
+
         return [
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],
             'type' => ['required', Rule::in(Booking::types())],
             'scheduled_date' => ['required', 'date'],
-            'scheduled_time_from' => ['nullable', 'date_format:H:i'],
-            'scheduled_time_to' => ['nullable', 'date_format:H:i', 'after_or_equal:scheduled_time_from'],
-            'contact_name' => ['nullable', 'string', 'max:255'],
-            'contact_phone' => ['nullable', 'string', 'max:255'],
-            'carrier_name' => ['nullable', 'string', 'max:255'],
-            'vehicle_plate' => ['nullable', 'string', 'max:255'],
-            'driver_name' => ['nullable', 'string', 'max:255'],
-            'pallets_expected' => ['nullable', 'integer', 'min:0'],
+            'scheduled_time_from' => [$isInternal ? 'nullable' : 'prohibited', 'date_format:H:i'],
+            'scheduled_time_to' => [$isInternal ? 'nullable' : 'prohibited', 'date_format:H:i', 'after_or_equal:scheduled_time_from'],
+            'contact_name' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:255'],
+            'contact_phone' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:255'],
+            'carrier_name' => [$isInternal ? 'nullable' : 'required', 'string', 'max:255'],
+            'vehicle_plate' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:255'],
+            'driver_name' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:255'],
+            'pallets_expected' => [$isInternal ? 'nullable' : 'prohibited', 'integer', 'min:0'],
             'notes' => ['nullable', 'string', 'max:5000'],
-            'internal_notes' => ['nullable', 'string', 'max:5000'],
-            'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
-            'warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
-            'origin_destination' => ['nullable', 'string', 'max:255'],
-            'document_reference' => ['nullable', 'string', 'max:255'],
-            'loading_dock' => ['nullable', 'string', 'max:255'],
+            'internal_notes' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:5000'],
+            'assigned_to' => [$isInternal ? 'nullable' : 'prohibited', 'integer', 'exists:users,id'],
+            'warehouse_id' => [$isInternal ? 'nullable' : 'prohibited', 'integer', 'exists:warehouses,id'],
+            'origin_destination' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:255'],
+            'document_reference' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:255'],
+            'loading_dock' => [$isInternal ? 'nullable' : 'prohibited', 'string', 'max:255'],
         ];
     }
 }

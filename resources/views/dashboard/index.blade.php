@@ -37,6 +37,69 @@
         @endforeach
     </section>
 
+    <section class="surface-card compact-card dashboard-calendar-card">
+        <div class="ops-section-heading dashboard-notifications-header">
+            <div class="dashboard-notifications-intro">
+                <strong>Calendario de bookings</strong>
+                <p class="merchandise-request-summary-copy">
+                    Semana operativa del {{ $bookingCalendarStart->format('d/m') }} al {{ $bookingCalendarEnd->format('d/m') }}.
+                </p>
+            </div>
+            <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Abrir agenda</a>
+        </div>
+
+        @if ($bookingCalendarDays->every(fn (array $day): bool => $day['bookings']->isEmpty()))
+            <div class="dashboard-notifications-empty">
+                No hay bookings previstos.
+            </div>
+        @else
+            <div class="dashboard-booking-calendar-grid">
+                @foreach ($bookingCalendarDays as $day)
+                    <article class="dashboard-booking-day">
+                        <div class="dashboard-booking-day-head">
+                            <strong>{{ $day['date']->translatedFormat('l') }}</strong>
+                            <span>{{ $day['date']->format('d/m') }}</span>
+                        </div>
+
+                        @if ($day['bookings']->isEmpty())
+                            <div class="dashboard-booking-day-empty">Sin bookings</div>
+                        @else
+                            <div class="dashboard-booking-day-list">
+                                @foreach ($day['bookings'] as $booking)
+                                    <a href="{{ route('bookings.show', $booking) }}" class="dashboard-booking-chip dashboard-booking-chip--{{ $booking->status }}">
+                                        <strong>{{ $booking->referenceCode() }}</strong>
+                                        <span>{{ $booking->typeLabel() }} · {{ $booking->client?->name ?? 'Sin cliente' }}</span>
+                                        <span>{{ $booking->carrier_name ?: 'Sin transportista' }}</span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </article>
+                @endforeach
+            </div>
+        @endif
+
+        @if (filled($googleBookingCalendarEmbedUrl))
+            <article class="dashboard-google-calendar">
+                <div class="ops-section-heading dashboard-notifications-header">
+                    <div class="dashboard-notifications-intro">
+                        <strong>Calendario Google Workspace</strong>
+                        <p class="merchandise-request-summary-copy">Vista compartida opcional del calendario corporativo.</p>
+                    </div>
+                </div>
+                <div class="dashboard-google-calendar-frame">
+                    <iframe
+                        src="{{ $googleBookingCalendarEmbedUrl }}"
+                        title="Calendario Google Workspace de bookings"
+                        loading="lazy"
+                        referrerpolicy="no-referrer"
+                    ></iframe>
+                </div>
+                <p class="helper-text">TODO: preparar sincronización real mediante API de Google Workspace cuando exista infraestructura corporativa.</p>
+            </article>
+        @endif
+    </section>
+
     <section class="surface-card compact-card dashboard-notifications-card">
         <div class="ops-section-heading dashboard-notifications-header">
             <div class="dashboard-notifications-intro">
