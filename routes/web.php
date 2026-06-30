@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\AuditController;
+use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DailyOperationController;
@@ -192,6 +193,34 @@ Route::middleware('auth')->group(function (): void {
     Route::delete('/operaciones-diarias/lineas/{dailyOperationLine}', [DailyOperationController::class, 'destroyLine'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('daily-operations.lines.destroy');
+
+    Route::get('/bookings', [BookingController::class, 'index'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.index');
+    Route::get('/bookings/calendario', [BookingController::class, 'calendar'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.calendar');
+    Route::get('/bookings/crear', [BookingController::class, 'create'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.create');
+    Route::post('/bookings', [BookingController::class, 'store'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.store');
+    Route::get('/bookings/{booking}', [BookingController::class, 'show'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.show');
+    Route::get('/bookings/{booking}/editar', [BookingController::class, 'edit'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.edit');
+    Route::put('/bookings/{booking}', [BookingController::class, 'update'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.update');
+    Route::patch('/bookings/{booking}/estado', [BookingController::class, 'updateStatus'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.update-status');
+    Route::delete('/bookings/{booking}', [BookingController::class, 'destroy'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('bookings.destroy');
 
     Route::get('/salidas', [GoodsDispatchController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

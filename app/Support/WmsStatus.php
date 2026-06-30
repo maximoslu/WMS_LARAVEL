@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\GoodsDispatch;
+use App\Models\Booking;
 use App\Models\MerchandiseRequest;
 
 class WmsStatus
@@ -35,6 +36,22 @@ class WmsStatus
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function bookingLabels(): array
+    {
+        return [
+            Booking::STATUS_REQUESTED => 'Solicitado',
+            Booking::STATUS_APPROVED => 'Aprobado',
+            Booking::STATUS_PLANNED => 'Planificado',
+            Booking::STATUS_IN_PROGRESS => 'En curso',
+            Booking::STATUS_COMPLETED => 'Completado',
+            Booking::STATUS_CANCELLED => 'Cancelado',
+            Booking::STATUS_REJECTED => 'Rechazado',
+        ];
+    }
+
     public static function merchandiseRequestLabel(string $status): string
     {
         return self::merchandiseRequestLabels()[$status] ?? ucfirst($status);
@@ -43,5 +60,10 @@ class WmsStatus
     public static function goodsDispatchLabel(string $status): string
     {
         return self::goodsDispatchLabels()[$status] ?? ucfirst($status);
+    }
+
+    public static function bookingLabel(string $status): string
+    {
+        return self::bookingLabels()[$status] ?? ucfirst($status);
     }
 }

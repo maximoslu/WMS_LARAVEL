@@ -103,6 +103,26 @@ class User extends Authenticatable
         return $this->hasMany(GoodsDispatch::class, 'created_by');
     }
 
+    public function requestedBookings(): HasMany
+    {
+        return $this->hasMany(Booking::class, 'requested_by');
+    }
+
+    public function assignedBookings(): HasMany
+    {
+        return $this->hasMany(Booking::class, 'assigned_to');
+    }
+
+    public function approvedBookings(): HasMany
+    {
+        return $this->hasMany(Booking::class, 'approved_by');
+    }
+
+    public function cancelledBookings(): HasMany
+    {
+        return $this->hasMany(Booking::class, 'cancelled_by');
+    }
+
     public function stockImports(): HasMany
     {
         return $this->hasMany(StockImport::class, 'uploaded_by');

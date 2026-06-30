@@ -40,6 +40,35 @@
     <section class="surface-card compact-card dashboard-notifications-card">
         <div class="ops-section-heading dashboard-notifications-header">
             <div class="dashboard-notifications-intro">
+                <strong>Próximos bookings</strong>
+                <p class="merchandise-request-summary-copy">Agenda operativa interna y próximas solicitudes previstas.</p>
+            </div>
+            <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Ver agenda</a>
+        </div>
+
+        @if ($upcomingBookings->isEmpty())
+            <div class="merchandise-request-summary-empty dashboard-notifications-empty">
+                No hay bookings próximos para este usuario.
+            </div>
+        @else
+            <div class="dashboard-notification-list">
+                @foreach ($upcomingBookings as $booking)
+                    <article class="dashboard-notification-item">
+                        <strong>{{ $booking->referenceCode() }} · {{ $booking->typeLabel() }}</strong>
+                        <p>{{ $booking->scheduledWindowLabel() }} · {{ $booking->client?->name ?? 'Sin cliente' }}</p>
+                        <div class="dashboard-notification-meta">
+                            <span class="ops-status badge-compact">{{ number_format($booking->pallets_expected ?? 0, 0, ',', '.') }} pallets</span>
+                            <span>{{ $booking->statusLabel() }}</span>
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        @endif
+    </section>
+
+    <section class="surface-card compact-card dashboard-notifications-card">
+        <div class="ops-section-heading dashboard-notifications-header">
+            <div class="dashboard-notifications-intro">
                 <strong>Notificaciones recientes</strong>
                 <p class="merchandise-request-summary-copy">Avisos internos y seguimiento operativo reciente en el SGA.</p>
             </div>
