@@ -43,9 +43,18 @@
 
                 <label class="auth-field">
                     <span>Rol</span>
-                    <select name="role_id" class="auth-input" @disabled(! $canManageAssignments)>
+                    <select
+                        name="role_id"
+                        class="auth-input"
+                        @disabled(! $canManageAssignments)
+                        @if ($canManageAssignments) data-user-role-select @endif
+                    >
                         @foreach ($roles as $role)
-                            <option value="{{ $role->id }}" @selected((string) old('role_id', $managedUser->role_id) === (string) $role->id)>
+                            <option
+                                value="{{ $role->id }}"
+                                data-role-slug="{{ $role->slug }}"
+                                @selected((string) old('role_id', $managedUser->role_id) === (string) $role->id)
+                            >
                                 {{ $role->name }}
                             </option>
                         @endforeach
@@ -60,14 +69,26 @@
 
                 <label class="auth-field">
                     <span>Cliente</span>
-                    <select name="client_id" class="auth-input" @disabled(! $canManageAssignments)>
-                        <option value="">Sin cliente</option>
+                    <select
+                        name="client_id"
+                        class="auth-input"
+                        @disabled(! $canManageAssignments)
+                        @if ($canManageAssignments) data-user-client-select @endif
+                    >
+                        <option value="">
+                            {{ $managedUser->role?->slug === \App\Models\Role::CLIENTE ? 'Seleccionar cliente' : 'Todos los clientes / Sin asignar' }}
+                        </option>
                         @foreach ($clients as $client)
                             <option value="{{ $client->id }}" @selected((string) old('client_id', $managedUser->client_id) === (string) $client->id)>
                                 {{ $client->name }}
                             </option>
                         @endforeach
                     </select>
+                    <small class="helper-text user-scope-hint" @if ($canManageAssignments) data-user-client-help @endif>
+                        {{ $managedUser->role?->slug === \App\Models\Role::CLIENTE
+                            ? 'El rol Cliente debe quedar vinculado a un cliente concreto.'
+                            : 'Los roles internos trabajan con todos los clientes y se guardan sin cliente asignado.' }}
+                    </small>
                     @if (! $canManageAssignments)
                         <small class="helper-text">Solo superadmin puede asignar cliente.</small>
                     @endif
@@ -113,4 +134,45 @@
             </div>
         </form>
     </section>
+
+    @if ($canManageAssignments)
+        <script>
+            (() => {
+                const roleSelect = document.querySelector('[data-user-role-select]');
+                const clientSelect = document.querySelector('[data-user-client-select]');
+                const clientHelp = document.querySelector('[data-user-client-help]');
+
+                if (!roleSelect || !clientSelect || !clientHelp) {
+                    return;
+                }
+
+                const emptyOption = clientSelect.querySelector('option[value=""]');
+
+                const syncClientScope = () => {
+                    const selectedRole = roleSelect.options[roleSelect.selectedIndex]?.dataset.roleSlug;
+                    const isClientRole = selectedRole === '{{ \App\Models\Role::CLIENTE }}';
+
+                    clientSelect.required = isClientRole;
+                    clientSelect.disabled = !isClientRole;
+
+                    if (!isClientRole) {
+                        clientSelect.value = '';
+                    }
+
+                    if (emptyOption) {
+                        emptyOption.textContent = isClientRole
+                            ? 'Seleccionar cliente'
+                            : 'Todos los clientes / Sin asignar';
+                    }
+
+                    clientHelp.textContent = isClientRole
+                        ? 'El rol Cliente debe quedar vinculado a un cliente concreto.'
+                        : 'Los roles internos trabajan con todos los clientes y se guardan sin cliente asignado.';
+                };
+
+                syncClientScope();
+                roleSelect.addEventListener('change', syncClientScope);
+            })();
+        </script>
+    @endif
 @endsection

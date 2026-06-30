@@ -7,7 +7,7 @@
     <section class="surface-card ops-page-header ops-page-header--dense compact-card">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Panel de control</h2>
-            <span class="ops-page-meta">{{ $visibleModuleCount }} módulos visibles</span>
+            <span class="ops-page-meta">{{ $visibleModuleCount }} modulos visibles</span>
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons">
@@ -57,7 +57,7 @@
                 @foreach ($bookingCalendarDays as $day)
                     <article class="dashboard-booking-day">
                         <div class="dashboard-booking-day-head">
-                            <strong>{{ $day['date']->translatedFormat('l') }}</strong>
+                            <strong>{{ \Illuminate\Support\Str::ucfirst($day['date']->locale('es')->isoFormat('dddd')) }}</strong>
                             <span>{{ $day['date']->format('d/m') }}</span>
                         </div>
 
@@ -68,7 +68,7 @@
                                 @foreach ($day['bookings'] as $booking)
                                     <a href="{{ route('bookings.show', $booking) }}" class="dashboard-booking-chip dashboard-booking-chip--{{ $booking->status }}">
                                         <strong>{{ $booking->referenceCode() }}</strong>
-                                        <span>{{ $booking->typeLabel() }} · {{ $booking->client?->name ?? 'Sin cliente' }}</span>
+                                        <span>{{ $booking->typeLabel() }} - {{ $booking->client?->name ?? 'Sin cliente' }}</span>
                                         <span>{{ $booking->carrier_name ?: 'Sin transportista' }}</span>
                                     </a>
                                 @endforeach
@@ -95,7 +95,7 @@
                         referrerpolicy="no-referrer"
                     ></iframe>
                 </div>
-                <p class="helper-text">TODO: preparar sincronización real mediante API de Google Workspace cuando exista infraestructura corporativa.</p>
+                <p class="helper-text">TODO: preparar sincronizacion real con Google Workspace Calendar y mantener la referencia maestra del booking cuando exista infraestructura corporativa.</p>
             </article>
         @endif
     </section>
@@ -117,8 +117,8 @@
             <div class="dashboard-notification-list">
                 @foreach ($upcomingBookings as $booking)
                     <article class="dashboard-notification-item">
-                        <strong>{{ $booking->referenceCode() }} · {{ $booking->typeLabel() }}</strong>
-                        <p>{{ $booking->scheduledWindowLabel() }} · {{ $booking->client?->name ?? 'Sin cliente' }}</p>
+                        <strong>{{ $booking->referenceCode() }} - {{ $booking->typeLabel() }}</strong>
+                        <p>{{ $booking->scheduledWindowLabel() }} - {{ $booking->client?->name ?? 'Sin cliente' }}</p>
                         <div class="dashboard-notification-meta">
                             <span class="ops-status badge-compact">{{ number_format($booking->pallets_expected ?? 0, 0, ',', '.') }} pallets</span>
                             <span>{{ $booking->statusLabel() }}</span>
@@ -146,10 +146,10 @@
             <div class="dashboard-notification-list">
                 @foreach ($recentNotifications as $notification)
                     <article class="dashboard-notification-item{{ $notification->read_at === null ? ' is-unread' : '' }}">
-                        <strong>{{ $notification->data['title'] ?? 'Notificación' }}</strong>
+                        <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
                         <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
                         <div class="dashboard-notification-meta">
-                            <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leída' }}</span>
+                            <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
                             <span>{{ $notification->created_at?->format('d/m/Y H:i') }}</span>
                         </div>
                     </article>

@@ -15,7 +15,7 @@
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">{{ $isClient ? 'Solicitar booking' : 'Crear booking' }}</h2>
-            <span class="ops-page-meta">La solicitud quedará pendiente de validación operativa.</span>
+            <span class="ops-page-meta">La solicitud quedara pendiente de validacion operativa.</span>
         </div>
     </section>
 
@@ -29,9 +29,9 @@
 
     <section class="surface-card compact-card daily-ops-card">
         @if ($isClient)
-            <p class="helper-text">Indica únicamente el tipo, la fecha prevista, quién viene o sale y cualquier observación útil. El equipo interno completará el resto de datos operativos.</p>
+            <p class="helper-text">Indica unicamente el tipo, la fecha prevista, quien viene o sale y cualquier observacion util. El equipo interno completara el resto de datos operativos.</p>
         @endif
-        <p class="helper-text">TODO: preparar sincronización futura con Google Workspace Calendar cuando exista la integración corporativa.</p>
+        <p class="helper-text">TODO: preparar sincronizacion futura con Google Workspace Calendar y conservar este booking como referencia maestra cuando exista la integracion corporativa.</p>
         @include('bookings._form')
     </section>
 @endsection

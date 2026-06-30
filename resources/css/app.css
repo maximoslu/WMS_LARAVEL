@@ -3843,6 +3843,20 @@ body.brand-body.app-shell-body .pagination-card {
     gap: 0.9rem;
 }
 
+.user-scope-hint,
+.access-request-scope-hint {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.85rem 0.95rem;
+    border: 1px solid rgba(15, 127, 147, 0.16);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(15, 127, 147, 0.08), rgba(255, 255, 255, 0.92));
+}
+
+.user-scope-hint {
+    color: var(--brand-slate-dark);
+}
+
 .access-request-status--pending,
 .status-badge--warning {
     background: var(--brand-warning-bg);
@@ -4385,6 +4399,10 @@ body.brand-body.app-shell-body .pagination-card {
     color: var(--brand-soft);
     font-size: 0.82rem;
     font-weight: 700;
+}
+
+.dashboard-booking-day-head strong {
+    text-transform: capitalize;
 }
 
 .dashboard-booking-day-list,

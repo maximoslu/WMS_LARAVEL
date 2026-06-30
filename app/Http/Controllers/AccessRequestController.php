@@ -68,6 +68,7 @@ class AccessRequestController extends Controller
         return view('access-requests.show', [
             'accessRequest' => $accessRequest->load(['client', 'user', 'approvedBy', 'rejectedBy']),
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
+            'roles' => Role::query()->orderByDesc('level')->get(),
             'pendingCount' => AccessRequest::query()->pending()->count(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
@@ -103,13 +104,24 @@ class AccessRequestController extends Controller
         $this->ensurePending($accessRequest);
 
         $validated = $request->validate([
-            'client_id' => ['required', 'exists:clients,id'],
+            'role_id' => ['required', 'exists:roles,id'],
+            'client_id' => ['nullable', 'exists:clients,id'],
         ]);
 
-        $clienteRole = Role::query()->where('slug', Role::CLIENTE)->firstOrFail();
+        $selectedRole = Role::query()->findOrFail($validated['role_id']);
+        $clientId = $selectedRole->slug === Role::CLIENTE
+            ? ($validated['client_id'] ?? null)
+            : null;
+
+        if ($selectedRole->slug === Role::CLIENTE && $clientId === null) {
+            return back()
+                ->withErrors(['client_id' => 'Debes seleccionar un cliente para el rol Cliente.'])
+                ->withInput();
+        }
+
         $actor = $request->user();
 
-        $accessRequest = DB::transaction(function () use ($accessRequest, $validated, $clienteRole, $actor): AccessRequest {
+        $accessRequest = DB::transaction(function () use ($accessRequest, $selectedRole, $clientId, $actor): AccessRequest {
             $user = User::query()->where('email', $accessRequest->email)->first();
 
             if ($user === null) {
@@ -117,20 +129,18 @@ class AccessRequestController extends Controller
                     'name' => $accessRequest->name,
                     'email' => $accessRequest->email,
                     'password' => Str::password(24),
-                    'role_id' => $clienteRole->id,
-                    'client_id' => $validated['client_id'],
+                    'role_id' => $selectedRole->id,
+                    'client_id' => $clientId,
                     'active' => true,
                 ]);
             } else {
                 $payload = [
                     'name' => $accessRequest->name,
-                    'client_id' => $validated['client_id'],
+                    'client_id' => $clientId,
                     'active' => true,
                 ];
 
-                if ($user->role === null || ! $user->canAccessRole(Role::ALMACEN)) {
-                    $payload['role_id'] = $clienteRole->id;
-                }
+                $payload['role_id'] = $selectedRole->id;
 
                 $user->update($payload);
             }
@@ -143,7 +153,7 @@ class AccessRequestController extends Controller
                 'rejected_at' => null,
                 'rejection_reason' => null,
                 'user_id' => $user->id,
-                'client_id' => $validated['client_id'],
+                'client_id' => $clientId,
             ]);
 
             return $accessRequest->fresh(['client', 'user']);

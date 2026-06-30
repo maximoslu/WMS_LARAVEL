@@ -113,7 +113,11 @@
                                     </div>
                                 </td>
                                 <td>{{ $managedUser->role?->name ?? 'Sin rol' }}</td>
-                                <td>{{ $managedUser->client?->name ?? 'Sin cliente' }}</td>
+                                <td>
+                                    {{ $managedUser->role?->slug === \App\Models\Role::CLIENTE
+                                        ? ($managedUser->client?->name ?? 'Sin cliente')
+                                        : 'Todos los clientes' }}
+                                </td>
                                 <td>
                                     <span class="status-badge {{ $managedUser->active ? 'status-badge--active' : 'status-badge--inactive' }}">
                                         {{ $managedUser->active ? 'Activo' : 'Inactivo' }}

@@ -273,6 +273,21 @@ class BookingManagementTest extends TestCase
             ->assertSee('dashboard-booking-calendar-grid', false);
     }
 
+    public function test_dashboard_renders_booking_day_names_in_spanish(): void
+    {
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Booking::factory()->create([
+            'client_id' => $client->id,
+            'scheduled_date' => now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Lunes');
+    }
+
     public function test_dashboard_shows_upcoming_bookings(): void
     {
         [$client] = $this->seedBaseData();

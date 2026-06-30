@@ -15,7 +15,7 @@
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">{{ $booking->referenceCode() }}</h2>
-            <span class="ops-page-meta">{{ $booking->client?->name ?? 'Sin cliente' }} · {{ $booking->scheduledWindowLabel() }}</span>
+            <span class="ops-page-meta">{{ $booking->client?->name ?? 'Sin cliente' }} - {{ $booking->scheduledWindowLabel() }}</span>
         </div>
         <div class="ops-page-actions page-actions-compact action-buttons">
             @if ($canEdit)
@@ -45,7 +45,7 @@
         <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
             <strong>Fecha / hora</strong>
             <span>{{ $booking->scheduledWindowLabel() }}</span>
-            <small>Planificación operativa</small>
+            <small>Planificacion operativa</small>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
             <strong>Pallets previstos</strong>
@@ -55,7 +55,7 @@
         <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
             <strong>Transportista</strong>
             <span>{{ $booking->carrier_name ?: '-' }}</span>
-            <small>{{ $booking->vehicle_plate ?: 'Sin matrícula' }}</small>
+            <small>{{ $booking->vehicle_plate ?: 'Sin matricula' }}</small>
         </article>
     </section>
 
@@ -77,7 +77,7 @@
                 </article>
                 <article class="dashboard-notification-item">
                     <strong>Contacto</strong>
-                    <p>{{ $booking->contact_name ?: 'Sin contacto' }}{{ $booking->contact_phone ? ' · '.$booking->contact_phone : '' }}</p>
+                    <p>{{ $booking->contact_name ?: 'Sin contacto' }}{{ $booking->contact_phone ? ' - '.$booking->contact_phone : '' }}</p>
                 </article>
                 <article class="dashboard-notification-item">
                     <strong>Conductor</strong>
@@ -111,7 +111,7 @@
         <article class="surface-card compact-card daily-ops-card">
             <div class="ops-index-heading">
                 <strong>Acciones de estado</strong>
-                <span class="ops-page-meta">Gestión operativa del booking</span>
+                <span class="ops-page-meta">Gestion operativa del booking</span>
             </div>
 
             @if ($availableStatuses === [])
@@ -144,7 +144,7 @@
                 </form>
             @endunless
 
-            <p class="helper-text">TODO: pendiente conectar booking con operaciones diarias y facturación sin booking.</p>
+            <p class="helper-text">TODO: enlazar booking con operaciones diarias, flujo de facturacion/FF y gestion manual cuando una operacion llegue sin booking previo.</p>
         </article>
     </section>
 @endsection

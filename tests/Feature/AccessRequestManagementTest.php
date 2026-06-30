@@ -80,6 +80,7 @@ class AccessRequestManagementTest extends TestCase
 
         $this->actingAs($admin)
             ->patch(route('access-requests.approve', $accessRequest), [
+                'role_id' => $clienteRole->id,
                 'client_id' => $client->id,
             ])
             ->assertRedirect(route('access-requests.show', $accessRequest));
@@ -122,6 +123,7 @@ class AccessRequestManagementTest extends TestCase
 
         $this->actingAs($superadmin)
             ->patch(route('access-requests.approve', $accessRequest), [
+                'role_id' => $clienteRole->id,
                 'client_id' => $client->id,
             ])
             ->assertRedirect(route('access-requests.show', $accessRequest));
@@ -132,6 +134,56 @@ class AccessRequestManagementTest extends TestCase
             'role_id' => $clienteRole->id,
             'client_id' => $client->id,
             'active' => true,
+        ]);
+    }
+
+    public function test_approve_access_request_requires_client_for_cliente_role(): void
+    {
+        $this->seedBaseData();
+
+        $admin = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $clienteRole = Role::query()->where('slug', Role::CLIENTE)->firstOrFail();
+        $accessRequest = AccessRequest::factory()->create();
+
+        $this->actingAs($admin)
+            ->from(route('access-requests.show', $accessRequest))
+            ->patch(route('access-requests.approve', $accessRequest), [
+                'role_id' => $clienteRole->id,
+                'client_id' => '',
+            ])
+            ->assertRedirect(route('access-requests.show', $accessRequest))
+            ->assertSessionHasErrors('client_id');
+    }
+
+    public function test_approve_access_request_can_create_internal_user_without_client_assignment(): void
+    {
+        $this->seedBaseData();
+
+        $admin = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $almacenRole = Role::query()->where('slug', Role::ALMACEN)->firstOrFail();
+        $accessRequest = AccessRequest::factory()->create([
+            'name' => 'Operativo Interno',
+            'email' => 'operativo.interno@example.com',
+        ]);
+
+        $this->actingAs($admin)
+            ->patch(route('access-requests.approve', $accessRequest), [
+                'role_id' => $almacenRole->id,
+                'client_id' => '',
+            ])
+            ->assertRedirect(route('access-requests.show', $accessRequest));
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'operativo.interno@example.com',
+            'role_id' => $almacenRole->id,
+            'client_id' => null,
+            'active' => true,
+        ]);
+
+        $this->assertDatabaseHas('access_requests', [
+            'id' => $accessRequest->id,
+            'status' => AccessRequest::STATUS_APPROVED,
+            'client_id' => null,
         ]);
     }
 
@@ -168,12 +220,14 @@ class AccessRequestManagementTest extends TestCase
         $admin = $this->makeUserWithRole(Role::ADMINISTRACION);
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $clienteRole = Role::query()->where('slug', Role::CLIENTE)->firstOrFail();
         $accessRequest = AccessRequest::factory()->create([
             'email' => 'solo.cliente@friesland.test',
         ]);
 
         $this->actingAs($admin)
             ->patch(route('access-requests.approve', $accessRequest), [
+                'role_id' => $clienteRole->id,
                 'client_id' => $client->id,
             ])
             ->assertRedirect(route('access-requests.show', $accessRequest));
@@ -190,6 +244,7 @@ class AccessRequestManagementTest extends TestCase
 
         $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $clienteRole = Role::query()->where('slug', Role::CLIENTE)->firstOrFail();
         $accessRequest = AccessRequest::factory()->create([
             'name' => 'Cliente Visible',
             'email' => 'visible@friesland.test',
@@ -197,6 +252,7 @@ class AccessRequestManagementTest extends TestCase
 
         $this->actingAs($superadmin)
             ->patch(route('access-requests.approve', $accessRequest), [
+                'role_id' => $clienteRole->id,
                 'client_id' => $client->id,
             ]);
 

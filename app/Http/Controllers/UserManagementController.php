@@ -84,8 +84,12 @@ class UserManagementController extends Controller
         }
 
         if ($actor->isSuperAdmin()) {
-            $payload['role_id'] = $validated['role_id'];
-            $payload['client_id'] = $validated['client_id'] ?? null;
+            $role = Role::query()->findOrFail($validated['role_id']);
+
+            $payload['role_id'] = $role->id;
+            $payload['client_id'] = $role->slug === Role::CLIENTE
+                ? ($validated['client_id'] ?? null)
+                : null;
             $payload['active'] = (bool) ($validated['active'] ?? false);
         }
 

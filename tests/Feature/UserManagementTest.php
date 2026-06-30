@@ -50,8 +50,55 @@ class UserManagementTest extends TestCase
             'name' => 'Usuario Gestionado',
             'email' => 'gestionado@example.com',
             'role_id' => $adminRole->id,
-            'client_id' => $client->id,
+            'client_id' => null,
             'active' => true,
+        ]);
+    }
+
+    public function test_superadmin_must_assign_client_when_role_is_cliente(): void
+    {
+        $this->seedBaseData();
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $managedUser = $this->makeUserWithRole(Role::CLIENTE);
+        $clienteRole = Role::query()->where('slug', Role::CLIENTE)->firstOrFail();
+
+        $this->actingAs($superadmin)
+            ->from(route('users.edit', $managedUser))
+            ->put(route('users.update', $managedUser), [
+                'name' => 'Usuario Cliente',
+                'email' => 'usuario.cliente@example.com',
+                'role_id' => $clienteRole->id,
+                'client_id' => '',
+                'active' => '1',
+            ])
+            ->assertRedirect(route('users.edit', $managedUser))
+            ->assertSessionHasErrors('client_id');
+    }
+
+    public function test_superadmin_clears_client_assignment_for_internal_role(): void
+    {
+        $this->seedBaseData();
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $managedUser = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacenRole = Role::query()->where('slug', Role::ALMACEN)->firstOrFail();
+
+        $this->actingAs($superadmin)
+            ->put(route('users.update', $managedUser), [
+                'name' => 'Usuario Interno',
+                'email' => 'interno@example.com',
+                'role_id' => $almacenRole->id,
+                'client_id' => $client->id,
+                'active' => '1',
+            ])
+            ->assertRedirect(route('users.index'));
+
+        $this->assertDatabaseHas('users', [
+            'id' => $managedUser->id,
+            'role_id' => $almacenRole->id,
+            'client_id' => null,
         ]);
     }
 
@@ -85,14 +132,13 @@ class UserManagementTest extends TestCase
         $this->seedBaseData();
 
         $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
-        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $role = Role::query()->where('slug', Role::ALMACEN)->firstOrFail();
 
         User::factory()->create([
             'name' => 'Usuario Operativo',
             'email' => 'operativo@example.com',
             'role_id' => $role->id,
-            'client_id' => $client->id,
+            'client_id' => null,
         ]);
 
         $this->actingAs($superadmin)
@@ -100,7 +146,7 @@ class UserManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Usuario Operativo')
             ->assertSee('Almacen')
-            ->assertSee('FRIESLAND');
+            ->assertSee('Todos los clientes');
     }
 
     private function seedBaseData(): void
@@ -111,12 +157,13 @@ class UserManagementTest extends TestCase
         ]);
     }
 
-    private function makeUserWithRole(string $roleSlug): User
+    private function makeUserWithRole(string $roleSlug, ?Client $client = null): User
     {
         $role = Role::query()->where('slug', $roleSlug)->firstOrFail();
 
         return User::factory()->create([
             'role_id' => $role->id,
+            'client_id' => $roleSlug === Role::CLIENTE ? $client?->id : null,
         ]);
     }
 }

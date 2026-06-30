@@ -53,7 +53,7 @@
         <article class="surface-card item-empty-state compact-card">
             <span class="status-chip small-badge badge-compact">Sin resultados</span>
             <h3>No hay solicitudes con estos filtros</h3>
-            <p>Ajusta el estado o la busqueda para localizar altas pendientes.</p>
+            <p>Ajusta el estado o la busqueda para localizar solicitudes de acceso pendientes.</p>
         </article>
     @else
         <section class="surface-card stock-table-shell compact-card">
