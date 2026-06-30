@@ -4,6 +4,14 @@
 @section('topbar_title', 'Panel de control')
 
 @section('content')
+    @if (session('status'))
+        <div class="alert alert-success">{{ session('status') }}</div>
+    @endif
+
+    @if (session('warning'))
+        <div class="alert alert-error">{{ session('warning') }}</div>
+    @endif
+
     <section class="surface-card ops-page-header ops-page-header--dense compact-card">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Panel de control</h2>
@@ -37,6 +45,37 @@
         @endforeach
     </section>
 
+    @if ($showGoogleCalendarControls && $googleCalendarStatus !== null)
+        <section class="surface-card compact-card dashboard-google-connection-card">
+            <div class="dashboard-google-connection-head">
+                <div class="dashboard-notifications-intro">
+                    <strong>Google Calendar</strong>
+                    <p>Integracion OAuth en modo solo lectura para la agenda operativa.</p>
+                </div>
+                <span class="status-badge dashboard-google-status dashboard-google-status--{{ $googleCalendarStatus['state'] }}">
+                    {{ $googleCalendarStatus['label'] }}
+                </span>
+            </div>
+
+            <p class="dashboard-google-connection-copy">{{ $googleCalendarStatus['message'] }}</p>
+
+            <div class="action-buttons dashboard-google-connection-actions">
+                @if ($googleCalendarStatus['state'] !== 'disabled')
+                    <a href="{{ route('google-calendar.oauth.redirect') }}" class="button-primary compact-button btn-compact">Conectar Google Calendar</a>
+                @endif
+
+                @if ($googleCalendarStatus['state'] === 'connected')
+                    <form method="POST" action="{{ route('google-calendar.oauth.disconnect') }}">
+                        @csrf
+                        <button type="submit" class="button-secondary compact-button btn-compact">Desconectar Google Calendar</button>
+                    </form>
+                @endif
+            </div>
+
+            <p class="helper-text">TODO: mapear colores por cliente/tipo operacion y reconciliacion booking WMS vs evento Google.</p>
+        </section>
+    @endif
+
     <section class="surface-card compact-card dashboard-calendar-card">
         <div class="ops-section-heading dashboard-notifications-header">
             <div class="dashboard-notifications-intro">
@@ -48,70 +87,61 @@
             <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Abrir agenda</a>
         </div>
 
-        @if ($bookingCalendarDays->every(fn (array $day): bool => $day['bookings']->isEmpty()))
-            <div class="dashboard-notifications-empty">
-                No hay bookings previstos.
-            </div>
-        @else
-            <div class="dashboard-booking-calendar-grid">
-                @foreach ($bookingCalendarDays as $day)
-                    <article class="dashboard-booking-day">
-                        <div class="dashboard-booking-day-head">
-                            <strong>{{ \Illuminate\Support\Str::ucfirst($day['date']->locale('es')->isoFormat('dddd')) }}</strong>
-                            <span>{{ $day['date']->format('d/m') }}</span>
-                        </div>
-
-                        @if ($day['bookings']->isEmpty())
-                            <div class="dashboard-booking-day-empty">Sin bookings</div>
-                        @else
-                            <div class="dashboard-booking-day-list">
-                                @foreach ($day['bookings'] as $booking)
-                                    <a href="{{ route('bookings.show', $booking) }}" class="dashboard-booking-chip dashboard-booking-chip--{{ $booking->status }}">
-                                        <strong>{{ $booking->referenceCode() }}</strong>
-                                        <span>{{ $booking->typeLabel() }} - {{ $booking->client?->name ?? 'Sin cliente' }}</span>
-                                        <span>{{ $booking->carrier_name ?: 'Sin transportista' }}</span>
-                                    </a>
-                                @endforeach
-                            </div>
-                        @endif
-                    </article>
-                @endforeach
-            </div>
-        @endif
-
-        @if (filled($googleBookingCalendarEmbedUrl))
-            <article class="dashboard-google-calendar">
-                <div class="ops-section-heading dashboard-notifications-header">
-                    <div class="dashboard-notifications-intro">
-                        <strong>Calendario Google Workspace</strong>
-                        <p class="merchandise-request-summary-copy">Vista compartida opcional del calendario corporativo.</p>
+        <div class="dashboard-booking-calendar-grid">
+            @foreach ($bookingCalendarDays as $day)
+                <article class="dashboard-booking-day">
+                    <div class="dashboard-booking-day-head">
+                        <strong>{{ \Illuminate\Support\Str::ucfirst($day['date']->locale('es')->isoFormat('dddd')) }}</strong>
+                        <span>{{ $day['date']->format('d/m') }}</span>
                     </div>
-                </div>
-                <div class="dashboard-google-calendar-frame">
-                    <iframe
-                        src="{{ $googleBookingCalendarEmbedUrl }}"
-                        title="Calendario Google Workspace de bookings"
-                        loading="lazy"
-                        referrerpolicy="no-referrer"
-                    ></iframe>
-                </div>
-                <p class="helper-text">TODO: preparar sincronizacion real con Google Workspace Calendar y mantener la referencia maestra del booking cuando exista infraestructura corporativa.</p>
-            </article>
-        @endif
+
+                    @if ($day['bookings']->isEmpty() && $day['google_events']->isEmpty())
+                        <div class="dashboard-booking-day-empty">Sin actividad</div>
+                    @else
+                        <div class="dashboard-booking-day-list">
+                            @foreach ($day['bookings'] as $booking)
+                                <a href="{{ route('bookings.show', $booking) }}" class="dashboard-booking-chip dashboard-booking-chip--{{ $booking->status }}">
+                                    <strong>{{ $booking->referenceCode() }}</strong>
+                                    <span>{{ $booking->typeLabel() }} - {{ $booking->client?->name ?? 'Sin cliente' }}</span>
+                                    <span>{{ $booking->carrier_name ?: 'Sin transportista' }}</span>
+                                </a>
+                            @endforeach
+
+                            @if ($showGoogleCalendarLayer)
+                                @foreach ($day['google_events'] as $googleEvent)
+                                    <article class="dashboard-google-event-chip">
+                                        <span class="dashboard-google-event-badge">Google</span>
+                                        <strong>{{ $googleEvent['title'] }}</strong>
+                                        <span>
+                                            {{ $googleEvent['all_day'] ? 'Todo el dia' : $googleEvent['starts_at']->format('H:i') . ' - ' . $googleEvent['ends_at']->format('H:i') }}
+                                        </span>
+                                        @if ($googleEvent['location'])
+                                            <span>{{ $googleEvent['location'] }}</span>
+                                        @endif
+                                    </article>
+                                @endforeach
+                            @endif
+                        </div>
+                    @endif
+                </article>
+            @endforeach
+        </div>
+
+        <p class="helper-text">TODO: crear eventos Google al aprobar booking, actualizarlos al modificar booking y cancelarlos cuando el booking se anule.</p>
     </section>
 
     <section class="surface-card compact-card dashboard-notifications-card">
         <div class="ops-section-heading dashboard-notifications-header">
             <div class="dashboard-notifications-intro">
-                <strong>Próximos bookings</strong>
-                <p class="merchandise-request-summary-copy">Agenda operativa interna y próximas solicitudes previstas.</p>
+                <strong>Proximos bookings</strong>
+                <p class="merchandise-request-summary-copy">Agenda operativa interna y proximas solicitudes previstas.</p>
             </div>
             <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Ver agenda</a>
         </div>
 
         @if ($upcomingBookings->isEmpty())
             <div class="merchandise-request-summary-empty dashboard-notifications-empty">
-                No hay bookings próximos para este usuario.
+                No hay bookings proximos para este usuario.
             </div>
         @else
             <div class="dashboard-notification-list">

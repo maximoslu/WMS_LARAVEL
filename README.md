@@ -1,11 +1,10 @@
-<<<<<<< HEAD
 # MAXIMO WMS
 
 Base Laravel del proyecto WMS de MAXIMO, preparada para desplegarse en Laravel Forge sobre PHP 8.4 y MySQL 8.4 LTS.
 
 ## Objetivo
 
-Este repositorio establece una base limpia y mantenible para evolucionar el WMS por fases, empezando por los clientes Friesland y Edelvives, sin adelantar todavía lógica de negocio compleja.
+Este repositorio establece una base limpia y mantenible para evolucionar el WMS por fases, empezando por los clientes Friesland y Edelvives, sin adelantar todavia logica de negocio compleja.
 
 ## Stack
 
@@ -18,7 +17,7 @@ Este repositorio establece una base limpia y mantenible para evolucionar el WMS 
 
 ## Estructura base
 
-La aplicación incluye la estructura estándar de Laravel:
+La aplicacion incluye la estructura estandar de Laravel:
 
 - `app/`
 - `bootstrap/`
@@ -62,11 +61,44 @@ npm install
 npm run build
 ```
 
-6. Levantar la aplicación:
+6. Levantar la aplicacion:
 
 ```bash
 php artisan serve
 ```
+
+## Google Calendar OAuth read-only
+
+La integracion actual de Google Calendar es solo de lectura y se usa como capa visual en el dashboard operativo.
+
+1. Activar Google Calendar API en Google Cloud.
+2. Crear un OAuth Client de tipo "Aplicacion web".
+3. Configurar como redirect URIs locales:
+   - `http://127.0.0.1:8000/google-calendar/oauth/callback`
+   - `http://localhost:8000/google-calendar/oauth/callback`
+4. Configurar en `.env`:
+
+```bash
+GOOGLE_CALENDAR_ENABLED=true
+GOOGLE_CALENDAR_AUTH_MODE=oauth
+GOOGLE_CALENDAR_ID=
+GOOGLE_CALENDAR_CLIENT_ID=
+GOOGLE_CALENDAR_CLIENT_SECRET=
+GOOGLE_CALENDAR_REDIRECT_URI=http://127.0.0.1:8000/google-calendar/oauth/callback
+GOOGLE_CALENDAR_TOKEN_PATH=storage/app/google/calendar-token.json
+```
+
+5. `GOOGLE_CALENDAR_ID` se obtiene en Google Calendar > Configuracion del calendario > Integrar calendario > ID del calendario.
+6. Ir a `/google-calendar/oauth/redirect` con un usuario `superadmin` o `administracion` para conectar.
+7. El token OAuth se guarda solo en local en `storage/app/google/calendar-token.json`.
+
+Notas:
+
+- La integracion actual solo lee eventos.
+- No crea, no modifica y no elimina eventos en Google Calendar.
+- Futura fase: booking aprobado -> crear evento Google.
+- No se deben versionar secretos, tokens ni JSON reales descargados de Google.
+- Como el secreto OAuth ya se ha visto durante la configuracion inicial, antes de produccion conviene regenerarlo en Google Cloud y actualizar Forge con el secreto definitivo.
 
 ## Despliegue
 
@@ -75,9 +107,9 @@ php artisan serve
 - Root directory en Forge: `/`
 - Web directory en Forge: `/public`
 
-La guía de despliegue está en [docs/DEPLOY_FORGE.md](/C:/Users/jorge/Mi%20unidad/MAXIMO/WEB/WMS/WMS_LARAVEL/docs/DEPLOY_FORGE.md).
+La guia de despliegue esta en [docs/DEPLOY_FORGE.md](/C:/Users/jorge/Mi%20unidad/MAXIMO/WEB/WMS/WMS_LARAVEL/docs/DEPLOY_FORGE.md).
 
-## Documentación
+## Documentacion
 
 - Arquitectura inicial: [docs/ARCHITECTURE.md](/C:/Users/jorge/Mi%20unidad/MAXIMO/WEB/WMS/WMS_LARAVEL/docs/ARCHITECTURE.md)
 - Roadmap funcional: [docs/ROADMAP.md](/C:/Users/jorge/Mi%20unidad/MAXIMO/WEB/WMS/WMS_LARAVEL/docs/ROADMAP.md)
@@ -89,8 +121,4 @@ La guía de despliegue está en [docs/DEPLOY_FORGE.md](/C:/Users/jorge/Mi%20unid
 - `.env` no debe subirse al repositorio.
 - Los cambios de base de datos deben pasar por migraciones.
 - La base principal del sistema es MySQL, no SQLite.
-- Los módulos del dominio WMS se introducirán por fases, con tests asociados.
-=======
-# WMS_LARAVEL
-sistema de gestión en Laravel
->>>>>>> d800d7f153aea62df20860252d32b7f5e5f93f28
+- Los modulos del dominio WMS se introduciran por fases, con tests asociados.

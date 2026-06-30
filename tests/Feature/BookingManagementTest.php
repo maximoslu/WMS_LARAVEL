@@ -74,10 +74,6 @@ class BookingManagementTest extends TestCase
             ->assertOk()
             ->assertDontSee('Hora desde')
             ->assertDontSee('Hora hasta')
-            ->assertDontSee('Nº pallets previstos')
-            ->assertDontSee('Matrícula vehículo')
-            ->assertDontSee('Conductor')
-            ->assertDontSee('Teléfono')
             ->assertDontSee('Muelle')
             ->assertDontSee('Referencia documental')
             ->assertDontSee('Notas internas');
@@ -96,10 +92,6 @@ class BookingManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Hora desde')
             ->assertSee('Hora hasta')
-            ->assertSee('Nº pallets previstos')
-            ->assertSee('Matrícula vehículo')
-            ->assertSee('Conductor')
-            ->assertSee('Teléfono')
             ->assertSee('Muelle')
             ->assertSee('Referencia documental')
             ->assertSee('Notas internas');
@@ -301,7 +293,7 @@ class BookingManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Próximos bookings')
+            ->assertSee('Proximos bookings')
             ->assertSee($booking->referenceCode());
     }
 
@@ -359,7 +351,7 @@ class BookingManagementTest extends TestCase
         $this->actingAs($cliente)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('No hay bookings previstos');
+            ->assertSee('Sin actividad');
     }
 
     public function test_calendar_shows_bookings_grouped_by_date(): void
@@ -408,39 +400,36 @@ class BookingManagementTest extends TestCase
             ->assertSee('dashboard-booking-chip--solicitado', false);
     }
 
-    public function test_google_embed_is_not_rendered_when_config_is_empty(): void
+    public function test_google_calendar_status_is_rendered_for_administracion(): void
     {
-        config()->set('wms.google_booking_calendar_embed_url', null);
         [$client] = $this->seedBaseData();
-        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
         Booking::factory()->create([
             'client_id' => $client->id,
             'scheduled_date' => now()->addDay()->toDateString(),
         ]);
 
-        $this->actingAs($almacen)
+        $this->actingAs($administracion)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertDontSee('Calendario Google Workspace')
-            ->assertDontSee('<iframe', false);
+            ->assertSee('Google Calendar')
+            ->assertSee('Google Calendar desactivado');
     }
 
-    public function test_google_embed_is_rendered_when_configured(): void
+    public function test_google_calendar_status_is_hidden_for_cliente(): void
     {
-        config()->set('wms.google_booking_calendar_embed_url', 'https://calendar.google.com/calendar/embed?src=test');
         [$client] = $this->seedBaseData();
-        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
         Booking::factory()->create([
             'client_id' => $client->id,
             'scheduled_date' => now()->addDay()->toDateString(),
         ]);
 
-        $this->actingAs($almacen)
+        $this->actingAs($cliente)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Calendario Google Workspace')
-            ->assertSee('https://calendar.google.com/calendar/embed?src=test')
-            ->assertSee('<iframe', false);
+            ->assertDontSee('Conectar Google Calendar')
+            ->assertDontSee('Google Calendar desactivado');
     }
 
     public function test_internal_database_notification_is_created_for_superadmin_administracion_and_almacen(): void
@@ -553,7 +542,7 @@ class BookingManagementTest extends TestCase
 
         return User::factory()->create([
             'role_id' => $role->id,
-            'client_id' => $client?->id,
+            'client_id' => $roleSlug === Role::CLIENTE ? $client?->id : null,
         ]);
     }
 }

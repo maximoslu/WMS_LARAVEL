@@ -4468,24 +4468,84 @@ body.brand-body.app-shell-body .pagination-card {
     border-color: rgba(196, 88, 88, 0.18);
 }
 
-.dashboard-google-calendar {
+.dashboard-google-connection-card {
     display: grid;
     gap: 0.9rem;
-    padding-top: 0.25rem;
 }
 
-.dashboard-google-calendar-frame {
-    overflow: hidden;
-    border: 1px solid rgba(24, 37, 50, 0.1);
-    border-radius: 16px;
-    background: #fff;
+.dashboard-google-connection-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
 }
 
-.dashboard-google-calendar-frame iframe {
-    display: block;
-    width: 100%;
-    min-height: 30rem;
-    border: 0;
+.dashboard-google-connection-copy {
+    margin: 0;
+    color: var(--brand-soft);
+    line-height: 1.55;
+}
+
+.dashboard-google-connection-actions form {
+    margin: 0;
+}
+
+.dashboard-google-status--disabled {
+    background: rgba(70, 93, 115, 0.12);
+    color: var(--brand-slate-dark);
+}
+
+.dashboard-google-status--pending {
+    background: var(--brand-warning-bg);
+    color: var(--brand-warning);
+}
+
+.dashboard-google-status--connected {
+    background: var(--brand-success-bg);
+    color: var(--brand-success);
+}
+
+.dashboard-google-status--error {
+    background: var(--brand-danger-bg);
+    color: var(--brand-danger);
+}
+
+.dashboard-google-event-chip {
+    display: grid;
+    gap: 0.28rem;
+    padding: 0.75rem 0.8rem;
+    border: 1px solid rgba(15, 127, 147, 0.16);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(15, 127, 147, 0.08), rgba(255, 255, 255, 0.94));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+
+.dashboard-google-event-chip strong {
+    color: #12384a;
+    font-size: 0.82rem;
+}
+
+.dashboard-google-event-chip span {
+    color: #4d6472;
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+
+.dashboard-google-event-badge {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.35rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.88);
+    color: var(--brand-cyan-dark);
+    border: 1px solid rgba(15, 127, 147, 0.18);
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
 }
 
 .dispatch-builder {

@@ -12,6 +12,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DailyOperationController;
 use App\Http\Controllers\GoodsDispatchController;
 use App\Http\Controllers\GoodsReceiptController;
+use App\Http\Controllers\GoogleCalendarOAuthController;
 use App\Http\Controllers\ItemController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MerchandiseRequestController;
@@ -56,6 +57,15 @@ Route::middleware('auth')->group(function (): void {
         ->name('ajax.lots');
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/google-calendar/oauth/redirect', [GoogleCalendarOAuthController::class, 'redirect'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('google-calendar.oauth.redirect');
+    Route::get('/google-calendar/oauth/callback', [GoogleCalendarOAuthController::class, 'callback'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('google-calendar.oauth.callback');
+    Route::post('/google-calendar/oauth/disconnect', [GoogleCalendarOAuthController::class, 'disconnect'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('google-calendar.oauth.disconnect');
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/perfil', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/perfil', [ProfileController::class, 'update'])->name('profile.update');
