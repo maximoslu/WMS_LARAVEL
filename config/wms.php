@@ -23,7 +23,7 @@ return [
             'key' => 'stock',
             'title' => 'Stock',
             'summary' => 'Visibilidad operativa por articulo, palet y estructura fisica del almacen.',
-            'minimum_role' => 'almacen',
+            'minimum_role' => 'cliente',
             'children' => [
                 [
                     'key' => 'stock',
@@ -31,7 +31,7 @@ return [
                     'path' => '/stock',
                     'title' => 'Stock actual',
                     'summary' => 'Vista operativa por articulo con cantidad total, palets completos y picos.',
-                    'minimum_role' => 'almacen',
+                    'minimum_role' => 'cliente',
                     'tag' => 'Visibilidad',
                     'status' => 'ready',
                     'next_step' => 'Conectar movimientos, ubicaciones reales y trazabilidad completa.',

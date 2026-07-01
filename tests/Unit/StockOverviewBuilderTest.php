@@ -5,7 +5,9 @@ namespace Tests\Unit;
 use App\Models\Client;
 use App\Models\Item;
 use App\Models\Location;
+use App\Models\Role;
 use App\Models\StockPallet;
+use App\Models\User;
 use App\Models\Warehouse;
 use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
@@ -20,6 +22,7 @@ class StockOverviewBuilderTest extends TestCase
     public function test_builder_calculates_total_units_and_total_full_pallets_from_inventory_rows(): void
     {
         [$client] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::ALMACEN);
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'FR-1080',
@@ -42,7 +45,7 @@ class StockOverviewBuilderTest extends TestCase
             'active' => true,
         ]);
 
-        $result = app(StockOverviewBuilder::class)->build([
+        $result = app(StockOverviewBuilder::class)->build($user, [
             'stock_state' => 'with_stock',
         ]);
 
@@ -54,6 +57,7 @@ class StockOverviewBuilderTest extends TestCase
     public function test_builder_separates_same_sku_across_clients(): void
     {
         [$friesland, $edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $frItem = Item::factory()->create([
             'client_id' => $friesland->id,
@@ -81,7 +85,7 @@ class StockOverviewBuilderTest extends TestCase
             'quantity_units' => 180,
         ]);
 
-        $result = app(StockOverviewBuilder::class)->build([
+        $result = app(StockOverviewBuilder::class)->build($user, [
             'stock_state' => 'with_stock',
         ]);
 
@@ -92,6 +96,7 @@ class StockOverviewBuilderTest extends TestCase
     public function test_builder_keeps_same_item_split_by_inventory_lot(): void
     {
         [$client] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $item = Item::factory()->create([
             'client_id' => $client->id,
@@ -113,7 +118,7 @@ class StockOverviewBuilderTest extends TestCase
             'quantity_units' => 300,
         ]);
 
-        $rows = app(StockOverviewBuilder::class)->build([
+        $rows = app(StockOverviewBuilder::class)->build($user, [
             'stock_state' => 'with_stock',
         ])['rows']->where('sku', 'SKU-LOTE')->values();
 
@@ -124,13 +129,14 @@ class StockOverviewBuilderTest extends TestCase
     public function test_builder_reports_without_stock_items_when_requested(): void
     {
         [$client] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-SIN-STOCK',
         ]);
 
-        $rows = app(StockOverviewBuilder::class)->build([
+        $rows = app(StockOverviewBuilder::class)->build($user, [
             'stock_state' => 'without_stock',
         ])['rows'];
 
@@ -144,6 +150,7 @@ class StockOverviewBuilderTest extends TestCase
     public function test_builder_hides_legacy_zero_quantity_batches_and_keeps_item_in_without_stock_view(): void
     {
         [$client] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $item = Item::factory()->create([
             'client_id' => $client->id,
@@ -161,11 +168,11 @@ class StockOverviewBuilderTest extends TestCase
             'peak_1' => 0,
         ]);
 
-        $withStockRows = app(StockOverviewBuilder::class)->build([
+        $withStockRows = app(StockOverviewBuilder::class)->build($user, [
             'stock_state' => 'with_stock',
         ])['rows'];
 
-        $withoutStockRows = app(StockOverviewBuilder::class)->build([
+        $withoutStockRows = app(StockOverviewBuilder::class)->build($user, [
             'stock_state' => 'without_stock',
         ])['rows'];
 
@@ -176,6 +183,7 @@ class StockOverviewBuilderTest extends TestCase
     public function test_builder_prefers_location_code_over_legacy_text(): void
     {
         [$client] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $warehouse = Warehouse::factory()->create();
         $location = Location::factory()->create([
@@ -196,12 +204,54 @@ class StockOverviewBuilderTest extends TestCase
             'quantity_units' => 500,
         ]);
 
-        $row = app(StockOverviewBuilder::class)->build([
+        $row = app(StockOverviewBuilder::class)->build($user, [
             'stock_state' => 'with_stock',
         ])['rows']->firstWhere('sku', 'SKU-LOC');
 
         $this->assertNotNull($row);
         $this->assertSame('A1-REAL', $row['location_label']);
+    }
+
+    public function test_builder_forces_client_scope_for_cliente_user(): void
+    {
+        [$friesland, $edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+
+        $frItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'SKU-FR-CLIENT',
+        ]);
+
+        $edItem = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'SKU-ED-CLIENT',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frItem->id,
+            'quantity_units' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'quantity_units' => 100,
+        ]);
+
+        $result = app(StockOverviewBuilder::class)->build($user, [
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'location' => 'AJENA',
+            'location_id' => 999,
+        ]);
+
+        $this->assertSame($friesland->id, $result['filters']['client_id']);
+        $this->assertNull($result['filters']['item_id']);
+        $this->assertSame('', $result['filters']['location']);
+        $this->assertNull($result['filters']['location_id']);
+        $this->assertCount(1, $result['rows']);
+        $this->assertSame('SKU-FR-CLIENT', $result['rows']->first()['sku']);
     }
 
     /**
@@ -218,5 +268,15 @@ class StockOverviewBuilderTest extends TestCase
             Client::query()->where('code', 'FRIESLAND')->firstOrFail(),
             Client::query()->where('code', 'EDELVIVES')->firstOrFail(),
         ];
+    }
+
+    private function makeUserWithRole(string $roleSlug, ?Client $client = null): User
+    {
+        $role = Role::query()->where('slug', $roleSlug)->firstOrFail();
+
+        return User::factory()->create([
+            'role_id' => $role->id,
+            'client_id' => $roleSlug === Role::CLIENTE ? $client?->id : null,
+        ]);
     }
 }

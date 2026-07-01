@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\Models\Item;
+use App\Models\User;
 use App\Models\StockPallet;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -15,9 +16,9 @@ class StockOverviewBuilder
      * @param  array<string, mixed>  $filters
      * @return array{filters: array<string, mixed>, rows: Collection<int, array<string, mixed>>, paginator: LengthAwarePaginator, summary: array<string, int>}
      */
-    public function build(array $filters = []): array
+    public function build(User $user, array $filters = []): array
     {
-        $normalizedFilters = $this->normalizeFilters($filters);
+        $normalizedFilters = $this->normalizeFilters($user, $filters);
         $paginator = match ($normalizedFilters['stock_state']) {
             'with_stock' => $this->paginateStockRows($normalizedFilters),
             'without_stock' => $this->paginateWithoutStockRows($normalizedFilters),
@@ -34,7 +35,7 @@ class StockOverviewBuilder
                 'references_with_stock' => (clone $summaryQuery)->distinct('item_id')->count('item_id'),
                 'total_units' => (int) (clone $summaryQuery)->sum('quantity_units'),
                 'total_pallets' => (int) (clone $summaryQuery)->sum('full_pallets'),
-                'blocked_batches' => (clone $summaryQuery)->where('status', StockPallet::STATUS_BLOCKED)->count(),
+                'batches_with_peaks' => (clone $summaryQuery)->where('peaks_count', '>', 0)->count(),
             ],
         ];
     }
@@ -119,23 +120,24 @@ class StockOverviewBuilder
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
-    private function normalizeFilters(array $filters): array
+    private function normalizeFilters(User $user, array $filters): array
     {
         $stockState = (string) ($filters['stock_state'] ?? 'with_stock');
+        $isClient = $user->hasRole('cliente');
 
         return [
-            'client_id' => isset($filters['client_id']) && (int) $filters['client_id'] > 0
-                ? (int) $filters['client_id']
-                : null,
-            'item_id' => isset($filters['item_id']) && (int) $filters['item_id'] > 0
+            'client_id' => $this->resolveClientId($user, $filters['client_id'] ?? null),
+            'item_id' => $isClient ? null : (isset($filters['item_id']) && (int) $filters['item_id'] > 0
                 ? (int) $filters['item_id']
-                : null,
+                : null),
             'search' => trim((string) ($filters['search'] ?? '')),
             'lot' => trim((string) ($filters['lot'] ?? '')),
-            'location' => trim((string) ($filters['location'] ?? '')),
-            'location_id' => isset($filters['location_id']) && (int) $filters['location_id'] > 0
-                ? (int) $filters['location_id']
-                : null,
+            'location' => $isClient ? '' : trim((string) ($filters['location'] ?? '')),
+            'location_id' => $isClient
+                ? null
+                : (isset($filters['location_id']) && (int) $filters['location_id'] > 0
+                    ? (int) $filters['location_id']
+                    : null),
             'per_page' => in_array((int) ($filters['per_page'] ?? 25), [25, 50, 100], true)
                 ? (int) ($filters['per_page'] ?? 25)
                 : 25,
@@ -146,7 +148,35 @@ class StockOverviewBuilder
             'stock_state' => in_array($stockState, ['with_stock', 'without_stock', 'all'], true)
                 ? $stockState
                 : 'with_stock',
+            'is_client' => $isClient,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function paginationQuery(array $filters): array
+    {
+        $query = [
+            'search' => $filters['search'],
+            'lot' => $filters['lot'],
+            'only_peaks' => $filters['only_peaks'] ? 1 : 0,
+            'per_page' => $filters['per_page'],
+            'stock_state' => $filters['stock_state'],
+            'batch_status' => $filters['batch_status'],
+        ];
+
+        if (! $filters['is_client']) {
+            $query['client_id'] = $filters['client_id'];
+            $query['item_id'] = $filters['item_id'];
+            $query['location'] = $filters['location'];
+            $query['location_id'] = $filters['location_id'];
+        }
+
+        return array_filter(
+            $query,
+            fn (mixed $value): bool => ! in_array($value, [null, ''], true)
+        );
     }
 
     /**
@@ -300,10 +330,11 @@ class StockOverviewBuilder
                 perPage: $filters['per_page'],
                 columns: ['*'],
                 pageName: 'page',
-            )
-            ->withQueryString();
+            );
 
-        return $paginator->through(fn (StockPallet $pallet): array => $this->buildStockRow($pallet));
+        return $paginator
+            ->appends($this->paginationQuery($filters))
+            ->through(fn (StockPallet $pallet): array => $this->buildStockRow($pallet));
     }
 
     /**
@@ -316,10 +347,11 @@ class StockOverviewBuilder
                 perPage: $filters['per_page'],
                 columns: ['*'],
                 pageName: 'page',
-            )
-            ->withQueryString();
+            );
 
-        return $paginator->through(fn (Item $item): array => $this->buildWithoutStockRow($item));
+        return $paginator
+            ->appends($this->paginationQuery($filters))
+            ->through(fn (Item $item): array => $this->buildWithoutStockRow($item));
     }
 
     /**
@@ -384,9 +416,20 @@ class StockOverviewBuilder
             options: [
                 'path' => LengthAwarePaginator::resolveCurrentPath(),
                 'pageName' => 'page',
-                'query' => request()->query(),
+                'query' => $this->paginationQuery($filters),
             ],
         );
+    }
+
+    private function resolveClientId(User $user, mixed $requestedClientId): ?int
+    {
+        if ($user->hasRole('cliente')) {
+            return $user->client_id !== null ? (int) $user->client_id : null;
+        }
+
+        return isset($requestedClientId) && (int) $requestedClientId > 0
+            ? (int) $requestedClientId
+            : null;
     }
 
     /**

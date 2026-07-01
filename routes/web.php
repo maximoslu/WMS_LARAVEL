@@ -95,7 +95,7 @@ Route::middleware('auth')->group(function (): void {
         ->name('items.toggle-active');
 
     Route::get('/stock', [StockController::class, 'index'])
-        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('stock.index');
     Route::get('/stock/partidas/{stockPallet}/editar', [StockController::class, 'edit'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)

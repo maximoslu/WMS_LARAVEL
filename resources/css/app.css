@@ -4906,6 +4906,13 @@ body.brand-body.app-shell-body .pagination-card {
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
 
+.stock-intro-helper {
+    margin: 0.3rem 0 0;
+    color: var(--brand-soft);
+    font-size: 0.94rem;
+    line-height: 1.55;
+}
+
 .stock-filter-card,
 .stock-table-shell,
 .stock-mobile-card,

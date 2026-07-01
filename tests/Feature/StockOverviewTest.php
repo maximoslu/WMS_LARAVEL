@@ -57,15 +57,142 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('Codigo pallet');
     }
 
-    public function test_cliente_cannot_view_stock_index(): void
+    public function test_cliente_can_view_only_own_stock_inventory(): void
     {
-        $this->seedBaseData();
+        [$friesland, $edelvives] = $this->seedBaseData();
 
-        $user = $this->makeUserWithRole(Role::CLIENTE);
+        $frItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'SKU-FR-ONLY',
+            'description' => 'Inventario Friesland',
+        ]);
+
+        $edItem = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'SKU-ED-HIDE',
+            'description' => 'Inventario Edelvives',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frItem->id,
+            'lot' => 'LOT-FR-ONLY',
+            'quantity_units' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'lot' => 'LOT-ED-HIDE',
+            'quantity_units' => 100,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $friesland);
 
         $this->actingAs($user)
             ->get(route('stock.index'))
-            ->assertForbidden();
+            ->assertOk()
+            ->assertSee('Mi inventario')
+            ->assertSee('Consulta tus existencias, lotes, pallets y picos disponibles.')
+            ->assertSee('Usa el buscador para localizar por SKU, descripcion o lote.')
+            ->assertSee('SKU-FR-ONLY')
+            ->assertDontSee('SKU-ED-HIDE')
+            ->assertDontSee('name="client_id"', false);
+    }
+
+    public function test_cliente_cannot_force_other_client_with_query_string(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $frItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'SKU-FR-SAFE',
+        ]);
+
+        $edItem = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'SKU-ED-BLOCK',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frItem->id,
+            'lot' => 'LOT-FR-SAFE',
+            'quantity_units' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'lot' => 'LOT-ED-BLOCK',
+            'quantity_units' => 100,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', ['client_id' => $edelvives->id]))
+            ->assertOk()
+            ->assertSee('SKU-FR-SAFE')
+            ->assertDontSee('SKU-ED-BLOCK')
+            ->assertDontSee('client_id='.$edelvives->id, false);
+    }
+
+    public function test_cliente_can_search_within_own_inventory(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $frMatch = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'SKU-FR-MATCH',
+            'description' => 'Mercancia visible',
+        ]);
+
+        $frOther = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'SKU-FR-OTHER',
+            'description' => 'Otra referencia',
+        ]);
+
+        $edMatch = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'SKU-ED-MATCH',
+            'description' => 'Mercancia visible',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frMatch->id,
+            'lot' => 'LOT-BUSQUEDA',
+            'quantity_units' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frOther->id,
+            'lot' => 'LOT-OTRO',
+            'quantity_units' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edMatch->id,
+            'lot' => 'LOT-BUSQUEDA',
+            'quantity_units' => 100,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', [
+                'search' => 'MATCH',
+                'lot' => 'LOT-BUSQUEDA',
+                'client_id' => $edelvives->id,
+            ]))
+            ->assertOk()
+            ->assertSee('SKU-FR-MATCH')
+            ->assertDontSee('SKU-FR-OTHER')
+            ->assertDontSee('SKU-ED-MATCH');
     }
 
     public function test_stock_view_shows_received_at_and_batch_status(): void
@@ -407,6 +534,58 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('SKU-OTRO');
     }
 
+    public function test_almacen_can_view_stock_for_multiple_clients(): void
+    {
+        $this->assertInternalRoleSeesMultipleClients(Role::ALMACEN);
+    }
+
+    public function test_administracion_can_view_stock_for_multiple_clients(): void
+    {
+        $this->assertInternalRoleSeesMultipleClients(Role::ADMINISTRACION);
+    }
+
+    public function test_superadmin_can_view_stock_for_multiple_clients(): void
+    {
+        $this->assertInternalRoleSeesMultipleClients(Role::SUPERADMIN);
+    }
+
+    public function test_internal_roles_can_filter_stock_by_client(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $frItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'SKU-FR-FILTER',
+        ]);
+
+        $edItem = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'SKU-ED-FILTER',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frItem->id,
+            'quantity_units' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'quantity_units' => 100,
+        ]);
+
+        foreach ([Role::ALMACEN, Role::ADMINISTRACION, Role::SUPERADMIN] as $roleSlug) {
+            $user = $this->makeUserWithRole($roleSlug);
+
+            $this->actingAs($user)
+                ->get(route('stock.index', ['client_id' => $friesland->id]))
+                ->assertOk()
+                ->assertSee('SKU-FR-FILTER')
+                ->assertDontSee('SKU-ED-FILTER');
+        }
+    }
+
     public function test_stock_table_does_not_show_cliente_column_and_summary_only_shows_total_pallets(): void
     {
         [$client] = $this->seedBaseData();
@@ -642,12 +821,51 @@ class StockOverviewTest extends TestCase
         ];
     }
 
-    private function makeUserWithRole(string $roleSlug): User
+    private function makeUserWithRole(string $roleSlug, ?Client $client = null): User
     {
         $role = Role::query()->where('slug', $roleSlug)->firstOrFail();
 
         return User::factory()->create([
             'role_id' => $role->id,
+            'client_id' => $roleSlug === Role::CLIENTE ? $client?->id : null,
         ]);
+    }
+
+    private function assertInternalRoleSeesMultipleClients(string $roleSlug): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $frItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'SKU-FR-'.$roleSlug,
+        ]);
+
+        $edItem = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'SKU-ED-'.$roleSlug,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frItem->id,
+            'quantity_units' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'quantity_units' => 100,
+        ]);
+
+        $user = $this->makeUserWithRole($roleSlug);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('SKU-FR-'.$roleSlug)
+            ->assertSee('SKU-ED-'.$roleSlug)
+            ->assertSee('FRIESLAND')
+            ->assertSee('EDELVIVES')
+            ->assertSee('name="client_id"', false);
     }
 }

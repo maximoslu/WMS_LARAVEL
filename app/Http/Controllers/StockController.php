@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\Location;
+use App\Models\Role;
 use App\Models\StockPallet;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
@@ -20,7 +21,11 @@ class StockController extends Controller
 
     public function index(Request $request): View
     {
-        $overview = $this->overviewBuilder->build($request->only([
+        $user = $request->user();
+
+        abort_if($user?->hasRole(Role::CLIENTE) && $user->client_id === null, 403);
+
+        $overview = $this->overviewBuilder->build($user, $request->only([
             'client_id',
             'item_id',
             'search',
@@ -32,17 +37,27 @@ class StockController extends Controller
             'location',
             'location_id',
         ]));
+        $isClient = $user?->hasRole(Role::CLIENTE) === true;
+        $canFilterClients = $user?->canAccessRole(Role::ALMACEN) === true;
 
         return view('stock.index', [
             'rows' => $overview['rows'],
             'paginator' => $overview['paginator'],
             'summary' => $overview['summary'],
             'filters' => $overview['filters'],
-            'clients' => Client::query()->orderBy('name')->get(),
+            'clients' => $canFilterClients
+                ? Client::query()->orderBy('name')->get()
+                : collect(),
+            'isClient' => $isClient,
+            'canFilterClients' => $canFilterClients,
+            'pageTitle' => $isClient ? 'Mi inventario' : 'Stock actual',
+            'pageSubtitle' => $isClient
+                ? 'Consulta tus existencias, lotes, pallets y picos disponibles.'
+                : 'Consulta existencias, lotes, pallets y picos operativos.',
             'itemSearchEndpoint' => route('ajax.items'),
             'lotSearchEndpoint' => route('ajax.lots'),
             'locationSearchEndpoint' => route('ajax.locations'),
-            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
+            'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
 

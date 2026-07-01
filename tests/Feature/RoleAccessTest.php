@@ -45,7 +45,7 @@ class RoleAccessTest extends TestCase
             ->get(route('dashboard'))
             ->assertOk()
             ->assertSee('Solicitar mercancia')
-            ->assertDontSee('Stock actual')
+            ->assertSee('Mi inventario')
             ->assertDontSee('Usuarios y roles')
             ->assertDontSee('Backups')
             ->assertDontSee('Auditoria y trazabilidad');
@@ -104,9 +104,15 @@ class RoleAccessTest extends TestCase
         $this->seed(RoleSeeder::class);
 
         $role = Role::query()->where('slug', $roleSlug)->firstOrFail();
+        $clientId = null;
+
+        if ($roleSlug === Role::CLIENTE) {
+            $clientId = \App\Models\Client::factory()->create()->id;
+        }
 
         return User::factory()->create([
             'role_id' => $role->id,
+            'client_id' => $clientId,
         ]);
     }
 }

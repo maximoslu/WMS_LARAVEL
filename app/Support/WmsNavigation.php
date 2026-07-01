@@ -97,6 +97,10 @@ class WmsNavigation
             $displayTitle = 'Solicitudes';
         }
 
+        if ($user?->hasRole(Role::CLIENTE) && ($child['key'] ?? null) === 'stock') {
+            $displayTitle = 'Mi inventario';
+        }
+
         return [
             ...$child,
             'display_title' => $displayTitle,
