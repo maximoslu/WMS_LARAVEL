@@ -76,7 +76,9 @@ La integracion actual de Google Calendar es solo de lectura y se usa como capa v
 3. Configurar como redirect URIs locales:
    - `http://127.0.0.1:8000/google-calendar/oauth/callback`
    - `http://localhost:8000/google-calendar/oauth/callback`
-4. Configurar en `.env`:
+4. Configurar como redirect URI de produccion:
+   - `https://wms.maximosl.com/google-calendar/oauth/callback`
+5. Configurar en `.env`:
 
 ```bash
 GOOGLE_CALENDAR_ENABLED=true
@@ -99,6 +101,27 @@ Notas:
 - Futura fase: booking aprobado -> crear evento Google.
 - No se deben versionar secretos, tokens ni JSON reales descargados de Google.
 - Como el secreto OAuth ya se ha visto durante la configuracion inicial, antes de produccion conviene regenerarlo en Google Cloud y actualizar Forge con el secreto definitivo.
+
+### Forge y produccion
+
+En Forge conviene dejar la capa desactivada hasta que el OAuth quede configurado de punta a punta:
+
+```bash
+GOOGLE_CALENDAR_ENABLED=false
+GOOGLE_CALENDAR_AUTH_MODE=oauth
+GOOGLE_CALENDAR_ID=
+GOOGLE_CALENDAR_CLIENT_ID=
+GOOGLE_CALENDAR_CLIENT_SECRET=
+GOOGLE_CALENDAR_REDIRECT_URI=https://wms.maximosl.com/google-calendar/oauth/callback
+GOOGLE_CALENDAR_TOKEN_PATH=storage/app/google/calendar-token.json
+```
+
+Notas de despliegue para esta capa:
+
+- El token OAuth no se sube desde local: se genera en el propio servidor al completar el login contra Google.
+- El fichero esperado en produccion es `storage/app/google/calendar-token.json`.
+- Antes de activar `GOOGLE_CALENDAR_ENABLED=true` en Forge, hay que validar que la redirect URI anterior existe tambien en Google Cloud.
+- El secreto OAuth definitivo de produccion debe regenerarse en Google Cloud y guardarse solo en Forge.
 
 ## Despliegue
 

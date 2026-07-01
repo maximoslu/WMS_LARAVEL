@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class GoogleCalendarService
@@ -72,10 +73,18 @@ class GoogleCalendarService
         return $client->createAuthUrl();
     }
 
-    public function handleOAuthCallback(string $code): bool
+    public function handleOAuthCallback(string $code): array
     {
         if (! $this->canStartOAuthFlow()) {
-            return false;
+            $this->logWarning('No se puede completar el callback OAuth porque falta configuracion local.', [
+                'redirect_uri' => $this->redirectUri(),
+                'token_path' => $this->resolvedTokenPath(),
+            ]);
+
+            return [
+                'success' => false,
+                'reason' => 'configuration',
+            ];
         }
 
         $client = $this->makeOAuthClient();
@@ -84,14 +93,30 @@ class GoogleCalendarService
 
         if (! is_array($token) || isset($token['error']) || ! isset($token['access_token'])) {
             $this->logWarning('No se pudo intercambiar el code OAuth por un token valido.', [
+                'reason' => 'token_exchange',
                 'has_error' => is_array($token) && isset($token['error']),
+                'google_error' => is_array($token) ? ($token['error'] ?? null) : null,
+                'google_error_description' => is_array($token) ? ($token['error_description'] ?? null) : null,
+                'redirect_uri' => $this->redirectUri(),
+                'token_path' => $this->resolvedTokenPath(),
             ]);
 
-            return false;
+            return [
+                'success' => false,
+                'reason' => 'token_exchange',
+            ];
         }
 
         if (! isset($token['refresh_token']) && isset($existingToken['refresh_token'])) {
             $token['refresh_token'] = $existingToken['refresh_token'];
+        }
+
+        if (! isset($token['refresh_token'])) {
+            $this->logWarning('Google Calendar devolvio access_token sin refresh_token.', [
+                'reason' => 'missing_refresh_token',
+                'redirect_uri' => $this->redirectUri(),
+                'token_path' => $this->resolvedTokenPath(),
+            ]);
         }
 
         $this->storeToken($token);
@@ -100,7 +125,11 @@ class GoogleCalendarService
         // TODO: actualizar evento Google al modificar booking.
         // TODO: cancelar evento Google al cancelar booking.
 
-        return true;
+        return [
+            'success' => true,
+            'reason' => 'connected',
+            'has_refresh_token' => isset($token['refresh_token']),
+        ];
     }
 
     public function disconnect(): void
@@ -243,8 +272,21 @@ class GoogleCalendarService
         $client->setScopes([GoogleCalendar::CALENDAR_READONLY]);
         $client->setAccessType('offline');
         $client->setPrompt('consent');
+        $client->setIncludeGrantedScopes(true);
 
         return $client;
+    }
+
+    public function redirectUri(): ?string
+    {
+        $redirectUri = config('google-calendar.redirect_uri');
+
+        return filled($redirectUri) ? (string) $redirectUri : null;
+    }
+
+    public function tokenPath(): ?string
+    {
+        return $this->resolvedTokenPath();
     }
 
     private function canStartOAuthFlow(): bool
@@ -321,11 +363,21 @@ class GoogleCalendarService
         $path = $this->resolvedTokenPath();
 
         if ($path === null) {
-            return;
+            throw new RuntimeException('No hay una ruta configurada para guardar el token OAuth.');
         }
 
-        File::ensureDirectoryExists(dirname($path));
-        File::put($path, json_encode($token, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $directory = dirname($path);
+        File::ensureDirectoryExists($directory);
+
+        if (! File::isDirectory($directory)) {
+            throw new RuntimeException('No se pudo preparar la carpeta del token OAuth.');
+        }
+
+        $written = File::put($path, json_encode($token, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        if ($written === false) {
+            throw new RuntimeException('No se pudo escribir el token OAuth de Google Calendar.');
+        }
     }
 
     private function logWarning(string $message, array $context = []): void
