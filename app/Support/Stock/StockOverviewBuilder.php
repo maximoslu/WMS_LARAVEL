@@ -6,45 +6,35 @@ use App\Models\Item;
 use App\Models\StockPallet;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 
 class StockOverviewBuilder
 {
     /**
      * @param  array<string, mixed>  $filters
-     * @return array{filters: array<string, mixed>, rows: Collection<int, array<string, mixed>>, summary: array<string, int>}
+     * @return array{filters: array<string, mixed>, rows: Collection<int, array<string, mixed>>, paginator: LengthAwarePaginator, summary: array<string, int>}
      */
     public function build(array $filters = []): array
     {
         $normalizedFilters = $this->normalizeFilters($filters);
-
-        $stockRows = $this->stockQuery($normalizedFilters)
-            ->get()
-            ->map(fn (StockPallet $pallet): array => $this->buildStockRow($pallet))
-            ->sortBy([
-                ['received_at_raw', 'asc'],
-                ['sku', 'asc'],
-                ['lot', 'asc'],
-            ])
-            ->values();
-
-        $withoutStockRows = $this->withoutStockQuery($normalizedFilters)
-            ->get()
-            ->map(fn (Item $item): array => $this->buildWithoutStockRow($item));
-
-        $rows = match ($normalizedFilters['stock_state']) {
-            'with_stock' => $stockRows,
-            'without_stock' => $withoutStockRows,
-            default => $stockRows->concat($withoutStockRows),
+        $paginator = match ($normalizedFilters['stock_state']) {
+            'with_stock' => $this->paginateStockRows($normalizedFilters),
+            'without_stock' => $this->paginateWithoutStockRows($normalizedFilters),
+            default => $this->paginateAllRows($normalizedFilters),
         };
+        $rows = collect($paginator->items());
+        $summaryQuery = $this->stockQuery($normalizedFilters);
 
         return [
             'filters' => $normalizedFilters,
             'rows' => $rows->values(),
+            'paginator' => $paginator,
             'summary' => [
-                'references_with_stock' => $stockRows->pluck('item_id')->filter()->unique()->count(),
-                'total_units' => (int) $stockRows->sum('quantity_units'),
-                'total_pallets' => (int) $stockRows->sum('full_pallets'),
-                'blocked_batches' => $stockRows->where('batch_status', StockPallet::STATUS_BLOCKED)->count(),
+                'references_with_stock' => (clone $summaryQuery)->distinct('item_id')->count('item_id'),
+                'total_units' => (int) (clone $summaryQuery)->sum('quantity_units'),
+                'total_pallets' => (int) (clone $summaryQuery)->sum('full_pallets'),
+                'blocked_batches' => (clone $summaryQuery)->where('status', StockPallet::STATUS_BLOCKED)->count(),
             ],
         ];
     }
@@ -90,6 +80,7 @@ class StockOverviewBuilder
                 });
             })
             ->when($filters['batch_status'] !== 'all', fn (Builder $query) => $query->where('status', $filters['batch_status']))
+            ->when($filters['only_peaks'], fn (Builder $query) => $query->where('peaks_count', '>', 0))
             ->orderBy('received_at')
             ->orderBy('lot')
             ->orderBy('id');
@@ -145,6 +136,10 @@ class StockOverviewBuilder
             'location_id' => isset($filters['location_id']) && (int) $filters['location_id'] > 0
                 ? (int) $filters['location_id']
                 : null,
+            'per_page' => in_array((int) ($filters['per_page'] ?? 25), [25, 50, 100], true)
+                ? (int) ($filters['per_page'] ?? 25)
+                : 25,
+            'only_peaks' => filter_var($filters['only_peaks'] ?? false, FILTER_VALIDATE_BOOL),
             'batch_status' => in_array((string) ($filters['batch_status'] ?? 'all'), ['all', ...StockPallet::statuses()], true)
                 ? (string) ($filters['batch_status'] ?? 'all')
                 : 'all',
@@ -293,5 +288,135 @@ class StockOverviewBuilder
         }
 
         return 'normal';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function paginateStockRows(array $filters): LengthAwarePaginator
+    {
+        $paginator = $this->stockQuery($filters)
+            ->paginate(
+                perPage: $filters['per_page'],
+                columns: ['*'],
+                pageName: 'page',
+            )
+            ->withQueryString();
+
+        return $paginator->through(fn (StockPallet $pallet): array => $this->buildStockRow($pallet));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function paginateWithoutStockRows(array $filters): LengthAwarePaginator
+    {
+        $paginator = $this->withoutStockQuery($filters)
+            ->paginate(
+                perPage: $filters['per_page'],
+                columns: ['*'],
+                pageName: 'page',
+            )
+            ->withQueryString();
+
+        return $paginator->through(fn (Item $item): array => $this->buildWithoutStockRow($item));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function paginateAllRows(array $filters): LengthAwarePaginator
+    {
+        $stockIndexQuery = $this->stockIndexQuery($filters);
+        $withoutStockIndexQuery = $this->withoutStockIndexQuery($filters);
+        $page = LengthAwarePaginator::resolveCurrentPage('page');
+        $perPage = $filters['per_page'];
+        $unionQuery = $stockIndexQuery->unionAll($withoutStockIndexQuery);
+        $rowsPage = DB::query()
+            ->fromSub($unionQuery, 'stock_index')
+            ->orderBy('sort_group')
+            ->orderBy('received_at_sort')
+            ->orderBy('sku_sort')
+            ->orderBy('lot_sort')
+            ->orderBy('row_id')
+            ->forPage($page, $perPage)
+            ->get();
+        $total = DB::query()
+            ->fromSub($unionQuery, 'stock_index')
+            ->count();
+        $stockIds = $rowsPage
+            ->where('row_type', 'stock')
+            ->pluck('row_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $withoutStockIds = $rowsPage
+            ->where('row_type', 'master_without_stock')
+            ->pluck('row_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $stockRows = StockPallet::query()
+            ->with(['client', 'item.client', 'item.defaultLocation.warehouse', 'location.warehouse'])
+            ->whereIn('id', $stockIds)
+            ->get()
+            ->keyBy('id');
+        $withoutStockRows = Item::query()
+            ->with(['client', 'defaultLocation.warehouse'])
+            ->whereIn('id', $withoutStockIds)
+            ->get()
+            ->keyBy('id');
+        $items = $rowsPage->map(function (object $row) use ($stockRows, $withoutStockRows): ?array {
+            if ($row->row_type === 'stock') {
+                $pallet = $stockRows->get((int) $row->row_id);
+
+                return $pallet ? $this->buildStockRow($pallet) : null;
+            }
+
+            $item = $withoutStockRows->get((int) $row->row_id);
+
+            return $item ? $this->buildWithoutStockRow($item) : null;
+        })->filter()->values();
+
+        return new LengthAwarePaginator(
+            items: $items,
+            total: $total,
+            perPage: $perPage,
+            currentPage: $page,
+            options: [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'pageName' => 'page',
+                'query' => request()->query(),
+            ],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function stockIndexQuery(array $filters): \Illuminate\Database\Query\Builder
+    {
+        return $this->stockQuery($filters)
+            ->getQuery()
+            ->join('items', 'stock_pallets.item_id', '=', 'items.id')
+            ->selectRaw("'stock' as row_type")
+            ->selectRaw('stock_pallets.id as row_id')
+            ->selectRaw('0 as sort_group')
+            ->selectRaw("COALESCE(DATE_FORMAT(stock_pallets.received_at, '%Y-%m-%d'), '9999-12-31') as received_at_sort")
+            ->selectRaw('items.sku as sku_sort')
+            ->selectRaw("COALESCE(stock_pallets.lot, '') as lot_sort");
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function withoutStockIndexQuery(array $filters): \Illuminate\Database\Query\Builder
+    {
+        return $this->withoutStockQuery($filters)
+            ->getQuery()
+            ->selectRaw("'master_without_stock' as row_type")
+            ->selectRaw('items.id as row_id')
+            ->selectRaw('1 as sort_group')
+            ->selectRaw("'9999-12-31' as received_at_sort")
+            ->selectRaw('items.sku as sku_sort')
+            ->selectRaw("'' as lot_sort");
     }
 }

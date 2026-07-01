@@ -25,6 +25,8 @@ class StockController extends Controller
             'item_id',
             'search',
             'lot',
+            'only_peaks',
+            'per_page',
             'stock_state',
             'batch_status',
             'location',
@@ -33,6 +35,7 @@ class StockController extends Controller
 
         return view('stock.index', [
             'rows' => $overview['rows'],
+            'paginator' => $overview['paginator'],
             'summary' => $overview['summary'],
             'filters' => $overview['filters'],
             'clients' => Client::query()->orderBy('name')->get(),

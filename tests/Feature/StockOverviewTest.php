@@ -48,12 +48,12 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSee('Vista operativa agregada por lote y fecha de entrada')
+            ->assertSee('Consulta existencias, lotes, pallets y picos operativos.')
             ->assertSee('SKU-STOCK-01')
             ->assertSee('LOT-001')
             ->assertSee('70.000')
             ->assertSee('64')
-            ->assertSee('880')
+            ->assertSee('1 pico')
             ->assertDontSee('Codigo pallet');
     }
 
@@ -432,10 +432,112 @@ class StockOverviewTest extends TestCase
             ->get(route('stock.index'))
             ->assertOk()
             ->assertSeeText('Total pallets')
-            ->assertDontSeeText('Referencias con stock')
-            ->assertDontSeeText('Total unidades')
-            ->assertDontSeeText('Partidas bloqueadas')
             ->assertDontSee('<th>Cliente</th>', false);
+    }
+
+    public function test_stock_index_is_paginated_by_default(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        for ($index = 1; $index <= 30; $index++) {
+            $item = Item::factory()->create([
+                'client_id' => $client->id,
+                'sku' => 'SKU-PAG-'.$index,
+                'description' => 'Articulo '.$index,
+                'units_per_pallet' => 100,
+            ]);
+
+            StockPallet::factory()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'lot' => 'LOT-PAG-'.$index,
+                'quantity_units' => 100,
+                'units_per_pallet' => 100,
+                'full_pallets' => 1,
+                'status' => StockPallet::STATUS_AVAILABLE,
+            ]);
+        }
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('Mostrando 1-25 de 30 registros')
+            ->assertSee('page=2', false);
+    }
+
+    public function test_stock_pagination_keeps_filters_in_query_string(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        for ($index = 1; $index <= 30; $index++) {
+            $item = Item::factory()->create([
+                'client_id' => $client->id,
+                'sku' => 'SKU-FILTRO-PAG-'.$index,
+                'description' => 'Articulo filtro '.$index,
+                'units_per_pallet' => 100,
+            ]);
+
+            StockPallet::factory()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'lot' => 'LOT-FILTRO-PAG-'.$index,
+                'quantity_units' => 100,
+                'units_per_pallet' => 100,
+                'full_pallets' => 1,
+                'status' => StockPallet::STATUS_AVAILABLE,
+            ]);
+        }
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', [
+                'stock_state' => 'with_stock',
+                'per_page' => 25,
+                'only_peaks' => 1,
+            ]))
+            ->assertOk()
+            ->assertSee('stock_state=with_stock', false)
+            ->assertSee('per_page=25', false)
+            ->assertSee('only_peaks=1', false);
+    }
+
+    public function test_stock_headers_do_not_show_peak_columns_and_detail_contains_peaks(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-PEAK-DETAIL',
+            'description' => 'Detalle con picos',
+            'units_per_pallet' => 500,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-PEAK',
+            'quantity_units' => 1400,
+            'units_per_pallet' => 500,
+            'full_pallets' => 2,
+            'peaks_count' => 1,
+            'peak_1' => 400,
+            'status' => StockPallet::STATUS_AVAILABLE,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('<th class="stock-table-center">Picos</th>', false)
+            ->assertDontSee('<th>Pico 1</th>', false)
+            ->assertDontSee('<th>Pico 10</th>', false)
+            ->assertSee('Distribucion de picos')
+            ->assertSee('Pico 1')
+            ->assertSee('400');
     }
 
     public function test_stock_view_marks_blocked_rows_with_visual_class(): void

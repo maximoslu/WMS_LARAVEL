@@ -443,6 +443,35 @@ const setupStockFilters = () => {
     form.dataset.stockFiltersBound = 'true';
 };
 
+const setupStockDetailToggles = () => {
+    const toggles = document.querySelectorAll('[data-stock-detail-toggle]');
+
+    if (toggles.length === 0) {
+        return;
+    }
+
+    toggles.forEach((toggle) => {
+        if (toggle.dataset.stockDetailBound === 'true') {
+            return;
+        }
+
+        toggle.addEventListener('click', () => {
+            const targetId = toggle.dataset.target;
+            const detailRow = targetId ? document.getElementById(targetId) : null;
+
+            if (!detailRow) {
+                return;
+            }
+
+            const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+            toggle.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+            detailRow.hidden = isExpanded;
+        });
+
+        toggle.dataset.stockDetailBound = 'true';
+    });
+};
+
 const setupMerchandiseRequestBuilder = () => {
     const form = document.querySelector('[data-merchandise-request-form]');
 
@@ -1052,6 +1081,7 @@ const setupDispatchLoadingEditor = () => {
 const boot = () => {
     setupAppDrawer();
     setupStockFilters();
+    setupStockDetailToggles();
     setupGoodsReceiptLines();
     setupMerchandiseRequestBuilder();
     setupGoodsDispatchBuilder();
