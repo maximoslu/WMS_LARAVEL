@@ -1,25 +1,25 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Detalle booking | MAXIMO WMS')
-@section('topbar_title', 'Detalle booking')
+@section('title', 'Solicitud | MAXIMO WMS')
+@section('topbar_title', 'Solicitud')
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
         <a href="{{ route('dashboard') }}">Panel de control</a>
         <span>/</span>
-        <a href="{{ route('bookings.index') }}">Bookings</a>
+        <a href="{{ route('bookings.index') }}">{{ $isClient ? 'Solicitudes' : 'Bookings' }}</a>
         <span>/</span>
         <span>{{ $booking->referenceCode() }}</span>
     </nav>
 
-    <section class="surface-card ops-page-header page-header-compact compact-card">
+    <section class="surface-card ops-page-header page-header-compact compact-card wms-page-hero">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">{{ $booking->referenceCode() }}</h2>
+            <h2 class="ops-page-title page-title-compact">Solicitud {{ $booking->referenceCode() }}</h2>
             <span class="ops-page-meta">{{ $booking->client?->name ?? 'Sin cliente' }} - {{ $booking->scheduledWindowLabel() }}</span>
         </div>
         <div class="ops-page-actions page-actions-compact action-buttons">
             @if ($canEdit)
-                <a href="{{ route('bookings.edit', $booking) }}" class="button-secondary compact-button btn-compact">Editar booking</a>
+                <a href="{{ route('bookings.edit', $booking) }}" class="button-secondary compact-button btn-compact">Editar</a>
             @endif
         </div>
     </section>
@@ -54,16 +54,16 @@
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
             <strong>Transportista</strong>
-            <span>{{ $booking->carrier_name ?: '-' }}</span>
-            <small>{{ $booking->vehicle_plate ?: 'Sin matricula' }}</small>
+            <span>{{ $booking->carrier_name ?: 'Pendiente de asignar' }}</span>
+            <small>{{ $booking->vehicle_plate ?: 'Pendiente de asignar' }}</small>
         </article>
     </section>
 
     <section class="daily-ops-grid">
         <article class="surface-card compact-card daily-ops-card">
             <div class="ops-index-heading">
-                <strong>Datos del booking</strong>
-                <span class="ops-page-meta">Detalle completo de la solicitud</span>
+                <strong>Datos de la solicitud</strong>
+                <span class="ops-page-meta">Detalle operativo y seguimiento</span>
             </div>
 
             <div class="dashboard-notification-list">
@@ -79,18 +79,24 @@
                     <strong>Contacto</strong>
                     <p>{{ $booking->contact_name ?: 'Sin contacto' }}{{ $booking->contact_phone ? ' - '.$booking->contact_phone : '' }}</p>
                 </article>
-                <article class="dashboard-notification-item">
-                    <strong>Conductor</strong>
-                    <p>{{ $booking->driver_name ?: 'Sin conductor' }}</p>
-                </article>
-                <article class="dashboard-notification-item">
-                    <strong>Origen / destino</strong>
-                    <p>{{ $booking->origin_destination ?: 'Sin detalle' }}</p>
-                </article>
-                <article class="dashboard-notification-item">
-                    <strong>Referencia documental</strong>
-                    <p>{{ $booking->document_reference ?: 'Sin referencia' }}</p>
-                </article>
+                @if (! $isClient || filled($booking->origin_destination))
+                    <article class="dashboard-notification-item">
+                        <strong>Origen / destino</strong>
+                        <p>{{ $booking->origin_destination ?: 'Pendiente de definir' }}</p>
+                    </article>
+                @endif
+                @if (! $isClient || filled($booking->document_reference))
+                    <article class="dashboard-notification-item">
+                        <strong>Referencia documental</strong>
+                        <p>{{ $booking->document_reference ?: 'Pendiente de registrar' }}</p>
+                    </article>
+                @endif
+                @if (! $isClient || filled($booking->driver_name))
+                    <article class="dashboard-notification-item">
+                        <strong>{{ $isClient ? 'Persona asignada al transporte' : 'Conductor' }}</strong>
+                        <p>{{ $booking->driver_name ?: 'Pendiente de asignar' }}</p>
+                    </article>
+                @endif
                 <article class="dashboard-notification-item">
                     <strong>Observaciones cliente</strong>
                     <p>{{ $booking->notes ?: 'Sin observaciones' }}</p>
@@ -111,7 +117,7 @@
         <article class="surface-card compact-card daily-ops-card">
             <div class="ops-index-heading">
                 <strong>Acciones de estado</strong>
-                <span class="ops-page-meta">Gestion operativa del booking</span>
+                <span class="ops-page-meta">Gestion operativa de la solicitud</span>
             </div>
 
             @if ($availableStatuses === [])
@@ -143,8 +149,6 @@
                     </div>
                 </form>
             @endunless
-
-            <p class="helper-text">TODO: enlazar booking con operaciones diarias, flujo de facturacion/FF y gestion manual cuando una operacion llegue sin booking previo.</p>
         </article>
     </section>
 @endsection

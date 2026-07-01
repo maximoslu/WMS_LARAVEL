@@ -39,7 +39,7 @@
         </label>
 
         <label class="auth-field{{ $isClient ? ' item-form-field--full' : '' }}">
-            <span>{{ $isClient ? 'Proveedor / transportista / origen' : 'Transportista' }}</span>
+            <span>{{ $isClient ? 'Transportista o referencia de llegada' : 'Transportista' }}</span>
             <input type="text" name="carrier_name" value="{{ old('carrier_name', $booking?->carrier_name) }}" class="auth-input" @required($isClient)>
         </label>
 
@@ -134,7 +134,7 @@
 
     <div class="item-form-actions action-buttons daily-ops-entry-actions">
         <button type="submit" class="button-primary compact-button btn-compact">
-            {{ $isEditing ? 'Guardar booking' : 'Enviar solicitud de booking' }}
+            {{ $isEditing ? ($isClient ? 'Guardar solicitud' : 'Guardar booking') : ($isClient ? 'Enviar solicitud' : 'Enviar solicitud de booking') }}
         </button>
     </div>
 </form>

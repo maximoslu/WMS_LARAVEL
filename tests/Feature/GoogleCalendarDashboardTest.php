@@ -33,10 +33,12 @@ class GoogleCalendarDashboardTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Calendario de bookings');
+            ->assertSee('Agenda operativa WMS')
+            ->assertDontSee('Agenda Google')
+            ->assertDontSee('Google Calendar');
     }
 
-    public function test_dashboard_loads_though_google_service_fails_in_a_controlled_way(): void
+    public function test_calendar_loads_though_google_service_fails_in_a_controlled_way(): void
     {
         [$client] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
@@ -53,12 +55,12 @@ class GoogleCalendarDashboardTest extends TestCase
         $this->app->instance(GoogleCalendarService::class, $service);
 
         $this->actingAs($almacen)
-            ->get(route('dashboard'))
+            ->get(route('bookings.calendar'))
             ->assertOk()
-            ->assertSee('Calendario de bookings');
+            ->assertSee('Agenda operativa');
     }
 
-    public function test_dashboard_can_render_mocked_google_events(): void
+    public function test_calendar_can_render_mocked_google_events(): void
     {
         [$client] = $this->seedBaseData();
         $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
@@ -78,8 +80,8 @@ class GoogleCalendarDashboardTest extends TestCase
                     'source' => 'google',
                     'id' => 'evt-1',
                     'title' => 'Muelle reservado externo',
-                    'starts_at' => now()->startOfWeek(Carbon::MONDAY)->addDay()->setTime(9, 0),
-                    'ends_at' => now()->startOfWeek(Carbon::MONDAY)->addDay()->setTime(10, 0),
+                    'starts_at' => now()->addDay()->setTime(9, 0),
+                    'ends_at' => now()->addDay()->setTime(10, 0),
                     'all_day' => false,
                     'location' => 'Dock 3',
                     'description' => 'Prueba',
@@ -88,9 +90,10 @@ class GoogleCalendarDashboardTest extends TestCase
         $this->app->instance(GoogleCalendarService::class, $service);
 
         $this->actingAs($administracion)
-            ->get(route('dashboard'))
+            ->get(route('bookings.calendar'))
             ->assertOk()
-            ->assertSee('Conectado')
+            ->assertSee('Agenda Google')
+            ->assertSee('Conectada')
             ->assertSee('Google')
             ->assertSee('Muelle reservado externo')
             ->assertSee('Dock 3');

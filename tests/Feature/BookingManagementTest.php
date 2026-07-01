@@ -60,7 +60,7 @@ class BookingManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Tipo')
             ->assertSee('Fecha solicitada')
-            ->assertSee('Proveedor / transportista / origen')
+            ->assertSee('Transportista o referencia de llegada')
             ->assertSee('Observaciones');
     }
 
@@ -261,7 +261,7 @@ class BookingManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Calendario de bookings')
+            ->assertSee('Agenda operativa WMS')
             ->assertSee('dashboard-booking-calendar-grid', false);
     }
 
@@ -400,7 +400,7 @@ class BookingManagementTest extends TestCase
             ->assertSee('dashboard-booking-chip--solicitado', false);
     }
 
-    public function test_google_calendar_status_is_rendered_for_administracion(): void
+    public function test_google_calendar_status_is_rendered_for_administracion_in_calendar(): void
     {
         [$client] = $this->seedBaseData();
         $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
@@ -410,10 +410,10 @@ class BookingManagementTest extends TestCase
         ]);
 
         $this->actingAs($administracion)
-            ->get(route('dashboard'))
+            ->get(route('bookings.calendar'))
             ->assertOk()
-            ->assertSee('Google Calendar')
-            ->assertSee('Google Calendar desactivado');
+            ->assertSee('Agenda Google')
+            ->assertSee('Desactivada');
     }
 
     public function test_google_calendar_status_is_hidden_for_cliente(): void
@@ -429,7 +429,39 @@ class BookingManagementTest extends TestCase
             ->get(route('dashboard'))
             ->assertOk()
             ->assertDontSee('Conectar Google Calendar')
-            ->assertDontSee('Google Calendar desactivado');
+            ->assertDontSee('Agenda Google');
+    }
+
+    public function test_cliente_sees_nueva_solicitud_label_instead_of_solicitar_booking(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->get(route('bookings.index'))
+            ->assertOk()
+            ->assertSee('Nueva solicitud')
+            ->assertDontSee('Solicitar booking');
+    }
+
+    public function test_dashboard_and_booking_detail_do_not_show_visible_todos(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('TODO');
+
+        $this->actingAs($cliente)
+            ->get(route('bookings.show', $booking))
+            ->assertOk()
+            ->assertDontSee('TODO');
     }
 
     public function test_internal_database_notification_is_created_for_superadmin_administracion_and_almacen(): void

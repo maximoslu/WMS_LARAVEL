@@ -11,10 +11,14 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Bookings\BookingNotificationService;
+use App\Services\GoogleCalendarService;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 use Illuminate\View\View;
 
 class BookingController extends Controller
@@ -100,7 +104,7 @@ class BookingController extends Controller
 
         return redirect()
             ->route('bookings.show', $booking)
-            ->with('status', 'Booking registrado correctamente. La solicitud queda pendiente de validacion operativa.');
+            ->with('status', 'Solicitud registrada correctamente. Queda pendiente de validacion operativa.');
     }
 
     public function show(Request $request, Booking $booking): View
@@ -108,7 +112,6 @@ class BookingController extends Controller
         $user = $request->user();
         abort_unless($this->canViewBooking($user, $booking), 403);
 
-        // TODO: Pendiente conectar booking con operaciones diarias y facturacion sin booking.
         $booking->load(['client', 'requestedBy', 'assignedTo', 'approvedBy', 'cancelledBy', 'warehouse']);
 
         return view('bookings.show', [
@@ -218,7 +221,7 @@ class BookingController extends Controller
             ->with('status', 'Estado del booking actualizado correctamente.');
     }
 
-    public function calendar(Request $request): View
+    public function calendar(Request $request, GoogleCalendarService $googleCalendarService): View
     {
         $user = $request->user();
         abort_unless($this->canAccessBookings($user), 403);
@@ -233,18 +236,54 @@ class BookingController extends Controller
             ->orderBy('scheduled_date')
             ->orderBy('scheduled_time_from')
             ->get();
+        $showGoogleCalendarLayer = $this->isInternalUser($user);
+        $showGoogleCalendarControls = $user->canAccessRole(Role::ADMINISTRACION);
+        $googleCalendarStatus = $showGoogleCalendarControls
+            ? $googleCalendarService->getConnectionStatus()
+            : null;
+        $googleCalendarEvents = collect();
 
-        $groupedBookings = $bookings
-            ->groupBy(fn (Booking $booking) => $booking->scheduled_date?->toDateString() ?? 'sin-fecha');
+        if ($showGoogleCalendarLayer) {
+            try {
+                $googleCalendarEvents = $googleCalendarService->getEventsBetween(
+                    Carbon::parse($filters['date_from']),
+                    Carbon::parse($filters['date_to'])
+                );
+            } catch (Throwable $exception) {
+                Log::warning('La agenda de bookings ignora un fallo controlado de Google Calendar.', [
+                    'channel' => 'google_calendar',
+                    'exception' => $exception::class,
+                ]);
+            }
+        }
+
+        $calendarDays = collect();
+        $startDate = Carbon::parse($filters['date_from'])->startOfDay();
+        $endDate = Carbon::parse($filters['date_to'])->startOfDay();
+
+        for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
+            $calendarDays->push([
+                'date' => $date->copy(),
+                'bookings' => $bookings
+                    ->filter(fn (Booking $booking) => $booking->scheduled_date?->isSameDay($date))
+                    ->values(),
+                'google_events' => $googleCalendarEvents
+                    ->filter(fn (array $event) => $event['starts_at']->isSameDay($date))
+                    ->values(),
+            ]);
+        }
 
         return view('bookings.calendar', [
-            'groupedBookings' => $groupedBookings,
+            'calendarDays' => $calendarDays,
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
             'filters' => $filters,
             'isClient' => $isClient,
             'navigationSections' => WmsNavigation::sectionsForUser($user),
             'statusOptions' => Booking::statusOptions(),
             'typeOptions' => Booking::typeOptions(),
+            'showGoogleCalendarControls' => $showGoogleCalendarControls,
+            'showGoogleCalendarLayer' => $showGoogleCalendarLayer,
+            'googleCalendarStatus' => $googleCalendarStatus,
         ]);
     }
 

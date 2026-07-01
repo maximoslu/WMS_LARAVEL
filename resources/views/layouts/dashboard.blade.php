@@ -74,7 +74,7 @@
                                     @php($isActive = request()->routeIs(...($child['active_patterns'] ?? [$child['route']])))
 
                                     <a href="{{ route($child['route']) }}" class="ops-nav-link{{ $isActive ? ' is-active' : '' }}">
-                                        <strong>{{ $child['title'] }}</strong>
+                                        <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
                                         <span class="ops-link-meta">
                                             <span class="ops-status badge-compact {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
                                                 {{ $child['status_label'] }}

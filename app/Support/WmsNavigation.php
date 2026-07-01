@@ -16,7 +16,7 @@ class WmsNavigation
             ->map(function (array $section) use ($user): ?array {
                 $children = collect($section['children'] ?? [])
                     ->filter(fn (array $child) => $user->canAccessRole($child['minimum_role']))
-                    ->map(fn (array $child): array => self::decorateChild($child))
+                    ->map(fn (array $child): array => self::decorateChild($child, $user))
                     ->values()
                     ->all();
 
@@ -88,12 +88,18 @@ class WmsNavigation
      * @param  array<string, mixed>  $child
      * @return array<string, mixed>
      */
-    private static function decorateChild(array $child): array
+    private static function decorateChild(array $child, ?User $user = null): array
     {
         $status = $child['status'] ?? 'ready';
+        $displayTitle = $child['title'];
+
+        if ($user?->hasRole(Role::CLIENTE) && ($child['key'] ?? null) === 'bookings') {
+            $displayTitle = 'Solicitudes';
+        }
 
         return [
             ...$child,
+            'display_title' => $displayTitle,
             'status' => $status,
             'status_label' => match ($status) {
                 'ready' => 'Disponible',

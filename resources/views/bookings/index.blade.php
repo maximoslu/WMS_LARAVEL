@@ -1,7 +1,7 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Bookings | MAXIMO WMS')
-@section('topbar_title', 'Bookings')
+@section('title', 'Solicitudes | MAXIMO WMS')
+@section('topbar_title', 'Solicitudes')
 
 @section('content')
     <nav class="ops-breadcrumb" aria-label="Breadcrumb">
@@ -9,19 +9,20 @@
         <span>/</span>
         <span>Operaciones</span>
         <span>/</span>
-        <span>Bookings</span>
+        <span>{{ $isClient ? 'Solicitudes' : 'Bookings' }}</span>
     </nav>
 
-    <section class="surface-card ops-page-header page-header-compact compact-card">
+    <section class="surface-card ops-page-header page-header-compact compact-card wms-page-hero">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">{{ $isClient ? 'Mis bookings' : 'Bookings operativos' }}</h2>
-            <span class="ops-page-meta">{{ $bookings->total() }} registros</span>
+            <h2 class="ops-page-title page-title-compact">{{ $isClient ? 'Mis solicitudes de mercancia' : 'Bookings operativos' }}</h2>
+            <span class="ops-page-meta">{{ $isClient ? 'Consulta, filtra y crea nuevas solicitudes de entrada o salida.' : $bookings->total() . ' registros operativos' }}</span>
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons">
-            <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-compact">Ver agenda</a>
+            <span class="wms-counter-pill">{{ $bookings->total() }} {{ $isClient ? 'solicitudes' : 'registros' }}</span>
+            <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Ver agenda</a>
             @if ($canCreate)
-                <a href="{{ route('bookings.create') }}" class="button-primary compact-button btn-compact">Solicitar booking</a>
+                <a href="{{ route('bookings.create') }}" class="button-primary compact-button btn-compact wms-action-primary">Nueva solicitud</a>
             @endif
         </div>
     </section>
@@ -30,7 +31,7 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="surface-card item-filter-card compact-card">
+    <section class="surface-card item-filter-card compact-card wms-filter-card">
         <form method="GET" action="{{ route('bookings.index') }}" class="item-filter-form compact-filters filters-compact">
             @unless ($isClient)
                 <label class="auth-field">
@@ -75,38 +76,40 @@
             </label>
 
             <label class="auth-field">
-                <span>Código, transportista o matrícula</span>
-                <input type="text" name="search" value="{{ $filters['search'] }}" class="auth-input" placeholder="Buscar booking">
+                <span>{{ $isClient ? 'Codigo o referencia' : 'Codigo, transportista o matricula' }}</span>
+                <input type="text" name="search" value="{{ $filters['search'] }}" class="auth-input" placeholder="{{ $isClient ? 'Buscar solicitud' : 'Buscar booking' }}">
             </label>
 
             <div class="item-filter-actions action-buttons page-actions-compact">
-                <button type="submit" class="button-primary compact-button btn-compact">Filtrar</button>
-                <a href="{{ route('bookings.index') }}" class="button-secondary compact-button btn-compact">Limpiar</a>
+                <button type="submit" class="button-primary compact-button btn-compact wms-action-primary">Filtrar</button>
+                <a href="{{ route('bookings.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Limpiar</a>
             </div>
         </form>
     </section>
 
     @if ($bookings->isEmpty())
         <article class="surface-card item-empty-state compact-card">
-            <span class="status-chip small-badge badge-compact">Sin bookings</span>
-            <h3>{{ $isClient ? 'Todavía no has solicitado bookings' : 'No hay bookings con estos filtros' }}</h3>
-            <p>{{ $isClient ? 'Cuando registres una nueva entrada o salida prevista aparecerá aquí para su seguimiento.' : 'Ajusta los filtros para localizar bookings operativos.' }}</p>
+            <span class="status-chip small-badge badge-compact">{{ $isClient ? 'Sin solicitudes' : 'Sin bookings' }}</span>
+            <h3>{{ $isClient ? 'Todavia no has registrado solicitudes' : 'No hay bookings con estos filtros' }}</h3>
+            <p>{{ $isClient ? 'Cuando registres una nueva entrada o salida prevista aparecera aqui para su seguimiento.' : 'Ajusta los filtros para localizar bookings operativos.' }}</p>
         </article>
     @else
         <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
-                <table class="data-table table-compact" aria-label="Listado de bookings">
+                <table class="data-table table-compact wms-data-table" aria-label="Listado de bookings">
                     <thead>
                         <tr>
-                            <th>Código</th>
+                            <th>Codigo</th>
                             @unless ($isClient)
                                 <th>Cliente</th>
                             @endunless
                             <th>Tipo</th>
                             <th>Fecha / hora</th>
                             <th>Pallets</th>
-                            <th>Transportista</th>
-                            <th>Matrícula</th>
+                            @unless ($isClient)
+                                <th>Transportista</th>
+                                <th>Matricula</th>
+                            @endunless
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
@@ -121,16 +124,18 @@
                                 <td>{{ $booking->typeLabel() }}</td>
                                 <td>{{ $booking->scheduledWindowLabel() }}</td>
                                 <td>{{ number_format($booking->pallets_expected ?? 0, 0, ',', '.') }}</td>
-                                <td>{{ $booking->carrier_name ?: '-' }}</td>
-                                <td>{{ $booking->vehicle_plate ?: '-' }}</td>
+                                @unless ($isClient)
+                                    <td>{{ $booking->carrier_name ?: '-' }}</td>
+                                    <td>{{ $booking->vehicle_plate ?: 'Pendiente' }}</td>
+                                @endunless
                                 <td>
-                                    <span class="status-badge merchandise-request-status merchandise-request-status--{{ $booking->status }}">
+                                    <span class="status-badge merchandise-request-status merchandise-request-status--{{ $booking->status }} wms-status-badge">
                                         {{ $booking->statusLabel() }}
                                     </span>
                                 </td>
                                 <td>
                                     <div class="inline-actions action-buttons">
-                                        <a href="{{ route('bookings.show', $booking) }}" class="button-secondary compact-button btn-table">Ver detalle</a>
+                                        <a href="{{ route('bookings.show', $booking) }}" class="button-secondary compact-button btn-table">Ver</a>
                                         <a href="{{ route('bookings.edit', $booking) }}" class="button-secondary compact-button btn-table">Editar</a>
                                     </div>
                                 </td>
