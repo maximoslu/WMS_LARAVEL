@@ -42,16 +42,20 @@
             <span>{{ number_format($summary['references_with_stock'], 0, ',', '.') }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Total pallets</strong>
-            <span>{{ number_format($summary['total_pallets'], 0, ',', '.') }}</span>
+            <strong>Pallets completos</strong>
+            <span>{{ number_format($summary['total_full_pallets'], 0, ',', '.') }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
             <strong>Total unidades</strong>
             <span>{{ number_format($summary['total_units'], 0, ',', '.') }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Partidas con picos</strong>
-            <span>{{ number_format($summary['batches_with_peaks'], 0, ',', '.') }}</span>
+            <strong>Picos totales</strong>
+            <span>{{ number_format($summary['total_peaks'], 0, ',', '.') }}</span>
+        </article>
+        <article class="surface-card stock-summary-card kpi-card kpi-compact">
+            <strong>Unidades logisticas</strong>
+            <span>{{ number_format($summary['total_logistic_units'], 0, ',', '.') }}</span>
         </article>
     </section>
 

@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
+use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -19,7 +20,7 @@ class StockOverviewBuilderTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_builder_calculates_total_units_and_total_full_pallets_from_inventory_rows(): void
+    public function test_builder_calculates_operational_stock_totals_from_inventory_rows(): void
     {
         [$client] = $this->seedClients();
         $user = $this->makeUserWithRole(Role::ALMACEN);
@@ -51,7 +52,64 @@ class StockOverviewBuilderTest extends TestCase
 
         $this->assertSame(70000, $result['summary']['total_units']);
         $this->assertSame(64, $result['summary']['total_pallets']);
+        $this->assertSame(64, $result['summary']['total_full_pallets']);
+        $this->assertSame(1, $result['summary']['total_peaks']);
+        $this->assertSame(65, $result['summary']['total_logistic_units']);
         $this->assertSame(1, $result['summary']['references_with_stock']);
+    }
+
+    public function test_builder_counts_logistic_only_rows_with_zero_quantity_as_stock(): void
+    {
+        [$client] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'CONTRACOLADOS',
+            'description' => 'Stock logistico',
+            'units_per_pallet' => 1,
+        ]);
+        $stockImport = StockImport::query()->create([
+            'client_id' => $client->id,
+            'uploaded_by' => $user->id,
+            'original_filename' => 'edelvives.xlsx',
+            'stored_path' => 'stock-imports/test.xlsx',
+            'status' => StockImport::STATUS_IMPORTED,
+            'total_rows' => 1,
+            'imported_rows' => 1,
+            'skipped_rows' => 0,
+            'available_rows' => 1,
+            'blocked_rows' => 0,
+            'detected_sheets_json' => ['processed' => ['STOCK']],
+            'summary_json' => [],
+            'warnings_json' => [],
+            'errors_json' => [],
+        ]);
+
+        StockPallet::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'stock_import_id' => $stockImport->id,
+            'lot' => 'SIN LOTE',
+            'location_text' => '0',
+            'quantity_units' => 0,
+            'units_per_pallet' => 0,
+            'full_pallets' => 24,
+            'peaks_count' => 0,
+            'received_at' => '2026-07-02',
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
+
+        $result = app(StockOverviewBuilder::class)->build($user, [
+            'stock_state' => 'with_stock',
+        ]);
+
+        $this->assertSame(1, $result['summary']['references_with_stock']);
+        $this->assertSame(0, $result['summary']['total_units']);
+        $this->assertSame(24, $result['summary']['total_full_pallets']);
+        $this->assertSame(0, $result['summary']['total_peaks']);
+        $this->assertSame(24, $result['summary']['total_logistic_units']);
+        $this->assertNotNull($result['rows']->firstWhere('sku', 'CONTRACOLADOS'));
     }
 
     public function test_builder_separates_same_sku_across_clients(): void

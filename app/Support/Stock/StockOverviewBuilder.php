@@ -35,6 +35,9 @@ class StockOverviewBuilder
                 'references_with_stock' => (clone $summaryQuery)->distinct('item_id')->count('item_id'),
                 'total_units' => (int) (clone $summaryQuery)->sum('quantity_units'),
                 'total_pallets' => (int) (clone $summaryQuery)->sum('full_pallets'),
+                'total_full_pallets' => (int) (clone $summaryQuery)->sum('full_pallets'),
+                'total_peaks' => (int) (clone $summaryQuery)->sum('peaks_count'),
+                'total_logistic_units' => (int) ((clone $summaryQuery)->sum(DB::raw('full_pallets + peaks_count'))),
                 'batches_with_peaks' => (clone $summaryQuery)->where('peaks_count', '>', 0)->count(),
             ],
         ];

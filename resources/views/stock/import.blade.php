@@ -96,6 +96,22 @@
                 <span>{{ number_format($preview['rows'] ? count($preview['rows']) : 0, 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Total unidades</strong>
+                <span>{{ number_format($preview['totals']['total_units'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Pallets completos</strong>
+                <span>{{ number_format($preview['totals']['total_full_pallets'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Picos totales</strong>
+                <span>{{ number_format($preview['totals']['total_peaks_count'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Unidades logisticas</strong>
+                <span>{{ number_format($preview['totals']['total_logistic_units'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
                 <strong>Partidas bloqueadas</strong>
                 <span>{{ number_format($preview['totals']['blocked_rows'], 0, ',', '.') }}</span>
             </article>

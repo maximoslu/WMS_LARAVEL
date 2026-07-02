@@ -586,7 +586,7 @@ class StockOverviewTest extends TestCase
         }
     }
 
-    public function test_stock_table_does_not_show_cliente_column_and_summary_only_shows_total_pallets(): void
+    public function test_stock_table_does_not_show_cliente_column_and_summary_shows_operational_kpis(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -610,7 +610,9 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Total pallets')
+            ->assertSeeText('Pallets completos')
+            ->assertSeeText('Picos totales')
+            ->assertSeeText('Unidades logisticas')
             ->assertDontSee('<th>Cliente</th>', false);
     }
 

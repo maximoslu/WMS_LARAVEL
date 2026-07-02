@@ -10,6 +10,7 @@ use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -1010,6 +1011,76 @@ class StockImportTest extends TestCase
         $this->assertSame(800, $stock->peak_1);
     }
 
+    public function test_edelvives_preview_and_import_align_with_realistic_workbook_totals_and_logistic_rows(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealisticEdelvivesWorkbookRows(),
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('CONTRACOLADOS')
+            ->assertSee('413')
+            ->assertSee('157')
+            ->assertSee('178')
+            ->assertSee('5.149.956')
+            ->assertSee('858')
+            ->assertSee('95')
+            ->assertSee('953')
+            ->assertDontSee('no se puede cuantificar para SKU CONTRACOLADOS');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(413, $stockImport->summary_json['total_rows']);
+        $this->assertSame(178, $stockImport->summary_json['available_rows']);
+        $this->assertSame(235, $stockImport->summary_json['skipped_rows']);
+        $this->assertSame(235, $stockImport->summary_json['missing_sku_rows']);
+        $this->assertSame(157, $stockImport->summary_json['catalog_items_detected']);
+        $this->assertSame(5149956, $stockImport->summary_json['total_units']);
+        $this->assertSame(858, $stockImport->summary_json['total_full_pallets']);
+        $this->assertSame(95, $stockImport->summary_json['total_peaks_count']);
+        $this->assertSame(953, $stockImport->summary_json['total_logistic_units']);
+        $this->assertSame(0, $stockImport->summary_json['invalid_rows_ignored']);
+        $this->assertSame(0, $stockImport->summary_json['real_errors']);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect(route('stock.index', ['client_id' => $edelvives->id]));
+
+        $this->assertSame(178, StockPallet::query()->where('client_id', $edelvives->id)->count());
+        $this->assertSame(157, Item::query()->where('client_id', $edelvives->id)->count());
+
+        $contracolados = StockPallet::query()
+            ->where('client_id', $edelvives->id)
+            ->whereHas('item', fn ($query) => $query->where('sku', 'CONTRACOLADOS'))
+            ->firstOrFail();
+
+        $this->assertSame(0, $contracolados->quantity_units);
+        $this->assertSame(0, $contracolados->units_per_pallet);
+        $this->assertSame(24, $contracolados->full_pallets);
+        $this->assertSame(0, $contracolados->peaks_count);
+        $this->assertSame('SIN LOTE', $contracolados->lot);
+
+        $overview = app(StockOverviewBuilder::class)->build($user, [
+            'client_id' => $edelvives->id,
+            'stock_state' => 'with_stock',
+        ]);
+
+        $this->assertSame(157, $overview['summary']['references_with_stock']);
+        $this->assertSame(5149956, $overview['summary']['total_units']);
+        $this->assertSame(858, $overview['summary']['total_full_pallets']);
+        $this->assertSame(95, $overview['summary']['total_peaks']);
+        $this->assertSame(953, $overview['summary']['total_logistic_units']);
+    }
+
     public function test_edelvives_normalizes_special_locations_without_losing_stock(): void
     {
         [, $edelvives] = $this->seedBaseData();
@@ -1301,5 +1372,67 @@ class StockImportTest extends TestCase
         $row[] = $ignoredAux;
 
         return $row;
+    }
+
+    /**
+     * @return array<int, array<int, mixed>>
+     */
+    private function makeRealisticEdelvivesWorkbookRows(): array
+    {
+        $rows = [
+            $this->makeRealEdelvivesDataRow('0', 0, 'CONTRACOLADOS', 'Stock logistico sin unidades', 0, 0, 24, 0, [], 24),
+        ];
+
+        $locations = array_merge(array_map('strval', range(0, 45)), ['A', 'B', 'C', 'D', 'E', 'F', 'FONDO', 'SIN UBICACION']);
+        $peakValues = array_merge(array_fill(0, 94, 1536), [1572]);
+        $peakValueIndex = 0;
+
+        for ($rowIndex = 1; $rowIndex <= 177; $rowIndex++) {
+            $skuIndex = $rowIndex <= 156 ? $rowIndex : $rowIndex - 156;
+            $sku = sprintf('ED-SKU-%03d', $skuIndex);
+            $location = $locations[$rowIndex % count($locations)];
+            $fullPallets = $rowIndex <= 126 ? 5 : 4;
+            $peaksCount = 0;
+            $rowPeakValues = [];
+
+            if ($rowIndex <= 69) {
+                $peaksCount = 1;
+                $rowPeakValues[] = $peakValues[$peakValueIndex++];
+            } elseif ($rowIndex <= 82) {
+                $peaksCount = 2;
+                $rowPeakValues[] = $peakValues[$peakValueIndex++];
+                $rowPeakValues[] = $peakValues[$peakValueIndex++];
+            }
+
+            $rows[] = $this->makeRealEdelvivesDataRow(
+                $location,
+                80 + ($skuIndex % 10) * 10,
+                $sku,
+                'Producto '.$sku,
+                ($fullPallets * 6000) + array_sum($rowPeakValues),
+                6000,
+                $fullPallets,
+                $peaksCount,
+                $rowPeakValues,
+                $fullPallets + $peaksCount,
+            );
+        }
+
+        for ($rowIndex = 1; $rowIndex <= 235; $rowIndex++) {
+            $rows[] = $this->makeRealEdelvivesDataRow(
+                $locations[$rowIndex % count($locations)],
+                '',
+                '',
+                'Fila sin SKU '.$rowIndex,
+                0,
+                0,
+                0,
+                0,
+                [],
+                null,
+            );
+        }
+
+        return $this->makeRealEdelvivesWorkbookRows($rows);
     }
 }

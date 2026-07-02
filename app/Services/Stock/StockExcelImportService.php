@@ -366,6 +366,8 @@ class StockExcelImportService
             'blocked_rows' => 0,
             'total_units' => 0,
             'total_full_pallets' => 0,
+            'total_peaks_count' => 0,
+            'total_logistic_units' => 0,
             'total_peak_units' => 0,
             'excluded_rows' => 0,
             'empty_rows_ignored' => 0,
@@ -520,6 +522,8 @@ class StockExcelImportService
                     $rows[] = $parsedRow['row'];
                     $totals['total_units'] += $parsedRow['row']['quantity_units'];
                     $totals['total_full_pallets'] += $parsedRow['row']['full_pallets'];
+                    $totals['total_peaks_count'] += $parsedRow['row']['peaks_count'];
+                    $totals['total_logistic_units'] += $parsedRow['row']['full_pallets'] + $parsedRow['row']['peaks_count'];
                     $totals['total_peak_units'] += $this->sumPeakUnits($parsedRow['row']);
 
                     if ($parsedRow['row']['status'] === StockPallet::STATUS_BLOCKED) {
@@ -615,6 +619,8 @@ class StockExcelImportService
             'blocked_rows' => 0,
             'total_units' => 0,
             'total_full_pallets' => 0,
+            'total_peaks_count' => 0,
+            'total_logistic_units' => 0,
             'total_peak_units' => 0,
             'excluded_rows' => 0,
             'empty_rows_ignored' => 0,
@@ -755,6 +761,8 @@ class StockExcelImportService
                     $rows[] = $parsedRow['row'];
                     $totals['total_units'] += $parsedRow['row']['quantity_units'];
                     $totals['total_full_pallets'] += $parsedRow['row']['full_pallets'];
+                    $totals['total_peaks_count'] += $parsedRow['row']['peaks_count'];
+                    $totals['total_logistic_units'] += $parsedRow['row']['full_pallets'] + $parsedRow['row']['peaks_count'];
                     $totals['total_peak_units'] += $this->sumPeakUnits($parsedRow['row']);
                     $totals['available_rows']++;
                     $detectedLocations[$parsedRow['row']['location_code']] = true;
@@ -1164,25 +1172,12 @@ class StockExcelImportService
         }
 
         if ($unitsPerPallet === 0 && $fullPalletsFromFile > 0) {
-            if ($quantityFromFile <= 0 && $peakUnits <= 0) {
-                return [
-                    'row' => null,
-                    'catalog_item' => $catalogItem,
-                    'skip' => false,
-                    'warning_groups' => $warningGroups,
-                    'error' => 'Fila '.$lineNumber.' de '.$sheetName.' no se puede cuantificar para SKU '.$sku.' porque tiene pallets declarados sin unidades por pallet, cantidad ni picos.',
-                    'error_group' => [
-                        'key' => 'invalid_units_'.$sheetName,
-                        'summary' => 'Se han encontrado :count filas en '.$sheetName.' que no se pueden cuantificar por falta de unidades por pallet y cantidad.',
-                        'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' no se puede cuantificar para SKU '.$sku.' porque tiene pallets declarados sin unidades por pallet, cantidad ni picos.',
-                    ],
-                ];
-            }
-
             $warningGroups[] = [
                 'key' => 'pallets_without_units_'.$sheetName,
                 'summary' => 'Se importaran :count filas de '.$sheetName.' con pallets declarados pero sin unidades por pallet.',
-                'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con pallets declarados y sin unidades por pallet. Se conserva la cantidad del archivo.',
+                'detail' => $quantityFromFile > 0 || $peakUnits > 0
+                    ? 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con pallets declarados y sin unidades por pallet. Se conserva la cantidad del archivo.'
+                    : 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con pallets declarados y sin unidades por pallet. Se conserva como stock logistico con cantidad cero.',
             ];
         }
 
