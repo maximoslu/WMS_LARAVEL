@@ -663,9 +663,9 @@ class StockExcelImportService
                     }
 
                     if ($headerMap === null) {
-                        $headerMap = $this->buildHeaderMap($row);
+                        $headerMap = $this->buildEdelvivesColumnMap($row);
 
-                        if (! isset($headerMap['sku'], $headerMap['location_text'], $headerMap['quantity_units'], $headerMap['units_per_pallet'])) {
+                        if ($headerMap === null) {
                             $fatalErrors[] = 'La hoja '.$sheetName.' no tiene el formato esperado para Edelvives.';
                             break;
                         }
@@ -1227,6 +1227,44 @@ class StockExcelImportService
     }
 
     /**
+     * @return array<string, int>|null
+     */
+    private function buildEdelvivesColumnMap(Row $row): ?array
+    {
+        $values = $row->toArray();
+
+        $matchesExpectedStructure = $this->normalizeHeaderCellValue($values[1] ?? null) === 'gramaje'
+            && $this->matchesHeaderAlias('sku', $this->normalizeHeaderCellValue($values[2] ?? null))
+            && $this->matchesHeaderAlias('quantity_units', $this->normalizeHeaderCellValue($values[4] ?? null))
+            && $this->matchesHeaderAlias('units_per_pallet', $this->normalizeHeaderCellValue($values[5] ?? null))
+            && $this->matchesHeaderAlias('full_pallets', $this->normalizeHeaderCellValue($values[6] ?? null))
+            && $this->matchesHeaderAlias('peaks_count', $this->normalizeHeaderCellValue($values[7] ?? null))
+            && preg_match('/^(pico|peak)\s*1$/', $this->normalizeHeaderCellValue($values[8] ?? null)) === 1
+            && $this->matchesHeaderAlias('reported_total_pallets', $this->normalizeHeaderCellValue($values[18] ?? null));
+
+        if (! $matchesExpectedStructure) {
+            return null;
+        }
+
+        $map = [
+            'location_text' => 0,
+            'sku' => 2,
+            'description' => 3,
+            'quantity_units' => 4,
+            'units_per_pallet' => 5,
+            'full_pallets' => 6,
+            'peaks_count' => 7,
+            'reported_total_pallets' => 18,
+        ];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $map['peak_'.$peakNumber] = 7 + $peakNumber;
+        }
+
+        return $map;
+    }
+
+    /**
      * @return array<string, int>
      */
     private function buildHeaderMap(Row $row): array
@@ -1270,6 +1308,11 @@ class StockExcelImportService
     private function canonicalSheetName(string $sheetName): string
     {
         return Str::upper($this->normalizeHeaderToken($sheetName));
+    }
+
+    private function normalizeHeaderCellValue(mixed $value): string
+    {
+        return $this->canonicalizeHeaderAlias($this->normalizeHeaderLabel($this->stringValue($value)));
     }
 
     private function normalizeHeaderLabel(string $value): string
@@ -1582,10 +1625,33 @@ class StockExcelImportService
 
     private function normalizeEdelvivesLocation(mixed $value): ?string
     {
+        if (is_int($value)) {
+            return $value >= 0 && $value <= 45 ? (string) $value : null;
+        }
+
+        if (is_float($value)) {
+            $integerValue = (int) round($value);
+
+            return ((float) $integerValue === (float) $value) && $integerValue >= 0 && $integerValue <= 45
+                ? (string) $integerValue
+                : null;
+        }
+
         $normalized = Str::upper($this->normalizeText($this->stringValue($value)));
 
         if ($normalized === '') {
             return null;
+        }
+
+        $numericCandidate = str_replace(',', '.', $normalized);
+
+        if (is_numeric($numericCandidate)) {
+            $numericValue = (float) $numericCandidate;
+            $integerValue = (int) round($numericValue);
+
+            if ((float) $integerValue === $numericValue) {
+                return $integerValue >= 0 && $integerValue <= 45 ? (string) $integerValue : null;
+            }
         }
 
         if (preg_match('/^\d{1,2}$/', $normalized) === 1) {

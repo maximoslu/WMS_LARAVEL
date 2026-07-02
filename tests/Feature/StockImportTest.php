@@ -656,17 +656,17 @@ class StockImportTest extends TestCase
             ->assertDontSee('Fila 8 de STOCK ignorada por no tener SKU.');
     }
 
-    public function test_edelvives_preview_detects_single_sheet_profile_and_ignores_grammage_as_functional_property(): void
+    public function test_edelvives_preview_accepts_real_header_positions_and_ignores_grammage_as_functional_property(): void
     {
         [, $edelvives] = $this->seedBaseData();
         Storage::fake('local');
 
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
-            'Hoja 1' => [
-                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Pico 2', 'Pico 3', 'Pico 4', 'Pico 5', 'Pico 6', 'Pico 7', 'Pico 8', 'Pico 9', 'Pico 10', 'Total pallets', 'Aux'],
-                ['0', '80', '70x100 80', 'Papel offset 70x100 80', 1880, 1000, 1, 1, 880, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 'x'],
-            ],
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('D', 135, '100x127 135', '100x127 135 - MATT COATED', 1998, 4500, 0, 1, [1998], 1, 'ignorar'),
+                $this->makeRealEdelvivesDataRow('18.0', 110, '100x131 110', '100x131 110 INASET PLUS OFFSET', 38500, 5500, 7, 0, [], 7, 'aux'),
+            ]),
         ]);
 
         $response = $this->actingAs($user)->post(route('stock.import.preview'), [
@@ -678,14 +678,18 @@ class StockImportTest extends TestCase
             ->assertSee('Stock Edelvives')
             ->assertSee('Gramaje detectado en archivo, no se importara como propiedad independiente.')
             ->assertSee('Se usara el almacen NAVE 38 y se aseguraran las calles 0-45 y A-F.')
-            ->assertSee('70x100 80')
-            ->assertSee('SIN LOTE');
+            ->assertSee('100x127 135')
+            ->assertSee('100x131 110')
+            ->assertSee('SIN LOTE')
+            ->assertDontSee('La hoja STOCK no tiene el formato esperado para Edelvives.');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
 
         $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->status);
-        $this->assertSame(['Hoja 1'], $stockImport->detected_sheets_json['processed']);
-        $this->assertSame(1, $stockImport->summary_json['locations_detected']);
+        $this->assertSame(['STOCK'], $stockImport->detected_sheets_json['processed']);
+        $this->assertSame(2, $stockImport->summary_json['total_rows']);
+        $this->assertSame(2, $stockImport->summary_json['available_rows']);
+        $this->assertSame(2, $stockImport->summary_json['locations_detected']);
     }
 
     public function test_edelvives_confirm_creates_nave_38_locations_and_imports_stock_with_default_lot_and_states(): void
@@ -695,11 +699,10 @@ class StockImportTest extends TestCase
 
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
-            'Principal' => [
-                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Pico 2', 'Pico 3', 'Pico 4', 'Pico 5', 'Pico 6', 'Pico 7', 'Pico 8', 'Pico 9', 'Pico 10', 'Total pallets'],
-                ['0', '80', '70x100 80', 'Papel offset 70x100 80', 1880, 1000, 1, 1, 880, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
-                ['A', '110', '100x127 110', 'Papel estucado 100x127 110', 2500, 1000, 2, 1, 500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3],
-            ],
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('18.0', 80, '70x100 80', 'Papel offset 70x100 80', 1880, 1000, 1, 1, [880], 2),
+                $this->makeRealEdelvivesDataRow('A', 110, '100x127 110', 'Papel estucado 100x127 110', 2500, 1000, 2, 1, [500], 3),
+            ]),
         ]);
 
         $this->actingAs($user)->post(route('stock.import.preview'), [
@@ -722,9 +725,12 @@ class StockImportTest extends TestCase
 
         $firstItem = Item::query()->where('client_id', $edelvives->id)->where('sku', '70x100 80')->firstOrFail();
         $firstStock = StockPallet::query()->where('item_id', $firstItem->id)->firstOrFail();
+        $secondItem = Item::query()->where('client_id', $edelvives->id)->where('sku', '100x127 110')->firstOrFail();
+        $secondStock = StockPallet::query()->where('item_id', $secondItem->id)->firstOrFail();
 
         $this->assertSame(Item::STATUS_ACTIVE, $firstItem->status);
         $this->assertTrue($firstItem->active);
+        $this->assertSame('Papel offset 70x100 80', $firstItem->description);
         $this->assertSame('SIN LOTE', $firstStock->lot);
         $this->assertSame(StockPallet::STATUS_AVAILABLE, $firstStock->status);
         $this->assertSame(1880, $firstStock->quantity_units);
@@ -733,7 +739,9 @@ class StockImportTest extends TestCase
         $this->assertSame(1, $firstStock->peaks_count);
         $this->assertSame(880, $firstStock->peak_1);
         $this->assertNotNull($firstStock->location_id);
-        $this->assertSame('0', $firstStock->location_text);
+        $this->assertSame('18', $firstStock->location_text);
+        $this->assertSame('Papel estucado 100x127 110', $secondItem->description);
+        $this->assertSame('A', $secondStock->location_text);
     }
 
     public function test_edelvives_import_reuses_existing_sku_per_client_without_mixing_clients(): void
@@ -768,10 +776,9 @@ class StockImportTest extends TestCase
 
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
-            'Principal' => [
-                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Total pallets'],
-                ['1', '80', $sharedSku, 'Producto Edelvives actualizado', 1880, 1000, 1, 1, 880, 2],
-            ],
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('1', 80, $sharedSku, 'Producto Edelvives actualizado', 1880, 1000, 1, 1, [880], 2),
+            ]),
         ]);
 
         $this->actingAs($user)->post(route('stock.import.preview'), [
@@ -801,17 +808,16 @@ class StockImportTest extends TestCase
 
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
-            'Principal' => [
-                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Total pallets'],
-                ['B', '90', '90x120 90', 'Papel mismatch', 1880, 1000, 1, 1, 880, 7],
-            ],
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('B', 90, '90x120 90', 'Papel mismatch', 1880, 1000, 1, 1, [880], 7),
+            ]),
         ]);
 
         $this->actingAs($user)->post(route('stock.import.preview'), [
             'client_id' => $edelvives->id,
             'file' => $file,
         ])->assertOk()
-            ->assertSee('Se han detectado 1 filas con total pallets distinto al calculado en Principal.');
+            ->assertSee('Se han detectado 1 filas con total pallets distinto al calculado en STOCK.');
     }
 
     public function test_edelvives_client_sees_only_imported_edelvives_inventory_after_import(): void
@@ -838,10 +844,9 @@ class StockImportTest extends TestCase
         ]);
 
         $file = $this->makeWorkbookUpload([
-            'Principal' => [
-                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Total pallets'],
-                ['C', '100', 'ED-VISIBLE', 'Papel Edelvives', 1880, 1000, 1, 1, 880, 2],
-            ],
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('C', 100, 'ED-VISIBLE', 'Papel Edelvives', 1880, 1000, 1, 1, [880], 2),
+            ]),
         ]);
 
         $this->actingAs($user)->post(route('stock.import.preview'), [
@@ -895,7 +900,7 @@ class StockImportTest extends TestCase
     }
 
     /**
-     * @param  array<string, array<int, array<int, int|string|null>>>  $sheets
+     * @param  array<string, array<int, array<int, mixed>>>  $sheets
      */
     private function makeWorkbookUpload(array $sheets): UploadedFile
     {
@@ -927,5 +932,73 @@ class StockImportTest extends TestCase
         $writer->close();
 
         return UploadedFile::fake()->createWithContent('stock.xlsx', file_get_contents($xlsxPath) ?: '');
+    }
+
+    /**
+     * @param  array<int, array<int, mixed>>  $dataRows
+     * @return array<int, array<int, mixed>>
+     */
+    private function makeRealEdelvivesWorkbookRows(array $dataRows, mixed $descriptionHeader = 13.0, mixed $auxHeader = 953): array
+    {
+        return array_merge([[
+            'NAVE 19',
+            'GRAMAJE',
+            'SKU',
+            $descriptionHeader,
+            'CANTIDAD',
+            'UNIDADES x PALLET',
+            'PALLETS',
+            'PICOS',
+            'PICO 1',
+            'PICO 2',
+            'PICO 3',
+            'PICO 4',
+            'PICO 5',
+            'PICO 6',
+            'PICO 7',
+            'PICO 8',
+            'PICO 9',
+            'PICO 10',
+            'TOTAL PALLETS',
+            $auxHeader,
+        ]], $dataRows);
+    }
+
+    /**
+     * @param  array<int, mixed>  $peakValues
+     * @return array<int, mixed>
+     */
+    private function makeRealEdelvivesDataRow(
+        mixed $location,
+        mixed $grammage,
+        string $sku,
+        string $description,
+        mixed $quantity,
+        mixed $unitsPerPallet,
+        mixed $fullPallets,
+        mixed $peaksCount,
+        array $peakValues = [],
+        mixed $reportedTotalPallets = null,
+        mixed $ignoredAux = null,
+    ): array {
+        $row = [
+            $location,
+            $grammage,
+            $sku,
+            $description,
+            $quantity,
+            $unitsPerPallet,
+            $fullPallets,
+            $peaksCount,
+        ];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $row[] = $peakValues[$peakNumber - 1] ?? 0;
+        }
+
+        $row[] = $reportedTotalPallets;
+        $row[] = $ignoredAux;
+
+        return $row;
     }
 }
