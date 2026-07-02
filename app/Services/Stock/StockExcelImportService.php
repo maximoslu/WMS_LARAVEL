@@ -1098,14 +1098,17 @@ class StockExcelImportService
         $resolvedLocation = $this->resolveEdelvivesLocation($values[$headerMap['location_text']] ?? null, $sheetName, $sku, $lineNumber);
         $locationCode = $resolvedLocation['code'];
         $warningGroups = $resolvedLocation['warning_groups'];
-        $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null);
-        $unitsPerPallet = $unitsPerPallet !== null
-            ? max(0, $unitsPerPallet)
+        $metrics = $this->parseEdelvivesMetrics($values, $headerMap);
+        $unitsPerPallet = $metrics['units_per_pallet'] !== null
+            ? max(0, $metrics['units_per_pallet'])
             : max(0, (int) ($existingItem?->units_per_pallet ?? 0));
-        $quantityFromFile = max(0, $this->integerValue($values[$headerMap['quantity_units'] ?? -1] ?? null) ?? 0);
-        $fullPalletsFromFile = max(0, $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null) ?? 0);
-        $peaksCountFromFile = max(0, $this->integerValue($values[$headerMap['peaks_count'] ?? -1] ?? null) ?? 0);
-        $reportedTotalPallets = max(0, $this->integerValue($values[$headerMap['reported_total_pallets'] ?? -1] ?? null) ?? 0);
+        $quantityFromFileRaw = $metrics['quantity_units'];
+        $quantityFromFile = max(0, $quantityFromFileRaw ?? 0);
+        $fullPalletsFromFile = max(0, $metrics['full_pallets'] ?? 0);
+        $peaksCountFromFileRaw = $metrics['peaks_count'];
+        $peaksCountFromFile = max(0, $peaksCountFromFileRaw ?? 0);
+        $reportedTotalPalletsRaw = $metrics['reported_total_pallets'];
+        $reportedTotalPallets = max(0, $reportedTotalPalletsRaw ?? 0);
 
         $catalogItem = [
             'sku' => $sku,
@@ -1114,7 +1117,7 @@ class StockExcelImportService
             'source_sheet' => $sheetName,
         ];
 
-        if ($quantityFromFile === 0 && $fullPalletsFromFile === 0 && $peaksCountFromFile === 0 && ! $this->hasPositivePeakValues($values, $headerMap)) {
+        if ($quantityFromFile === 0 && $fullPalletsFromFile === 0 && $peaksCountFromFile === 0 && $metrics['peak_units'] === 0) {
             return [
                 'row' => null,
                 'catalog_item' => $catalogItem,
@@ -1129,19 +1132,14 @@ class StockExcelImportService
             ];
         }
 
-        $peaks = [];
-
-        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-            $peaks[$peakNumber] = max(0, $this->integerValue($values[$headerMap['peak_'.$peakNumber] ?? -1] ?? null) ?? 0);
-        }
-
-        $peakUnits = array_sum($peaks);
-        $computedPeaksCount = count(array_filter($peaks, fn (int $value): bool => $value > 0));
+        $peaks = $metrics['peaks'];
+        $peakUnits = $metrics['peak_units'];
+        $computedPeaksCount = $metrics['computed_peaks_count'];
         $calculatedQuantity = ($unitsPerPallet > 0 || $fullPalletsFromFile === 0)
             ? ($fullPalletsFromFile * $unitsPerPallet) + $peakUnits
             : null;
 
-        if ($peaksCountFromFile > 0 && $peaksCountFromFile !== $computedPeaksCount) {
+        if ($peaksCountFromFileRaw !== null && $peaksCountFromFile > 0 && $peaksCountFromFile !== $computedPeaksCount) {
             $warningGroups[] = [
                 'key' => 'peaks_count_mismatch_'.$sheetName,
                 'summary' => 'Se han detectado :count filas con numero de picos distinto al detalle en '.$sheetName.'.',
@@ -1149,7 +1147,7 @@ class StockExcelImportService
             ];
         }
 
-        if ($reportedTotalPallets > 0 && $reportedTotalPallets !== ($fullPalletsFromFile + $computedPeaksCount)) {
+        if ($reportedTotalPalletsRaw !== null && $reportedTotalPallets > 0 && $reportedTotalPallets !== ($fullPalletsFromFile + $computedPeaksCount)) {
             $warningGroups[] = [
                 'key' => 'reported_total_mismatch_'.$sheetName,
                 'summary' => 'Se han detectado :count filas con total pallets distinto al calculado en '.$sheetName.'.',
@@ -1188,7 +1186,7 @@ class StockExcelImportService
             ];
         }
 
-        if ($calculatedQuantity !== null && $quantityFromFile > 0 && $quantityFromFile !== $calculatedQuantity) {
+        if ($calculatedQuantity !== null && $quantityFromFileRaw !== null && $quantityFromFile > 0 && $quantityFromFile !== $calculatedQuantity) {
             $warningGroups[] = [
                 'key' => 'quantity_mismatch_'.$sheetName,
                 'summary' => 'Se han detectado :count filas con cantidad distinta al desglose calculado en '.$sheetName.'.',
@@ -1246,6 +1244,40 @@ class StockExcelImportService
             'warning_groups' => $warningGroups,
             'error' => null,
             'error_group' => null,
+        ];
+    }
+
+    /**
+     * @param  array<int, mixed>  $values
+     * @param  array<string, int>  $headerMap
+     * @return array{
+     *     quantity_units: ?int,
+     *     units_per_pallet: ?int,
+     *     full_pallets: ?int,
+     *     peaks_count: ?int,
+     *     reported_total_pallets: ?int,
+     *     peaks: array<int, int>,
+     *     peak_units: int,
+     *     computed_peaks_count: int
+     * }
+     */
+    private function parseEdelvivesMetrics(array $values, array $headerMap): array
+    {
+        $peaks = [];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $peaks[$peakNumber] = max(0, $this->parseEdelvivesIntegerValue($values[$headerMap['peak_'.$peakNumber] ?? -1] ?? null) ?? 0);
+        }
+
+        return [
+            'quantity_units' => $this->parseEdelvivesIntegerValue($values[$headerMap['quantity_units'] ?? -1] ?? null),
+            'units_per_pallet' => $this->parseEdelvivesIntegerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null),
+            'full_pallets' => $this->parseEdelvivesIntegerValue($values[$headerMap['full_pallets'] ?? -1] ?? null),
+            'peaks_count' => $this->parseEdelvivesIntegerValue($values[$headerMap['peaks_count'] ?? -1] ?? null),
+            'reported_total_pallets' => $this->parseEdelvivesIntegerValue($values[$headerMap['reported_total_pallets'] ?? -1] ?? null),
+            'peaks' => $peaks,
+            'peak_units' => array_sum($peaks),
+            'computed_peaks_count' => count(array_filter($peaks, fn (int $value): bool => $value > 0)),
         ];
     }
 
@@ -1470,6 +1502,55 @@ class StockExcelImportService
         $digitsOnly = preg_replace('/[^0-9\-]/', '', $normalized);
 
         return $digitsOnly !== null && $digitsOnly !== '' ? $digitsOnly : null;
+    }
+
+    private function parseEdelvivesIntegerValue(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_float($value)) {
+            return (int) round($value);
+        }
+
+        $normalized = trim(str_replace(["\xc2\xa0", ' '], '', (string) $value));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (preg_match('/^-?\d+$/', $normalized) === 1) {
+            return (int) $normalized;
+        }
+
+        if (preg_match('/^-?\d{1,3}([.,]\d{3})+$/', $normalized) === 1) {
+            return (int) str_replace([',', '.'], '', $normalized);
+        }
+
+        if (preg_match('/^-?\d+[.,]0+$/', $normalized) === 1) {
+            [$wholePart] = preg_split('/[.,]/', $normalized, 2);
+
+            return (int) $wholePart;
+        }
+
+        if (preg_match('/^-?\d+[.,]\d{3}$/', $normalized) === 1) {
+            [$wholePart, $fractionPart] = preg_split('/[.,]/', $normalized, 2);
+
+            return (int) ($wholePart.$fractionPart);
+        }
+
+        if (preg_match('/^-?\d{1,3}([.,]\d{3})+[.,]0+$/', $normalized) === 1) {
+            $sanitized = preg_replace('/[.,]0+$/', '', $normalized);
+
+            return $sanitized !== null ? (int) str_replace([',', '.'], '', $sanitized) : null;
+        }
+
+        return null;
     }
 
     private function shouldIgnoreSku(string $sku): bool

@@ -865,6 +865,81 @@ class StockImportTest extends TestCase
         $this->assertSame('18', $palletStock->location_text);
     }
 
+    public function test_edelvives_real_row_two_does_not_generate_false_quantity_or_total_pallet_warnings(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('D', 135, '100x127 135', '100x127 135 - MATT COATED', 1998, 4500, 0, 1, [1998], 1),
+                $this->makeRealEdelvivesDataRow('18', 110, '100x131 110', '100x131 110 INASET PLUS OFFSET', 38500, 5500, 7, 0, [], 7),
+            ]),
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('100x127 135')
+            ->assertSee('1.998')
+            ->assertDontSee('Fila 2 de STOCK con total pallets')
+            ->assertDontSee('Fila 2 de STOCK con cantidad');
+    }
+
+    public function test_edelvives_real_row_two_as_string_thousands_does_not_generate_false_warnings(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('D', '135', '100x127 135', '100x127 135 - MATT COATED', '1.998', '4.500', '0', '1', ['1.998'], '1'),
+            ]),
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('1.998')
+            ->assertSee('4.500')
+            ->assertDontSee('Fila 2 de STOCK con total pallets')
+            ->assertDontSee('Fila 2 de STOCK con cantidad');
+    }
+
+    public function test_edelvives_row_with_seven_pallets_and_two_peaks_and_total_nine_does_not_warn(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('7', 356, '101x67 356', 'Caso fila 9', 12660, 1400, 7, 2, [1430, 1430], 9),
+            ]),
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('12.660')
+            ->assertSee('7')
+            ->assertSee('2')
+            ->assertDontSee('Fila 2 de STOCK con total pallets')
+            ->assertDontSee('Fila 2 de STOCK con cantidad')
+            ->assertDontSee('Fila 2 de STOCK con numero de picos');
+    }
+
     public function test_edelvives_imports_peak_larger_than_units_per_pallet_when_total_matches(): void
     {
         [, $edelvives] = $this->seedBaseData();
