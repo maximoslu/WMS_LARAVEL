@@ -96,7 +96,7 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `npm run build` → OK (sin errores), dos veces (antes y después de la corrección del breadcrumb).
 - `php artisan test` → **245 passed, 0 failed**, 1127 aserciones.
 
-**Commit / push:** [PENDIENTE DE COMPLETAR TRAS EL COMMIT DE ESTE PASO]
+**Commit / push:** Commit `1932c23` ("style: extend dark glass theme to the whole logged-in app shell"), pusheado a `origin/main` (`864a7d7..1932c23`). Forge desplegará automáticamente en producción desde este push.
 
 **Pendientes:**
 - Quedan sin auditar visualmente el resto de módulos no revisados en esta pasada (bookings, entradas, salidas, usuarios, clientes, proveedores, solicitudes, notificaciones, perfil) — se benefician automáticamente de los mismos cambios CSS globales, pero no se ha hecho una revisión visual pantalla por pantalla de cada uno.
