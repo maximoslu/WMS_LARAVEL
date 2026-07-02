@@ -64,7 +64,7 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `npm run build` → OK (sin errores).
 - `php artisan test` → **245 passed, 0 failed**, 1127 aserciones.
 
-**Commit / push:** [PENDIENTE DE COMPLETAR TRAS EL COMMIT DE ESTE PASO]
+**Commit / push:** Commit `1b82a28` ("style: redesign login with bold dark theme and real brand logo"), pusheado a `origin/main` (`a394364..1b82a28`). Forge desplegará automáticamente en producción desde este push.
 
 **Pendientes:**
 - Extender el mismo lenguaje visual (fondo oscuro/contraste alto, cristal, degradados de marca) al resto de la aplicación (dashboard, stock, bookings, operaciones diarias, etc.) — pendiente de alcance y ejecución.
