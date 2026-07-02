@@ -22,15 +22,10 @@
             <section class="auth-panel surface-card" aria-label="Acceso a MAXIMO WMS">
                 <div class="auth-logo-mark">
                     <img
-                        src="{{ asset('brand/maximo-icon.png') }}"
+                        src="{{ asset('brand/maximo-logo-horizontal.png') }}"
                         alt="MAXIMO WMS"
-                        class="auth-logo-icon"
+                        class="auth-brand-mark"
                     >
-
-                    <div class="auth-logo-copy">
-                        <span class="auth-kicker">Acceso operativo</span>
-                        <strong>MAXIMO WMS</strong>
-                    </div>
                 </div>
 
                 @if (session('status'))

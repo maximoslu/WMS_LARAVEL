@@ -4,9 +4,15 @@
 
 @section('content')
     <div class="auth-header">
-        <span class="auth-eyebrow">Acceso operativo</span>
-        <h1 class="auth-title">MAXIMO WMS</h1>
-        <p class="auth-subtitle">Identificate para continuar.</p>
+        <span class="auth-eyebrow">Plataforma operativa</span>
+        <h1 class="auth-title auth-title--brand">
+            <img
+                src="{{ asset('brand/maximo-logo-horizontal.png') }}"
+                alt="MAXIMO WMS"
+                class="auth-brand-hero"
+            >
+        </h1>
+        <p class="auth-subtitle">Control total de tu operativa logistica, en un solo lugar.</p>
     </div>
 
     <form method="POST" action="{{ route('login.store') }}" class="auth-form">
