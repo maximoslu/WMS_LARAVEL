@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Models\Warehouse;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -654,6 +656,218 @@ class StockImportTest extends TestCase
             ->assertDontSee('Fila 8 de STOCK ignorada por no tener SKU.');
     }
 
+    public function test_edelvives_preview_detects_single_sheet_profile_and_ignores_grammage_as_functional_property(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'Hoja 1' => [
+                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Pico 2', 'Pico 3', 'Pico 4', 'Pico 5', 'Pico 6', 'Pico 7', 'Pico 8', 'Pico 9', 'Pico 10', 'Total pallets', 'Aux'],
+                ['0', '80', '70x100 80', 'Papel offset 70x100 80', 1880, 1000, 1, 1, 880, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 'x'],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('Stock Edelvives')
+            ->assertSee('Gramaje detectado en archivo, no se importara como propiedad independiente.')
+            ->assertSee('Se usara el almacen NAVE 38 y se aseguraran las calles 0-45 y A-F.')
+            ->assertSee('70x100 80')
+            ->assertSee('SIN LOTE');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->status);
+        $this->assertSame(['Hoja 1'], $stockImport->detected_sheets_json['processed']);
+        $this->assertSame(1, $stockImport->summary_json['locations_detected']);
+    }
+
+    public function test_edelvives_confirm_creates_nave_38_locations_and_imports_stock_with_default_lot_and_states(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'Principal' => [
+                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Pico 2', 'Pico 3', 'Pico 4', 'Pico 5', 'Pico 6', 'Pico 7', 'Pico 8', 'Pico 9', 'Pico 10', 'Total pallets'],
+                ['0', '80', '70x100 80', 'Papel offset 70x100 80', 1880, 1000, 1, 1, 880, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+                ['A', '110', '100x127 110', 'Papel estucado 100x127 110', 2500, 1000, 2, 1, 500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk();
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect(route('stock.index', ['client_id' => $edelvives->id]));
+
+        $warehouse = Warehouse::query()
+            ->where('name', 'NAVE 38')
+            ->orWhere('code', '38')
+            ->firstOrFail();
+
+        $this->assertSame(52, Location::query()->where('warehouse_id', $warehouse->id)->whereIn('code', array_merge(array_map('strval', range(0, 45)), ['A', 'B', 'C', 'D', 'E', 'F']))->count());
+
+        $firstItem = Item::query()->where('client_id', $edelvives->id)->where('sku', '70x100 80')->firstOrFail();
+        $firstStock = StockPallet::query()->where('item_id', $firstItem->id)->firstOrFail();
+
+        $this->assertSame(Item::STATUS_ACTIVE, $firstItem->status);
+        $this->assertTrue($firstItem->active);
+        $this->assertSame('SIN LOTE', $firstStock->lot);
+        $this->assertSame(StockPallet::STATUS_AVAILABLE, $firstStock->status);
+        $this->assertSame(1880, $firstStock->quantity_units);
+        $this->assertSame(1000, $firstStock->units_per_pallet);
+        $this->assertSame(1, $firstStock->full_pallets);
+        $this->assertSame(1, $firstStock->peaks_count);
+        $this->assertSame(880, $firstStock->peak_1);
+        $this->assertNotNull($firstStock->location_id);
+        $this->assertSame('0', $firstStock->location_text);
+    }
+
+    public function test_edelvives_import_reuses_existing_sku_per_client_without_mixing_clients(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $sharedSku = '70x100 80';
+
+        $frieslandItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => $sharedSku,
+            'description' => 'Producto Friesland',
+            'units_per_pallet' => 700,
+        ]);
+
+        Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => $sharedSku,
+            'description' => 'Version antigua Edelvives',
+            'units_per_pallet' => 900,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frieslandItem->id,
+            'lot' => 'FR-LOT',
+            'quantity_units' => 700,
+            'units_per_pallet' => 700,
+            'full_pallets' => 1,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'Principal' => [
+                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Total pallets'],
+                ['1', '80', $sharedSku, 'Producto Edelvives actualizado', 1880, 1000, 1, 1, 880, 2],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk();
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $this->assertSame(1, Item::query()->where('client_id', $edelvives->id)->where('sku', $sharedSku)->count());
+        $this->assertSame(1, Item::query()->where('client_id', $friesland->id)->where('sku', $sharedSku)->count());
+        $this->assertSame('Producto Edelvives actualizado', Item::query()->where('client_id', $edelvives->id)->where('sku', $sharedSku)->firstOrFail()->description);
+        $this->assertDatabaseHas('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'FR-LOT',
+        ]);
+    }
+
+    public function test_edelvives_preview_warns_when_reported_total_pallets_does_not_match_breakdown(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'Principal' => [
+                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Total pallets'],
+                ['B', '90', '90x120 90', 'Papel mismatch', 1880, 1000, 1, 1, 880, 7],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertSee('Se han detectado 1 filas con total pallets distinto al calculado en Principal.');
+    }
+
+    public function test_edelvives_client_sees_only_imported_edelvives_inventory_after_import(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $frieslandClientUser = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $edelvivesClientUser = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $frieslandItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'FR-VISIBLE',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frieslandItem->id,
+            'lot' => 'FR-LOT',
+            'quantity_units' => 700,
+            'units_per_pallet' => 700,
+            'full_pallets' => 1,
+        ]);
+
+        $file = $this->makeWorkbookUpload([
+            'Principal' => [
+                ['Ubicacion', 'Gramaje', 'SKU', 'Descripcion', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Total pallets'],
+                ['C', '100', 'ED-VISIBLE', 'Papel Edelvives', 1880, 1000, 1, 1, 880, 2],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk();
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $this->actingAs($edelvivesClientUser)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('ED-VISIBLE')
+            ->assertDontSee('FR-VISIBLE');
+
+        $this->actingAs($frieslandClientUser)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('FR-VISIBLE')
+            ->assertDontSee('ED-VISIBLE');
+    }
+
     /**
      * @return array{0: Client, 1: Client}
      */
@@ -670,12 +884,13 @@ class StockImportTest extends TestCase
         ];
     }
 
-    private function makeUserWithRole(string $roleSlug): User
+    private function makeUserWithRole(string $roleSlug, ?Client $client = null): User
     {
         $role = Role::query()->where('slug', $roleSlug)->firstOrFail();
 
         return User::factory()->create([
             'role_id' => $role->id,
+            'client_id' => $roleSlug === Role::CLIENTE ? $client?->id : null,
         ]);
     }
 

@@ -4,9 +4,11 @@ namespace App\Services\Stock;
 
 use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Support\Stock\StockBatchCalculator;
 use DateTimeInterface;
 use Illuminate\Database\DatabaseManager;
@@ -21,6 +23,11 @@ use OpenSpout\Reader\Common\Creator\ReaderFactory;
 class StockExcelImportService
 {
     private const MAX_DETAILED_MESSAGES = 5;
+    private const PROFILE_STANDARD = 'standard_multisheet';
+    private const PROFILE_EDELVIVES = 'edelvives_single_sheet';
+    private const EDELVIVES_WAREHOUSE_CODE = '38';
+    private const EDELVIVES_WAREHOUSE_NAME = 'NAVE 38';
+    private const EDELVIVES_DEFAULT_LOT = 'SIN LOTE';
 
     /**
      * @var array<string, string>
@@ -63,6 +70,7 @@ class StockExcelImportService
         'peaks_count' => ['picos'],
         'received_at' => ['fecha entrada', 'fecha'],
         'blocked_reason' => ['motivo bloqueo', 'bloqueo', 'observaciones bloqueo'],
+        'reported_total_pallets' => ['total pallets', 'total palets', 'total pallets archivo', 'total palets archivo'],
     ];
 
     public function __construct(
@@ -185,6 +193,9 @@ class StockExcelImportService
             $importedRows = 0;
             $createdItems = 0;
             $updatedItems = 0;
+            $edelvivesLocations = ($preview['profile'] ?? null) === self::PROFILE_EDELVIVES
+                ? $this->ensureEdelvivesLocations($lockedImport->client)
+                : [];
 
             foreach ($preview['catalog_items'] as $catalogItem) {
                 $skuKey = Str::upper($catalogItem['sku']);
@@ -226,13 +237,17 @@ class StockExcelImportService
                     throw new InvalidArgumentException('No se ha podido resolver el articulo maestro para SKU '.$row['sku'].'.');
                 }
 
+                $locationCode = $row['location_code'] ?? null;
+
                 $attributes = [
                     'client_id' => $lockedImport->client_id,
                     'item_id' => $item->id,
                     'stock_import_id' => $lockedImport->id,
                     'goods_receipt_id' => null,
-                    'location_id' => null,
-                    'location_text' => $row['location_text'],
+                    'location_id' => $locationCode !== null && isset($edelvivesLocations[$locationCode])
+                        ? $edelvivesLocations[$locationCode]->id
+                        : null,
+                    'location_text' => $row['location_text'] ?? null,
                     'pallet_code' => null,
                     'lot' => $row['lot'],
                     'quantity_units' => $row['quantity_units'],
@@ -291,10 +306,38 @@ class StockExcelImportService
      *     errors: list<string>,
      *     all_errors: list<string>,
      *     can_confirm: bool,
-     *     totals: array<string, int>
+     *     totals: array<string, int>,
+     *     profile: string,
+     *     profile_label: string,
+     *     warehouse_name: ?string
      * }
      */
     public function parseWorkbook(string $path, Client $client): array
+    {
+        return $this->usesEdelvivesProfile($client)
+            ? $this->parseEdelvivesWorkbook($path, $client)
+            : $this->parseStandardWorkbook($path, $client);
+    }
+
+    /**
+     * @return array{
+     *     rows: list<array<string, mixed>>,
+     *     catalog_items: list<array<string, mixed>>,
+     *     sample_rows: list<array<string, mixed>>,
+     *     detected_sheets: array<string, mixed>,
+     *     warnings: list<string>,
+     *     row_errors: list<string>,
+     *     fatal_errors: list<string>,
+     *     errors: list<string>,
+     *     all_errors: list<string>,
+     *     can_confirm: bool,
+     *     totals: array<string, int>,
+     *     profile: string,
+     *     profile_label: string,
+     *     warehouse_name: ?string
+     * }
+     */
+    private function parseStandardWorkbook(string $path, Client $client): array
     {
         $reader = ReaderFactory::createFromFile($path);
         $reader->open($path);
@@ -519,6 +562,230 @@ class StockExcelImportService
             'all_errors' => array_values(array_merge($compiledFatalErrors, $compiledRowErrors)),
             'can_confirm' => $canConfirm,
             'totals' => $totals,
+            'profile' => self::PROFILE_STANDARD,
+            'profile_label' => 'Stock multihoja',
+            'warehouse_name' => null,
+        ];
+    }
+
+    /**
+     * @return array{
+     *     rows: list<array<string, mixed>>,
+     *     catalog_items: list<array<string, mixed>>,
+     *     sample_rows: list<array<string, mixed>>,
+     *     detected_sheets: array<string, mixed>,
+     *     warnings: list<string>,
+     *     row_errors: list<string>,
+     *     fatal_errors: list<string>,
+     *     errors: list<string>,
+     *     all_errors: list<string>,
+     *     can_confirm: bool,
+     *     totals: array<string, int>,
+     *     profile: string,
+     *     profile_label: string,
+     *     warehouse_name: ?string
+     * }
+     */
+    private function parseEdelvivesWorkbook(string $path, Client $client): array
+    {
+        $reader = ReaderFactory::createFromFile($path);
+        $reader->open($path);
+
+        $existingItems = Item::query()
+            ->where('client_id', $client->id)
+            ->get()
+            ->keyBy(fn (Item $item): string => Str::upper(trim($item->sku)));
+
+        $rows = [];
+        $catalogItems = [];
+        $warnings = [];
+        $rowErrors = [];
+        $fatalErrors = [];
+        $warningGroups = [];
+        $errorGroups = [];
+        $detectedSheets = [
+            'processed' => [],
+            'ignored' => [],
+            'unsupported' => [],
+        ];
+        $totals = [
+            'total_rows' => 0,
+            'skipped_rows' => 0,
+            'available_rows' => 0,
+            'blocked_rows' => 0,
+            'total_units' => 0,
+            'total_full_pallets' => 0,
+            'total_peak_units' => 0,
+            'excluded_rows' => 0,
+            'empty_rows_ignored' => 0,
+            'missing_sku_rows' => 0,
+            'real_errors' => 0,
+            'invalid_rows_ignored' => 0,
+            'catalog_items_detected' => 0,
+            'catalog_items_created' => 0,
+            'catalog_items_updated' => 0,
+            'catalog_items_without_stock' => 0,
+            'locations_detected' => 0,
+        ];
+        $detectedLocations = [];
+
+        try {
+            $sheet = null;
+            foreach ($reader->getSheetIterator() as $candidateSheet) {
+                $sheet = $candidateSheet;
+                break;
+            }
+
+            if ($sheet === null) {
+                $fatalErrors[] = 'El fichero de Edelvives no contiene ninguna hoja para importar.';
+            } else {
+                $sheetName = trim($sheet->getName());
+                $detectedSheets['processed'][] = $sheetName;
+                $headerMap = null;
+                $lineNumber = 0;
+
+                foreach ($sheet->getRowIterator() as $row) {
+                    $lineNumber++;
+
+                    if ($row->isEmpty()) {
+                        if ($headerMap !== null) {
+                            $totals['skipped_rows']++;
+                            $totals['empty_rows_ignored']++;
+                            $this->addGroupedMessage(
+                                $warningGroups,
+                                'empty_rows_'.$sheetName,
+                                'Se han ignorado :count filas vacias en '.$sheetName.'.',
+                                'Fila vacia ignorada en '.$sheetName.'.',
+                            );
+                        }
+
+                        continue;
+                    }
+
+                    if ($headerMap === null) {
+                        $headerMap = $this->buildHeaderMap($row);
+
+                        if (! isset($headerMap['sku'], $headerMap['location_text'], $headerMap['quantity_units'], $headerMap['units_per_pallet'])) {
+                            $fatalErrors[] = 'La hoja '.$sheetName.' no tiene el formato esperado para Edelvives.';
+                            break;
+                        }
+
+                        continue;
+                    }
+
+                    $totals['total_rows']++;
+
+                    $parsedRow = $this->parseEdelvivesRow(
+                        $row,
+                        $headerMap,
+                        $sheetName,
+                        $existingItems,
+                        $lineNumber,
+                    );
+
+                    if ($parsedRow['skip']) {
+                        $totals['skipped_rows']++;
+
+                        if ($parsedRow['warning_group'] !== null) {
+                            $this->applyWarningCounters($totals, $parsedRow['warning_group']['key']);
+                            $this->addGroupedMessage(
+                                $warningGroups,
+                                $parsedRow['warning_group']['key'],
+                                $parsedRow['warning_group']['summary'],
+                                $parsedRow['warning_group']['detail'],
+                            );
+                        }
+
+                        continue;
+                    }
+
+                    if ($parsedRow['catalog_item'] !== null) {
+                        $catalogKey = Str::upper($parsedRow['catalog_item']['sku']);
+                        $alreadySeen = array_key_exists($catalogKey, $catalogItems);
+
+                        if (! $alreadySeen) {
+                            $catalogItems[$catalogKey] = $parsedRow['catalog_item'];
+                            $totals['catalog_items_detected']++;
+
+                            if ($existingItems->has($catalogKey)) {
+                                $totals['catalog_items_updated']++;
+                            } else {
+                                $totals['catalog_items_created']++;
+                            }
+                        } else {
+                            $catalogItems[$catalogKey] = $this->mergeCatalogItems($catalogItems[$catalogKey], $parsedRow['catalog_item']);
+                        }
+                    }
+
+                    if ($parsedRow['warning_group'] !== null) {
+                        $this->addGroupedMessage(
+                            $warningGroups,
+                            $parsedRow['warning_group']['key'],
+                            $parsedRow['warning_group']['summary'],
+                            $parsedRow['warning_group']['detail'],
+                        );
+                    }
+
+                    if ($parsedRow['error'] !== null) {
+                        $totals['skipped_rows']++;
+                        $totals['real_errors']++;
+                        $totals['invalid_rows_ignored']++;
+
+                        $this->addGroupedMessage(
+                            $errorGroups,
+                            $parsedRow['error_group']['key'],
+                            $parsedRow['error_group']['summary'],
+                            $parsedRow['error_group']['detail'],
+                        );
+
+                        continue;
+                    }
+
+                    if ($parsedRow['row'] === null) {
+                        $totals['skipped_rows']++;
+
+                        if ($parsedRow['catalog_item'] !== null) {
+                            $totals['catalog_items_without_stock']++;
+                        }
+
+                        continue;
+                    }
+
+                    $rows[] = $parsedRow['row'];
+                    $totals['total_units'] += $parsedRow['row']['quantity_units'];
+                    $totals['total_full_pallets'] += $parsedRow['row']['full_pallets'];
+                    $totals['total_peak_units'] += $this->sumPeakUnits($parsedRow['row']);
+                    $totals['available_rows']++;
+                    $detectedLocations[$parsedRow['row']['location_code']] = true;
+                }
+            }
+        } finally {
+            $reader->close();
+        }
+
+        $totals['locations_detected'] = count($detectedLocations);
+        $warnings[] = 'Gramaje detectado en archivo, no se importara como propiedad independiente.';
+
+        $compiledWarnings = array_values(array_unique(array_merge($warnings, $this->compileGroupedMessages($warningGroups))));
+        $compiledRowErrors = array_values(array_unique(array_merge($rowErrors, $this->compileGroupedMessages($errorGroups))));
+        $compiledFatalErrors = array_values(array_unique($fatalErrors));
+        $canConfirm = $rows !== [] && $compiledFatalErrors === [];
+
+        return [
+            'rows' => $rows,
+            'catalog_items' => array_values($catalogItems),
+            'sample_rows' => array_slice($rows, 0, 10),
+            'detected_sheets' => $detectedSheets,
+            'warnings' => $compiledWarnings,
+            'row_errors' => $compiledRowErrors,
+            'fatal_errors' => $compiledFatalErrors,
+            'errors' => array_values(array_merge($compiledFatalErrors, $compiledRowErrors)),
+            'all_errors' => array_values(array_merge($compiledFatalErrors, $compiledRowErrors)),
+            'can_confirm' => $canConfirm,
+            'totals' => $totals,
+            'profile' => self::PROFILE_EDELVIVES,
+            'profile_label' => 'Stock Edelvives',
+            'warehouse_name' => self::EDELVIVES_WAREHOUSE_NAME,
         ];
     }
 
@@ -649,6 +916,7 @@ class StockExcelImportService
                     'sku' => $sku,
                     'description' => $description,
                     'lot' => $lot,
+                    'location_code' => null,
                     'location_text' => $locationText,
                     'quantity_units' => (int) $quantityFromFile,
                     'units_per_pallet' => 0,
@@ -759,6 +1027,7 @@ class StockExcelImportService
             'sku' => $sku,
             'description' => $description,
             'lot' => $lot,
+            'location_code' => null,
             'location_text' => $locationText,
             'quantity_units' => $quantityUnits,
             'units_per_pallet' => $unitsPerPallet,
@@ -781,6 +1050,177 @@ class StockExcelImportService
             'message' => $message,
             'warning' => null,
             'warning_group' => null,
+            'error' => null,
+            'error_group' => null,
+        ];
+    }
+
+    /**
+     * @param  array<string, int>  $headerMap
+     * @param  \Illuminate\Support\Collection<string, Item>  $existingItems
+     * @return array{
+     *     row: array<string, mixed>|null,
+     *     catalog_item: array<string, mixed>|null,
+     *     skip: bool,
+     *     warning_group: ?array{key: string, summary: string, detail: ?string},
+     *     error: ?string,
+     *     error_group: ?array{key: string, summary: string, detail: ?string}
+     * }
+     */
+    private function parseEdelvivesRow(
+        Row $row,
+        array $headerMap,
+        string $sheetName,
+        $existingItems,
+        int $lineNumber,
+    ): array {
+        $values = $row->toArray();
+        $sku = $this->normalizeSku($this->stringValue($values[$headerMap['sku']] ?? null));
+
+        if ($sku === '') {
+            return [
+                'row' => null,
+                'catalog_item' => null,
+                'skip' => true,
+                'warning_group' => [
+                    'key' => 'missing_sku_'.$sheetName,
+                    'summary' => 'Se han ignorado :count filas sin SKU valido en '.$sheetName.'.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' ignorada por no tener SKU.',
+                ],
+                'error' => null,
+                'error_group' => null,
+            ];
+        }
+
+        $locationCode = $this->normalizeEdelvivesLocation($values[$headerMap['location_text']] ?? null);
+        $existingItem = $existingItems->get(Str::upper($sku));
+        $description = $this->normalizeText($this->stringValue($values[$headerMap['description'] ?? -1] ?? null)) ?: ($existingItem?->description ?? $sku);
+        $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null)
+            ?? (int) ($existingItem?->units_per_pallet ?? 0);
+        $quantityUnits = max(0, $this->integerValue($values[$headerMap['quantity_units'] ?? -1] ?? null) ?? 0);
+        $fullPalletsFromFile = max(0, $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null) ?? 0);
+        $peaksCountFromFile = max(0, $this->integerValue($values[$headerMap['peaks_count'] ?? -1] ?? null) ?? 0);
+        $reportedTotalPallets = max(0, $this->integerValue($values[$headerMap['reported_total_pallets'] ?? -1] ?? null) ?? 0);
+
+        $catalogItem = [
+            'sku' => $sku,
+            'description' => $description,
+            'units_per_pallet' => $unitsPerPallet > 0 ? $unitsPerPallet : null,
+            'source_sheet' => $sheetName,
+        ];
+
+        if ($locationCode === null) {
+            return [
+                'row' => null,
+                'catalog_item' => $catalogItem,
+                'skip' => false,
+                'warning_group' => null,
+                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' con ubicacion/calle invalida para SKU '.$sku.'. Solo se admiten 0-45 y A-F.',
+                'error_group' => [
+                    'key' => 'invalid_location_'.$sheetName,
+                    'summary' => 'Se han encontrado :count filas con ubicaciones no validas en '.$sheetName.'.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con ubicacion/calle invalida para SKU '.$sku.'. Solo se admiten 0-45 y A-F.',
+                ],
+            ];
+        }
+
+        if ($quantityUnits === 0 && $fullPalletsFromFile === 0 && $peaksCountFromFile === 0 && ! $this->hasPositivePeakValues($values, $headerMap)) {
+            return [
+                'row' => null,
+                'catalog_item' => $catalogItem,
+                'skip' => false,
+                'warning_group' => [
+                    'key' => 'non_positive_stock_'.$sheetName,
+                    'summary' => 'Se han omitido :count filas sin stock positivo en '.$sheetName.'.',
+                    'detail' => null,
+                ],
+                'error' => null,
+                'error_group' => null,
+            ];
+        }
+
+        if ($unitsPerPallet <= 0) {
+            return [
+                'row' => null,
+                'catalog_item' => $catalogItem,
+                'skip' => false,
+                'warning_group' => null,
+                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' no se importara por no tener unidades por pallet validas para SKU '.$sku.'.',
+                'error_group' => [
+                    'key' => 'invalid_units_'.$sheetName,
+                    'summary' => 'Se han encontrado :count filas en '.$sheetName.' que no se importaran por no tener unidades por pallet validas.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' no se importara por no tener unidades por pallet validas para SKU '.$sku.'.',
+                ],
+            ];
+        }
+
+        $peaks = [];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $peaks[$peakNumber] = max(0, $this->integerValue($values[$headerMap['peak_'.$peakNumber] ?? -1] ?? null) ?? 0);
+        }
+
+        $peakUnits = array_sum($peaks);
+        $computedPeaksCount = count(array_filter($peaks, fn (int $value): bool => $value > 0));
+
+        if ($quantityUnits < $peakUnits) {
+            return [
+                'row' => null,
+                'catalog_item' => $catalogItem,
+                'skip' => false,
+                'warning_group' => null,
+                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' con picos superiores a la cantidad total para SKU '.$sku.'.',
+                'error_group' => [
+                    'key' => 'invalid_peaks_'.$sheetName,
+                    'summary' => 'Se han encontrado :count filas con picos inconsistentes en '.$sheetName.'.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con picos superiores a la cantidad total para SKU '.$sku.'.',
+                ],
+            ];
+        }
+
+        $warningGroup = null;
+
+        if ($peaksCountFromFile > 0 && $peaksCountFromFile !== $computedPeaksCount) {
+            $warningGroup = [
+                'key' => 'peaks_count_mismatch_'.$sheetName,
+                'summary' => 'Se han detectado :count filas con numero de picos distinto al detalle en '.$sheetName.'.',
+                'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con numero de picos '.$peaksCountFromFile.' pero detalle calculado '.$computedPeaksCount.' para SKU '.$sku.'.',
+            ];
+        }
+
+        if ($reportedTotalPallets > 0 && $reportedTotalPallets !== ($fullPalletsFromFile + $computedPeaksCount)) {
+            $warningGroup = [
+                'key' => 'reported_total_mismatch_'.$sheetName,
+                'summary' => 'Se han detectado :count filas con total pallets distinto al calculado en '.$sheetName.'.',
+                'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con total pallets '.$reportedTotalPallets.' y calculado '.($fullPalletsFromFile + $computedPeaksCount).' para SKU '.$sku.'.',
+            ];
+        }
+
+        $rowData = [
+            'sku' => $sku,
+            'description' => $description,
+            'lot' => self::EDELVIVES_DEFAULT_LOT,
+            'location_code' => $locationCode,
+            'location_text' => $locationCode,
+            'quantity_units' => $quantityUnits,
+            'units_per_pallet' => $unitsPerPallet,
+            'full_pallets' => $fullPalletsFromFile,
+            'peaks_count' => $computedPeaksCount,
+            'received_at' => null,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'blocked_reason' => null,
+            'source_sheet' => $sheetName,
+        ];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $rowData['peak_'.$peakNumber] = $peaks[$peakNumber];
+        }
+
+        return [
+            'row' => $rowData,
+            'catalog_item' => $catalogItem,
+            'skip' => false,
+            'warning_group' => $warningGroup,
             'error' => null,
             'error_group' => null,
         ];
@@ -812,6 +1252,7 @@ class StockExcelImportService
                 $this->matchesHeaderAlias('peaks_count', $canonical) => 'peaks_count',
                 $this->matchesHeaderAlias('received_at', $canonical) => 'received_at',
                 $this->matchesHeaderAlias('blocked_reason', $canonical) => 'blocked_reason',
+                $this->matchesHeaderAlias('reported_total_pallets', $canonical) => 'reported_total_pallets',
                 preg_match('/^(pico|peak)\s*(\d{1,2})$/', $canonical, $matches) === 1
                     && (int) $matches[2] >= 1
                     && (int) $matches[2] <= StockPallet::MAX_PEAK_COLUMNS => 'peak_'.(int) $matches[2],
@@ -1069,5 +1510,92 @@ class StockExcelImportService
         if (str_starts_with($key, 'missing_sku_')) {
             $totals['missing_sku_rows']++;
         }
+    }
+
+    private function usesEdelvivesProfile(Client $client): bool
+    {
+        return Str::upper(trim($client->code)) === 'EDELVIVES';
+    }
+
+    /**
+     * @return array<string, Location>
+     */
+    private function ensureEdelvivesLocations(Client $client): array
+    {
+        $warehouse = Warehouse::query()
+            ->where(function ($query) use ($client): void {
+                $query
+                    ->where(fn ($warehouseQuery) => $warehouseQuery
+                        ->where('code', self::EDELVIVES_WAREHOUSE_CODE)
+                        ->whereIn('client_id', [$client->id, null]))
+                    ->orWhere(fn ($warehouseQuery) => $warehouseQuery
+                        ->where('name', self::EDELVIVES_WAREHOUSE_NAME)
+                        ->whereIn('client_id', [$client->id, null]));
+            })
+            ->orderByRaw('client_id is null desc')
+            ->first();
+
+        if ($warehouse === null) {
+            $warehouse = Warehouse::query()->create([
+                'client_id' => null,
+                'code' => self::EDELVIVES_WAREHOUSE_CODE,
+                'name' => self::EDELVIVES_WAREHOUSE_NAME,
+                'active' => true,
+            ]);
+        }
+
+        $codes = collect(range(0, 45))
+            ->map(fn (int $value): string => (string) $value)
+            ->merge(['A', 'B', 'C', 'D', 'E', 'F']);
+
+        foreach ($codes as $code) {
+            Location::query()->updateOrCreate(
+                [
+                    'warehouse_id' => $warehouse->id,
+                    'code' => $code,
+                ],
+                [
+                    'name' => 'Calle '.$code,
+                    'aisle' => $code,
+                    'active' => true,
+                ],
+            );
+        }
+
+        return Location::query()
+            ->where('warehouse_id', $warehouse->id)
+            ->whereIn('code', $codes->all())
+            ->get()
+            ->keyBy('code')
+            ->all();
+    }
+
+    private function normalizeSku(string $value): string
+    {
+        return preg_replace('/\s+/u', ' ', trim($value)) ?? trim($value);
+    }
+
+    private function normalizeText(string $value): string
+    {
+        return preg_replace('/\s+/u', ' ', trim($value)) ?? trim($value);
+    }
+
+    private function normalizeEdelvivesLocation(mixed $value): ?string
+    {
+        $normalized = Str::upper($this->normalizeText($this->stringValue($value)));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d{1,2}$/', $normalized) === 1) {
+            $number = (int) $normalized;
+
+            return $number >= 0 && $number <= 45 ? (string) $number : null;
+        }
+
+        return in_array($normalized, ['A', 'B', 'C', 'D', 'E', 'F'], true)
+            ? $normalized
+            : null;
     }
 }

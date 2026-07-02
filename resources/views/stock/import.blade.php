@@ -16,6 +16,9 @@
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Importar stock desde Excel</h2>
             <span class="ops-page-meta">Solo superadmin. Sustituye el stock del cliente seleccionado al confirmar.</span>
+            @if ($preview && $stockImport)
+                <p class="stock-intro-helper">Perfil detectado: {{ $preview['profile_label'] }}.</p>
+            @endif
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons ops-toolbar-links">
@@ -58,6 +61,10 @@
                 <button type="submit" class="button-primary compact-button btn-compact">Previsualizar importacion</button>
             </div>
         </form>
+
+        @if ($stockImport?->client?->code === 'EDELVIVES')
+            <p class="stock-intro-helper">Se importaran articulos, ubicaciones, pallets y picos del cliente Edelvives.</p>
+        @endif
     </section>
 
     @if ($preview && $stockImport)
@@ -66,6 +73,12 @@
                 <strong>Filas leidas</strong>
                 <span>{{ number_format($preview['totals']['total_rows'], 0, ',', '.') }}</span>
             </article>
+            @if (($preview['profile'] ?? null) === 'edelvives_single_sheet')
+                <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                    <strong>Ubicaciones usadas</strong>
+                    <span>{{ number_format($preview['totals']['locations_detected'] ?? 0, 0, ',', '.') }}</span>
+                </article>
+            @endif
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
                 <strong>Articulos detectados</strong>
                 <span>{{ number_format($preview['totals']['catalog_items_detected'], 0, ',', '.') }}</span>
@@ -111,6 +124,10 @@
             <p>No soportadas: {{ implode(', ', $preview['detected_sheets']['unsupported']) ?: 'Ninguna' }}</p>
             <p>Se han ignorado referencias internas que empiezan por * o _.</p>
             <p>Las referencias con SKU valido se crearan o actualizaran como articulos aunque no tengan stock.</p>
+            @if (($preview['profile'] ?? null) === 'edelvives_single_sheet')
+                <p>Se usara el almacen {{ $preview['warehouse_name'] }} y se aseguraran las calles 0-45 y A-F.</p>
+                <p>Gramaje detectado en archivo, no se importara como propiedad independiente.</p>
+            @endif
         </section>
 
         @if ($preview['warnings'] !== [])
@@ -160,6 +177,7 @@
                                 <th>Hoja</th>
                                 <th>SKU</th>
                                 <th>Descripcion</th>
+                                <th>Ubicacion</th>
                                 <th>Lote</th>
                                 <th>Cantidad</th>
                                 <th>Uds/pallet</th>
@@ -174,6 +192,7 @@
                                     <td>{{ $row['source_sheet'] }}</td>
                                     <td>{{ $row['sku'] }}</td>
                                     <td>{{ $row['description'] }}</td>
+                                    <td>{{ $row['location_text'] ?: '-' }}</td>
                                     <td>{{ $row['lot'] ?: '-' }}</td>
                                     <td>{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
                                     <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
