@@ -104,7 +104,7 @@
                 <span>{{ number_format($preview['totals']['catalog_items_without_stock'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Filas invalidas omitidas</strong>
+                <strong>Errores bloqueantes en filas</strong>
                 <span>{{ number_format($preview['totals']['invalid_rows_ignored'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
@@ -112,7 +112,7 @@
                 <span>{{ number_format($preview['totals']['skipped_rows'], 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Errores reales</strong>
+                <strong>Errores bloqueantes</strong>
                 <span>{{ number_format($preview['totals']['real_errors'], 0, ',', '.') }}</span>
             </article>
         </section>
@@ -125,8 +125,10 @@
             <p>Se han ignorado referencias internas que empiezan por * o _.</p>
             <p>Las referencias con SKU valido se crearan o actualizaran como articulos aunque no tengan stock.</p>
             @if (($preview['profile'] ?? null) === 'edelvives_single_sheet')
-                <p>Se usara el almacen {{ $preview['warehouse_name'] }} y se aseguraran las calles 0-45 y A-F.</p>
+                <p>Se usara el almacen {{ $preview['warehouse_name'] }} y se aseguraran las calles 0-45, A-F, FONDO y SIN UBICACION.</p>
                 <p>Gramaje detectado en archivo, no se importara como propiedad independiente.</p>
+                <p>Las filas con avisos se importaran. Las filas sin SKU se ignoran.</p>
+                <p>Las ubicaciones no reconocidas se importaran en SIN UBICACION.</p>
             @endif
         </section>
 
@@ -154,7 +156,7 @@
 
         @if ($preview['row_errors'] !== [])
             <section class="surface-card compact-card">
-                <h3>Filas invalidas omitidas</h3>
+                <h3>Errores bloqueantes en filas</h3>
                 <p>Estas filas no se importaran, pero no bloquean la importacion mientras existan filas validas.</p>
                 <ul>
                     @foreach ($preview['row_errors'] as $error)
@@ -211,6 +213,9 @@
             @if ($preview['can_confirm'])
                 <h3>Confirmacion</h3>
                 <p>Esta accion sustituira el stock actual del cliente {{ $stockImport->client->name }} por el contenido del Excel previsualizado.</p>
+                @if (($preview['profile'] ?? null) === 'edelvives_single_sheet' && $preview['warnings'] !== [])
+                    <p>Las filas con avisos se importaran igualmente.</p>
+                @endif
                 @if ($preview['row_errors'] !== [])
                     <p>Las filas invalidas detectadas seran omitidas y no bloquearan la importacion.</p>
                 @endif

@@ -111,7 +111,7 @@ class StockImportTest extends TestCase
             ]);
 
         $response->assertOk()
-            ->assertSee('Errores reales')
+            ->assertSee('Errores bloqueantes')
             ->assertSee('Articulos detectados')
             ->assertSee('Confirmar importacion');
 
@@ -301,7 +301,7 @@ class StockImportTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertSee('Filas invalidas omitidas')
+            ->assertSee('Errores bloqueantes en filas')
             ->assertSee('Confirmar importacion');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
@@ -677,7 +677,7 @@ class StockImportTest extends TestCase
         $response->assertOk()
             ->assertSee('Stock Edelvives')
             ->assertSee('Gramaje detectado en archivo, no se importara como propiedad independiente.')
-            ->assertSee('Se usara el almacen NAVE 38 y se aseguraran las calles 0-45 y A-F.')
+            ->assertSee('Se usara el almacen NAVE 38 y se aseguraran las calles 0-45, A-F, FONDO y SIN UBICACION.')
             ->assertSee('100x127 135')
             ->assertSee('100x131 110')
             ->assertSee('SIN LOTE')
@@ -721,7 +721,7 @@ class StockImportTest extends TestCase
             ->orWhere('code', '38')
             ->firstOrFail();
 
-        $this->assertSame(52, Location::query()->where('warehouse_id', $warehouse->id)->whereIn('code', array_merge(array_map('strval', range(0, 45)), ['A', 'B', 'C', 'D', 'E', 'F']))->count());
+        $this->assertSame(54, Location::query()->where('warehouse_id', $warehouse->id)->whereIn('code', array_merge(array_map('strval', range(0, 45)), ['A', 'B', 'C', 'D', 'E', 'F', 'FONDO', 'SIN UBICACION']))->count());
 
         $firstItem = Item::query()->where('client_id', $edelvives->id)->where('sku', '70x100 80')->firstOrFail();
         $firstStock = StockPallet::query()->where('item_id', $firstItem->id)->firstOrFail();
@@ -818,6 +818,232 @@ class StockImportTest extends TestCase
             'file' => $file,
         ])->assertOk()
             ->assertSee('Se han detectado 1 filas con total pallets distinto al calculado en STOCK.');
+    }
+
+    public function test_edelvives_imports_peak_only_rows_and_parses_numeric_text_values(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('D', '135', '100x127 135', '100x127 135 - MATT COATED', '1.998', '4.500', '0', '1', ['1.998'], '1'),
+                $this->makeRealEdelvivesDataRow('18.0', 110, '100x131 110', '100x131 110 INASET PLUS OFFSET', 38500, 5500.0, 7, 0, [], 7),
+            ]),
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertSee('100x127 135')
+            ->assertSee('1.998')
+            ->assertDontSee('222.222.222.222');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $peakOnlyItem = Item::query()->where('client_id', $edelvives->id)->where('sku', '100x127 135')->firstOrFail();
+        $peakOnlyStock = StockPallet::query()->where('item_id', $peakOnlyItem->id)->firstOrFail();
+        $palletItem = Item::query()->where('client_id', $edelvives->id)->where('sku', '100x131 110')->firstOrFail();
+        $palletStock = StockPallet::query()->where('item_id', $palletItem->id)->firstOrFail();
+
+        $this->assertSame(1998, $peakOnlyStock->quantity_units);
+        $this->assertSame(4500, $peakOnlyStock->units_per_pallet);
+        $this->assertSame(0, $peakOnlyStock->full_pallets);
+        $this->assertSame(1, $peakOnlyStock->peaks_count);
+        $this->assertSame(1998, $peakOnlyStock->peak_1);
+
+        $this->assertSame(38500, $palletStock->quantity_units);
+        $this->assertSame(5500, $palletStock->units_per_pallet);
+        $this->assertSame(7, $palletStock->full_pallets);
+        $this->assertSame(0, $palletStock->peaks_count);
+        $this->assertSame('18', $palletStock->location_text);
+    }
+
+    public function test_edelvives_imports_peak_larger_than_units_per_pallet_when_total_matches(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('C', 170, '130x90 170', 'Referencia con pico grande', 13000, 3750, 2, 1, [5500], 3),
+            ]),
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertDontSee('picos superiores a la cantidad total');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $stock = StockPallet::query()
+            ->whereHas('item', fn ($query) => $query->where('client_id', $edelvives->id)->where('sku', '130x90 170'))
+            ->firstOrFail();
+
+        $this->assertSame(13000, $stock->quantity_units);
+        $this->assertSame(3750, $stock->units_per_pallet);
+        $this->assertSame(2, $stock->full_pallets);
+        $this->assertSame(1, $stock->peaks_count);
+        $this->assertSame(5500, $stock->peak_1);
+    }
+
+    public function test_edelvives_imports_rows_without_units_per_pallet_when_stock_is_in_peaks(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('B', 125, '102x72 125', 'Solo pico sin uds/pallet', 800, 0, 0, 1, [800], 1),
+            ]),
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertSee('Se importaran 1 filas de STOCK sin unidades por pallet, usando solo picos.');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $stock = StockPallet::query()
+            ->whereHas('item', fn ($query) => $query->where('client_id', $edelvives->id)->where('sku', '102x72 125'))
+            ->firstOrFail();
+
+        $this->assertSame(800, $stock->quantity_units);
+        $this->assertSame(0, $stock->units_per_pallet);
+        $this->assertSame(0, $stock->full_pallets);
+        $this->assertSame(1, $stock->peaks_count);
+        $this->assertSame(800, $stock->peak_1);
+    }
+
+    public function test_edelvives_normalizes_special_locations_without_losing_stock(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('FONDO?', 90, '90x118 90', 'Ubicacion fondo', 1200, 0, 0, 1, [1200], 1),
+                $this->makeRealEdelvivesDataRow('', 80, '80x60 80', 'Sin ubicacion', 600, 0, 0, 1, [600], 1),
+            ]),
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertSee('Se normalizaran 1 ubicaciones especiales en STOCK.')
+            ->assertSee('Se importaran 1 filas de STOCK sin ubicacion en SIN UBICACION.');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $fondoStock = StockPallet::query()
+            ->whereHas('item', fn ($query) => $query->where('client_id', $edelvives->id)->where('sku', '90x118 90'))
+            ->firstOrFail();
+        $pendingStock = StockPallet::query()
+            ->whereHas('item', fn ($query) => $query->where('client_id', $edelvives->id)->where('sku', '80x60 80'))
+            ->firstOrFail();
+
+        $this->assertSame('FONDO', $fondoStock->location_text);
+        $this->assertSame('SIN UBICACION', $pendingStock->location_text);
+    }
+
+    public function test_edelvives_reimport_replaces_only_its_previous_snapshot_without_touching_friesland(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $frieslandItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'FR-STABLE',
+            'description' => 'Friesland estable',
+            'units_per_pallet' => 1000,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frieslandItem->id,
+            'lot' => 'FR-1',
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 1,
+        ]);
+
+        $firstFile = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('A', 100, 'ED-ONE', 'Primera carga', 1000, 1000, 1, 0, [], 1),
+                $this->makeRealEdelvivesDataRow('B', 120, 'ED-TWO', 'Primera carga dos', 800, 0, 0, 1, [800], 1),
+            ]),
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $firstFile,
+        ])->assertOk();
+
+        $firstImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $firstImport->id,
+        ])->assertRedirect();
+
+        $this->assertSame(2, StockPallet::query()->where('client_id', $edelvives->id)->count());
+
+        $secondFile = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('C', 90, 'ED-THREE', 'Segunda carga', 600, 0, 0, 1, [600], 1),
+            ]),
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $secondFile,
+        ])->assertOk();
+
+        $secondImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $secondImport->id,
+        ])->assertRedirect();
+
+        $this->assertSame(1, StockPallet::query()->where('client_id', $edelvives->id)->count());
+        $this->assertDatabaseHas('stock_pallets', [
+            'client_id' => $edelvives->id,
+            'location_text' => 'C',
+        ]);
+        $this->assertDatabaseMissing('stock_pallets', [
+            'client_id' => $edelvives->id,
+            'location_text' => 'A',
+        ]);
+        $this->assertDatabaseHas('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'FR-1',
+        ]);
     }
 
     public function test_edelvives_client_sees_only_imported_edelvives_inventory_after_import(): void

@@ -114,9 +114,9 @@ class StockPallet extends Model
                 ? $stockPallet->status
                 : self::STATUS_AVAILABLE;
 
-            if ((int) $stockPallet->units_per_pallet > 0 && (int) $stockPallet->quantity_units >= 0) {
-                $explicitPeaks = self::explicitPeaks($stockPallet);
+            $explicitPeaks = self::explicitPeaks($stockPallet);
 
+            if ((int) $stockPallet->units_per_pallet > 0 && (int) $stockPallet->quantity_units >= 0) {
                 if ($explicitPeaks !== []) {
                     $peakTotal = array_sum($explicitPeaks);
                     $remainingUnits = max(0, (int) $stockPallet->quantity_units - $peakTotal);
@@ -139,6 +139,16 @@ class StockPallet extends Model
                     foreach (range(1, self::MAX_PEAK_COLUMNS) as $peakNumber) {
                         $stockPallet->{'peak_'.$peakNumber} = $breakdown['peak_'.$peakNumber] ?? 0;
                     }
+                }
+            } elseif (
+                $explicitPeaks !== []
+                || ($stockPallet->stock_import_id !== null && ((int) $stockPallet->full_pallets > 0 || (int) $stockPallet->quantity_units > 0))
+            ) {
+                $stockPallet->full_pallets = max(0, (int) $stockPallet->full_pallets);
+                $stockPallet->peaks_count = count(array_filter($explicitPeaks, fn (int $value): bool => $value > 0));
+
+                foreach (range(1, self::MAX_PEAK_COLUMNS) as $peakNumber) {
+                    $stockPallet->{'peak_'.$peakNumber} = $explicitPeaks[$peakNumber] ?? 0;
                 }
             } else {
                 $stockPallet->full_pallets = 0;

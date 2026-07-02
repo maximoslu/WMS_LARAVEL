@@ -686,13 +686,13 @@ class StockExcelImportService
                     if ($parsedRow['skip']) {
                         $totals['skipped_rows']++;
 
-                        if ($parsedRow['warning_group'] !== null) {
-                            $this->applyWarningCounters($totals, $parsedRow['warning_group']['key']);
+                        foreach ($parsedRow['warning_groups'] as $warningGroup) {
+                            $this->applyWarningCounters($totals, $warningGroup['key']);
                             $this->addGroupedMessage(
                                 $warningGroups,
-                                $parsedRow['warning_group']['key'],
-                                $parsedRow['warning_group']['summary'],
-                                $parsedRow['warning_group']['detail'],
+                                $warningGroup['key'],
+                                $warningGroup['summary'],
+                                $warningGroup['detail'],
                             );
                         }
 
@@ -717,12 +717,13 @@ class StockExcelImportService
                         }
                     }
 
-                    if ($parsedRow['warning_group'] !== null) {
+                    foreach ($parsedRow['warning_groups'] as $warningGroup) {
+                        $this->applyWarningCounters($totals, $warningGroup['key']);
                         $this->addGroupedMessage(
                             $warningGroups,
-                            $parsedRow['warning_group']['key'],
-                            $parsedRow['warning_group']['summary'],
-                            $parsedRow['warning_group']['detail'],
+                            $warningGroup['key'],
+                            $warningGroup['summary'],
+                            $warningGroup['detail'],
                         );
                     }
 
@@ -1062,7 +1063,7 @@ class StockExcelImportService
      *     row: array<string, mixed>|null,
      *     catalog_item: array<string, mixed>|null,
      *     skip: bool,
-     *     warning_group: ?array{key: string, summary: string, detail: ?string},
+     *     warning_groups: list<array{key: string, summary: string, detail: ?string}>,
      *     error: ?string,
      *     error_group: ?array{key: string, summary: string, detail: ?string}
      * }
@@ -1082,22 +1083,26 @@ class StockExcelImportService
                 'row' => null,
                 'catalog_item' => null,
                 'skip' => true,
-                'warning_group' => [
+                'warning_groups' => [[
                     'key' => 'missing_sku_'.$sheetName,
                     'summary' => 'Se han ignorado :count filas sin SKU valido en '.$sheetName.'.',
                     'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' ignorada por no tener SKU.',
-                ],
+                ]],
                 'error' => null,
                 'error_group' => null,
             ];
         }
 
-        $locationCode = $this->normalizeEdelvivesLocation($values[$headerMap['location_text']] ?? null);
         $existingItem = $existingItems->get(Str::upper($sku));
         $description = $this->normalizeText($this->stringValue($values[$headerMap['description'] ?? -1] ?? null)) ?: ($existingItem?->description ?? $sku);
-        $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null)
-            ?? (int) ($existingItem?->units_per_pallet ?? 0);
-        $quantityUnits = max(0, $this->integerValue($values[$headerMap['quantity_units'] ?? -1] ?? null) ?? 0);
+        $resolvedLocation = $this->resolveEdelvivesLocation($values[$headerMap['location_text']] ?? null, $sheetName, $sku, $lineNumber);
+        $locationCode = $resolvedLocation['code'];
+        $warningGroups = $resolvedLocation['warning_groups'];
+        $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null);
+        $unitsPerPallet = $unitsPerPallet !== null
+            ? max(0, $unitsPerPallet)
+            : max(0, (int) ($existingItem?->units_per_pallet ?? 0));
+        $quantityFromFile = max(0, $this->integerValue($values[$headerMap['quantity_units'] ?? -1] ?? null) ?? 0);
         $fullPalletsFromFile = max(0, $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null) ?? 0);
         $peaksCountFromFile = max(0, $this->integerValue($values[$headerMap['peaks_count'] ?? -1] ?? null) ?? 0);
         $reportedTotalPallets = max(0, $this->integerValue($values[$headerMap['reported_total_pallets'] ?? -1] ?? null) ?? 0);
@@ -1109,48 +1114,18 @@ class StockExcelImportService
             'source_sheet' => $sheetName,
         ];
 
-        if ($locationCode === null) {
+        if ($quantityFromFile === 0 && $fullPalletsFromFile === 0 && $peaksCountFromFile === 0 && ! $this->hasPositivePeakValues($values, $headerMap)) {
             return [
                 'row' => null,
                 'catalog_item' => $catalogItem,
                 'skip' => false,
-                'warning_group' => null,
-                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' con ubicacion/calle invalida para SKU '.$sku.'. Solo se admiten 0-45 y A-F.',
-                'error_group' => [
-                    'key' => 'invalid_location_'.$sheetName,
-                    'summary' => 'Se han encontrado :count filas con ubicaciones no validas en '.$sheetName.'.',
-                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con ubicacion/calle invalida para SKU '.$sku.'. Solo se admiten 0-45 y A-F.',
-                ],
-            ];
-        }
-
-        if ($quantityUnits === 0 && $fullPalletsFromFile === 0 && $peaksCountFromFile === 0 && ! $this->hasPositivePeakValues($values, $headerMap)) {
-            return [
-                'row' => null,
-                'catalog_item' => $catalogItem,
-                'skip' => false,
-                'warning_group' => [
+                'warning_groups' => [[
                     'key' => 'non_positive_stock_'.$sheetName,
                     'summary' => 'Se han omitido :count filas sin stock positivo en '.$sheetName.'.',
                     'detail' => null,
-                ],
+                ]],
                 'error' => null,
                 'error_group' => null,
-            ];
-        }
-
-        if ($unitsPerPallet <= 0) {
-            return [
-                'row' => null,
-                'catalog_item' => $catalogItem,
-                'skip' => false,
-                'warning_group' => null,
-                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' no se importara por no tener unidades por pallet validas para SKU '.$sku.'.',
-                'error_group' => [
-                    'key' => 'invalid_units_'.$sheetName,
-                    'summary' => 'Se han encontrado :count filas en '.$sheetName.' que no se importaran por no tener unidades por pallet validas.',
-                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' no se importara por no tener unidades por pallet validas para SKU '.$sku.'.',
-                ],
             ];
         }
 
@@ -1162,26 +1137,12 @@ class StockExcelImportService
 
         $peakUnits = array_sum($peaks);
         $computedPeaksCount = count(array_filter($peaks, fn (int $value): bool => $value > 0));
-
-        if ($quantityUnits < $peakUnits) {
-            return [
-                'row' => null,
-                'catalog_item' => $catalogItem,
-                'skip' => false,
-                'warning_group' => null,
-                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' con picos superiores a la cantidad total para SKU '.$sku.'.',
-                'error_group' => [
-                    'key' => 'invalid_peaks_'.$sheetName,
-                    'summary' => 'Se han encontrado :count filas con picos inconsistentes en '.$sheetName.'.',
-                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con picos superiores a la cantidad total para SKU '.$sku.'.',
-                ],
-            ];
-        }
-
-        $warningGroup = null;
+        $calculatedQuantity = ($unitsPerPallet > 0 || $fullPalletsFromFile === 0)
+            ? ($fullPalletsFromFile * $unitsPerPallet) + $peakUnits
+            : null;
 
         if ($peaksCountFromFile > 0 && $peaksCountFromFile !== $computedPeaksCount) {
-            $warningGroup = [
+            $warningGroups[] = [
                 'key' => 'peaks_count_mismatch_'.$sheetName,
                 'summary' => 'Se han detectado :count filas con numero de picos distinto al detalle en '.$sheetName.'.',
                 'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con numero de picos '.$peaksCountFromFile.' pero detalle calculado '.$computedPeaksCount.' para SKU '.$sku.'.',
@@ -1189,10 +1150,72 @@ class StockExcelImportService
         }
 
         if ($reportedTotalPallets > 0 && $reportedTotalPallets !== ($fullPalletsFromFile + $computedPeaksCount)) {
-            $warningGroup = [
+            $warningGroups[] = [
                 'key' => 'reported_total_mismatch_'.$sheetName,
                 'summary' => 'Se han detectado :count filas con total pallets distinto al calculado en '.$sheetName.'.',
                 'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con total pallets '.$reportedTotalPallets.' y calculado '.($fullPalletsFromFile + $computedPeaksCount).' para SKU '.$sku.'.',
+            ];
+        }
+
+        if ($unitsPerPallet === 0 && $fullPalletsFromFile === 0 && $peakUnits > 0) {
+            $warningGroups[] = [
+                'key' => 'peak_only_without_units_'.$sheetName,
+                'summary' => 'Se importaran :count filas de '.$sheetName.' sin unidades por pallet, usando solo picos.',
+                'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' sin unidades por pallet. Se importa como stock en picos.',
+            ];
+        }
+
+        if ($unitsPerPallet === 0 && $fullPalletsFromFile > 0) {
+            if ($quantityFromFile <= 0 && $peakUnits <= 0) {
+                return [
+                    'row' => null,
+                    'catalog_item' => $catalogItem,
+                    'skip' => false,
+                    'warning_groups' => $warningGroups,
+                    'error' => 'Fila '.$lineNumber.' de '.$sheetName.' no se puede cuantificar para SKU '.$sku.' porque tiene pallets declarados sin unidades por pallet, cantidad ni picos.',
+                    'error_group' => [
+                        'key' => 'invalid_units_'.$sheetName,
+                        'summary' => 'Se han encontrado :count filas en '.$sheetName.' que no se pueden cuantificar por falta de unidades por pallet y cantidad.',
+                        'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' no se puede cuantificar para SKU '.$sku.' porque tiene pallets declarados sin unidades por pallet, cantidad ni picos.',
+                    ],
+                ];
+            }
+
+            $warningGroups[] = [
+                'key' => 'pallets_without_units_'.$sheetName,
+                'summary' => 'Se importaran :count filas de '.$sheetName.' con pallets declarados pero sin unidades por pallet.',
+                'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con pallets declarados y sin unidades por pallet. Se conserva la cantidad del archivo.',
+            ];
+        }
+
+        if ($calculatedQuantity !== null && $quantityFromFile > 0 && $quantityFromFile !== $calculatedQuantity) {
+            $warningGroups[] = [
+                'key' => 'quantity_mismatch_'.$sheetName,
+                'summary' => 'Se han detectado :count filas con cantidad distinta al desglose calculado en '.$sheetName.'.',
+                'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con cantidad '.$quantityFromFile.' y calculado '.$calculatedQuantity.' para SKU '.$sku.'. Se usara el desglose de pallets y picos.',
+            ];
+        }
+
+        $quantityUnits = $calculatedQuantity !== null && $calculatedQuantity > 0
+            ? $calculatedQuantity
+            : $quantityFromFile;
+
+        if ($quantityUnits <= 0 && $peakUnits > 0) {
+            $quantityUnits = $peakUnits;
+        }
+
+        if ($quantityUnits <= 0 && $fullPalletsFromFile === 0 && $peakUnits === 0) {
+            return [
+                'row' => null,
+                'catalog_item' => $catalogItem,
+                'skip' => false,
+                'warning_groups' => $warningGroups,
+                'error' => 'Fila '.$lineNumber.' de '.$sheetName.' sin cantidad importable para SKU '.$sku.'.',
+                'error_group' => [
+                    'key' => 'invalid_quantity_'.$sheetName,
+                    'summary' => 'Se han encontrado :count filas en '.$sheetName.' sin cantidad importable.',
+                    'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' sin cantidad importable para SKU '.$sku.'.',
+                ],
             ];
         }
 
@@ -1220,7 +1243,7 @@ class StockExcelImportService
             'row' => $rowData,
             'catalog_item' => $catalogItem,
             'skip' => false,
-            'warning_group' => $warningGroup,
+            'warning_groups' => $warningGroups,
             'error' => null,
             'error_group' => null,
         ];
@@ -1387,11 +1410,66 @@ class StockExcelImportService
             return (int) round($value);
         }
 
-        $normalized = preg_replace('/[^0-9\-]/', '', str_replace(',', '.', (string) $value));
+        $normalized = $this->normalizeIntegerString((string) $value);
 
         return $normalized !== null && $normalized !== '' && is_numeric($normalized)
             ? (int) $normalized
             : null;
+    }
+
+    private function normalizeIntegerString(string $value): ?string
+    {
+        $normalized = trim(str_replace(["\xc2\xa0", ' '], '', $value));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (preg_match('/^-?\d+$/', $normalized) === 1) {
+            return $normalized;
+        }
+
+        if (preg_match('/^-?\d{1,3}([.,]\d{3})+$/', $normalized) === 1) {
+            return str_replace([',', '.'], '', $normalized);
+        }
+
+        if (preg_match('/^-?\d+[.,]\d+$/', $normalized) === 1) {
+            $separator = str_contains($normalized, ',') ? ',' : '.';
+            [$wholePart, $fractionPart] = explode($separator, $normalized, 2);
+
+            if ($fractionPart !== '' && preg_match('/^0+$/', $fractionPart) === 1) {
+                return $wholePart;
+            }
+
+            if (strlen($fractionPart) === 3) {
+                return $wholePart.$fractionPart;
+            }
+
+            return (string) (int) round((float) str_replace(',', '.', $normalized));
+        }
+
+        if (preg_match('/^-?\d{1,3}([.,]\d{3})+[.,]\d+$/', $normalized) === 1) {
+            $lastDot = strrpos($normalized, '.');
+            $lastComma = strrpos($normalized, ',');
+            $decimalPosition = max($lastDot === false ? -1 : $lastDot, $lastComma === false ? -1 : $lastComma);
+            $wholePart = substr($normalized, 0, $decimalPosition);
+            $fractionPart = substr($normalized, $decimalPosition + 1);
+            $wholePart = str_replace([',', '.'], '', $wholePart);
+
+            if ($fractionPart !== '' && preg_match('/^0+$/', $fractionPart) === 1) {
+                return $wholePart;
+            }
+
+            if (strlen($fractionPart) === 3) {
+                return $wholePart.$fractionPart;
+            }
+
+            return (string) (int) round((float) str_replace(',', '.', $wholePart.'.'.$fractionPart));
+        }
+
+        $digitsOnly = preg_replace('/[^0-9\-]/', '', $normalized);
+
+        return $digitsOnly !== null && $digitsOnly !== '' ? $digitsOnly : null;
     }
 
     private function shouldIgnoreSku(string $sku): bool
@@ -1589,7 +1667,7 @@ class StockExcelImportService
 
         $codes = collect(range(0, 45))
             ->map(fn (int $value): string => (string) $value)
-            ->merge(['A', 'B', 'C', 'D', 'E', 'F']);
+            ->merge(['A', 'B', 'C', 'D', 'E', 'F', 'FONDO', 'SIN UBICACION']);
 
         foreach ($codes as $code) {
             Location::query()->updateOrCreate(
@@ -1625,43 +1703,63 @@ class StockExcelImportService
 
     private function normalizeEdelvivesLocation(mixed $value): ?string
     {
-        if (is_int($value)) {
-            return $value >= 0 && $value <= 45 ? (string) $value : null;
-        }
+        return $this->resolveEdelvivesLocation($value, 'STOCK', 'SKU', 0)['code'];
+    }
 
-        if (is_float($value)) {
-            $integerValue = (int) round($value);
+    /**
+     * @return array{code: string, warning_groups: list<array{key: string, summary: string, detail: ?string}>}
+     */
+    private function resolveEdelvivesLocation(mixed $value, string $sheetName, string $sku, int $lineNumber): array
+    {
+        $parsedInteger = $this->integerValue($value);
 
-            return ((float) $integerValue === (float) $value) && $integerValue >= 0 && $integerValue <= 45
-                ? (string) $integerValue
-                : null;
+        if ($parsedInteger !== null && $parsedInteger >= 0 && $parsedInteger <= 45) {
+            return [
+                'code' => (string) $parsedInteger,
+                'warning_groups' => [],
+            ];
         }
 
         $normalized = Str::upper($this->normalizeText($this->stringValue($value)));
 
         if ($normalized === '') {
-            return null;
+            return [
+                'code' => 'SIN UBICACION',
+                'warning_groups' => [[
+                    'key' => 'missing_location_'.$sheetName,
+                    'summary' => 'Se importaran :count filas de '.$sheetName.' sin ubicacion en SIN UBICACION.',
+                    'detail' => $lineNumber > 0 ? 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' sin ubicacion. Se importa en SIN UBICACION.' : null,
+                ]],
+            ];
         }
 
-        $numericCandidate = str_replace(',', '.', $normalized);
-
-        if (is_numeric($numericCandidate)) {
-            $numericValue = (float) $numericCandidate;
-            $integerValue = (int) round($numericValue);
-
-            if ((float) $integerValue === $numericValue) {
-                return $integerValue >= 0 && $integerValue <= 45 ? (string) $integerValue : null;
-            }
+        if (preg_match('/^FONDO\s*\?*$/', $normalized) === 1) {
+            return [
+                'code' => 'FONDO',
+                'warning_groups' => $normalized === 'FONDO'
+                    ? []
+                    : [[
+                        'key' => 'normalized_location_'.$sheetName,
+                        'summary' => 'Se normalizaran :count ubicaciones especiales en '.$sheetName.'.',
+                        'detail' => $lineNumber > 0 ? 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con ubicacion '.$normalized.'. Se normaliza a FONDO.' : null,
+                    ]],
+            ];
         }
 
-        if (preg_match('/^\d{1,2}$/', $normalized) === 1) {
-            $number = (int) $normalized;
-
-            return $number >= 0 && $number <= 45 ? (string) $number : null;
+        if (in_array($normalized, ['A', 'B', 'C', 'D', 'E', 'F'], true)) {
+            return [
+                'code' => $normalized,
+                'warning_groups' => [],
+            ];
         }
 
-        return in_array($normalized, ['A', 'B', 'C', 'D', 'E', 'F'], true)
-            ? $normalized
-            : null;
+        return [
+            'code' => 'SIN UBICACION',
+            'warning_groups' => [[
+                'key' => 'unknown_location_'.$sheetName,
+                'summary' => 'Se importaran :count filas de '.$sheetName.' con ubicacion no reconocida en SIN UBICACION.',
+                'detail' => $lineNumber > 0 ? 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con ubicacion '.$normalized.'. Se importa en SIN UBICACION.' : null,
+            ]],
+        ];
     }
 }

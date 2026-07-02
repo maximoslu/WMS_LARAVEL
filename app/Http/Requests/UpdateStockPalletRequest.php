@@ -46,8 +46,7 @@ class UpdateStockPalletRequest extends FormRequest
     {
         $locationId = $this->integer('location_id');
         $status = (string) $this->string('status');
-
-        return [
+        $payload = [
             'lot' => $this->input('lot'),
             'quantity_units' => $this->integer('quantity_units'),
             'units_per_pallet' => $this->integer('units_per_pallet'),
@@ -58,7 +57,15 @@ class UpdateStockPalletRequest extends FormRequest
             'blocked_reason' => $status === StockPallet::STATUS_BLOCKED
                 ? $this->input('blocked_reason')
                 : null,
+            'full_pallets' => 0,
+            'peaks_count' => 0,
         ];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $payload['peak_'.$peakNumber] = 0;
+        }
+
+        return $payload;
     }
 
     private function normalizeNullableInteger(mixed $value): ?int
