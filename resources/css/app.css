@@ -2474,16 +2474,20 @@ body.brand-body.app-shell-body {
     font-size: 14px;
     line-height: 1.5;
     background:
-        radial-gradient(circle at top left, rgba(15, 127, 147, 0.12), transparent 22%),
-        linear-gradient(180deg, #dde4ea 0%, #e8edf2 34%, #d9e1e7 100%);
+        radial-gradient(circle at top left, rgba(20, 184, 196, 0.18), transparent 26%),
+        radial-gradient(circle at bottom right, rgba(20, 184, 196, 0.09), transparent 30%),
+        linear-gradient(160deg, #0b1720 0%, #16283a 45%, #0f2430 100%);
+    background-attachment: fixed;
 }
 
 body.brand-body.app-shell-body .surface-card {
     border-radius: 8px;
-    border-color: rgba(24, 37, 50, 0.14);
-    background: rgba(255, 255, 255, 0.985);
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
-    backdrop-filter: blur(8px);
+    border: 1px solid rgba(20, 184, 196, 0.18);
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow:
+        0 20px 44px rgba(4, 12, 18, 0.38),
+        0 0 0 1px rgba(20, 184, 196, 0.04);
+    backdrop-filter: blur(14px);
 }
 
 body.brand-body.app-shell-body .app-shell {
@@ -2571,9 +2575,10 @@ body.brand-body.app-shell-body .ops-page-meta {
 
 body.brand-body.app-shell-body .app-topbar-mark,
 body.brand-body.app-shell-body .app-drawer-mark {
-    width: 1.9rem;
+    width: auto;
     height: 1.9rem;
-    border-radius: 8px;
+    max-width: 8rem;
+    object-fit: contain;
     flex: 0 0 auto;
 }
 
@@ -2813,9 +2818,10 @@ body.brand-body.app-shell-body .btn-compact {
 }
 
 body.brand-body.app-shell-body .button-primary {
-    background: var(--brand-slate-dark);
+    background: linear-gradient(135deg, var(--brand-cyan) 0%, var(--brand-cyan-dark) 55%, var(--brand-slate-dark) 100%);
     color: #f8fafc;
-    border-color: rgba(24, 37, 50, 0.92);
+    border-color: transparent;
+    box-shadow: 0 10px 22px rgba(20, 184, 196, 0.22);
 }
 
 body.brand-body.app-shell-body .button-secondary {
@@ -2824,7 +2830,12 @@ body.brand-body.app-shell-body .button-secondary {
     border-color: rgba(24, 37, 50, 0.16);
 }
 
-body.brand-body.app-shell-body .button-primary:hover,
+body.brand-body.app-shell-body .button-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px rgba(20, 184, 196, 0.3);
+    filter: none;
+}
+
 body.brand-body.app-shell-body .button-secondary:hover {
     transform: none;
     filter: brightness(0.97);
@@ -2837,6 +2848,14 @@ body.brand-body.app-shell-body .btn-table {
     padding: 0.38rem 0.78rem;
     font-size: 0.78rem;
     flex: 0 0 auto;
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb {
+    color: rgba(226, 236, 241, 0.68);
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb a {
+    color: #7fdce8;
 }
 
 body.brand-body.app-shell-body .auth-input {

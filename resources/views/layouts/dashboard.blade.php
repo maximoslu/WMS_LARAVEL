@@ -25,12 +25,11 @@
                 <div class="app-drawer-header">
                     <a href="{{ route('dashboard') }}" class="app-drawer-brand" aria-label="Ir al panel de control">
                         <img
-                            src="{{ asset('brand/maximo-icon.png') }}"
+                            src="{{ asset('brand/maximo-logo-horizontal.png') }}"
                             alt="MAXIMO Servicios Logisticos"
                             class="app-drawer-mark"
                         >
                         <div class="app-drawer-brand-copy">
-                            <strong>MAXIMO WMS</strong>
                             <span>Panel de control</span>
                         </div>
                     </a>
@@ -123,11 +122,10 @@
 
                     <a href="{{ route('dashboard') }}" class="app-topbar-brand" aria-label="Ir al panel de control">
                         <img
-                            src="{{ asset('brand/maximo-icon.png') }}"
+                            src="{{ asset('brand/maximo-logo-horizontal.png') }}"
                             alt="MAXIMO Servicios Logisticos"
                             class="app-topbar-mark"
                         >
-                        <span class="app-topbar-label">MAXIMO</span>
                     </a>
 
                     <div class="app-topbar-copy">

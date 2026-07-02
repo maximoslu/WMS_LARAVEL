@@ -69,3 +69,35 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 **Pendientes:**
 - Extender el mismo lenguaje visual (fondo oscuro/contraste alto, cristal, degradados de marca) al resto de la aplicación (dashboard, stock, bookings, operaciones diarias, etc.) — pendiente de alcance y ejecución.
 - Los puntos P1/P2/P3 de la auditoría inicial (ver entrada anterior) siguen abiertos.
+
+---
+
+## 2026-07-02 — Extensión del estilo oscuro/cristal a toda la app logueada
+
+**Contexto:** Continuación directa del paso anterior. El usuario pidió extender el estilo del login (fondo oscuro, cristal, degradados de marca) a todo el proyecto, incluidas las pantallas de trabajo denso (stock, operaciones diarias). Antes de programar, se planteó al usuario una pregunta de alcance (¿solo el "chrome" o también las tablas de datos?, ¿por fases o todo de una vez?) dado el riesgo de perder legibilidad en pantallas operativas. El usuario eligió: aplicar el estilo a todo, incluidas las tablas, en una sola pasada.
+
+**Resumen de lo realizado:**
+- Se inspeccionó `resources/css/app.css` (5300 líneas) y se detectó que `.app-header`/`.app-nav`/`.ops-sidebar`/`.module-card`/`.app-overview-card`/`.app-stat` son **CSS muerto** (0 coincidencias en las vistas reales) de una iteración de diseño anterior — no se tocaron para no perder tiempo en código no usado.
+- Se identificó el sistema real y único que gobierna toda la app logueada: `resources/views/layouts/dashboard.blade.php` con `body.brand-body.app-shell-body`, y la clase `.surface-card` (191 usos) + `.compact-card` (155 usos) como envoltorio universal de tarjetas, tablas y formularios en los ~20 módulos.
+- Estrategia aplicada (igual que en el login): fondo de página oscuro con degradado de marca; las tarjetas/tablas que contienen datos permanecen en "cristal claro" (blanco, alto contraste) flotando sobre el fondo oscuro — así se logra el efecto en toda la interfaz sin sacrificar la legibilidad de tablas densas (stock, operaciones diarias, auditoría).
+- Cambios concretos en CSS (todos scoped a `body.brand-body.app-shell-body` para no afectar fuera del área logueada):
+  - Fondo de página: degradado oscuro (mismo lenguaje que el login, sin los orbes animados para no fatigar la vista en sesiones largas de trabajo).
+  - `.surface-card`: tratamiento cristal con borde brillante cian y sombra profunda.
+  - `.button-primary`: degradado cian → tinta (igual que el botón del login).
+  - Corrección del logo pixelado en topbar y menú lateral (mismo problema que en el login: `maximo-icon.png` de 16×16 px), sustituido por `maximo-logo-horizontal.png`, quitando el texto de marca duplicado.
+- **Bug encontrado y corregido durante la verificación visual:** el breadcrumb superior de cada página (`.ops-breadcrumb`, presente en 38 vistas) quedó con contraste insuficiente (gris oscuro sobre fondo oscuro) al no estar envuelto en una tarjeta. Se corrigió con un color claro scoped.
+- Verificación visual en navegador real con un usuario de prueba temporal (`preview-qa@local.test`, creado y **borrado** al terminar, sin tocar la cuenta real ni datos existentes): Dashboard, Stock (vista tabla y vista tarjetas móvil), menú lateral (drawer) abierto, Operaciones diarias. Todo con buen contraste y logo nítido.
+
+**Archivos modificados:**
+- `resources/css/app.css`
+- `resources/views/layouts/dashboard.blade.php`
+
+**Tests/build ejecutados:**
+- `npm run build` → OK (sin errores), dos veces (antes y después de la corrección del breadcrumb).
+- `php artisan test` → **245 passed, 0 failed**, 1127 aserciones.
+
+**Commit / push:** [PENDIENTE DE COMPLETAR TRAS EL COMMIT DE ESTE PASO]
+
+**Pendientes:**
+- Quedan sin auditar visualmente el resto de módulos no revisados en esta pasada (bookings, entradas, salidas, usuarios, clientes, proveedores, solicitudes, notificaciones, perfil) — se benefician automáticamente de los mismos cambios CSS globales, pero no se ha hecho una revisión visual pantalla por pantalla de cada uno.
+- Los puntos P1/P2/P3 de la auditoría inicial siguen abiertos.
