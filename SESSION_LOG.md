@@ -225,7 +225,7 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan test` → **262 passed, 0 failed** (257 previos + 5 nuevos), 1221 aserciones.
 - `npm run build` → OK.
 
-**Commit / push:** [PENDIENTE DE COMPLETAR TRAS EL COMMIT DE ESTE PASO]
+**Commit / push:** Commit `ff9dd66` ("fix: polish pedidos workflow ux"), pusheado a `origin/main` (`3bff27e..ff9dd66`). Sin migraciones nuevas; tras el deploy en Forge basta con `Deploy Now` + `php artisan optimize:clear` (no hace falta `migrate --force` ni `queue:restart` para este cambio).
 
 **Pendientes:**
 - Confirmar en Forge si GD/Imagick está instalado para que el logo aparezca en los PDFs en producción.
