@@ -9,7 +9,7 @@
 
 
         ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-        ['label' => $isClient ? 'Mi inventario' : 'Stock'],
+        ['label' => $isClient ? 'STOCK' : 'Stock'],
         ['label' => 'Inventario'],
         ];
     @endphp

@@ -2558,10 +2558,11 @@ body.brand-body.app-shell-body .app-topbar {
     position: sticky;
     top: 0.8rem;
     z-index: 50;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
     gap: 1rem;
+    width: 100%;
     min-height: 4.25rem;
     padding: 0.9rem 1.15rem;
     overflow: visible;
@@ -2585,6 +2586,16 @@ body.brand-body.app-shell-body .ops-toolbar-links {
     min-width: 0;
 }
 
+body.brand-body.app-shell-body .app-topbar-start {
+    flex: 1 1 auto;
+}
+
+body.brand-body.app-shell-body .app-topbar-end {
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
 body.brand-body.app-shell-body .app-topbar-copy,
 body.brand-body.app-shell-body .app-drawer-brand-copy,
 body.brand-body.app-shell-body .app-drawer-user-copy,
@@ -2592,6 +2603,10 @@ body.brand-body.app-shell-body .ops-page-headline {
     display: grid;
     gap: 0.18rem;
     min-width: 0;
+}
+
+body.brand-body.app-shell-body .app-topbar-copy {
+    flex: 1 1 auto;
 }
 
 body.brand-body.app-shell-body .app-topbar-copy strong,
@@ -2972,7 +2987,64 @@ body.brand-body.app-shell-body .btn-table {
 }
 
 body.brand-body.app-shell-body .ops-breadcrumb {
-    color: #667785;
+    font-size: 0.78rem;
+    color: #8ea3b5;
+    width: 100%;
+    padding: 0.1rem 0;
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-list {
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    width: 100%;
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-item {
+    gap: 0.32rem;
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-link,
+body.brand-body.app-shell-body .ops-breadcrumb-current {
+    min-height: 2rem;
+    padding: 0.36rem 0.72rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    backdrop-filter: blur(12px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-link {
+    color: #dcf6ff;
+    background: linear-gradient(180deg, rgba(15, 127, 147, 0.24), rgba(21, 37, 50, 0.18));
+    border-color: rgba(87, 204, 227, 0.2);
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-link:hover {
+    color: #f5fdff;
+    background: linear-gradient(180deg, rgba(24, 165, 194, 0.3), rgba(23, 44, 60, 0.26));
+    border-color: rgba(102, 224, 247, 0.34);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.56),
+        0 12px 24px rgba(4, 12, 18, 0.18);
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-current {
+    color: #f7fbfd;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(20, 36, 50, 0.3));
+    border-color: rgba(255, 255, 255, 0.16);
+    font-weight: 800;
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-separator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(214, 232, 241, 0.72);
+}
+
+body.brand-body.app-shell-body .ops-breadcrumb-separator-icon {
+    width: 0.78rem;
+    height: 0.78rem;
 }
 
 body.brand-body.app-shell-body .auth-input {
@@ -2993,32 +3065,6 @@ body.brand-body.app-shell-body .auth-field {
 body.brand-body.app-shell-body .auth-field span {
     font-size: 0.75rem;
     font-weight: 700;
-}
-
-body.brand-body.app-shell-body .ops-breadcrumb {
-    font-size: 0.78rem;
-}
-
-body.brand-body.app-shell-body .ops-breadcrumb-list {
-    gap: 0.35rem;
-    font-size: 0.78rem;
-}
-
-body.brand-body.app-shell-body .ops-breadcrumb-link {
-    color: #1c7083;
-}
-
-body.brand-body.app-shell-body .ops-breadcrumb-link:hover {
-    background: rgba(15, 127, 147, 0.12);
-}
-
-body.brand-body.app-shell-body .ops-breadcrumb-current {
-    color: #21313f;
-    background: rgba(24, 37, 50, 0.08);
-}
-
-body.brand-body.app-shell-body .ops-breadcrumb-separator {
-    color: rgba(102, 119, 133, 0.72);
 }
 
 body.brand-body.app-shell-body .ops-page-header,
@@ -3383,6 +3429,8 @@ body.brand-body.app-shell-body .pagination-card {
     body.brand-body.app-shell-body .app-topbar {
         top: 0.5rem;
         padding: 0.78rem 0.85rem;
+        grid-template-columns: 1fr;
+        align-items: start;
     }
 
     body.brand-body.app-shell-body .app-topbar-label,
@@ -3400,6 +3448,10 @@ body.brand-body.app-shell-body .pagination-card {
 
     body.brand-body.app-shell-body .app-topbar-action-copy {
         display: none;
+    }
+
+    body.brand-body.app-shell-body .app-topbar-end {
+        justify-content: flex-start;
     }
 
     body.brand-body.app-shell-body .ops-page-header,

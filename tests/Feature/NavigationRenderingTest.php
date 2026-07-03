@@ -22,4 +22,25 @@ class NavigationRenderingTest extends TestCase
         $this->assertStringContainsString('<svg', $html);
         $this->assertStringContainsString('rect', $html);
     }
+
+    public function test_breadcrumb_renders_svg_separator_without_mojibake_and_keeps_current_item_plain(): void
+    {
+        $html = Blade::render(
+            <<<'BLADE'
+<x-breadcrumbs
+    :items="[
+        ['label' => 'Panel de control', 'href' => '/dashboard', 'icon' => 'dashboard'],
+        ['label' => 'Stock', 'href' => '/stock'],
+        ['label' => 'Inventario'],
+    ]"
+/>
+BLADE
+        );
+
+        $this->assertStringContainsString('Panel de control', $html);
+        $this->assertStringContainsString('ops-breadcrumb-separator-icon', $html);
+        $this->assertStringContainsString('aria-current="page"', $html);
+        $this->assertStringNotContainsString('â€º', $html);
+        $this->assertStringNotContainsString('href="/inventario"', $html);
+    }
 }

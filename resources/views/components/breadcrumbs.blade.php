@@ -17,7 +17,17 @@
 
                 <li class="ops-breadcrumb-item">
                     @unless ($loop->first)
-                        <span class="ops-breadcrumb-separator" aria-hidden="true">â€º</span>
+                        <span class="ops-breadcrumb-separator" aria-hidden="true">
+                            <svg viewBox="0 0 16 16" fill="none" class="ops-breadcrumb-separator-icon">
+                                <path
+                                    d="M6 3.5L10.5 8L6 12.5"
+                                    stroke="currentColor"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="1.5"
+                                />
+                            </svg>
+                        </span>
                     @endunless
 
                     @if ($href)

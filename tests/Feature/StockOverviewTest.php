@@ -57,6 +57,36 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('Codigo pallet');
     }
 
+    public function test_stock_index_renders_expected_breadcrumb_segments_without_mojibake(): void
+    {
+        [$client] = $this->seedBaseData();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-BREAD-01',
+            'description' => 'Stock con breadcrumb',
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-BREAD-01',
+            'quantity_units' => 120,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('Panel de control')
+            ->assertSee('Stock')
+            ->assertSee('Inventario')
+            ->assertSee(route('dashboard'), false)
+            ->assertSee('aria-current="page"', false)
+            ->assertDontSee('â€º', false)
+            ->assertDontSee('href="'.route('stock.index').'">Inventario', false);
+    }
+
     public function test_cliente_can_view_only_own_stock_inventory(): void
     {
         [$friesland, $edelvives] = $this->seedBaseData();
