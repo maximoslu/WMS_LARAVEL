@@ -238,9 +238,13 @@ class GoodsDispatchController extends Controller
 
         $warning = $workflowService->changeStatus($goodsDispatch, $validated['status'], $request->user());
 
+        $statusMessage = $validated['status'] === GoodsDispatch::STATUS_SENT
+            ? 'Salida enviada y stock actualizado correctamente.'
+            : 'Estado de salida actualizado correctamente.';
+
         $response = redirect()
             ->route('dispatches.show', $goodsDispatch->fresh())
-            ->with('status', 'Estado de salida actualizado correctamente.');
+            ->with('status', $statusMessage);
 
         if ($warning !== null) {
             $response->with('warning', $warning);

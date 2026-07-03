@@ -13,6 +13,7 @@ class GoodsDispatchWorkflowService
 {
     public function __construct(
         private readonly MerchandiseRequestNotificationService $notificationService,
+        private readonly StockDispatchAllocationService $stockAllocationService,
     ) {}
 
     /**
@@ -147,6 +148,16 @@ class GoodsDispatchWorkflowService
 
             if ($newStatus === GoodsDispatch::STATUS_COMPLETED && $dispatch->completed_at === null) {
                 $dispatchPayload['completed_at'] = now();
+            }
+
+            if (
+                in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)
+                && ! $dispatch->hasStockApplied()
+            ) {
+                $this->stockAllocationService->apply($dispatch);
+
+                $dispatchPayload['stock_applied_at'] = now();
+                $dispatchPayload['stock_applied_by'] = $user->id;
             }
 
             $dispatch->update($dispatchPayload);

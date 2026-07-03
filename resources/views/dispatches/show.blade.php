@@ -131,9 +131,15 @@
                         </a>
                     @endif
 
-                    <div class="dispatch-inline-help dispatch-stock-warning">
-                        La selección de lote ya queda visible por línea. El descuento real de stock sigue pendiente para una fase posterior.
-                    </div>
+                    @if ($dispatch->hasStockApplied())
+                        <span class="status-chip status-chip--success">
+                            Stock descontado el {{ $dispatch->stock_applied_at->format('d/m/Y H:i') }}
+                        </span>
+                    @else
+                        <div class="dispatch-inline-help dispatch-stock-warning">
+                            Stock pendiente de descontar al enviar.
+                        </div>
+                    @endif
                 </div>
             </div>
         </article>

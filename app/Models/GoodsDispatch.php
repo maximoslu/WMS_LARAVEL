@@ -38,6 +38,8 @@ class GoodsDispatch extends Model
         'sent_at',
         'completed_at',
         'delivery_note_sent_at',
+        'stock_applied_at',
+        'stock_applied_by',
         'notes',
     ];
 
@@ -47,6 +49,7 @@ class GoodsDispatch extends Model
             'sent_at' => 'datetime',
             'completed_at' => 'datetime',
             'delivery_note_sent_at' => 'datetime',
+            'stock_applied_at' => 'datetime',
         ];
     }
 
@@ -90,6 +93,16 @@ class GoodsDispatch extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function stockAppliedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'stock_applied_by');
+    }
+
+    public function hasStockApplied(): bool
+    {
+        return $this->stock_applied_at !== null;
     }
 
     public function lines(): HasMany

@@ -237,6 +237,11 @@ button {
     color: var(--brand-cyan-dark);
 }
 
+.status-chip--success {
+    background: #deefe4;
+    color: #114734;
+}
+
 .role-badge,
 .module-tag {
     background: rgba(19, 34, 46, 0.08);
