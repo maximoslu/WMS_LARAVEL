@@ -55,7 +55,7 @@
             </label>
 
             <label class="auth-field">
-                <span>NÂº pallets previstos</span>
+                <span>Nº pallets previstos</span>
                 <input type="number" min="0" name="pallets_expected" value="{{ old('pallets_expected', $booking?->pallets_expected) }}" class="auth-input">
             </label>
 

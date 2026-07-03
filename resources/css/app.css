@@ -3047,6 +3047,16 @@ body.brand-body.app-shell-body .ops-breadcrumb-separator-icon {
     height: 0.78rem;
 }
 
+body.brand-body.app-shell-body .alert-success {
+    background: #deefe4;
+    color: #114734;
+}
+
+body.brand-body.app-shell-body .alert-error {
+    background: #f5dede;
+    color: #8f2020;
+}
+
 body.brand-body.app-shell-body .auth-input {
     width: 100%;
     min-height: 2.45rem;
@@ -5001,6 +5011,13 @@ body.brand-body.app-shell-body .pagination-card {
     border-radius: 14px;
     background: #fff;
     box-shadow: 0 18px 40px rgba(21, 41, 59, 0.12);
+    max-height: min(20rem, 60vh);
+    overflow-y: auto;
+}
+
+.ajax-autocomplete-panel--flip {
+    top: auto;
+    bottom: calc(100% + 0.35rem);
 }
 
 .ajax-autocomplete-status {
@@ -5523,7 +5540,7 @@ body.brand-body.app-shell-body .pagination-card {
 
 .alert-success {
     border: 1px solid rgba(22, 104, 77, 0.24);
-    background: linear-gradient(180deg, rgba(22, 104, 77, 0.24), rgba(255, 255, 255, 0.96));
+    background: #deefe4;
     color: #114734;
 }
 
@@ -5541,7 +5558,9 @@ body.brand-body.app-shell-body .pagination-card {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 252, 0.94));
 }
 
-.wms-flow-hero {
+.wms-flow-hero,
+.wms-flow-card,
+.wms-empty-state {
     display: grid;
     gap: 1rem;
     padding: 1.2rem;
@@ -5665,10 +5684,12 @@ body.brand-body.app-shell-body .pagination-card {
 
 .wms-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
 }
 
 .wms-action-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
 }
 
 .wms-action-card,

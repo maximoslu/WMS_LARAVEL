@@ -112,7 +112,10 @@
                             @endunless
                             <th>Fecha</th>
                             <th>Resumen</th>
-                            <th>Total pallets</th>
+                            <th>Pallets</th>
+                            <th>Picos</th>
+                            <th>Unidades</th>
+                            <th>Salida</th>
                             <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
@@ -138,6 +141,21 @@
                                     </div>
                                 </td>
                                 <td>{{ number_format($merchandiseRequest->requestedPalletsCount(), 0, ',', '.') }}</td>
+                                <td>{{ number_format($merchandiseRequest->requestedPeaksCount(), 0, ',', '.') }}</td>
+                                <td>{{ number_format((int) $merchandiseRequest->lines->sum('requested_units'), 0, ',', '.') }}</td>
+                                <td>
+                                    @if ($merchandiseRequest->dispatch)
+                                        @unless ($isClient)
+                                            <a href="{{ route('dispatches.show', $merchandiseRequest->dispatch) }}" class="wms-line-type-pill wms-line-type-pill--pallet">
+                                                {{ $merchandiseRequest->dispatch->dispatchNumber() }}
+                                            </a>
+                                        @else
+                                            <span class="wms-line-type-pill wms-line-type-pill--pallet">{{ $merchandiseRequest->dispatch->dispatchNumber() }}</span>
+                                        @endunless
+                                    @else
+                                        <span class="text-muted">Sin salida</span>
+                                    @endif
+                                </td>
                                 <td>
                                     <span class="status-badge merchandise-request-status merchandise-request-status--{{ $merchandiseRequest->status }}">
                                         {{ $merchandiseRequest->statusLabel() }}

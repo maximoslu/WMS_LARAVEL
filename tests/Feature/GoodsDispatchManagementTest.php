@@ -264,6 +264,46 @@ class GoodsDispatchManagementTest extends TestCase
         ]);
     }
 
+    public function test_request_and_dispatch_pages_do_not_render_mojibake(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 40]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 40,
+            'requested_pallets' => 2,
+            'requested_peaks' => 0,
+            'requested_units' => 80,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        $dispatch = GoodsDispatch::query()->firstOrFail();
+
+        foreach ([
+            route('dispatches.requests.show', $merchandiseRequest),
+            route('dispatches.show', $dispatch),
+            route('dispatches.index'),
+        ] as $url) {
+            $html = $this->actingAs($almacen)->get($url)->assertOk()->getContent();
+
+            $this->assertStringNotContainsString('Ã', $html, "Mojibake found at {$url}");
+            $this->assertStringNotContainsString('â€', $html, "Mojibake found at {$url}");
+        }
+    }
+
     public function test_changing_dispatch_status_to_sent_sets_sent_at(): void
     {
         $this->seedBaseData();

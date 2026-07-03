@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Jobs\ProcessMerchandiseRequestSubmittedNotificationsJob;
 use App\Models\Client;
+use App\Models\GoodsDispatch;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
+use App\Models\MerchandiseRequestLine;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\User;
@@ -444,6 +446,118 @@ class MerchandiseRequestManagementTest extends TestCase
                 ->get(route('merchandise-requests.index'))
                 ->assertOk()
                 ->assertSee($request->referenceCode());
+        }
+    }
+
+    public function test_internal_listing_shows_peaks_units_and_associated_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 40]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 3,
+            'requested_peaks' => 0,
+            'requested_units' => 120,
+            'units_per_pallet' => 40,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'peak',
+            'requested_pallets' => 0,
+            'requested_peaks' => 1,
+            'requested_units' => 15,
+            'units_per_pallet' => 40,
+            'units_per_peak' => 15,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'type' => GoodsDispatch::TYPE_REQUEST,
+        ]);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($almacen)
+            ->get(route('merchandise-requests.index'))
+            ->assertOk()
+            ->assertSee($request->referenceCode())
+            ->assertSee('135') // total units (120 + 15)
+            ->assertSee($dispatch->dispatchNumber());
+    }
+
+    public function test_request_detail_shows_pallet_and_peak_type_badges(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 40]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 2,
+            'requested_peaks' => 0,
+            'requested_units' => 80,
+            'units_per_pallet' => 40,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'peak',
+            'requested_pallets' => 0,
+            'requested_peaks' => 1,
+            'requested_units' => 15,
+            'units_per_pallet' => 40,
+            'units_per_peak' => 15,
+        ]);
+
+        $this->actingAs($requester)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('Pallet completo')
+            ->assertSee('Pico');
+    }
+
+    public function test_create_and_show_pages_do_not_render_mojibake(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 40]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+        ]);
+
+        foreach ([
+            route('merchandise-requests.create'),
+            route('merchandise-requests.show', $request),
+            route('merchandise-requests.index'),
+        ] as $url) {
+            $html = $this->actingAs($cliente)->get($url)->assertOk()->getContent();
+
+            $this->assertStringNotContainsString('Ã', $html, "Mojibake found at {$url}");
+            $this->assertStringNotContainsString('â€', $html, "Mojibake found at {$url}");
         }
     }
 

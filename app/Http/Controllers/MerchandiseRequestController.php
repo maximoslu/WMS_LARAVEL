@@ -33,7 +33,7 @@ class MerchandiseRequestController extends Controller
         $clientId = $request->integer('client_id');
 
         $requests = MerchandiseRequest::query()
-            ->with(['client', 'requestedBy', 'lines.item'])
+            ->with(['client', 'requestedBy', 'lines.item', 'dispatch'])
             ->when($isClient, fn (Builder $query) => $query->where('client_id', $user->client_id))
             ->when(! $isClient && $clientId > 0, fn (Builder $query) => $query->where('client_id', $clientId))
             ->when($status !== 'all' && in_array($status, MerchandiseRequest::statuses(), true), fn (Builder $query) => $query->where('status', $status))

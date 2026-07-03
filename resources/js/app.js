@@ -128,7 +128,7 @@ const renderVariantPreview = (item, quantity = null) => {
     if (!item) {
         return `
             <strong>Selecciona una referencia para ver el detalle</strong>
-            <p>Lote, unidades, disponibilidad y tipo de lÃ­nea aparecerÃ¡n aquÃ­ antes de aÃ±adirla.</p>
+            <p>Lote, unidades, disponibilidad y tipo de línea aparecerán aquí antes de añadirla.</p>
         `;
     }
 
@@ -136,9 +136,9 @@ const renderVariantPreview = (item, quantity = null) => {
         ? `<span>${escapeHtml(formatRequestedQuantity(item, quantity))}</span>`
         : '';
     const lotMarkup = item.lot ? `<span>Lote ${escapeHtml(item.lot)}</span>` : '<span>Sin lote</span>';
-    const locationMarkup = item.location_text ? `<span>UbicaciÃ³n ${escapeHtml(item.location_text)}</span>` : '';
+    const locationMarkup = item.location_text ? `<span>Ubicación ${escapeHtml(item.location_text)}</span>` : '';
     const availability = item.line_type === 'peak'
-        ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} Â· ${escapeHtml(formatVariantUnits(item))}`
+        ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} · ${escapeHtml(formatVariantUnits(item))}`
         : item.available_pallets
             ? `${formatNumber.format(item.available_pallets)} pallets visibles`
             : 'Pallet genÃ©rico';
@@ -164,7 +164,7 @@ const renderVariantPreview = (item, quantity = null) => {
 const renderVariantAutocompleteOption = (item) => {
     const typeClass = item.line_type === 'peak' ? 'wms-line-type-pill--peak' : 'wms-line-type-pill--pallet';
     const availability = item.line_type === 'peak'
-        ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} Â· ${escapeHtml(formatVariantUnits(item))}`
+        ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} · ${escapeHtml(formatVariantUnits(item))}`
         : item.available_pallets
             ? `${formatNumber.format(item.available_pallets)} pallets disponibles`
             : 'Pallet genÃ©rico';
@@ -172,8 +172,8 @@ const renderVariantAutocompleteOption = (item) => {
         item.lot ? `Lote ${item.lot}` : 'Sin lote',
         formatVariantUnits(item),
         item.available_peaks ? `${formatNumber.format(item.available_peaks)} picos` : null,
-        item.location_text ? `UbicaciÃ³n ${item.location_text}` : null,
-    ].filter(Boolean).join(' Â· ');
+        item.location_text ? `Ubicación ${item.location_text}` : null,
+    ].filter(Boolean).join(' · ');
 
     return `
         <div class="wms-autocomplete-option">
@@ -222,9 +222,20 @@ const createAutocomplete = (root, options = {}) => {
         status.textContent = message;
     };
 
+    const positionPanel = () => {
+        const rootRect = root.getBoundingClientRect();
+        const estimatedPanelHeight = Math.min(panel.scrollHeight || 320, 320);
+        const spaceBelow = window.innerHeight - rootRect.bottom;
+        const spaceAbove = rootRect.top;
+        const shouldFlip = spaceBelow < estimatedPanelHeight && spaceAbove > spaceBelow;
+
+        panel.classList.toggle('ajax-autocomplete-panel--flip', shouldFlip);
+    };
+
     const openPanel = () => {
         panel.hidden = false;
         root.classList.add('is-open');
+        positionPanel();
     };
 
     const closePanel = () => {
@@ -268,6 +279,10 @@ const createAutocomplete = (root, options = {}) => {
                 `}
             </button>
         `).join('');
+
+        if (!panel.hidden) {
+            positionPanel();
+        }
     };
 
     const fetchResults = async () => {

@@ -13,16 +13,30 @@
             .meta-grid { width: 100%; margin-top: 12px; }
             .meta-grid td { border: 0; padding: 0 12px 8px 0; }
             .meta-label { color: #6b7d8a; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
-            .brand { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #d9e4ea; }
+            .brand { width: 100%; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #d9e4ea; }
+            .brand td { border: 0; padding: 0; vertical-align: middle; }
+            .brand-logo { width: 140px; }
             .brand strong { display: block; font-size: 18px; }
             .notes { margin-top: 24px; border: 1px solid #cdd7df; min-height: 120px; padding: 12px; }
         </style>
     </head>
     <body>
-        <div class="brand">
-            <h2>MAXIMO SERVICIOS LOGISTICOS</h2>
-            <strong>Hoja de preparación de pedido</strong>
-        </div>
+        @php($logoPath = public_path('brand/maximo-logo-horizontal.png'))
+        @php($logoAvailable = file_exists($logoPath) && (extension_loaded('gd') || extension_loaded('imagick')))
+
+        <table class="brand">
+            <tr>
+                @if ($logoAvailable)
+                    <td class="brand-logo">
+                        <img src="{{ $logoPath }}" alt="Maximo Servicios Logisticos" width="130">
+                    </td>
+                @endif
+                <td>
+                    <h2>MAXIMO SERVICIOS LOGISTICOS</h2>
+                    <strong>Hoja de preparación de pedido</strong>
+                </td>
+            </tr>
+        </table>
 
         <table class="meta-grid">
             <tr>

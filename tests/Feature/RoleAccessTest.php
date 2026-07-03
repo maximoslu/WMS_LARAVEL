@@ -69,6 +69,17 @@ class RoleAccessTest extends TestCase
             ->assertSee(route('merchandise-requests.create'), false);
     }
 
+    public function test_almacen_sees_pedidos_link_pointing_to_internal_listing(): void
+    {
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Pedidos')
+            ->assertSee(route('merchandise-requests.index'), false);
+    }
+
     public function test_higher_role_can_access_lower_role_route(): void
     {
         $user = $this->makeUserWithRole(Role::SUPERADMIN);

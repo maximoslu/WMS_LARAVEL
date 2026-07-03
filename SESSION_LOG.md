@@ -179,3 +179,55 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
   - `npm run build` OK
 - El push ya esta hecho en `origin/main` con `c1da968`.
 - Lo siguiente a revisar no es funcionalidad base de stock, sino pulido serio de UX/UI y correccion de textos rotos en PEDIDOS / SALIDAS.
+
+---
+
+## 2026-07-03 — Pulido UX/UI de PEDIDOS y SALIDAS tras el hito de picos/pallets
+
+**Contexto:** Continuación directa del traspaso anterior (commit `c1da968`). Se pidió corregir mojibake, mejorar en profundidad crear/detalle de pedido cliente, dar acceso directo "Pedidos" a roles internos, mejorar el listado, pulir gestión interna de pedido/salida, arreglar el panel de "añadir referencia a la carga", añadir logo al albarán/preparación PDF, y tests — todo sin tocar Google Calendar, importación Friesland/Edelvives, facturación ni las reglas de stock por cliente.
+
+**Hallazgo inicial importante:** gran parte de la maquetación "pedido/salida" (sistema `.wms-flow-card`, `.wms-line-type-pill`, KPIs, timeline, breadcrumbs con iconos) ya estaba bien construida por trabajo previo (commits `c1da968`, `4f87109`, `a704e29`, `2bb22fd`). Se verificó en vivo con navegador (usuarios de prueba temporales, creados y borrados al terminar) antes de rediseñar nada a ciegas, para no reescribir código que ya funcionaba bien.
+
+**Bugs reales encontrados y corregidos (verificados con `preview_inspect`, no solo visualmente):**
+- `.wms-flow-card` y `.wms-empty-state` no tenían **ningún padding** definido en `app.css` — causaba el efecto "bloques pegados" que reportó el usuario. Corregido añadiendo `padding: 1.2rem`.
+- `.wms-detail-grid`/`.wms-action-grid` no fijaban `align-items`, así que el grid estiraba las tarjetas cortas a la altura de la más alta (p. ej. "Resumen rápido" con hueco vacío enorme junto a "Seguimiento"). Corregido con `align-items: start`.
+- `.alert-success` tenía un degradado semitransparente (`rgba(...,0.24)` → blanco) que sobre el fondo oscuro nuevo del shell dejaba el texto casi ilegible — exactamente el "texto perdido" que pedía arreglar el usuario. Corregido a fondo sólido `#deefe4`, con el mismo tratamiento para `.alert-error` scoped a `body.brand-body.app-shell-body`.
+- El panel de autocompletar (`.ajax-autocomplete-panel`, usado en "Añadir referencia a la carga" de `dispatches/show.blade.php`) se posicionaba siempre hacia abajo (`position:absolute; top:...`) sin detección de colisión, y en filas bajas de la página se salía por debajo del viewport (confirmado con `getBoundingClientRect()`: 79px fuera de pantalla). Corregido con lógica de "flip up" en `resources/js/app.js` (`positionPanel()`) + clase CSS `.ajax-autocomplete-panel--flip`.
+- Mojibake real (UTF-8 roto) encontrado y corregido: 7 ocurrencias en `resources/js/app.js` (picker de variantes de stock) y 1 en `resources/views/bookings/_form.blade.php`. Los dos casos en tests (`StockOverviewTest`, `NavigationRenderingTest`) eran comprobaciones de *ausencia* de mojibake, no bugs.
+
+**Acceso PEDIDOS para internos:** se evitó crear una entrada de menú duplicada (primer intento generó "Pedidos" y "Solicitar mercancia" apuntando a la misma ruta — se detectó en vivo y se corrigió). Solución final: un solo cambio de título en `config/wms.php` (`solicitudes` → "Pedidos"), reutilizando la ruta `merchandise-requests.index` ya multi-rol. Bookings intacto.
+
+**Listado de PEDIDOS mejorado:** columnas Picos, Unidades y Salida asociada (enlace a la salida si existe) añadidas a `merchandise-requests/index.blade.php`, con `dispatch` añadido al eager-load del controlador para evitar N+1.
+
+**Logo en PDFs:** `dispatches/delivery-note-pdf.blade.php` y `merchandise-requests/preparation-pdf.blade.php` ahora incluyen el logo (`public_path()`, no `asset()`, por compatibilidad con dompdf). **Riesgo real detectado y mitigado:** el entorno local no tiene la extensión PHP GD instalada, y dompdf no puede renderizar `<img>` sin GD/Imagick — esto rompió 3 tests (`500` en vez de `200`). Se añadió un guard `extension_loaded('gd') || extension_loaded('imagick')` para que el logo solo se intente si el servidor lo soporta, cayendo a texto si no — exactamente el fallback que pedía el usuario. **Pendiente de confirmar en Forge/producción si GD o Imagick están instalados**; si no lo están, el logo no aparecerá (pero el PDF seguirá generándose sin error).
+
+**CSS reutilizable:** no se crearon clases nuevas `pedido-*` como sugería el enunciado — el sistema `wms-*` ya existente (`wms-flow-card`, `wms-line-type-pill`, `wms-detail-grid`, etc.) cubre exactamente ese rol y ya está usado de forma consistente en todo el módulo. Crear una nomenclatura paralela habría fragmentado el sistema de diseño en vez de consolidarlo, así que se optó por corregir/reforzar el sistema existente.
+
+**Incidente de datos local (a tener en cuenta):** durante la limpieza de datos de prueba (usuarios, item y stock QA temporales) se ejecutó una query de limpieza más amplia de lo previsto (`MerchandiseRequest::query()->delete()`, `GoodsDispatch::where('client_id', ...)->delete()`) que borró un `GoodsDispatch` (id 1) y su `MerchandiseRequest` asociada que ya existían en la base de datos local **antes** de esta sesión — con contenido tipo Faker/lorem ipsum ("BASE0001"/"EXTRA0001"), consistente con datos de prueba de una sesión anterior (probablemente de Codex), no datos reales de negocio. Es solo base de datos local de desarrollo, no producción, pero se deja constancia explícita.
+
+**Archivos modificados:**
+- `app/Http/Controllers/MerchandiseRequestController.php`
+- `config/wms.php`
+- `resources/css/app.css`
+- `resources/js/app.js`
+- `resources/views/bookings/_form.blade.php`
+- `resources/views/dispatches/delivery-note-pdf.blade.php`
+- `resources/views/merchandise-requests/index.blade.php`
+- `resources/views/merchandise-requests/preparation-pdf.blade.php`
+- `tests/Feature/GoodsDispatchManagementTest.php`
+- `tests/Feature/MerchandiseRequestManagementTest.php`
+- `tests/Feature/RoleAccessTest.php`
+
+**Migraciones nuevas:** ninguna.
+
+**Tests/build:**
+- `php artisan optimize:clear` → OK.
+- `php artisan test` → **262 passed, 0 failed** (257 previos + 5 nuevos), 1221 aserciones.
+- `npm run build` → OK.
+
+**Commit / push:** [PENDIENTE DE COMPLETAR TRAS EL COMMIT DE ESTE PASO]
+
+**Pendientes:**
+- Confirmar en Forge si GD/Imagick está instalado para que el logo aparezca en los PDFs en producción.
+- No se hizo una revisión visual exhaustiva de "Salida enviada/completada" con datos reales de envío completo (se revisó la estructura y los estilos base, que ya heredan las correcciones de padding/alerts, pero no se forzó el flujo completo hasta "completado").
+- Los puntos P1/P2/P3 de la auditoría inicial siguen abiertos.
