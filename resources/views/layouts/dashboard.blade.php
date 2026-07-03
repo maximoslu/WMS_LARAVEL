@@ -72,8 +72,17 @@
                                 @foreach ($section['children'] as $child)
                                     @php($isActive = request()->routeIs(...($child['active_patterns'] ?? [$child['route']])))
 
-                                    <a href="{{ route($child['route']) }}" class="ops-nav-link{{ $isActive ? ' is-active' : '' }}">
-                                        <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
+                                    <a href="{{ route($child['display_route'] ?? $child['route']) }}" class="ops-nav-link{{ $isActive ? ' is-active' : '' }}">
+                                        <span class="module-link-body">
+                                            @if (! empty($child['display_icon']))
+                                                <span class="module-link-icon" aria-hidden="true">
+                                                    <x-module-icon :name="$child['display_icon']" />
+                                                </span>
+                                            @endif
+                                            <span class="module-link-copy">
+                                                <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
+                                            </span>
+                                        </span>
                                         <span class="ops-link-meta">
                                             <span class="ops-status badge-compact {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
                                                 {{ $child['status_label'] }}

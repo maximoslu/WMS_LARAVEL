@@ -24,19 +24,23 @@
     @if ($notifications->isEmpty())
         <article class="surface-card item-empty-state compact-card">
             <span class="status-chip small-badge badge-compact">Sin avisos</span>
-            <h3>No hay notificaciones para mostrar</h3>
-            <p>Cuando el sistema registre avisos operativos aparecerán aquí.</p>
+            <h3>No hay notificaciones recientes.</h3>
+            <p>Cuando el sistema registre avisos operativos apareceran aqui.</p>
         </article>
     @else
+        <section class="surface-card compact-card notification-summary-card">
+            <strong>Mostrando {{ $notifications->firstItem() }}-{{ $notifications->lastItem() }} de {{ $notifications->total() }} notificaciones</strong>
+        </section>
+
         <section class="notification-list">
             @foreach ($notifications as $notification)
                 <article class="surface-card compact-card notification-card{{ $notification->read_at === null ? ' is-unread' : '' }}">
                     <div class="notification-card-head">
                         <div>
-                            <strong>{{ $notification->data['title'] ?? 'Notificación' }}</strong>
+                            <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
                             <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
                         </div>
-                        <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leída' }}</span>
+                        <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
                     </div>
 
                     <div class="notification-card-meta">
@@ -50,7 +54,7 @@
                                 <form method="POST" action="{{ route('notifications.read', $notification->id) }}">
                                     @csrf
                                     @method('PATCH')
-                                    <button type="submit" class="button-secondary compact-button btn-table">Marcar leída</button>
+                                    <button type="submit" class="button-secondary compact-button btn-table">Marcar leida</button>
                                 </form>
                             @endif
                         </div>

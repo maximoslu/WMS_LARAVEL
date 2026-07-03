@@ -2785,6 +2785,38 @@ body.brand-body.app-shell-body .ops-action-card strong {
     font-size: 0.86rem;
 }
 
+body.brand-body.app-shell-body .module-link-body {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .module-link-copy {
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .module-link-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 0.9rem;
+    color: #0f7f93;
+    background: linear-gradient(180deg, rgba(15, 127, 147, 0.16), rgba(15, 127, 147, 0.06));
+    border: 1px solid rgba(15, 127, 147, 0.16);
+    flex: 0 0 auto;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+body.brand-body.app-shell-body .module-link-icon-svg {
+    width: 1.15rem;
+    height: 1.15rem;
+}
+
 body.brand-body.app-shell-body .ops-nav-link:hover,
 body.brand-body.app-shell-body .ops-index-link:hover,
 body.brand-body.app-shell-body .ops-action-card:hover {
@@ -4312,6 +4344,7 @@ body.brand-body.app-shell-body .pagination-card {
 
 .dashboard-notifications-card,
 .dashboard-calendar-card,
+.notification-summary-card,
 .notification-list,
 .dispatch-entry-grid,
 .dispatch-builder,
@@ -4412,6 +4445,10 @@ body.brand-body.app-shell-body .pagination-card {
 .dashboard-notification-item strong {
     color: #13212c;
     font-size: 0.88rem;
+}
+
+.notification-summary-card {
+    padding: 0.95rem 1.05rem;
 }
 
 .dashboard-notification-meta span:last-child {

@@ -92,18 +92,23 @@ class WmsNavigation
     {
         $status = $child['status'] ?? 'ready';
         $displayTitle = $child['title'];
+        $displayRoute = $child['route'];
+        $displayIcon = null;
 
-        if ($user?->hasRole(Role::CLIENTE) && ($child['key'] ?? null) === 'bookings') {
-            $displayTitle = 'Solicitudes';
-        }
-
-        if ($user?->hasRole(Role::CLIENTE) && ($child['key'] ?? null) === 'stock') {
-            $displayTitle = 'Mi inventario';
+        if ($user?->hasRole(Role::CLIENTE)) {
+            match ($child['key'] ?? null) {
+                'stock' => [$displayTitle, $displayRoute, $displayIcon] = ['STOCK', 'stock.index', 'stock'],
+                'bookings' => [$displayTitle, $displayRoute, $displayIcon] = ['BOOKING', 'bookings.index', 'booking'],
+                'solicitudes' => [$displayTitle, $displayRoute, $displayIcon] = ['PEDIDOS', 'merchandise-requests.create', 'orders'],
+                default => null,
+            };
         }
 
         return [
             ...$child,
             'display_title' => $displayTitle,
+            'display_route' => $displayRoute,
+            'display_icon' => $displayIcon,
             'status' => $status,
             'status_label' => match ($status) {
                 'ready' => 'Disponible',

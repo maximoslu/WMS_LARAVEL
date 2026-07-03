@@ -15,7 +15,7 @@ class NotificationController extends Controller
             'notifications' => $request->user()
                 ->notifications()
                 ->latest()
-                ->paginate(20)
+                ->paginate(10)
                 ->withQueryString(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);

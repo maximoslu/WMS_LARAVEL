@@ -33,8 +33,17 @@
 
                 <div class="ops-index-list">
                     @foreach ($section['children'] as $child)
-                        <a href="{{ route($child['route']) }}" class="ops-index-link{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}">
-                            <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
+                        <a href="{{ route($child['display_route'] ?? $child['route']) }}" class="ops-index-link{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}">
+                            <span class="module-link-body">
+                                @if (! empty($child['display_icon']))
+                                    <span class="module-link-icon" aria-hidden="true">
+                                        <x-module-icon :name="$child['display_icon']" />
+                                    </span>
+                                @endif
+                                <span class="module-link-copy">
+                                    <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
+                                </span>
+                            </span>
                             <span class="ops-status badge-compact {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
                                 {{ $child['status_label'] }}
                             </span>
@@ -48,7 +57,7 @@
     <section class="surface-card compact-card dashboard-calendar-card">
         <div class="ops-section-heading dashboard-notifications-header">
             <div class="dashboard-notifications-intro">
-                <strong>{{ $isClient ? 'Agenda de solicitudes' : 'Agenda operativa WMS' }}</strong>
+                <strong>{{ $isClient ? 'Agenda de BOOKING' : 'Agenda operativa WMS' }}</strong>
                 <p class="merchandise-request-summary-copy">
                     Semana operativa del {{ $bookingCalendarStart->format('d/m') }} al {{ $bookingCalendarEnd->format('d/m') }}.
                 </p>
@@ -85,7 +94,7 @@
     <section class="surface-card compact-card dashboard-notifications-card">
         <div class="ops-section-heading dashboard-notifications-header">
             <div class="dashboard-notifications-intro">
-                <strong>{{ $isClient ? 'Proximas solicitudes' : 'Proximos bookings' }}</strong>
+                <strong>{{ $isClient ? 'Proximos BOOKING' : 'Proximos bookings' }}</strong>
                 <p class="merchandise-request-summary-copy">
                     {{ $isClient ? 'Consulta tus entradas y salidas previstas de un vistazo.' : 'Agenda operativa interna y proximas solicitudes previstas.' }}
                 </p>
@@ -95,7 +104,7 @@
 
         @if ($upcomingBookings->isEmpty())
             <div class="merchandise-request-summary-empty dashboard-notifications-empty">
-                {{ $isClient ? 'No hay solicitudes proximas para este usuario.' : 'No hay bookings proximos para este usuario.' }}
+                {{ $isClient ? 'No hay bookings proximos para este usuario.' : 'No hay bookings proximos para este usuario.' }}
             </div>
         @else
             <div class="dashboard-notification-list">
@@ -124,7 +133,7 @@
 
         @if ($recentNotifications->isEmpty())
             <div class="merchandise-request-summary-empty dashboard-notifications-empty">
-                No hay notificaciones recientes para este usuario.
+                No hay notificaciones recientes.
             </div>
         @else
             <div class="dashboard-notification-list">

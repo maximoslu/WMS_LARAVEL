@@ -44,11 +44,27 @@ class RoleAccessTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Solicitar mercancia')
-            ->assertSee('Mi inventario')
+            ->assertSee('STOCK')
+            ->assertSee('BOOKING')
+            ->assertSee('PEDIDOS')
+            ->assertDontSee('Mi inventario')
+            ->assertDontSee('Solicitudes')
+            ->assertDontSee('Solicitar mercancia')
             ->assertDontSee('Usuarios y roles')
             ->assertDontSee('Backups')
             ->assertDontSee('Auditoria y trazabilidad');
+    }
+
+    public function test_cliente_dashboard_links_stock_booking_and_pedidos_to_expected_routes(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee(route('stock.index'), false)
+            ->assertSee(route('bookings.index'), false)
+            ->assertSee(route('merchandise-requests.create'), false);
     }
 
     public function test_higher_role_can_access_lower_role_route(): void
