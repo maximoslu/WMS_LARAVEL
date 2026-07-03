@@ -49,6 +49,8 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::get('/ajax/items', [AjaxSearchController::class, 'items'])
         ->name('ajax.items');
+    Route::get('/ajax/stock-variants', [AjaxSearchController::class, 'stockVariants'])
+        ->name('ajax.stock-variants');
     Route::get('/ajax/clients', [AjaxSearchController::class, 'clients'])
         ->name('ajax.clients');
     Route::get('/ajax/locations', [AjaxSearchController::class, 'locations'])

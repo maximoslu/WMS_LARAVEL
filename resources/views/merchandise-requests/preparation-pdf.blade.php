@@ -1,48 +1,83 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
     <head>
         <meta charset="utf-8">
         <title>Preparacion {{ $merchandiseRequest->referenceCode() }}</title>
         <style>
             body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #13222e; }
-            h1 { font-size: 20px; margin-bottom: 8px; }
-            h2 { font-size: 14px; margin: 20px 0 8px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-            th, td { border: 1px solid #cdd7df; padding: 8px; text-align: left; }
+            h1 { font-size: 20px; margin: 0 0 6px; }
+            h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .08em; color: #5d7282; }
+            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+            th, td { border: 1px solid #cdd7df; padding: 8px; text-align: left; vertical-align: top; }
             th { background: #eef5f8; }
-            .meta { margin-bottom: 12px; }
-            .meta p { margin: 4px 0; }
+            .meta-grid { width: 100%; margin-top: 12px; }
+            .meta-grid td { border: 0; padding: 0 12px 8px 0; }
+            .meta-label { color: #6b7d8a; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+            .brand { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #d9e4ea; }
+            .brand strong { display: block; font-size: 18px; }
             .notes { margin-top: 24px; border: 1px solid #cdd7df; min-height: 120px; padding: 12px; }
         </style>
     </head>
     <body>
-        <h1>Hoja de preparación de pedido</h1>
-        <div class="meta">
-            <p><strong>Solicitud:</strong> {{ $merchandiseRequest->referenceCode() }}</p>
-            <p><strong>Cliente:</strong> {{ $merchandiseRequest->client?->name ?? 'Sin cliente' }}</p>
-            <p><strong>Fecha:</strong> {{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') }}</p>
-            <p><strong>Estado:</strong> {{ $merchandiseRequest->statusLabel() }}</p>
-            <p><strong>Total pallets:</strong> {{ number_format($merchandiseRequest->requestedPalletsCount(), 0, ',', '.') }}</p>
+        <div class="brand">
+            <h2>MAXIMO SERVICIOS LOGISTICOS</h2>
+            <strong>Hoja de preparación de pedido</strong>
         </div>
+
+        <table class="meta-grid">
+            <tr>
+                <td>
+                    <div class="meta-label">Solicitud</div>
+                    <strong>{{ $merchandiseRequest->referenceCode() }}</strong>
+                </td>
+                <td>
+                    <div class="meta-label">Cliente</div>
+                    <strong>{{ $merchandiseRequest->client?->name ?? 'Sin cliente' }}</strong>
+                </td>
+                <td>
+                    <div class="meta-label">Fecha</div>
+                    <strong>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') }}</strong>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="meta-label">Estado</div>
+                    <strong>{{ $merchandiseRequest->statusLabel() }}</strong>
+                </td>
+                <td>
+                    <div class="meta-label">Pallets</div>
+                    <strong>{{ number_format($merchandiseRequest->requestedPalletsCount(), 0, ',', '.') }}</strong>
+                </td>
+                <td>
+                    <div class="meta-label">Picos</div>
+                    <strong>{{ number_format($merchandiseRequest->requestedPeaksCount(), 0, ',', '.') }}</strong>
+                </td>
+            </tr>
+        </table>
 
         <table>
             <thead>
                 <tr>
+                    <th>Tipo</th>
                     <th>Mercancia</th>
-                    <th>Descripcion</th>
                     <th>Lote</th>
-                    <th>Uds/pallet</th>
-                    <th>Pallets</th>
+                    <th>Detalle</th>
+                    <th>Solicitado</th>
+                    <th>Ubicación</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($merchandiseRequest->lines as $line)
                     <tr>
-                        <td>{{ $line->item?->sku ?? 'Articulo eliminado' }}</td>
-                        <td>{{ $line->item?->description ?? 'Sin descripcion' }}</td>
+                        <td>{{ $line->lineTypeLabel() }}</td>
+                        <td>
+                            <strong>{{ $line->item?->sku ?? 'Articulo eliminado' }}</strong><br>
+                            {{ $line->item?->description ?? 'Sin descripción' }}
+                        </td>
                         <td>{{ $line->lot ?: 'Sin lote' }}</td>
-                        <td>{{ number_format($line->units_per_pallet, 0, ',', '.') }}</td>
-                        <td>{{ number_format($line->requested_pallets, 0, ',', '.') }}</td>
+                        <td>{{ $line->unitsLabel() }}</td>
+                        <td>{{ $line->requestedQuantityLabel() }}</td>
+                        <td>{{ $line->stockPallet?->location_text ?: '-' }}</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -52,4 +87,3 @@
         <div class="notes"></div>
     </body>
 </html>
-

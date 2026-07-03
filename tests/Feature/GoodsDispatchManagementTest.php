@@ -10,6 +10,7 @@ use App\Models\GoodsDispatchLine;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
+use App\Models\StockPallet;
 use App\Models\User;
 use App\Notifications\CustomerDispatchDeliveryNoteNotification;
 use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
@@ -192,6 +193,75 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertRedirect(route('dispatches.show', $dispatch));
 
         $this->assertSame(1, GoodsDispatch::query()->count());
+    }
+
+    public function test_dispatch_from_request_preserves_peak_lines(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'PICO-DISPATCH',
+            'units_per_pallet' => 600,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-DISPATCH',
+            'units_per_pallet' => 600,
+            'full_pallets' => 1,
+            'peaks_count' => 1,
+            'peak_1' => 95,
+            'peak_2' => 0,
+            'peak_3' => 0,
+            'peak_4' => 0,
+            'peak_5' => 0,
+            'peak_6' => 0,
+            'peak_7' => 0,
+            'peak_8' => 0,
+            'peak_9' => 0,
+            'peak_10' => 0,
+            'quantity_units' => 695,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'line_type' => 'peak',
+            'stock_peak_index' => 1,
+            'lot' => 'LOT-DISPATCH',
+            'units_per_pallet' => 600,
+            'units_per_peak' => 95,
+            'requested_pallets' => 0,
+            'requested_peaks' => 1,
+            'requested_units' => 95,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        $dispatch = GoodsDispatch::query()->firstOrFail();
+
+        $this->assertDatabaseHas('goods_dispatch_lines', [
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'line_type' => 'peak',
+            'stock_peak_index' => 1,
+            'requested_pallets' => 0,
+            'requested_peaks' => 1,
+            'requested_units' => 95,
+        ]);
     }
 
     public function test_changing_dispatch_status_to_sent_sets_sent_at(): void

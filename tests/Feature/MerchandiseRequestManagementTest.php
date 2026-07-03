@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
+use App\Models\StockPallet;
 use App\Models\User;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
@@ -111,6 +112,70 @@ class MerchandiseRequestManagementTest extends TestCase
             ProcessMerchandiseRequestSubmittedNotificationsJob::class,
             fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $request->id
         );
+    }
+
+    public function test_cliente_can_create_request_with_peak_line_from_stock_variant(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'PICO0001',
+            'description' => 'Referencia con pico',
+            'units_per_pallet' => 700,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-PICO',
+            'units_per_pallet' => 700,
+            'full_pallets' => 2,
+            'peaks_count' => 1,
+            'peak_1' => 120,
+            'peak_2' => 0,
+            'peak_3' => 0,
+            'peak_4' => 0,
+            'peak_5' => 0,
+            'peak_6' => 0,
+            'peak_7' => 0,
+            'peak_8' => 0,
+            'peak_9' => 0,
+            'peak_10' => 0,
+            'quantity_units' => 1520,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'peak_variant' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'peak',
+                        'stock_pallet_id' => $stock->id,
+                        'stock_peak_index' => 1,
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'line_type' => 'peak',
+            'stock_peak_index' => 1,
+            'lot' => 'LOT-PICO',
+            'requested_pallets' => 0,
+            'requested_peaks' => 1,
+            'requested_units' => 120,
+        ]);
     }
 
     public function test_cliente_can_create_a_second_request_after_submitting_the_first_one(): void

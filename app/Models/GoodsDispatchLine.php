@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\WmsLineType;
 use Database\Factories\GoodsDispatchLineFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,14 +16,20 @@ class GoodsDispatchLine extends Model
     protected $fillable = [
         'goods_dispatch_id',
         'item_id',
+        'stock_pallet_id',
+        'line_type',
+        'stock_peak_index',
         'sku',
         'description',
         'lot',
         'units_per_pallet',
+        'units_per_peak',
         'pallets',
         'requested_units',
         'requested_pallets',
+        'requested_peaks',
         'loaded_pallets',
+        'loaded_peaks',
         'loading_notes',
         'confirmed_by',
         'confirmed_at',
@@ -34,11 +41,16 @@ class GoodsDispatchLine extends Model
     protected function casts(): array
     {
         return [
+            'stock_pallet_id' => 'integer',
+            'stock_peak_index' => 'integer',
             'units_per_pallet' => 'integer',
+            'units_per_peak' => 'integer',
             'pallets' => 'integer',
             'requested_units' => 'integer',
             'requested_pallets' => 'integer',
+            'requested_peaks' => 'integer',
             'loaded_pallets' => 'integer',
+            'loaded_peaks' => 'integer',
             'confirmed_at' => 'datetime',
             'is_extra_line' => 'boolean',
         ];
@@ -54,28 +66,115 @@ class GoodsDispatchLine extends Model
         return $this->belongsTo(Item::class);
     }
 
+    public function stockPallet(): BelongsTo
+    {
+        return $this->belongsTo(StockPallet::class);
+    }
+
     public function sourceRequestLine(): BelongsTo
     {
         return $this->belongsTo(MerchandiseRequestLine::class, 'source_request_line_id');
     }
 
+    public function lineType(): string
+    {
+        return in_array((string) $this->line_type, WmsLineType::values(), true)
+            ? (string) $this->line_type
+            : WmsLineType::PALLET;
+    }
+
+    public function isPalletLine(): bool
+    {
+        return $this->lineType() === WmsLineType::PALLET;
+    }
+
+    public function isPeakLine(): bool
+    {
+        return $this->lineType() === WmsLineType::PEAK;
+    }
+
+    public function lineTypeLabel(): string
+    {
+        return WmsLineType::label($this->lineType());
+    }
+
     public function requestedPallets(): int
     {
-        return (int) ($this->requested_pallets ?? $this->pallets ?? 0);
+        return $this->isPalletLine()
+            ? (int) ($this->requested_pallets ?? $this->pallets ?? 0)
+            : 0;
+    }
+
+    public function requestedPeaks(): int
+    {
+        return $this->isPeakLine()
+            ? (int) ($this->requested_peaks ?? 0)
+            : 0;
     }
 
     public function loadedPallets(): int
     {
-        return (int) ($this->loaded_pallets ?? $this->requestedPallets());
+        return $this->isPalletLine()
+            ? (int) ($this->loaded_pallets ?? $this->requestedPallets())
+            : 0;
+    }
+
+    public function loadedPeaks(): int
+    {
+        return $this->isPeakLine()
+            ? (int) ($this->loaded_peaks ?? $this->requestedPeaks())
+            : 0;
+    }
+
+    public function requestedQuantity(): int
+    {
+        return $this->isPeakLine()
+            ? $this->requestedPeaks()
+            : $this->requestedPallets();
+    }
+
+    public function loadedQuantity(): int
+    {
+        return $this->isPeakLine()
+            ? $this->loadedPeaks()
+            : $this->loadedPallets();
+    }
+
+    public function requestedQuantityLabel(): string
+    {
+        $quantity = $this->requestedQuantity();
+
+        return number_format($quantity, 0, ',', '.').' '.WmsLineType::quantityLabel($this->lineType(), $quantity);
+    }
+
+    public function loadedQuantityLabel(): string
+    {
+        $quantity = $this->loadedQuantity();
+
+        return number_format($quantity, 0, ',', '.').' '.WmsLineType::quantityLabel($this->lineType(), $quantity);
     }
 
     public function hasLoadingDifference(): bool
     {
-        return $this->requestedPallets() !== $this->loadedPallets();
+        return $this->requestedQuantity() !== $this->loadedQuantity();
+    }
+
+    public function hasDeliveredQuantity(): bool
+    {
+        return $this->loadedQuantity() > 0;
     }
 
     public function lineOriginLabel(): string
     {
         return $this->is_extra_line ? 'Extra' : 'Pedido';
+    }
+
+    public function unitsLabel(): string
+    {
+        if ($this->isPeakLine()) {
+            return number_format((int) ($this->units_per_peak ?? 0), 0, ',', '.').' uds';
+        }
+
+        return number_format((int) ($this->units_per_pallet ?? 0), 0, ',', '.').' uds/pallet';
     }
 }

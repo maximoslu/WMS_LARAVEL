@@ -3,7 +3,6 @@
 namespace App\Services\GoodsDispatches;
 
 use App\Models\GoodsDispatch;
-use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\User;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
@@ -20,7 +19,16 @@ class GoodsDispatchWorkflowService
      * @param  array<string, array{
      *     line_id?:int|string|null,
      *     item_id?:int|string|null,
+     *     stock_pallet_id?:int|string|null,
+     *     line_type:string,
+     *     stock_peak_index?:int|string|null,
+     *     sku?:string,
+     *     description?:string,
+     *     lot?:string|null,
+     *     units_per_pallet?:int|string|null,
+     *     units_per_peak?:int|string|null,
      *     loaded_pallets:int|string,
+     *     loaded_peaks?:int|string|null,
      *     loading_notes?:?string,
      *     remove?:mixed
      * }>  $linePayload
@@ -34,10 +42,11 @@ class GoodsDispatchWorkflowService
             $existingLines = $dispatch->lines->keyBy('id');
 
             foreach ($linePayload as $rowKey => $payload) {
-                $lineId = isset($payload['line_id'])
+                $lineId = isset($payload['line_id']) && $payload['line_id'] !== null
                     ? (int) $payload['line_id']
-                    : (is_numeric($rowKey) || preg_match('/^\d+$/', (string) $rowKey) ? (int) $rowKey : null);
+                    : null;
                 $loadedPallets = (int) $payload['loaded_pallets'];
+                $loadedPeaks = (int) ($payload['loaded_peaks'] ?? 0);
                 $loadingNotes = filled($payload['loading_notes'] ?? null)
                     ? trim((string) $payload['loading_notes'])
                     : null;
@@ -54,6 +63,7 @@ class GoodsDispatchWorkflowService
 
                     $line->update([
                         'loaded_pallets' => $loadedPallets,
+                        'loaded_peaks' => $loadedPeaks,
                         'loading_notes' => $loadingNotes,
                         'confirmed_by' => $user->id,
                         'confirmed_at' => $confirmedAt,
@@ -66,27 +76,22 @@ class GoodsDispatchWorkflowService
                     continue;
                 }
 
-                $item = Item::query()
-                    ->whereKey((int) $payload['item_id'])
-                    ->where('client_id', $dispatch->client_id)
-                    ->first();
-
-                if ($item === null) {
-                    throw ValidationException::withMessages([
-                        'lines' => 'Alguna referencia extra no es valida para el cliente seleccionado.',
-                    ]);
-                }
-
                 $dispatch->lines()->create([
-                    'item_id' => $item->id,
-                    'sku' => $item->sku,
-                    'description' => $item->description,
-                    'lot' => $item->lot,
-                    'units_per_pallet' => $item->units_per_pallet,
+                    'item_id' => $payload['item_id'],
+                    'stock_pallet_id' => $payload['stock_pallet_id'] ?? null,
+                    'line_type' => $payload['line_type'],
+                    'stock_peak_index' => $payload['stock_peak_index'] ?? null,
+                    'sku' => $payload['sku'] ?? 'Articulo',
+                    'description' => $payload['description'] ?? 'Sin descripcion',
+                    'lot' => $payload['lot'] ?? null,
+                    'units_per_pallet' => $payload['units_per_pallet'] ?? null,
+                    'units_per_peak' => $payload['units_per_peak'] ?? null,
                     'pallets' => 0,
                     'requested_units' => 0,
                     'requested_pallets' => 0,
+                    'requested_peaks' => 0,
                     'loaded_pallets' => $loadedPallets,
+                    'loaded_peaks' => $loadedPeaks,
                     'loading_notes' => $loadingNotes,
                     'confirmed_by' => $user->id,
                     'confirmed_at' => $confirmedAt,
@@ -207,7 +212,7 @@ class GoodsDispatchWorkflowService
 
         if (! $dispatch->hasDeliveredLine()) {
             throw ValidationException::withMessages([
-                'dispatch' => 'La salida no tiene ninguna linea cargada con pallets superiores a cero.',
+                'dispatch' => 'La salida no tiene ninguna línea cargada con pallets o picos superiores a cero.',
             ]);
         }
 
@@ -224,7 +229,7 @@ class GoodsDispatchWorkflowService
 
             if (! $dispatch->hasDeliveredLine()) {
                 throw ValidationException::withMessages([
-                    'status' => 'Debes tener al menos una linea cargada con pallets mayores que cero antes de enviar o completar la salida.',
+                    'status' => 'Debes tener al menos una línea cargada con pallets o picos mayores que cero antes de enviar o completar la salida.',
                 ]);
             }
 

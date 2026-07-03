@@ -6,10 +6,10 @@ use App\Http\Requests\ConfirmGoodsDispatchLoadingRequest;
 use App\Http\Requests\StoreGoodsDispatchRequest;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
-use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
+use App\Support\Stock\StockVariantCatalog;
 use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -46,30 +46,12 @@ class GoodsDispatchController extends Controller
         ]);
     }
 
-    public function create(Request $request): View
+    public function create(Request $request, StockVariantCatalog $variantCatalog): View
     {
-        $oldQuantities = collect(old('quantities', []))
-            ->filter(fn ($quantity, $itemId) => is_numeric((string) $itemId) && (int) $quantity > 0);
-
         return view('dispatches.create', [
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
-            'selectedItems' => Item::query()
-                ->whereIn('id', $oldQuantities->keys()->map(fn ($itemId) => (int) $itemId))
-                ->orderBy('sku')
-                ->get()
-                ->map(fn (Item $item): array => [
-                    'id' => $item->id,
-                    'label' => $item->sku.' - '.$item->description,
-                    'value' => $item->sku,
-                    'sku' => $item->sku,
-                    'description' => $item->description,
-                    'units_per_pallet' => $item->units_per_pallet,
-                    'client_id' => $item->client_id,
-                    'requested_pallets' => (int) $oldQuantities->get((string) $item->id, 0),
-                ])
-                ->values()
-                ->all(),
-            'searchEndpoint' => route('ajax.items'),
+            'selectedItems' => $variantCatalog->hydrateSelections(old('lines', old('quantities', []))),
+            'searchEndpoint' => route('ajax.stock-variants'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -77,12 +59,8 @@ class GoodsDispatchController extends Controller
     public function store(StoreGoodsDispatchRequest $request): RedirectResponse
     {
         $validatedLines = $request->validatedLines();
-        $items = Item::query()
-            ->whereIn('id', array_column($validatedLines, 'item_id'))
-            ->get()
-            ->keyBy('id');
 
-        $dispatch = DB::transaction(function () use ($request, $validatedLines, $items): GoodsDispatch {
+        $dispatch = DB::transaction(function () use ($request, $validatedLines): GoodsDispatch {
             $dispatch = GoodsDispatch::query()->create([
                 'client_id' => $request->integer('client_id'),
                 'type' => GoodsDispatch::TYPE_MANUAL,
@@ -92,21 +70,20 @@ class GoodsDispatchController extends Controller
             ]);
 
             foreach ($validatedLines as $line) {
-                $item = $items->get($line['item_id']);
-
-                if ($item === null) {
-                    continue;
-                }
-
                 $dispatch->lines()->create([
-                    'item_id' => $item->id,
-                    'sku' => $item->sku,
-                    'description' => $item->description,
-                    'lot' => null,
-                    'units_per_pallet' => $item->units_per_pallet,
-                    'pallets' => $line['pallets'],
-                    'requested_units' => $line['pallets'] * $item->units_per_pallet,
-                    'requested_pallets' => $line['pallets'],
+                    'item_id' => $line['item_id'],
+                    'stock_pallet_id' => $line['stock_pallet_id'],
+                    'line_type' => $line['line_type'],
+                    'stock_peak_index' => $line['stock_peak_index'],
+                    'sku' => $line['sku'],
+                    'description' => $line['description'],
+                    'lot' => $line['lot'],
+                    'units_per_pallet' => $line['units_per_pallet'],
+                    'units_per_peak' => $line['units_per_peak'],
+                    'pallets' => $line['requested_pallets'],
+                    'requested_units' => $line['requested_units'],
+                    'requested_pallets' => $line['requested_pallets'],
+                    'requested_peaks' => $line['requested_peaks'],
                 ]);
             }
 
@@ -139,7 +116,15 @@ class GoodsDispatchController extends Controller
 
     public function showRequest(Request $request, MerchandiseRequest $merchandiseRequest): View
     {
-        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines.item', 'dispatch.lines.sourceRequestLine']);
+        $merchandiseRequest->load([
+            'client',
+            'requestedBy',
+            'lines.item',
+            'lines.stockPallet',
+            'dispatch.lines.item',
+            'dispatch.lines.stockPallet',
+            'dispatch.lines.sourceRequestLine',
+        ]);
 
         return view('dispatches.request', [
             'merchandiseRequest' => $merchandiseRequest,
@@ -152,7 +137,7 @@ class GoodsDispatchController extends Controller
         MerchandiseRequest $merchandiseRequest,
         MerchandiseRequestNotificationService $notificationService,
     ): RedirectResponse {
-        $merchandiseRequest->load(['lines.item', 'dispatch']);
+        $merchandiseRequest->load(['lines.item', 'lines.stockPallet', 'dispatch']);
 
         if ($merchandiseRequest->dispatch !== null) {
             return redirect()
@@ -173,13 +158,18 @@ class GoodsDispatchController extends Controller
             foreach ($merchandiseRequest->lines as $line) {
                 $dispatch->lines()->create([
                     'item_id' => $line->item_id,
+                    'stock_pallet_id' => $line->stock_pallet_id,
+                    'line_type' => $line->lineType(),
+                    'stock_peak_index' => $line->stock_peak_index,
                     'sku' => $line->item?->sku ?? 'Articulo',
                     'description' => $line->item?->description ?? 'Sin descripcion',
                     'lot' => $line->lot,
                     'units_per_pallet' => $line->units_per_pallet,
-                    'pallets' => $line->requested_pallets,
+                    'units_per_peak' => $line->units_per_peak,
+                    'pallets' => $line->requestedPalletsCount(),
                     'requested_units' => $line->requested_units,
-                    'requested_pallets' => $line->requested_pallets,
+                    'requested_pallets' => $line->requestedPalletsCount(),
+                    'requested_peaks' => $line->requestedPeaksCount(),
                     'source_request_line_id' => $line->id,
                     'notes' => $line->notes,
                 ]);
@@ -203,11 +193,20 @@ class GoodsDispatchController extends Controller
 
     public function show(Request $request, GoodsDispatch $goodsDispatch): View
     {
-        $goodsDispatch->load(['client', 'creator', 'merchandiseRequest.lines.item', 'merchandiseRequest', 'lines.item', 'lines.sourceRequestLine']);
+        $goodsDispatch->load([
+            'client',
+            'creator',
+            'merchandiseRequest.lines.item',
+            'merchandiseRequest.lines.stockPallet',
+            'merchandiseRequest',
+            'lines.item',
+            'lines.stockPallet',
+            'lines.sourceRequestLine',
+        ]);
 
         return view('dispatches.show', [
             'dispatch' => $goodsDispatch,
-            'searchEndpoint' => route('ajax.items'),
+            'searchEndpoint' => route('ajax.stock-variants'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -217,7 +216,7 @@ class GoodsDispatchController extends Controller
         GoodsDispatch $goodsDispatch,
         GoodsDispatchWorkflowService $workflowService,
     ): RedirectResponse {
-        $workflowService->confirmLoading($goodsDispatch, $request->validated('lines'), $request->user());
+        $workflowService->confirmLoading($goodsDispatch, $request->validatedLines(), $request->user());
 
         return redirect()
             ->route('dispatches.show', $goodsDispatch)
@@ -255,7 +254,7 @@ class GoodsDispatchController extends Controller
         GoodsDispatch $goodsDispatch,
         GoodsDispatchWorkflowService $workflowService,
     ) {
-        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item']);
+        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet']);
 
         abort_unless(
             in_array($goodsDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true),

@@ -1,4 +1,4 @@
-import './bootstrap';
+﻿import './bootstrap';
 
 const setupAppDrawer = () => {
     const body = document.body;
@@ -96,6 +96,98 @@ const parsePositiveInteger = (value, allowZero = false) => {
     return Number.isFinite(parsed) ? parsed : NaN;
 };
 
+const normalizeVariantKey = (value) => String(value ?? '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '_');
+
+const lineTypeLabel = (lineType) => lineType === 'peak' ? 'Pico' : 'Pallet completo';
+
+const quantityLabel = (lineType, quantity = 1) => {
+    if (lineType === 'peak') {
+        return quantity === 1 ? 'pico' : 'picos';
+    }
+
+    return quantity === 1 ? 'pallet' : 'pallets';
+};
+
+const quantityFieldLabel = (lineType, loaded = false) => {
+    if (lineType === 'peak') {
+        return loaded ? 'Picos cargados' : 'Picos';
+    }
+
+    return loaded ? 'Pallets cargados' : 'Pallets';
+};
+
+const formatVariantUnits = (item) => item.line_type === 'peak'
+    ? `${formatNumber.format(item.units_per_peak ?? 0)} uds`
+    : `${formatNumber.format(item.units_per_pallet ?? 0)} uds/pallet`;
+
+const formatRequestedQuantity = (item, quantity) => `${formatNumber.format(quantity)} ${quantityLabel(item.line_type, quantity)}`;
+
+const renderVariantPreview = (item, quantity = null) => {
+    if (!item) {
+        return `
+            <strong>Selecciona una referencia para ver el detalle</strong>
+            <p>Lote, unidades, disponibilidad y tipo de lÃ­nea aparecerÃ¡n aquÃ­ antes de aÃ±adirla.</p>
+        `;
+    }
+
+    const quantityMarkup = Number.isFinite(quantity) && quantity > 0
+        ? `<span>${escapeHtml(formatRequestedQuantity(item, quantity))}</span>`
+        : '';
+    const lotMarkup = item.lot ? `<span>Lote ${escapeHtml(item.lot)}</span>` : '<span>Sin lote</span>';
+    const locationMarkup = item.location_text ? `<span>UbicaciÃ³n ${escapeHtml(item.location_text)}</span>` : '';
+    const availability = item.line_type === 'peak'
+        ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} Â· ${escapeHtml(formatVariantUnits(item))}`
+        : item.available_pallets
+            ? `${formatNumber.format(item.available_pallets)} pallets visibles`
+            : 'Pallet genÃ©rico';
+    const extraAvailability = item.available_peaks
+        ? `<span>${formatNumber.format(item.available_peaks)} picos visibles</span>`
+        : '';
+
+    return `
+        <strong>${escapeHtml(item.sku)}</strong>
+        <p>${escapeHtml(item.description ?? '')}</p>
+        <div class="wms-line-card-meta">
+            <span>${escapeHtml(lineTypeLabel(item.line_type))}</span>
+            <span>${escapeHtml(availability)}</span>
+            <span>${escapeHtml(formatVariantUnits(item))}</span>
+            ${lotMarkup}
+            ${locationMarkup}
+            ${extraAvailability}
+            ${quantityMarkup}
+        </div>
+    `;
+};
+
+const renderVariantAutocompleteOption = (item) => {
+    const typeClass = item.line_type === 'peak' ? 'wms-line-type-pill--peak' : 'wms-line-type-pill--pallet';
+    const availability = item.line_type === 'peak'
+        ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} Â· ${escapeHtml(formatVariantUnits(item))}`
+        : item.available_pallets
+            ? `${formatNumber.format(item.available_pallets)} pallets disponibles`
+            : 'Pallet genÃ©rico';
+    const secondary = [
+        item.lot ? `Lote ${item.lot}` : 'Sin lote',
+        formatVariantUnits(item),
+        item.available_peaks ? `${formatNumber.format(item.available_peaks)} picos` : null,
+        item.location_text ? `UbicaciÃ³n ${item.location_text}` : null,
+    ].filter(Boolean).join(' Â· ');
+
+    return `
+        <div class="wms-autocomplete-option">
+            <div class="wms-autocomplete-option-head">
+                <strong>${escapeHtml(item.sku ?? item.label ?? '')}</strong>
+                <span class="wms-line-type-pill ${typeClass}">${escapeHtml(lineTypeLabel(item.line_type))}</span>
+            </div>
+            <p>${escapeHtml(item.description ?? '')}</p>
+            <small>${escapeHtml(availability)}</small>
+            <small>${escapeHtml(secondary)}</small>
+        </div>
+    `;
+};
+
 const createAutocomplete = (root, options = {}) => {
     if (!root || root.dataset.autocompleteBound === 'true') {
         return null;
@@ -170,8 +262,10 @@ const createAutocomplete = (root, options = {}) => {
                 role="option"
                 aria-selected="${index === highlightedIndex ? 'true' : 'false'}"
             >
-                <strong>${escapeHtml(item.label ?? item.value ?? '')}</strong>
-                ${item.meta ? `<small>${escapeHtml(item.meta)}</small>` : ''}
+                ${options.renderOption?.(item, index) ?? `
+                    <strong>${escapeHtml(item.label ?? item.value ?? '')}</strong>
+                    ${item.meta ? `<small>${escapeHtml(item.meta)}</small>` : ''}
+                `}
             </button>
         `).join('');
     };
@@ -483,13 +577,23 @@ const setupMerchandiseRequestBuilder = () => {
     const summaryEmpty = form.querySelector('[data-request-summary-empty]');
     const summaryLines = form.querySelector('[data-request-summary-lines]');
     const summaryPallets = form.querySelector('[data-request-summary-pallets]');
+    const summaryPeaks = form.querySelector('[data-request-summary-peaks]');
     const hiddenInputs = form.querySelector('[data-request-hidden-inputs]');
     const feedback = form.querySelector('[data-request-search-feedback]');
     const quantityInput = form.querySelector('[data-request-picker-quantity]');
+    const quantityLabelNode = form.querySelector('[data-request-picker-label]');
     const addButton = form.querySelector('[data-request-add-selected]');
     const submitButton = form.querySelector('[data-request-submit]');
-    const cache = new Map(parseJsonNode('[data-request-selected-items]', form).map((item) => [String(item.id), item]));
-    let selectedItemId = '';
+    const preview = form.querySelector('[data-request-selection-preview]');
+    const initialItems = parseJsonNode('[data-request-selected-items]', form);
+    const cache = new Map(initialItems.map((item) => [String(item.variant_key ?? item.id), item]));
+    const lines = new Map(initialItems
+        .filter((item) => Number.isFinite(Number(item.selected_quantity)) && Number(item.selected_quantity) > 0)
+        .map((item) => [String(item.variant_key ?? item.id), {
+            ...item,
+            selected_quantity: Number(item.selected_quantity),
+        }]));
+    let selectedItemKey = '';
 
     const setFeedback = (message, type = 'default') => {
         feedback.textContent = message;
@@ -497,67 +601,76 @@ const setupMerchandiseRequestBuilder = () => {
         feedback.classList.toggle('helper-text--success', type === 'success');
     };
 
-    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-request-hidden-quantity][data-item-id="${itemId}"]`);
+    const syncHiddenInputs = () => {
+        hiddenInputs.innerHTML = Array.from(lines.values()).map((item) => {
+            const key = normalizeVariantKey(item.variant_key ?? item.id);
 
-    const upsertHiddenInput = (itemId, pallets) => {
-        let hiddenInput = hiddenInputFor(itemId);
+            return [
+                `<input type="hidden" name="lines[${key}][item_id]" value="${escapeHtml(item.item_id)}">`,
+                `<input type="hidden" name="lines[${key}][line_type]" value="${escapeHtml(item.line_type)}">`,
+                `<input type="hidden" name="lines[${key}][stock_pallet_id]" value="${escapeHtml(item.stock_pallet_id ?? '')}">`,
+                `<input type="hidden" name="lines[${key}][stock_peak_index]" value="${escapeHtml(item.stock_peak_index ?? '')}">`,
+                `<input type="hidden" name="lines[${key}][quantity]" value="${escapeHtml(item.selected_quantity)}">`,
+            ].join('');
+        }).join('');
+    };
 
-        if (pallets <= 0) {
-            hiddenInput?.remove();
+    const updatePickerForItem = (item) => {
+        quantityLabelNode.textContent = quantityFieldLabel(item?.line_type ?? 'pallet');
+
+        if (!item) {
+            quantityInput.value = '1';
+            quantityInput.max = '';
+            quantityInput.min = '1';
+            preview.innerHTML = renderVariantPreview(null);
             return;
         }
 
-        if (!hiddenInput) {
-            hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = `quantities[${itemId}]`;
-            hiddenInput.dataset.requestHiddenQuantity = 'true';
-            hiddenInput.dataset.itemId = itemId;
-            hiddenInputs.append(hiddenInput);
-        }
-
-        hiddenInput.value = String(pallets);
+        quantityInput.value = '1';
+        quantityInput.min = '1';
+        quantityInput.max = item.quantity_max ? String(item.quantity_max) : '';
+        preview.innerHTML = renderVariantPreview(item, 1);
     };
 
-    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-request-hidden-quantity]'))
-        .map((input) => {
-            const item = cache.get(String(input.dataset.itemId));
-            const pallets = parsePositiveInteger(input.value);
-
-            if (!item || !Number.isFinite(pallets) || pallets <= 0) {
-                return null;
-            }
-
-            return {
-                ...item,
-                pallets,
-            };
-        })
-        .filter(Boolean);
+    const selectedItems = () => Array.from(lines.values());
 
     const renderSummary = () => {
-        const lines = selectedItems();
-        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
+        const selected = selectedItems();
+        const totalPallets = selected.reduce((total, line) => total + (line.line_type === 'pallet' ? line.selected_quantity : 0), 0);
+        const totalPeaks = selected.reduce((total, line) => total + (line.line_type === 'peak' ? line.selected_quantity : 0), 0);
 
-        summaryLines.textContent = formatNumber.format(lines.length);
+        summaryLines.textContent = formatNumber.format(selected.length);
         summaryPallets.textContent = formatNumber.format(totalPallets);
-        summaryEmpty.hidden = lines.length > 0;
-        submitButton.disabled = lines.length === 0;
+        summaryPeaks.textContent = formatNumber.format(totalPeaks);
+        summaryEmpty.hidden = selected.length > 0;
+        submitButton.disabled = selected.length === 0;
+        syncHiddenInputs();
 
-        summaryRows.innerHTML = lines.map((line) => `
-            <article class="merchandise-request-summary-row">
-                <div class="merchandise-request-summary-main">
-                    <strong>${escapeHtml(line.sku)}</strong>
-                    <span>${escapeHtml(line.description)}</span>
-                    <small>${escapeHtml(line.units_per_pallet)} uds/pallet</small>
+        summaryRows.innerHTML = selected.map((line) => `
+            <article class="wms-line-editor-card">
+                <div class="wms-line-card-head">
+                    <div class="merchandise-request-summary-main">
+                        <strong>${escapeHtml(line.sku)}</strong>
+                        <span>${escapeHtml(line.description)}</span>
+                    </div>
+                    <span class="wms-line-type-pill wms-line-type-pill--${escapeHtml(line.line_type)}">${escapeHtml(lineTypeLabel(line.line_type))}</span>
                 </div>
-                <label class="auth-field merchandise-request-summary-field">
-                    <span>Pallets</span>
-                    <input type="number" min="1" step="1" value="${escapeHtml(line.pallets)}" class="auth-input merchandise-request-summary-input" data-request-summary-quantity data-item-id="${escapeHtml(line.id)}">
-                </label>
-                <button type="button" class="button-secondary compact-button btn-compact" data-request-summary-remove data-item-id="${escapeHtml(line.id)}">
-                    Quitar
-                </button>
+                <div class="wms-line-card-meta">
+                    <span>${escapeHtml(formatVariantUnits(line))}</span>
+                    <span>${escapeHtml(line.lot ? `Lote ${line.lot}` : 'Sin lote')}</span>
+                    ${line.location_text ? `<span>Ubicación ${escapeHtml(line.location_text)}</span>` : ''}
+                    ${line.available_pallets ? `<span>${formatNumber.format(line.available_pallets)} pallets visibles</span>` : ''}
+                    ${line.available_peaks ? `<span>${formatNumber.format(line.available_peaks)} picos visibles</span>` : ''}
+                </div>
+                <div class="wms-line-editor-actions">
+                    <label class="auth-field merchandise-request-summary-field">
+                        <span>${escapeHtml(quantityFieldLabel(line.line_type))}</span>
+                        <input type="number" min="1" step="1" ${line.quantity_max ? `max="${escapeHtml(line.quantity_max)}"` : ''} value="${escapeHtml(line.selected_quantity)}" class="auth-input merchandise-request-summary-input" data-request-summary-quantity data-line-key="${escapeHtml(line.variant_key ?? line.id)}">
+                    </label>
+                    <button type="button" class="button-secondary compact-button btn-compact" data-request-summary-remove data-line-key="${escapeHtml(line.variant_key ?? line.id)}">
+                        Quitar
+                    </button>
+                </div>
             </article>
         `).join('');
     };
@@ -568,34 +681,54 @@ const setupMerchandiseRequestBuilder = () => {
             active_only: '1',
             limit: '10',
         }),
-        hasSelection: () => selectedItemId !== '',
+        renderOption: (item) => renderVariantAutocompleteOption(item),
+        hasSelection: () => selectedItemKey !== '',
         onSelect: (item) => {
-            selectedItemId = String(item.id);
-            cache.set(String(item.id), item);
-            setFeedback(`${item.sku} lista para añadir al pedido.`, 'success');
+            selectedItemKey = String(item.variant_key ?? item.id);
+            cache.set(selectedItemKey, item);
+            updatePickerForItem(item);
+            setFeedback(`${item.sku} lista para añadir al pedido como ${lineTypeLabel(item.line_type).toLowerCase()}.`, 'success');
         },
         onInputChange: () => {
-            selectedItemId = '';
+            selectedItemKey = '';
+            updatePickerForItem(null);
             setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
         },
         onClear: () => {
-            selectedItemId = '';
+            selectedItemKey = '';
+            updatePickerForItem(null);
             setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
         },
     });
 
     addButton.addEventListener('click', () => {
-        const pallets = parsePositiveInteger(quantityInput.value);
-        const item = cache.get(selectedItemId);
+        const quantity = parsePositiveInteger(quantityInput.value);
+        const item = cache.get(selectedItemKey);
 
-        if (!item || !Number.isFinite(pallets) || pallets <= 0) {
+        if (!item || !Number.isFinite(quantity) || quantity <= 0) {
             setFeedback('Selecciona una mercancía y una cantidad entera mayor que cero.', 'error');
             return;
         }
 
-        upsertHiddenInput(selectedItemId, pallets);
+        if (item.quantity_max && quantity > Number(item.quantity_max)) {
+            setFeedback(`La cantidad supera lo visible para esta línea (${formatNumber.format(item.quantity_max)}).`, 'error');
+            return;
+        }
+
+        const currentQuantity = lines.get(selectedItemKey)?.selected_quantity ?? 0;
+        const nextQuantity = item.line_type === 'peak' ? 1 : currentQuantity + quantity;
+
+        if (item.quantity_max && nextQuantity > Number(item.quantity_max)) {
+            setFeedback(`Esta partida solo muestra ${formatNumber.format(item.quantity_max)} pallets visibles. Ajusta la cantidad o añade otra partida.`, 'error');
+            return;
+        }
+
+        lines.set(selectedItemKey, {
+            ...item,
+            selected_quantity: nextQuantity,
+        });
         renderSummary();
-        setFeedback(`${item.sku} se ha añadido al pedido con ${formatNumber.format(pallets)} pallets.`, 'success');
+        setFeedback(`${item.sku} se ha añadido al pedido como ${formatRequestedQuantity(item, nextQuantity)}.`, 'success');
         quantityInput.value = '1';
         autocomplete?.clear();
     });
@@ -607,8 +740,22 @@ const setupMerchandiseRequestBuilder = () => {
             return;
         }
 
-        const pallets = parsePositiveInteger(input.value);
-        upsertHiddenInput(input.dataset.itemId, Number.isFinite(pallets) ? pallets : 0);
+        const lineKey = String(input.dataset.lineKey ?? '');
+        const item = lines.get(lineKey);
+
+        if (!item) {
+            return;
+        }
+
+        const quantity = parsePositiveInteger(input.value);
+
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            lines.delete(lineKey);
+        } else {
+            const safeQuantity = item.quantity_max ? Math.min(quantity, Number(item.quantity_max)) : quantity;
+            lines.set(lineKey, { ...item, selected_quantity: safeQuantity });
+        }
+
         renderSummary();
     });
 
@@ -619,11 +766,12 @@ const setupMerchandiseRequestBuilder = () => {
             return;
         }
 
-        upsertHiddenInput(button.dataset.itemId, 0);
+        lines.delete(String(button.dataset.lineKey ?? ''));
         renderSummary();
         setFeedback('Línea eliminada del pedido.');
     });
 
+    updatePickerForItem(null);
     renderSummary();
     form.dataset.requestBuilderBound = 'true';
 };
@@ -644,9 +792,19 @@ const setupGoodsDispatchBuilder = () => {
     const summaryEmpty = form.querySelector('[data-dispatch-summary-empty]');
     const summaryLines = form.querySelector('[data-dispatch-summary-lines]');
     const summaryPallets = form.querySelector('[data-dispatch-summary-pallets]');
+    const summaryPeaks = form.querySelector('[data-dispatch-summary-peaks]');
     const submitButton = form.querySelector('[data-dispatch-submit]');
-    const cache = new Map(parseJsonNode('[data-dispatch-items]', form).map((item) => [String(item.id), item]));
-    let selectedItemId = '';
+    const quantityLabelNode = form.querySelector('[data-dispatch-picker-label]');
+    const preview = form.querySelector('[data-dispatch-selection-preview]');
+    const initialItems = parseJsonNode('[data-dispatch-items]', form);
+    const cache = new Map(initialItems.map((item) => [String(item.variant_key ?? item.id), item]));
+    const lines = new Map(initialItems
+        .filter((item) => Number.isFinite(Number(item.selected_quantity)) && Number(item.selected_quantity) > 0)
+        .map((item) => [String(item.variant_key ?? item.id), {
+            ...item,
+            selected_quantity: Number(item.selected_quantity),
+        }]));
+    let selectedItemKey = '';
 
     const setFeedback = (message, type = 'default') => {
         feedback.textContent = message;
@@ -654,70 +812,78 @@ const setupGoodsDispatchBuilder = () => {
         feedback.classList.toggle('helper-text--success', type === 'success');
     };
 
-    const hiddenInputFor = (itemId) => hiddenInputs.querySelector(`[data-dispatch-hidden-quantity][data-item-id="${itemId}"]`);
+    const syncHiddenInputs = () => {
+        hiddenInputs.innerHTML = Array.from(lines.values()).map((item) => {
+            const key = normalizeVariantKey(item.variant_key ?? item.id);
 
-    const upsertHiddenInput = (itemId, pallets) => {
-        let hiddenInput = hiddenInputFor(itemId);
+            return [
+                `<input type="hidden" name="lines[${key}][item_id]" value="${escapeHtml(item.item_id)}">`,
+                `<input type="hidden" name="lines[${key}][line_type]" value="${escapeHtml(item.line_type)}">`,
+                `<input type="hidden" name="lines[${key}][stock_pallet_id]" value="${escapeHtml(item.stock_pallet_id ?? '')}">`,
+                `<input type="hidden" name="lines[${key}][stock_peak_index]" value="${escapeHtml(item.stock_peak_index ?? '')}">`,
+                `<input type="hidden" name="lines[${key}][quantity]" value="${escapeHtml(item.selected_quantity)}">`,
+            ].join('');
+        }).join('');
+    };
 
-        if (pallets <= 0) {
-            hiddenInput?.remove();
+    const updatePickerForItem = (item) => {
+        quantityLabelNode.textContent = quantityFieldLabel(item?.line_type ?? 'pallet');
+
+        if (!item) {
+            quantityInput.value = '1';
+            quantityInput.max = '';
+            quantityInput.min = '1';
+            preview.innerHTML = `
+                <strong>Selecciona el cliente y después una referencia</strong>
+                <p>Cuando elijas una coincidencia verás aquí si estás añadiendo un pallet completo o un pico concreto.</p>
+            `;
             return;
         }
 
-        if (!hiddenInput) {
-            hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = `quantities[${itemId}]`;
-            hiddenInput.dataset.dispatchHiddenQuantity = 'true';
-            hiddenInput.dataset.itemId = itemId;
-            hiddenInputs.append(hiddenInput);
-        }
-
-        hiddenInput.value = String(pallets);
+        quantityInput.value = '1';
+        quantityInput.min = '1';
+        quantityInput.max = item.quantity_max ? String(item.quantity_max) : '';
+        preview.innerHTML = renderVariantPreview(item, 1);
     };
 
-    const selectedItems = () => Array.from(hiddenInputs.querySelectorAll('[data-dispatch-hidden-quantity]'))
-        .map((input) => {
-            const item = cache.get(String(input.dataset.itemId));
-            const pallets = parsePositiveInteger(input.value);
-
-            if (!item || !Number.isFinite(pallets) || pallets <= 0) {
-                return null;
-            }
-
-            return {
-                ...item,
-                pallets,
-            };
-        })
-        .filter(Boolean);
+    const selectedItems = () => Array.from(lines.values());
 
     const renderSummary = () => {
-        const lines = selectedItems();
-        const totalPallets = lines.reduce((total, line) => total + line.pallets, 0);
+        const selected = selectedItems();
+        const totalPallets = selected.reduce((total, line) => total + (line.line_type === 'pallet' ? line.selected_quantity : 0), 0);
+        const totalPeaks = selected.reduce((total, line) => total + (line.line_type === 'peak' ? line.selected_quantity : 0), 0);
 
-        summaryLines.textContent = formatNumber.format(lines.length);
+        summaryLines.textContent = formatNumber.format(selected.length);
         summaryPallets.textContent = formatNumber.format(totalPallets);
-        summaryEmpty.hidden = lines.length > 0;
-        submitButton.disabled = lines.length === 0;
+        summaryPeaks.textContent = formatNumber.format(totalPeaks);
+        summaryEmpty.hidden = selected.length > 0;
+        submitButton.disabled = selected.length === 0;
+        syncHiddenInputs();
 
-        summaryRows.innerHTML = lines.map((line) => `
-            <tr>
-                <td>
+        summaryRows.innerHTML = selected.map((line) => `
+            <article class="wms-line-editor-card">
+                <div class="wms-line-card-head">
                     <div class="stock-cell-main">
                         <strong>${escapeHtml(line.sku)}</strong>
-                        <span class="users-table-email">${escapeHtml(line.description)} · ${escapeHtml(line.units_per_pallet)} uds/pallet</span>
+                        <span class="users-table-email">${escapeHtml(line.description)}</span>
                     </div>
-                </td>
-                <td>
-                    <input type="number" min="1" step="1" value="${escapeHtml(line.pallets)}" class="auth-input merchandise-request-summary-input" data-dispatch-summary-quantity data-item-id="${escapeHtml(line.id)}">
-                </td>
-                <td>
-                    <button type="button" class="button-secondary compact-button btn-table" data-dispatch-summary-remove data-item-id="${escapeHtml(line.id)}">
+                    <span class="wms-line-type-pill wms-line-type-pill--${escapeHtml(line.line_type)}">${escapeHtml(lineTypeLabel(line.line_type))}</span>
+                </div>
+                <div class="wms-line-card-meta">
+                    <span>${escapeHtml(formatVariantUnits(line))}</span>
+                    <span>${escapeHtml(line.lot ? `Lote ${line.lot}` : 'Sin lote')}</span>
+                    ${line.location_text ? `<span>Ubicación ${escapeHtml(line.location_text)}</span>` : ''}
+                </div>
+                <div class="wms-line-editor-actions">
+                    <label class="auth-field">
+                        <span>${escapeHtml(quantityFieldLabel(line.line_type))}</span>
+                        <input type="number" min="1" step="1" ${line.quantity_max ? `max="${escapeHtml(line.quantity_max)}"` : ''} value="${escapeHtml(line.selected_quantity)}" class="auth-input merchandise-request-summary-input" data-dispatch-summary-quantity data-line-key="${escapeHtml(line.variant_key ?? line.id)}">
+                    </label>
+                    <button type="button" class="button-secondary compact-button btn-compact" data-dispatch-summary-remove data-line-key="${escapeHtml(line.variant_key ?? line.id)}">
                         Eliminar
                     </button>
-                </td>
-            </tr>
+                </div>
+            </article>
         `).join('');
     };
 
@@ -727,23 +893,30 @@ const setupGoodsDispatchBuilder = () => {
             active_only: '1',
             limit: '10',
         }),
-        hasSelection: () => selectedItemId !== '',
+        renderOption: (item) => renderVariantAutocompleteOption(item),
+        hasSelection: () => selectedItemKey !== '',
         onSelect: (item) => {
-            selectedItemId = String(item.id);
-            cache.set(String(item.id), item);
-            setFeedback(`${item.sku} lista para añadir a la salida.`, 'success');
+            selectedItemKey = String(item.variant_key ?? item.id);
+            cache.set(selectedItemKey, item);
+            updatePickerForItem(item);
+            setFeedback(`${item.sku} lista para añadir a la salida como ${lineTypeLabel(item.line_type).toLowerCase()}.`, 'success');
         },
         onInputChange: () => {
-            selectedItemId = '';
+            selectedItemKey = '';
+            updatePickerForItem(null);
         },
         onClear: () => {
-            selectedItemId = '';
+            selectedItemKey = '';
+            updatePickerForItem(null);
         },
     });
 
     clientSelect?.addEventListener('change', () => {
-        selectedItemId = '';
+        selectedItemKey = '';
+        lines.clear();
         autocomplete?.clear();
+        renderSummary();
+        updatePickerForItem(null);
         setFeedback('Selecciona o cambia el cliente y busca después la referencia correcta.');
     });
 
@@ -753,17 +926,33 @@ const setupGoodsDispatchBuilder = () => {
             return;
         }
 
-        const pallets = parsePositiveInteger(quantityInput.value);
-        const item = cache.get(selectedItemId);
+        const quantity = parsePositiveInteger(quantityInput.value);
+        const item = cache.get(selectedItemKey);
 
-        if (!item || !Number.isFinite(pallets) || pallets <= 0) {
+        if (!item || !Number.isFinite(quantity) || quantity <= 0) {
             setFeedback('Selecciona una referencia y una cantidad entera mayor que cero.', 'error');
             return;
         }
 
-        upsertHiddenInput(selectedItemId, pallets);
+        if (item.quantity_max && quantity > Number(item.quantity_max)) {
+            setFeedback(`La cantidad supera lo visible para esta línea (${formatNumber.format(item.quantity_max)}).`, 'error');
+            return;
+        }
+
+        const currentQuantity = lines.get(selectedItemKey)?.selected_quantity ?? 0;
+        const nextQuantity = item.line_type === 'peak' ? 1 : currentQuantity + quantity;
+
+        if (item.quantity_max && nextQuantity > Number(item.quantity_max)) {
+            setFeedback(`Esta partida solo muestra ${formatNumber.format(item.quantity_max)} pallets visibles. Ajusta la cantidad o añade otra partida.`, 'error');
+            return;
+        }
+
+        lines.set(selectedItemKey, {
+            ...item,
+            selected_quantity: nextQuantity,
+        });
         renderSummary();
-        setFeedback(`${item.sku} se ha añadido a la salida.`, 'success');
+        setFeedback(`${item.sku} se ha añadido a la salida como ${formatRequestedQuantity(item, nextQuantity)}.`, 'success');
         quantityInput.value = '1';
         autocomplete?.clear();
     });
@@ -775,8 +964,22 @@ const setupGoodsDispatchBuilder = () => {
             return;
         }
 
-        const pallets = parsePositiveInteger(input.value);
-        upsertHiddenInput(input.dataset.itemId, Number.isFinite(pallets) ? pallets : 0);
+        const lineKey = String(input.dataset.lineKey ?? '');
+        const item = lines.get(lineKey);
+
+        if (!item) {
+            return;
+        }
+
+        const quantity = parsePositiveInteger(input.value);
+
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            lines.delete(lineKey);
+        } else {
+            const safeQuantity = item.quantity_max ? Math.min(quantity, Number(item.quantity_max)) : quantity;
+            lines.set(lineKey, { ...item, selected_quantity: safeQuantity });
+        }
+
         renderSummary();
     });
 
@@ -787,10 +990,11 @@ const setupGoodsDispatchBuilder = () => {
             return;
         }
 
-        upsertHiddenInput(button.dataset.itemId, 0);
+        lines.delete(String(button.dataset.lineKey ?? ''));
         renderSummary();
     });
 
+    updatePickerForItem(null);
     renderSummary();
     form.dataset.dispatchBuilderBound = 'true';
 };
@@ -994,6 +1198,96 @@ const setupGoodsReceiptLines = () => {
 
 const bindDispatchExtraAutocomplete = (row, clientId, endpoint) => {
     const itemIdField = row.querySelector('[data-dispatch-extra-item-id]');
+    const lineTypeField = row.querySelector('[data-dispatch-extra-line-type]');
+    const stockPalletField = row.querySelector('[data-dispatch-extra-stock-pallet-id]');
+    const peakIndexField = row.querySelector('[data-dispatch-extra-peak-index]');
+    const quantityInput = row.querySelector('input[name*="[loaded_quantity]"]');
+    const quantityLabelNode = row.querySelector('[data-dispatch-extra-quantity-label]');
+    const typeLabelNode = row.querySelector('[data-dispatch-extra-type-label]');
+    const preview = row.querySelector('[data-dispatch-extra-preview]');
+
+    const resetSelection = () => {
+        if (itemIdField) {
+            itemIdField.value = '';
+        }
+
+        if (lineTypeField) {
+            lineTypeField.value = 'pallet';
+        }
+
+        if (stockPalletField) {
+            stockPalletField.value = '';
+        }
+
+        if (peakIndexField) {
+            peakIndexField.value = '';
+        }
+
+        if (quantityLabelNode) {
+            quantityLabelNode.textContent = quantityFieldLabel('pallet', true);
+        }
+
+        if (typeLabelNode) {
+            typeLabelNode.textContent = lineTypeLabel('pallet');
+            typeLabelNode.classList.remove('wms-line-type-pill--peak');
+            typeLabelNode.classList.add('wms-line-type-pill--pallet');
+        }
+
+        if (quantityInput) {
+            quantityInput.max = '';
+        }
+
+        if (preview) {
+            preview.innerHTML = `
+                <strong>Selecciona una referencia</strong>
+                <p>Verás si estás añadiendo un pallet completo o un pico concreto.</p>
+            `;
+        }
+    };
+
+    const applySelection = (item) => {
+        if (!item) {
+            resetSelection();
+            return;
+        }
+
+        if (itemIdField) {
+            itemIdField.value = String(item.item_id);
+        }
+
+        if (lineTypeField) {
+            lineTypeField.value = item.line_type ?? 'pallet';
+        }
+
+        if (stockPalletField) {
+            stockPalletField.value = item.stock_pallet_id ? String(item.stock_pallet_id) : '';
+        }
+
+        if (peakIndexField) {
+            peakIndexField.value = item.stock_peak_index ? String(item.stock_peak_index) : '';
+        }
+
+        if (quantityLabelNode) {
+            quantityLabelNode.textContent = quantityFieldLabel(item.line_type ?? 'pallet', true);
+        }
+
+        if (typeLabelNode) {
+            typeLabelNode.textContent = lineTypeLabel(item.line_type ?? 'pallet');
+            typeLabelNode.classList.toggle('wms-line-type-pill--peak', item.line_type === 'peak');
+            typeLabelNode.classList.toggle('wms-line-type-pill--pallet', item.line_type !== 'peak');
+        }
+
+        if (quantityInput) {
+            quantityInput.max = item.quantity_max ? String(item.quantity_max) : '';
+            if (item.line_type === 'peak') {
+                quantityInput.value = '1';
+            }
+        }
+
+        if (preview) {
+            preview.innerHTML = renderVariantPreview(item, item.line_type === 'peak' ? 1 : null);
+        }
+    };
 
     createAutocomplete(row.querySelector('[data-dispatch-extra-picker]'), {
         buildParams: () => ({
@@ -1001,23 +1295,43 @@ const bindDispatchExtraAutocomplete = (row, clientId, endpoint) => {
             active_only: '1',
             limit: '10',
         }),
+        renderOption: (item) => renderVariantAutocompleteOption(item),
         hasSelection: () => (itemIdField?.value ?? '') !== '',
         onSelect: (item) => {
-            if (itemIdField) {
-                itemIdField.value = String(item.id);
-            }
+            applySelection(item);
         },
         onInputChange: () => {
-            if (itemIdField) {
-                itemIdField.value = '';
-            }
+            resetSelection();
         },
         onClear: () => {
-            if (itemIdField) {
-                itemIdField.value = '';
-            }
+            resetSelection();
         },
     });
+
+    if (itemIdField?.value) {
+        if (quantityLabelNode) {
+            quantityLabelNode.textContent = quantityFieldLabel(lineTypeField?.value ?? 'pallet', true);
+        }
+
+        if (typeLabelNode) {
+            typeLabelNode.textContent = lineTypeLabel(lineTypeField?.value ?? 'pallet');
+            typeLabelNode.classList.toggle('wms-line-type-pill--peak', (lineTypeField?.value ?? 'pallet') === 'peak');
+            typeLabelNode.classList.toggle('wms-line-type-pill--pallet', (lineTypeField?.value ?? 'pallet') !== 'peak');
+        }
+
+        if (quantityInput) {
+            quantityInput.max = (lineTypeField?.value ?? 'pallet') === 'peak' ? '1' : '';
+        }
+
+        if (preview) {
+            preview.innerHTML = `
+                <strong>Referencia ya seleccionada</strong>
+                <p>Si necesitas cambiarla, vuelve a buscar y elige otra variante.</p>
+            `;
+        }
+    } else {
+        resetSelection();
+    }
 };
 
 const setupDispatchLoadingEditor = () => {
@@ -1093,3 +1407,5 @@ if (document.readyState === 'loading') {
 } else {
     boot();
 }
+
+

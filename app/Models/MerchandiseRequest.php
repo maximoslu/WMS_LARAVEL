@@ -115,11 +115,16 @@ class MerchandiseRequest extends Model
             return (int) $storedTotal;
         }
 
-        if ($this->relationLoaded('lines')) {
-            return (int) $this->lines->sum('requested_pallets');
-        }
+        return $this->relationLoaded('lines')
+            ? (int) $this->lines->sum(fn (MerchandiseRequestLine $line) => $line->requestedPalletsCount())
+            : (int) $this->lines()->sum('requested_pallets');
+    }
 
-        return (int) $this->lines()->sum('requested_pallets');
+    public function requestedPeaksCount(): int
+    {
+        return $this->relationLoaded('lines')
+            ? (int) $this->lines->sum(fn (MerchandiseRequestLine $line) => $line->requestedPeaksCount())
+            : (int) $this->lines()->sum('requested_peaks');
     }
 
     public function statusLabel(): string

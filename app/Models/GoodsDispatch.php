@@ -104,20 +104,30 @@ class GoodsDispatch extends Model
 
     public function palletsCount(): int
     {
-        if ($this->relationLoaded('lines')) {
-            return (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->requestedPallets());
-        }
+        return $this->relationLoaded('lines')
+            ? (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->requestedPallets())
+            : (int) $this->lines()->sum('requested_pallets');
+    }
 
-        return (int) $this->lines()->sum('requested_pallets');
+    public function peaksCount(): int
+    {
+        return $this->relationLoaded('lines')
+            ? (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->requestedPeaks())
+            : (int) $this->lines()->sum('requested_peaks');
     }
 
     public function loadedPalletsCount(): int
     {
-        if ($this->relationLoaded('lines')) {
-            return (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->loadedPallets());
-        }
+        return $this->relationLoaded('lines')
+            ? (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->loadedPallets())
+            : (int) $this->lines()->sum('loaded_pallets');
+    }
 
-        return (int) $this->lines()->sum('loaded_pallets');
+    public function loadedPeaksCount(): int
+    {
+        return $this->relationLoaded('lines')
+            ? (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->loadedPeaks())
+            : (int) $this->lines()->sum('loaded_peaks');
     }
 
     public function hasLoadingDifferences(): bool
@@ -137,7 +147,7 @@ class GoodsDispatch extends Model
             $this->load('lines');
         }
 
-        return $this->lines->contains(fn (GoodsDispatchLine $line) => $line->loadedPallets() > 0);
+        return $this->lines->contains(fn (GoodsDispatchLine $line) => $line->hasDeliveredQuantity());
     }
 
     public function hasConfirmedLoading(): bool

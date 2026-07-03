@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestScheduleService;
+use App\Support\Stock\StockVariantCatalog;
 use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -80,11 +81,9 @@ class MerchandiseRequestController extends Controller
         ]);
     }
 
-    public function create(Request $request): View
+    public function create(Request $request, StockVariantCatalog $variantCatalog): View
     {
         $user = $request->user();
-        $oldQuantities = collect(old('quantities', []))
-            ->filter(fn ($quantity, $itemId) => is_numeric((string) $itemId) && (int) $quantity > 0);
 
         abort_unless($user->hasRole(Role::CLIENTE) && $user->client_id !== null, 403);
 
@@ -93,33 +92,19 @@ class MerchandiseRequestController extends Controller
                 ->where('client_id', $user->client_id)
                 ->where('active', true)
                 ->exists(),
-            'selectedItems' => Item::query()
-                ->where('client_id', $user->client_id)
-                ->where('active', true)
-                ->whereIn('id', $oldQuantities->keys()->map(fn ($itemId) => (int) $itemId))
-                ->orderBy('sku')
-                ->get()
-                ->map(fn (Item $item): array => [
-                    'id' => $item->id,
-                    'sku' => $item->sku,
-                    'description' => $item->description,
-                    'units_per_pallet' => $item->units_per_pallet,
-                    'requested_pallets' => (int) $oldQuantities->get((string) $item->id, 0),
-                ])
-                ->values()
-                ->all(),
+            'selectedItems' => $variantCatalog->hydrateSelections(old('lines', old('quantities', [])), (int) $user->client_id),
             'client' => $user->client,
-            'searchEndpoint' => route('ajax.items'),
+            'searchEndpoint' => route('merchandise-requests.items.search'),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
 
-    public function searchItems(Request $request): JsonResponse
+    public function searchItems(Request $request, StockVariantCatalog $variantCatalog): JsonResponse
     {
         $user = $request->user();
         abort_unless($user->hasRole(Role::CLIENTE) && $user->client_id !== null, 403);
 
-        $search = trim((string) $request->string('search'));
+        $search = trim((string) ($request->string('search')->value() ?: $request->string('q')->value()));
 
         if (mb_strlen($search) < 2) {
             return response()->json([
@@ -127,28 +112,8 @@ class MerchandiseRequestController extends Controller
             ]);
         }
 
-        $items = Item::query()
-            ->where('client_id', $user->client_id)
-            ->where('active', true)
-            ->where(function (Builder $query) use ($search): void {
-                $query
-                    ->where('sku', 'like', '%'.$search.'%')
-                    ->orWhere('description', 'like', '%'.$search.'%');
-            })
-            ->orderBy('sku')
-            ->limit(15)
-            ->get()
-            ->map(fn (Item $item): array => [
-                'id' => $item->id,
-                'sku' => $item->sku,
-                'description' => $item->description,
-                'units_per_pallet' => $item->units_per_pallet,
-            ])
-            ->values()
-            ->all();
-
         return response()->json([
-            'data' => $items,
+            'data' => $variantCatalog->search($search, (int) $user->client_id, 15, true),
         ]);
     }
 
@@ -159,12 +124,8 @@ class MerchandiseRequestController extends Controller
     ): RedirectResponse {
         $user = $request->user();
         $requestedLines = $request->validatedLines();
-        $items = Item::query()
-            ->whereIn('id', array_column($requestedLines, 'item_id'))
-            ->get()
-            ->keyBy('id');
 
-        $merchandiseRequest = DB::transaction(function () use ($requestedLines, $items, $user): MerchandiseRequest {
+        $merchandiseRequest = DB::transaction(function () use ($requestedLines, $user): MerchandiseRequest {
             $requestModel = MerchandiseRequest::query()->create([
                 'client_id' => $user->client_id,
                 'requested_by' => $user->id,
@@ -173,18 +134,17 @@ class MerchandiseRequestController extends Controller
             ]);
 
             foreach ($requestedLines as $line) {
-                $item = $items->get($line['item_id']);
-
-                if ($item === null) {
-                    continue;
-                }
-
                 $requestModel->lines()->create([
-                    'item_id' => $item->id,
-                    'lot' => null,
-                    'units_per_pallet' => $item->units_per_pallet,
+                    'item_id' => $line['item_id'],
+                    'stock_pallet_id' => $line['stock_pallet_id'],
+                    'line_type' => $line['line_type'],
+                    'stock_peak_index' => $line['stock_peak_index'],
+                    'lot' => $line['lot'],
+                    'units_per_pallet' => $line['units_per_pallet'],
+                    'units_per_peak' => $line['units_per_peak'],
                     'requested_pallets' => $line['requested_pallets'],
-                    'requested_units' => $line['requested_pallets'] * $item->units_per_pallet,
+                    'requested_peaks' => $line['requested_peaks'],
+                    'requested_units' => $line['requested_units'],
                 ]);
             }
 
@@ -209,7 +169,15 @@ class MerchandiseRequestController extends Controller
         }
 
         return view('merchandise-requests.show', [
-            'merchandiseRequest' => $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'dispatch.lines.item', 'dispatch.lines.sourceRequestLine']),
+            'merchandiseRequest' => $merchandiseRequest->load([
+                'client',
+                'requestedBy',
+                'lines.item',
+                'lines.stockPallet',
+                'dispatch.lines.item',
+                'dispatch.lines.stockPallet',
+                'dispatch.lines.sourceRequestLine',
+            ]),
             'isClient' => $user->hasRole(Role::CLIENTE),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
@@ -243,32 +211,32 @@ class MerchandiseRequestController extends Controller
             }
 
             return $response;
-        } else {
-            $payload = [
-                'status' => $validated['status'],
-            ];
-
-            if ($validated['status'] === MerchandiseRequest::STATUS_PREPARING) {
-                $payload['prepared_by'] = $request->user()->id;
-                $payload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
-            }
-
-            if ($validated['status'] === MerchandiseRequest::STATUS_CANCELLED) {
-                $payload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
-            }
-
-            if (in_array($validated['status'], [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)) {
-                return redirect()
-                    ->route('merchandise-requests.show', $merchandiseRequest)
-                    ->withErrors([
-                        'status' => 'Debes generar primero una salida y confirmar la carga real antes de marcar este pedido como enviado o completado.',
-                    ]);
-            }
-
-            $merchandiseRequest->update($payload);
-
-            $notificationService->notifyStatusChanged($merchandiseRequest, $previousStatus);
         }
+
+        $payload = [
+            'status' => $validated['status'],
+        ];
+
+        if ($validated['status'] === MerchandiseRequest::STATUS_PREPARING) {
+            $payload['prepared_by'] = $request->user()->id;
+            $payload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
+        }
+
+        if ($validated['status'] === MerchandiseRequest::STATUS_CANCELLED) {
+            $payload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
+        }
+
+        if (in_array($validated['status'], [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)) {
+            return redirect()
+                ->route('merchandise-requests.show', $merchandiseRequest)
+                ->withErrors([
+                    'status' => 'Debes generar primero una salida y confirmar la carga real antes de marcar este pedido como enviado o completado.',
+                ]);
+        }
+
+        $merchandiseRequest->update($payload);
+
+        $notificationService->notifyStatusChanged($merchandiseRequest, $previousStatus);
 
         return redirect()
             ->route('merchandise-requests.show', $merchandiseRequest)
@@ -279,7 +247,7 @@ class MerchandiseRequestController extends Controller
     {
         abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
 
-        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item']);
+        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'lines.stockPallet']);
 
         return Pdf::loadView('merchandise-requests.preparation-pdf', [
             'merchandiseRequest' => $merchandiseRequest,

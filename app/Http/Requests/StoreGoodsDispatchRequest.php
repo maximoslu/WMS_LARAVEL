@@ -3,16 +3,84 @@
 namespace App\Http\Requests;
 
 use App\Models\Client;
-use App\Models\Item;
 use App\Models\Role;
+use App\Support\Stock\StockLinePayloadResolver;
+use App\Support\WmsLineType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
 class StoreGoodsDispatchRequest extends FormRequest
 {
+    /**
+     * @var array<int, int|string>
+     */
+    private array $legacyQuantityKeys = [];
+
+    /**
+     * @var array<int, array{
+     *     item_id:int,
+     *     sku:string,
+     *     description:string,
+     *     stock_pallet_id:int|null,
+     *     line_type:string,
+     *     stock_peak_index:int|null,
+     *     lot:string|null,
+     *     location_text:string|null,
+     *     units_per_pallet:int,
+     *     units_per_peak:int|null,
+     *     requested_pallets:int,
+     *     requested_peaks:int,
+     *     requested_units:int
+     * }> | null
+     */
+    private ?array $resolvedLines = null;
+
+    /**
+     * @var array<string, string>|null
+     */
+    private ?array $resolvedErrors = null;
+
     public function authorize(): bool
     {
         return $this->user()?->canAccessRole(Role::ALMACEN) ?? false;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $submittedLines = $this->input('lines');
+
+        if (! is_array($submittedLines)) {
+            $submittedLines = collect($this->input('quantities', []))
+                ->map(function ($value, $itemId) {
+                    $this->legacyQuantityKeys[] = $itemId;
+
+                    return [
+                        'item_id' => $itemId,
+                        'line_type' => WmsLineType::PALLET,
+                        'quantity' => $value,
+                    ];
+                })
+                ->values()
+                ->all();
+        }
+
+        $this->merge([
+            'lines' => collect($submittedLines)
+                ->map(function ($payload) {
+                    if (! is_array($payload)) {
+                        return [];
+                    }
+
+                    return [
+                        'item_id' => $payload['item_id'] ?? null,
+                        'line_type' => $payload['line_type'] ?? WmsLineType::PALLET,
+                        'stock_pallet_id' => $payload['stock_pallet_id'] ?? null,
+                        'stock_peak_index' => $payload['stock_peak_index'] ?? null,
+                        'quantity' => ($payload['quantity'] ?? '') === '' ? null : ($payload['quantity'] ?? null),
+                    ];
+                })
+                ->all(),
+        ]);
     }
 
     public function rules(): array
@@ -20,65 +88,140 @@ class StoreGoodsDispatchRequest extends FormRequest
         return [
             'client_id' => ['required', 'exists:clients,id'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'quantities' => ['required', 'array'],
-            'quantities.*' => ['nullable', 'integer', 'min:0'],
+            'lines' => ['required', 'array'],
+            'lines.*.item_id' => ['nullable', 'integer'],
+            'lines.*.line_type' => ['required', 'string'],
+            'lines.*.stock_pallet_id' => ['nullable', 'integer'],
+            'lines.*.stock_peak_index' => ['nullable', 'integer', 'min:1'],
+            'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
         ];
     }
 
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $this->mirrorLegacyValidationErrors($validator);
             $clientId = $this->integer('client_id');
             $clientExists = Client::query()->whereKey($clientId)->exists();
 
             if (! $clientExists) {
+                if ($this->has('quantities') && $this->validatedLegacyLineCount() === 0) {
+                    $validator->errors()->add('quantities', 'Debes anadir al menos una linea valida a la salida.');
+                }
+
                 return;
             }
 
             $lines = $this->validatedLines();
 
             if ($lines === []) {
-                $validator->errors()->add('quantities', 'Debes anadir al menos una linea valida a la salida.');
+                $message = 'Debes anadir al menos una linea valida a la salida.';
+                $validator->errors()->add('lines', $message);
+                $this->addLegacyQuantitiesError($validator, $message);
             }
 
-            $allowedItemIds = Item::query()
-                ->where('client_id', $clientId)
-                ->where('active', true)
-                ->pluck('id')
-                ->map(fn ($id) => (string) $id)
-                ->all();
-
-            $requestedItemIds = array_map(
-                static fn (array $line): string => (string) $line['item_id'],
-                $lines
-            );
-
-            if (array_diff($requestedItemIds, $allowedItemIds) !== []) {
-                $validator->errors()->add('quantities', 'Hay referencias no validas para el cliente seleccionado.');
+            foreach ($this->resolvedErrors() as $field => $message) {
+                $validator->errors()->add($field, $message);
+                $this->addLegacyQuantitiesError($validator, $message, $field);
             }
         });
     }
 
     /**
-     * @return array<int, array{item_id: int, pallets: int}>
+     * @return array<int, array{
+     *     item_id:int,
+     *     sku:string,
+     *     description:string,
+     *     stock_pallet_id:int|null,
+     *     line_type:string,
+     *     stock_peak_index:int|null,
+     *     lot:string|null,
+     *     location_text:string|null,
+     *     units_per_pallet:int,
+     *     units_per_peak:int|null,
+     *     requested_pallets:int,
+     *     requested_peaks:int,
+     *     requested_units:int
+     * }>
      */
     public function validatedLines(): array
     {
-        return collect($this->input('quantities', []))
-            ->map(function ($pallets, $itemId): ?array {
-                $normalized = (int) $pallets;
+        if ($this->resolvedLines !== null) {
+            return $this->resolvedLines;
+        }
 
-                if ($normalized <= 0 || ! is_numeric((string) $itemId)) {
-                    return null;
-                }
+        /** @var StockLinePayloadResolver $resolver */
+        $resolver = app(StockLinePayloadResolver::class);
+        $resolved = $resolver->resolve($this->integer('client_id'), $this->input('lines', []), true);
 
-                return [
-                    'item_id' => (int) $itemId,
-                    'pallets' => $normalized,
-                ];
-            })
-            ->filter()
-            ->values()
-            ->all();
+        $this->resolvedLines = $resolved['lines'];
+        $this->resolvedErrors = $resolved['errors'];
+
+        return $this->resolvedLines;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function resolvedErrors(): array
+    {
+        if ($this->resolvedErrors !== null) {
+            return $this->resolvedErrors;
+        }
+
+        $this->validatedLines();
+
+        return $this->resolvedErrors ?? [];
+    }
+
+    private function addLegacyQuantitiesError(Validator $validator, string $message, ?string $field = null): void
+    {
+        if ($this->legacyQuantityKeys === []) {
+            return;
+        }
+
+        if ($field === null || $field === 'lines') {
+            $validator->errors()->add('quantities', $message);
+
+            return;
+        }
+
+        if (preg_match('/^lines\.(\d+)\./', $field, $matches) !== 1) {
+            return;
+        }
+
+        $legacyKey = $this->legacyQuantityKeys[(int) $matches[1]] ?? null;
+
+        if ($legacyKey === null) {
+            $validator->errors()->add('quantities', $message);
+
+            return;
+        }
+
+        $validator->errors()->add('quantities.'.$legacyKey, $message);
+    }
+
+    private function mirrorLegacyValidationErrors(Validator $validator): void
+    {
+        if ($this->legacyQuantityKeys === []) {
+            return;
+        }
+
+        foreach ($validator->errors()->getMessages() as $field => $messages) {
+            if (! str_starts_with($field, 'lines.')) {
+                continue;
+            }
+
+            foreach ($messages as $message) {
+                $this->addLegacyQuantitiesError($validator, $message, $field);
+            }
+        }
+    }
+
+    private function validatedLegacyLineCount(): int
+    {
+        return collect($this->input('lines', []))
+            ->filter(fn ($payload) => is_array($payload) && is_numeric((string) ($payload['quantity'] ?? null)) && (int) $payload['quantity'] > 0)
+            ->count();
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
+use App\Support\Stock\StockVariantCatalog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +16,33 @@ use Illuminate\Validation\Rule;
 
 class AjaxSearchController extends Controller
 {
+    public function stockVariants(Request $request, StockVariantCatalog $variantCatalog): JsonResponse
+    {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'active_only' => ['nullable', 'boolean'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $query = trim((string) ($validated['q'] ?? ''));
+
+        if (mb_strlen($query) < 2) {
+            return response()->json(['data' => []]);
+        }
+
+        $user = $request->user();
+        $clientId = $this->resolveClientId($user, $validated['client_id'] ?? null);
+        $limit = (int) ($validated['limit'] ?? 10);
+        $activeOnly = $user->hasRole(Role::CLIENTE)
+            ? true
+            : filter_var($validated['active_only'] ?? false, FILTER_VALIDATE_BOOL);
+
+        return response()->json([
+            'data' => $variantCatalog->search($query, $clientId, $limit, $activeOnly),
+        ]);
+    }
+
     public function items(Request $request): JsonResponse
     {
         $validated = $request->validate([

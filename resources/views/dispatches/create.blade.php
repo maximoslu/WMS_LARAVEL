@@ -1,4 +1,4 @@
-﻿@extends('layouts.dashboard')
+@extends('layouts.dashboard')
 
 @section('title', 'Nueva salida manual | MAXIMO WMS')
 @section('topbar_title', 'Nueva salida manual')
@@ -6,18 +6,27 @@
 @section('content')
     @php
         $breadcrumbs = [
-
-
-        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-        ['label' => 'Salidas', 'href' => route('dispatches.index')],
-        ['label' => 'Salida manual'],
+            ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+            ['label' => 'Salidas', 'href' => route('dispatches.index')],
+            ['label' => 'Salida manual'],
         ];
     @endphp
+
     <x-breadcrumbs :items="$breadcrumbs" />
+
+    <section class="surface-card compact-card wms-flow-hero">
+        <div class="wms-flow-hero-copy">
+            <span class="status-chip">Expedición manual</span>
+            <h2 class="ops-page-title page-title-compact">Registrar una salida con referencias claras, pallets completos y picos</h2>
+            <p>
+                Selecciona cliente, busca la referencia exacta y deja la salida lista desde el primer momento con una operativa más cercana al trabajo real de almacén.
+            </p>
+        </div>
+    </section>
 
     @if ($errors->any())
         <div class="alert alert-error">
-            {{ $errors->first('quantities') ?: 'Revisa los datos de la salida antes de guardarla.' }}
+            {{ $errors->first('lines') ?: 'Revisa los datos de la salida antes de guardarla.' }}
         </div>
     @endif
 
@@ -25,11 +34,13 @@
         @csrf
 
         <div class="dispatch-builder">
-            <section class="surface-card compact-card merchandise-request-catalog">
-                <div class="ops-section-heading">
+            <section class="surface-card compact-card merchandise-request-catalog wms-flow-card">
+                <div class="wms-section-head">
                     <div>
                         <strong>Crear salida manual</strong>
-                        <p class="merchandise-request-summary-copy">Selecciona cliente, mercancía y pallets para registrar la expedición.</p>
+                        <p class="merchandise-request-summary-copy">
+                            El cliente filtra el catálogo disponible y el buscador te muestra partidas concretas cuando existen, con su lote, ubicación y disponibilidad visible.
+                        </p>
                     </div>
                 </div>
 
@@ -45,15 +56,15 @@
                     </select>
                 </label>
 
-                <section class="merchandise-request-picker" aria-label="Selector de salida">
+                <section class="wms-variant-picker" aria-label="Selector de salida">
                     <div class="auth-field">
-                        <span>Mercancia</span>
+                        <span>Buscar mercancía</span>
                         <div
                             class="ajax-autocomplete"
                             data-ajax-autocomplete
                             data-endpoint="{{ $searchEndpoint }}"
                             data-min-chars="2"
-                            data-empty-message="Escribe al menos 2 caracteres para buscar referencias."
+                            data-empty-message="Selecciona primero un cliente y escribe al menos 2 caracteres."
                             data-no-results-message="Sin resultados"
                             data-searching-message="Buscando..."
                             data-error-message="Error al buscar"
@@ -64,58 +75,62 @@
                                 <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
                             </div>
                             <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
-                                <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe al menos 2 caracteres...</div>
+                                <div class="ajax-autocomplete-status" data-autocomplete-status>Selecciona un cliente y empieza a escribir...</div>
                                 <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
                             </div>
                         </div>
                     </div>
 
-                    <label class="auth-field merchandise-request-picker-quantity">
-                        <span>Pallets</span>
-                        <input type="number" min="1" step="1" value="1" class="auth-input" data-dispatch-picker-quantity>
-                    </label>
+                    <article class="wms-variant-preview" data-dispatch-selection-preview>
+                        <strong>Selecciona el cliente y después una referencia</strong>
+                        <p>Cuando elijas una coincidencia verás aquí si estás añadiendo un pallet completo o un pico concreto.</p>
+                    </article>
 
-                    <button type="button" class="button-primary compact-button btn-compact" data-dispatch-add-selected>
-                        Añadir a salida
-                    </button>
+                    <div class="wms-variant-actions">
+                        <label class="auth-field wms-quantity-field">
+                            <span data-dispatch-picker-label>Cantidad</span>
+                            <input type="number" min="1" step="1" value="1" class="auth-input" data-dispatch-picker-quantity>
+                        </label>
+
+                        <button type="button" class="button-primary compact-button btn-compact" data-dispatch-add-selected>
+                            Añadir a salida
+                        </button>
+                    </div>
+
+                    <p class="helper-text" data-dispatch-picker-feedback>
+                        Selecciona el cliente primero para filtrar referencias y evitar errores de operativa.
+                    </p>
                 </section>
 
-                <p class="helper-text" data-dispatch-picker-feedback>
-                    Selecciona el cliente primero para filtrar referencias y evitar errores de operativa.
-                </p>
-
-                <div class="merchandise-request-hidden-inputs" data-dispatch-hidden-inputs>
-                    @foreach (old('quantities', []) as $itemId => $quantity)
-                        @if ((int) $quantity > 0)
-                            <input type="hidden" name="quantities[{{ $itemId }}]" value="{{ (int) $quantity }}" data-dispatch-hidden-quantity data-item-id="{{ $itemId }}">
-                        @endif
-                    @endforeach
-                </div>
-
+                <div class="merchandise-request-hidden-inputs" data-dispatch-hidden-inputs></div>
                 <script type="application/json" data-dispatch-items>@json($selectedItems)</script>
 
                 <label class="auth-field">
-                    <span>Observaciones</span>
+                    <span>Observaciones generales</span>
                     <textarea name="notes" class="auth-input" rows="4" maxlength="2000" placeholder="Opcional">{{ old('notes') }}</textarea>
                 </label>
             </section>
 
-            <aside class="surface-card compact-card merchandise-request-summary-card">
-                <div class="ops-section-heading">
+            <aside class="surface-card compact-card merchandise-request-summary-card wms-flow-card">
+                <div class="wms-section-head">
                     <div>
                         <strong>Resumen de salida</strong>
-                        <p class="merchandise-request-summary-copy">Revisa líneas y pallets antes de registrar la salida.</p>
+                        <p class="merchandise-request-summary-copy">Edita cantidades y revisa con claridad qué sale como pallet y qué sale como pico.</p>
                     </div>
                 </div>
 
-                <div class="merchandise-request-summary-totals">
-                    <div>
-                        <span>Lineas</span>
+                <div class="wms-summary-kpis">
+                    <div class="wms-kpi-tile">
+                        <span>Líneas</span>
                         <strong data-dispatch-summary-lines>0</strong>
                     </div>
-                    <div>
-                        <span>Total pallets</span>
+                    <div class="wms-kpi-tile">
+                        <span>Pallets</span>
                         <strong data-dispatch-summary-pallets>0</strong>
+                    </div>
+                    <div class="wms-kpi-tile">
+                        <span>Picos</span>
+                        <strong data-dispatch-summary-peaks>0</strong>
                     </div>
                 </div>
 
@@ -123,18 +138,7 @@
                     Todavía no hay líneas en la salida.
                 </div>
 
-                <div class="data-table-wrap">
-                    <table class="data-table table-compact merchandise-request-summary-table">
-                        <thead>
-                            <tr>
-                                <th>Mercancia</th>
-                                <th>Pallets</th>
-                                <th>Accion</th>
-                            </tr>
-                        </thead>
-                        <tbody data-dispatch-summary-rows></tbody>
-                    </table>
-                </div>
+                <div class="wms-line-editor-list" data-dispatch-summary-rows></div>
 
                 <div class="item-filter-actions action-buttons page-actions-compact merchandise-request-submit">
                     <button type="submit" class="button-primary compact-button btn-compact" data-dispatch-submit>Registrar salida</button>
@@ -144,8 +148,3 @@
         </div>
     </form>
 @endsection
-
-
-
-
-
