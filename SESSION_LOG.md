@@ -101,3 +101,81 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 **Pendientes:**
 - Quedan sin auditar visualmente el resto de módulos no revisados en esta pasada (bookings, entradas, salidas, usuarios, clientes, proveedores, solicitudes, notificaciones, perfil) — se benefician automáticamente de los mismos cambios CSS globales, pero no se ha hecho una revisión visual pantalla por pantalla de cada uno.
 - Los puntos P1/P2/P3 de la auditoría inicial siguen abiertos.
+---
+
+## 2026-07-03 - Cierre de sesion para traspaso a Claude (14:34:43 +02:00)
+
+**Contexto:** Sesion de cierre y documentacion tras completar el hito funcional de PEDIDOS / SALIDAS con soporte de pallets y picos. No se deben tocar ni Google Calendar, ni importacion de stock Friesland/Edelvives, ni facturacion, ni el aislamiento de stock por cliente en la continuacion.
+
+**Estado Git al cierre:**
+- Rama actual: `main`
+- `git status`: limpio en codigo funcional, pero con `.claude/` sin trackear en el working tree
+- `git log --oneline -10`: HEAD actual en `c1da968`, con historial inmediato `4f87109`, `a704e29`, `2bb22fd`, `c1011a5`, `1932c23`, `864a7d7`, `1b82a28`, `a394364`, `c187c0c`
+
+**Ultimos commits de referencia:**
+- Ultimo commit funcional actual:
+  - `c1da968 feat: improve pedidos y salidas ux with peak support`
+- Ultimo commit visual de referencia anterior en el log local/desplegado:
+  - `4f87109 fix: polish breadcrumbs and page header layout`
+
+**Estado de la funcionalidad nueva:**
+- pedidos ya soportan lineas tipo `pallet` y `peak`
+- cliente puede pedir picos desde autocomplete
+- interno puede gestionar carga real con pallets/picos
+- se anadio la migracion:
+  - `database/migrations/2026_07_03_000024_add_line_type_support_to_request_and_dispatch_lines.php`
+- si se despliega a produccion hay que ejecutar:
+  - `php artisan migrate --force`
+  - `php artisan optimize:clear`
+  - `php artisan queue:restart`
+
+**Validacion reportada por Codex:**
+- `php artisan optimize:clear`: OK
+- `php artisan test`: `257 passed`
+- `npm run build`: OK
+
+**Resumen tecnico real de lo entregado:**
+- Se anadieron tipos de linea y persistencia explicita para diferenciar pallets completos de picos en pedidos y salidas.
+- El flujo cliente -> pedido -> gestion interna -> salida -> carga real conserva el tipo de linea y la cantidad correspondiente.
+- Se anadio soporte de autocomplete para variantes de stock y para lineas extra en carga real.
+- Se corrigio compatibilidad hacia atras con payloads antiguos en tests y formularios donde todavia se enviaban cantidades legacy.
+
+**Problemas detectados por el usuario que quedan pendientes para Claude:**
+1. En PEDIDOS / Solicitar mercancia siguen mal los margenes, paddings y espaciados.
+2. Hay textos con UTF-8 roto, por ejemplo:
+   - `tipo de lÃ­nea`
+   - `aparecerÃ¡`
+   - `aÃ±adirla`
+   y debe corregirse en todas las vistas afectadas.
+3. La pantalla de crear pedido aun parece poco pulida visualmente.
+4. En dashboard de superadmin/almacen/administracion falta un acceso directo claro a PEDIDOS.
+5. La seccion PEDIDOS deberia tener una lista tipo tabla con pedidos y estado a la derecha, usando colores de estado.
+6. El albaran de salida sigue sin logo de Maximo.
+7. La gestion interna de pedido/salida/carga real necesita revision visual seria: paddings, margenes, alineacion de botones, jerarquia de acciones, colores de estado.
+8. El flujo debe ser "para tontos", porque usuarios de almacen pueden ir despistados.
+9. En carga real, anadir linea extra/autocomplete debe verse dentro del layout y no aparecer cortado o debajo de bloques.
+10. Botones de impresion/albaran deben estar alineados y con icono de impresora.
+11. Estados Pendiente/Enviado/Completado deben ser visualmente claros y con color.
+
+**Decisiones de producto vigentes:**
+- Menu cliente visible:
+  - `STOCK`
+  - `BOOKING`
+  - `PEDIDOS`
+- Internos tambien necesitan acceso directo a PEDIDOS.
+- Los colores deben ayudar a entender estados.
+- Mantener look corporativo dark/glass.
+- No tocar Google Calendar.
+- No tocar importacion stock Friesland/Edelvives.
+- No tocar facturacion.
+- No romper stock por cliente.
+
+**Notas operativas para Claude:**
+- No anadir `.claude/` a ningun commit.
+- La migracion nueva existe y ya forma parte del commit `c1da968`.
+- Validacion final hecha por Codex antes del push:
+  - `php artisan optimize:clear` OK
+  - `php artisan test` OK (`257 passed`)
+  - `npm run build` OK
+- El push ya esta hecho en `origin/main` con `c1da968`.
+- Lo siguiente a revisar no es funcionalidad base de stock, sino pulido serio de UX/UI y correccion de textos rotos en PEDIDOS / SALIDAS.
