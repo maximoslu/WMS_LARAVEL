@@ -93,7 +93,7 @@ class WmsNavigation
         $status = $child['status'] ?? 'ready';
         $displayTitle = $child['title'];
         $displayRoute = $child['route'];
-        $displayIcon = null;
+        $displayIcon = $child['icon'] ?? 'module';
 
         if ($user?->hasRole(Role::CLIENTE)) {
             match ($child['key'] ?? null) {

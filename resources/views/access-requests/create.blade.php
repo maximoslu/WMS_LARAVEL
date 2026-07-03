@@ -1,4 +1,4 @@
-@extends('layouts.auth')
+﻿@extends('layouts.auth')
 
 @section('title', 'Solicitar acceso | MAXIMO WMS')
 
@@ -70,3 +70,4 @@
         <a href="{{ route('password.request') }}" class="auth-link">Recuperar contrasena</a>
     </div>
 @endsection
+

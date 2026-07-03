@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Editar usuario | MAXIMO WMS')
 @section('topbar_title', 'Editar usuario')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('users.index') }}">Usuarios</a>
-        <span>/</span>
-        <span>{{ $managedUser->name }}</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Usuarios', 'href' => route('users.index')],
+        ['label' => $managedUser->name],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
@@ -156,7 +159,7 @@
                     clientSelect.disabled = !isClientRole;
 
                     if (!isClientRole) {
-                        clientSelect.value = '';
+                        clientSelect.value = ';
                     }
 
                     if (emptyOption) {
@@ -176,3 +179,8 @@
         </script>
     @endif
 @endsection
+
+
+
+
+

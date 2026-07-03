@@ -1,15 +1,18 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', $module['title'].' | MAXIMO WMS')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <span>{{ $module['section_title'] }}</span>
-        <span>/</span>
-        <span>{{ $module['title'] }}</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => $module['section_title']],
+        ['label' => $module['title']],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="placeholder-layout ops-placeholder-layout">
         <article class="placeholder-card surface-card ops-placeholder-main compact-card">
@@ -66,3 +69,8 @@
         </article>
     </section>
 @endsection
+
+
+
+
+

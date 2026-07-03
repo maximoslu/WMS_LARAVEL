@@ -1,4 +1,4 @@
-@extends('layouts.auth')
+﻿@extends('layouts.auth')
 
 @section('title', 'Restablecer contrasena | MAXIMO WMS')
 
@@ -57,3 +57,4 @@
         </div>
     </form>
 @endsection
+

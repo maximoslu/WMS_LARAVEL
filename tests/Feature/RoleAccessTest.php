@@ -34,7 +34,9 @@ class RoleAccessTest extends TestCase
             ->assertSee('Usuarios y roles')
             ->assertSee('Backups')
             ->assertSee('Auditoria y trazabilidad')
-            ->assertSee('Operaciones diarias');
+            ->assertSee('Operaciones diarias')
+            ->assertSee('Stock actual')
+            ->assertSee('module-link-icon', false);
     }
 
     public function test_cliente_does_not_see_administrative_sections(): void

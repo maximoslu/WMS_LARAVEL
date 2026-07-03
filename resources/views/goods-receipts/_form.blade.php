@@ -1,14 +1,15 @@
-@php($isEditing = $receipt->exists)
+@php
+    $isEditing = $receipt->exists;
+    $breadcrumbs = [
 
-<nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel de control</a>
-    <span>/</span>
-    <span>Operaciones</span>
-    <span>/</span>
-    <a href="{{ route('goods-receipts.index') }}">Entradas</a>
-    <span>/</span>
-    <span>{{ $isEditing ? 'Editar' : 'Crear' }}</span>
-</nav>
+
+    ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+    ['label' => 'Operaciones'],
+    ['label' => 'Entradas', 'href' => route('goods-receipts.index')],
+    ['label' => $isEditing ? 'Editar' : 'Crear'],
+    ];
+@endphp
+<x-breadcrumbs :items="$breadcrumbs" />
 
 <div class="goods-receipt-shell">
     <section class="surface-card item-form-card entity-form compact-card">
@@ -173,3 +174,8 @@
         </form>
     </section>
 </div>
+
+
+
+
+

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
     <head>
         <meta charset="utf-8">
@@ -17,6 +17,7 @@
         @php($unreadNotificationsCount = $layoutUnreadNotificationsCount ?? 0)
         @php($topbarTitle = $__env->yieldContent('topbar_title', trim(explode('|', $__env->yieldContent('title', 'MAXIMO WMS'))[0])))
         @php($userInitials = collect(preg_split('/\s+/', trim($userName)))->filter()->take(2)->map(fn (string $chunk) => strtoupper(substr($chunk, 0, 1)))->implode(''))
+        @php($notificationsAriaLabel = $unreadNotificationsCount > 0 ? 'Notificaciones, '.$unreadNotificationsCount.' sin leer' : 'Notificaciones')
 
         <div class="app-drawer-backdrop" data-drawer-backdrop hidden></div>
 
@@ -39,7 +40,7 @@
                         class="app-menu-toggle"
                         data-drawer-close
                         aria-controls="app-drawer"
-                        aria-label="Cerrar menú"
+                        aria-label="Cerrar menu"
                     >
                         <span></span>
                         <span></span>
@@ -58,7 +59,7 @@
                     </div>
                 </div>
 
-                <nav class="app-drawer-nav ops-nav" aria-label="Navegación principal">
+                <nav class="app-drawer-nav ops-nav" aria-label="Navegacion principal">
                     @foreach ($navigationSections as $section)
                         @php($sectionActive = collect($section['children'])->contains(fn (array $child) => request()->routeIs(...($child['active_patterns'] ?? [$child['route']]))))
 
@@ -74,11 +75,9 @@
 
                                     <a href="{{ route($child['display_route'] ?? $child['route']) }}" class="ops-nav-link{{ $isActive ? ' is-active' : '' }}">
                                         <span class="module-link-body">
-                                            @if (! empty($child['display_icon']))
-                                                <span class="module-link-icon" aria-hidden="true">
-                                                    <x-module-icon :name="$child['display_icon']" />
-                                                </span>
-                                            @endif
+                                            <span class="module-link-icon" aria-hidden="true">
+                                                <x-module-icon :name="$child['display_icon']" />
+                                            </span>
                                             <span class="module-link-copy">
                                                 <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
                                             </span>
@@ -95,12 +94,18 @@
                     @endforeach
                 </nav>
 
-                <a href="{{ route('profile.edit') }}" class="button-secondary compact-button btn-compact{{ request()->routeIs('profile.*') ? ' is-active' : '' }}">
-                    Mi perfil
+                <a href="{{ route('profile.edit') }}" class="button-secondary compact-button btn-compact app-utility-link{{ request()->routeIs('profile.*') ? ' is-active' : '' }}">
+                    <span class="app-action-icon" aria-hidden="true">
+                        <x-module-icon name="profile" />
+                    </span>
+                    <span>Mi perfil</span>
                 </a>
 
-                <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-compact{{ request()->routeIs('notifications.*') ? ' is-active' : '' }}">
-                    Notificaciones
+                <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-compact app-utility-link{{ request()->routeIs('notifications.*') ? ' is-active' : '' }}" aria-label="{{ $notificationsAriaLabel }}">
+                    <span class="app-action-icon" aria-hidden="true">
+                        <x-module-icon name="notifications" />
+                    </span>
+                    <span>Notificaciones</span>
                     @if ($unreadNotificationsCount > 0)
                         <span class="users-pending-count">{{ $unreadNotificationsCount }}</span>
                     @endif
@@ -108,7 +113,12 @@
 
                 <form method="POST" action="{{ route('logout') }}" class="app-drawer-logout">
                     @csrf
-                    <button type="submit" class="button-secondary compact-button btn-compact">Cerrar sesión</button>
+                    <button type="submit" class="button-secondary compact-button btn-compact app-utility-link">
+                        <span class="app-action-icon" aria-hidden="true">
+                            <x-module-icon name="logout" />
+                        </span>
+                        <span>Cerrar sesion</span>
+                    </button>
                 </form>
             </div>
         </aside>
@@ -122,7 +132,7 @@
                         data-drawer-toggle
                         aria-controls="app-drawer"
                         aria-expanded="false"
-                        aria-label="Abrir menú"
+                        aria-label="Abrir menu"
                     >
                         <span></span>
                         <span></span>
@@ -144,20 +154,35 @@
                 </div>
 
                 <div class="app-topbar-end">
-                    <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-compact app-notification-link">
-                        Notificaciones
+                    <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-compact app-topbar-action app-notification-link{{ request()->routeIs('notifications.*') ? ' is-active' : '' }}" aria-label="{{ $notificationsAriaLabel }}">
+                        <span class="app-action-icon" aria-hidden="true">
+                            <x-module-icon name="notifications" />
+                        </span>
+                        <span class="app-topbar-action-copy">Notificaciones</span>
                         @if ($unreadNotificationsCount > 0)
                             <span class="users-pending-count">{{ $unreadNotificationsCount }}</span>
                         @endif
                     </a>
-                    <span class="sr-only">Rol</span>
-                    <span class="app-role-chip">{{ $roleName }}</span>
-                    <a href="{{ route('profile.edit') }}" class="button-secondary compact-button btn-compact">Mi perfil</a>
+                    <span class="app-role-group">
+                        <span class="app-topbar-label">Rol</span>
+                        <span class="app-role-chip">{{ $roleName }}</span>
+                    </span>
+                    <a href="{{ route('profile.edit') }}" class="button-secondary compact-button btn-compact app-topbar-action{{ request()->routeIs('profile.*') ? ' is-active' : '' }}">
+                        <span class="app-action-icon" aria-hidden="true">
+                            <x-module-icon name="profile" />
+                        </span>
+                        <span class="app-topbar-action-copy">Mi perfil</span>
+                    </a>
                     <strong class="app-topbar-user">{{ $userName }}</strong>
 
                     <form method="POST" action="{{ route('logout') }}" class="app-topbar-logout">
                         @csrf
-                        <button type="submit" class="button-secondary compact-button btn-compact">Salir</button>
+                        <button type="submit" class="button-secondary compact-button btn-compact app-topbar-action">
+                            <span class="app-action-icon" aria-hidden="true">
+                                <x-module-icon name="logout" />
+                            </span>
+                            <span class="app-topbar-action-copy">Salir</span>
+                        </button>
                     </form>
                 </div>
             </header>
@@ -170,3 +195,4 @@
         </div>
     </body>
 </html>
+

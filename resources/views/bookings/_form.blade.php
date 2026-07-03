@@ -1,4 +1,4 @@
-@php
+﻿@php
     $isEditing = $booking !== null;
     $formAction = $isEditing ? route('bookings.update', $booking) : route('bookings.store');
 @endphp
@@ -55,7 +55,7 @@
             </label>
 
             <label class="auth-field">
-                <span>Nº pallets previstos</span>
+                <span>NÂº pallets previstos</span>
                 <input type="number" min="0" name="pallets_expected" value="{{ old('pallets_expected', $booking?->pallets_expected) }}" class="auth-input">
             </label>
 
@@ -138,3 +138,4 @@
         </button>
     </div>
 </form>
+

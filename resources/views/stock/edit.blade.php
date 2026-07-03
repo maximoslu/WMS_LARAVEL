@@ -1,4 +1,4 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Editar partida de stock | MAXIMO WMS')
 
@@ -6,14 +6,16 @@
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
+    @php
+        $breadcrumbs = [
 
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('stock.index', ['client_id' => $stockPallet->client_id]) }}">Stock</a>
-        <span>/</span>
-        <span>Editar partida</span>
-    </nav>
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Stock', 'href' => route('stock.index', ['client_id' => $stockPallet->client_id])],
+        ['label' => 'Editar partida'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <div class="surface-card item-form-card entity-form compact-card">
         <div class="item-form-header">
@@ -134,3 +136,8 @@
         </form>
     </div>
 @endsection
+
+
+
+
+

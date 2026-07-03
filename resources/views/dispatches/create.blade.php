@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Nueva salida manual | MAXIMO WMS')
 @section('topbar_title', 'Nueva salida manual')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('dispatches.index') }}">Salidas</a>
-        <span>/</span>
-        <span>Salida manual</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Salidas', 'href' => route('dispatches.index')],
+        ['label' => 'Salida manual'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     @if ($errors->any())
         <div class="alert alert-error">
@@ -141,3 +144,8 @@
         </div>
     </form>
 @endsection
+
+
+
+
+

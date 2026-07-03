@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Auditoría y trazabilidad | MAXIMO WMS')
 @section('topbar_title', 'Auditoría y trazabilidad')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <span>Sistema</span>
-        <span>/</span>
-        <span>Auditoría y trazabilidad</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Sistema'],
+        ['label' => 'Auditoria y trazabilidad'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact compact-card audit-hero-card">
         <div class="ops-page-headline">
@@ -146,3 +149,8 @@
         </section>
     @endif
 @endsection
+
+
+
+
+

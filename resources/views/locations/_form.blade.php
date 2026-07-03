@@ -1,14 +1,15 @@
-@php($isEditing = $location->exists)
+@php
+    $isEditing = $location->exists;
+    $breadcrumbs = [
 
-<nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel de control</a>
-    <span>/</span>
-    <span>Stock</span>
-    <span>/</span>
-    <a href="{{ route('locations.index') }}">Ubicaciones</a>
-    <span>/</span>
-    <span>{{ $isEditing ? 'Editar' : 'Crear' }}</span>
-</nav>
+
+    ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+    ['label' => 'Stock'],
+    ['label' => 'Ubicaciones', 'href' => route('locations.index')],
+    ['label' => $isEditing ? 'Editar' : 'Crear'],
+    ];
+@endphp
+<x-breadcrumbs :items="$breadcrumbs" />
 
 <div class="surface-card item-form-card entity-form compact-card">
     <div class="app-copy">
@@ -108,3 +109,8 @@
         </div>
     </form>
 </div>
+
+
+
+
+

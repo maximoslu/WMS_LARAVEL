@@ -1,17 +1,22 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Mi perfil | MAXIMO WMS')
 @section('topbar_title', 'Mi perfil')
 
 @section('content')
-    @php($user = auth()->user())
-    @php($userInitials = collect(preg_split('/\s+/', trim($user->name)))->filter()->take(2)->map(fn (string $chunk) => strtoupper(substr($chunk, 0, 1)))->implode(''))
-
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <span>Mi perfil</span>
-    </nav>
+    @php
+        $user = auth()->user();
+        $userInitials = collect(preg_split('/\s+/', trim($user->name)))
+            ->filter()
+            ->take(2)
+            ->map(fn (string $chunk) => strtoupper(substr($chunk, 0, 1)))
+            ->implode('');
+        $breadcrumbs = [
+            ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+            ['label' => 'Mi perfil'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
@@ -105,3 +110,8 @@
         </article>
     </section>
 @endsection
+
+
+
+
+

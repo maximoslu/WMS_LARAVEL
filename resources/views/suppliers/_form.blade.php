@@ -1,14 +1,15 @@
-@php($isEditing = $supplier->exists)
+@php
+    $isEditing = $supplier->exists;
+    $breadcrumbs = [
 
-<nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel de control</a>
-    <span>/</span>
-    <span>Gestión</span>
-    <span>/</span>
-    <a href="{{ route('suppliers.index') }}">Proveedores</a>
-    <span>/</span>
-    <span>{{ $isEditing ? 'Editar' : 'Crear' }}</span>
-</nav>
+
+    ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+    ['label' => 'Gestion'],
+    ['label' => 'Proveedores', 'href' => route('suppliers.index')],
+    ['label' => $isEditing ? 'Editar' : 'Crear'],
+    ];
+@endphp
+<x-breadcrumbs :items="$breadcrumbs" />
 
 <div class="surface-card item-form-card entity-form compact-card">
     <div class="app-copy">
@@ -102,3 +103,8 @@
         </div>
     </form>
 </div>
+
+
+
+
+

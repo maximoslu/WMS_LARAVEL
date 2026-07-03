@@ -1,4 +1,4 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Editar articulo | MAXIMO WMS')
 
@@ -9,3 +9,4 @@
 
     @include('items._form')
 @endsection
+

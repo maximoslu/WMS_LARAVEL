@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Detalle solicitud de acceso | MAXIMO WMS')
 @section('topbar_title', 'Detalle solicitud de acceso')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('access-requests.index') }}">Solicitudes de acceso</a>
-        <span>/</span>
-        <span>{{ $accessRequest->email }}</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Solicitudes de acceso', 'href' => route('access-requests.index')],
+        ['label' => $accessRequest->email],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
@@ -165,7 +168,7 @@
                     clientSelect.disabled = !isClientRole;
 
                     if (!isClientRole) {
-                        clientSelect.value = '';
+                        clientSelect.value = ';
                     }
 
                     clientHelp.textContent = isClientRole
@@ -180,3 +183,8 @@
         </script>
     @endif
 @endsection
+
+
+
+
+

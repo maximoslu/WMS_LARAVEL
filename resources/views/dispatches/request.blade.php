@@ -1,18 +1,20 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Gestión de pedido | MAXIMO WMS')
 @section('topbar_title', 'Gestión de pedido')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('dispatches.index') }}">Salidas</a>
-        <span>/</span>
-        <a href="{{ route('dispatches.requests.index') }}">Pedidos pendientes</a>
-        <span>/</span>
-        <span>{{ $merchandiseRequest->referenceCode() }}</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Salidas', 'href' => route('dispatches.index')],
+        ['label' => 'Pedidos pendientes', 'href' => route('dispatches.requests.index')],
+        ['label' => $merchandiseRequest->referenceCode()],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
@@ -173,3 +175,8 @@
         </section>
     @endif
 @endsection
+
+
+
+
+

@@ -1,4 +1,4 @@
-@if ($paginator->hasPages())
+﻿@if ($paginator->hasPages())
     <nav role="navigation" aria-label="Navegacion de paginas">
         <div class="flex gap-2 items-center justify-between sm:hidden">
             @if ($paginator->onFirstPage())
@@ -99,3 +99,4 @@
         </div>
     </nav>
 @endif
+

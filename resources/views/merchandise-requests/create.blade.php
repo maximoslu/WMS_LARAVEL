@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Solicitar mercancía | MAXIMO WMS')
 @section('topbar_title', 'Solicitar mercancía')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('merchandise-requests.index') }}">Solicitudes de mercancía</a>
-        <span>/</span>
-        <span>Nuevo pedido</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Solicitudes de mercancia', 'href' => route('merchandise-requests.index')],
+        ['label' => 'Nuevo pedido'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
@@ -173,3 +176,8 @@
         </form>
     @endif
 @endsection
+
+
+
+
+

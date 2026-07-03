@@ -1,18 +1,18 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Articulos | MAXIMO WMS')
 @section('topbar_title', 'Articulos')
 
 @section('content')
-    @php($isCardsView = $filters['view'] === 'cards')
-
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <span>Stock</span>
-        <span>/</span>
-        <span>Articulos</span>
-    </nav>
+    @php
+        $isCardsView = $filters['view'] === 'cards';
+        $breadcrumbs = [
+            ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+            ['label' => 'Stock'],
+            ['label' => 'Articulos'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
@@ -200,3 +200,8 @@
         </div>
     @endif
 @endsection
+
+
+
+
+

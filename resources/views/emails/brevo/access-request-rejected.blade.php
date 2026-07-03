@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
     <body style="margin:0;padding:24px;background:#edf3f7;font-family:Arial,sans-serif;color:#40515e;">
         <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #d8e3ea;border-radius:16px;padding:32px;">
@@ -14,3 +14,4 @@
         </div>
     </body>
 </html>
+

@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', $isClient ? 'Mi inventario | MAXIMO WMS' : 'Stock | MAXIMO WMS')
 @section('topbar_title', $pageTitle)
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <span>{{ $isClient ? 'Mi inventario' : 'Stock' }}</span>
-        <span>/</span>
-        <span>Inventario</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => $isClient ? 'Mi inventario' : 'Stock'],
+        ['label' => 'Inventario'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card wms-page-hero">
         <div class="ops-page-headline">
@@ -466,3 +469,8 @@
         </section>
     @endif
 @endsection
+
+
+
+
+

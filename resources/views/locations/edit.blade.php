@@ -1,4 +1,4 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Editar ubicacion | MAXIMO WMS')
 
@@ -9,3 +9,4 @@
 
     @include('locations._form')
 @endsection
+

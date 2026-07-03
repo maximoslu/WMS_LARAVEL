@@ -32,6 +32,8 @@ class NotificationCenterTest extends TestCase
             ->assertDontSee('Aviso 002')
             ->assertDontSee('Aviso 001')
             ->assertSee('Ver todas')
+            ->assertSee(route('notifications.index'), false)
+            ->assertSee('aria-label="Notificaciones, 7 sin leer"', false)
             ->assertSee('users-pending-count', false)
             ->assertSee('>7<', false);
     }
@@ -72,6 +74,19 @@ class NotificationCenterTest extends TestCase
             ->get(route('notifications.index'))
             ->assertOk()
             ->assertSee('No hay notificaciones recientes.');
+    }
+
+    public function test_notifications_breadcrumb_keeps_dashboard_clickable_and_current_page_not_linked(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee(route('dashboard'), false)
+            ->assertSee('aria-current="page"', false)
+            ->assertSee('>Notificaciones<', false)
+            ->assertDontSee('href="'.route('notifications.index').'">Notificaciones', false);
     }
 
     public function test_notification_can_be_marked_as_read_from_the_list(): void

@@ -1,18 +1,20 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Detalle de entrada | MAXIMO WMS')
 @section('topbar_title', 'Detalle de entrada')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <span>Operaciones</span>
-        <span>/</span>
-        <a href="{{ route('goods-receipts.index') }}">Entradas</a>
-        <span>/</span>
-        <span>{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Operaciones'],
+        ['label' => 'Entradas', 'href' => route('goods-receipts.index')],
+        ['label' => $receipt->receipt_number ?: 'Entrada #'.$receipt->id],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card goods-receipt-header-card">
         <div class="ops-page-headline">
@@ -231,3 +233,8 @@
         </section>
     @endif
 @endsection
+
+
+
+
+

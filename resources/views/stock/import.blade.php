@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Importar stock | MAXIMO WMS')
 @section('topbar_title', 'Importar stock de cliente')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('stock.index') }}">Stock</a>
-        <span>/</span>
-        <span>Importar Excel</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Stock', 'href' => route('stock.index')],
+        ['label' => 'Importar Excel'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
         <div class="ops-page-headline">
@@ -281,3 +284,8 @@
         </div>
     </section>
 @endsection
+
+
+
+
+

@@ -1,4 +1,4 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Panel de control | MAXIMO WMS')
 @section('topbar_title', 'Panel de control')
@@ -35,11 +35,9 @@
                     @foreach ($section['children'] as $child)
                         <a href="{{ route($child['display_route'] ?? $child['route']) }}" class="ops-index-link{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}">
                             <span class="module-link-body">
-                                @if (! empty($child['display_icon']))
-                                    <span class="module-link-icon" aria-hidden="true">
-                                        <x-module-icon :name="$child['display_icon']" />
-                                    </span>
-                                @endif
+                                <span class="module-link-icon" aria-hidden="true">
+                                    <x-module-icon :name="$child['display_icon']" />
+                                </span>
                                 <span class="module-link-copy">
                                     <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
                                 </span>
@@ -151,3 +149,4 @@
         @endif
     </section>
 @endsection
+

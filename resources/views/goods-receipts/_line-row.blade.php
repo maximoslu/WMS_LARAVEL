@@ -1,4 +1,4 @@
-@php($row = is_array($line ?? null) ? $line : [])
+﻿@php($row = is_array($line ?? null) ? $line : [])
 
 <tr data-line-row>
     <td>
@@ -157,3 +157,4 @@
         <button type="button" class="button-secondary compact-button btn-table" data-remove-line>Quitar</button>
     </td>
 </tr>
+

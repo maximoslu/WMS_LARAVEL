@@ -1,16 +1,19 @@
-@extends('layouts.dashboard')
+﻿@extends('layouts.dashboard')
 
 @section('title', 'Nueva solicitud | MAXIMO WMS')
 @section('topbar_title', 'Nueva solicitud')
 
 @section('content')
-    <nav class="ops-breadcrumb" aria-label="Breadcrumb">
-        <a href="{{ route('dashboard') }}">Panel de control</a>
-        <span>/</span>
-        <a href="{{ route('bookings.index') }}">{{ $isClient ? 'Solicitudes' : 'Bookings' }}</a>
-        <span>/</span>
-        <span>{{ $isClient ? 'Nueva solicitud' : 'Crear' }}</span>
-    </nav>
+    @php
+        $breadcrumbs = [
+
+
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => $isClient ? 'Solicitudes' : 'Bookings', 'href' => route('bookings.index')],
+        ['label' => $isClient ? 'Nueva solicitud' : 'Crear'],
+        ];
+    @endphp
+    <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact compact-card wms-page-hero">
         <div class="ops-page-headline">
@@ -34,3 +37,8 @@
         @include('bookings._form')
     </section>
 @endsection
+
+
+
+
+

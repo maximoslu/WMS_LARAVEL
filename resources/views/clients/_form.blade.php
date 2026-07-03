@@ -1,14 +1,15 @@
-@php($isEditing = $client->exists)
+@php
+    $isEditing = $client->exists;
+    $breadcrumbs = [
 
-<nav class="ops-breadcrumb" aria-label="Breadcrumb">
-    <a href="{{ route('dashboard') }}">Panel de control</a>
-    <span>/</span>
-    <span>Gestión</span>
-    <span>/</span>
-    <a href="{{ route('clients.index') }}">Clientes</a>
-    <span>/</span>
-    <span>{{ $isEditing ? 'Editar' : 'Crear' }}</span>
-</nav>
+
+    ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+    ['label' => 'Gestion'],
+    ['label' => 'Clientes', 'href' => route('clients.index')],
+    ['label' => $isEditing ? 'Editar' : 'Crear'],
+    ];
+@endphp
+<x-breadcrumbs :items="$breadcrumbs" />
 
 <div class="surface-card item-form-card entity-form compact-card">
     <div class="item-form-header">
@@ -95,3 +96,8 @@
         </div>
     </form>
 </div>
+
+
+
+
+
