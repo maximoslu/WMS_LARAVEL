@@ -199,6 +199,7 @@ const createAutocomplete = (root, options = {}) => {
     const status = root.querySelector('[data-autocomplete-status]');
     const list = root.querySelector('[data-autocomplete-list]');
     const endpoint = root.dataset.endpoint;
+    const useFixedPanel = root.dataset.autocompleteFloating === 'fixed';
 
     if (!input || !clearButton || !panel || !status || !list || !endpoint) {
         return null;
@@ -218,6 +219,17 @@ const createAutocomplete = (root, options = {}) => {
     let highlightedIndex = -1;
     let selectedLabel = input.value.trim();
 
+    const clearPanelPosition = () => {
+        if (!useFixedPanel) {
+            return;
+        }
+
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.style.bottom = '';
+        panel.style.width = '';
+    };
+
     const setStatus = (message) => {
         status.textContent = message;
     };
@@ -230,6 +242,22 @@ const createAutocomplete = (root, options = {}) => {
         const shouldFlip = spaceBelow < estimatedPanelHeight && spaceAbove > spaceBelow;
 
         panel.classList.toggle('ajax-autocomplete-panel--flip', shouldFlip);
+
+        if (!useFixedPanel) {
+            clearPanelPosition();
+            return;
+        }
+
+        const panelWidth = Math.min(Math.max(rootRect.width, 320), window.innerWidth - 24);
+        const left = Math.min(Math.max(rootRect.left, 12), Math.max(window.innerWidth - panelWidth - 12, 12));
+
+        panel.classList.add('ajax-autocomplete-panel--fixed');
+        panel.style.width = `${panelWidth}px`;
+        panel.style.left = `${left}px`;
+        panel.style.top = shouldFlip
+            ? `${Math.max(rootRect.top - estimatedPanelHeight - 6, 12)}px`
+            : `${Math.min(rootRect.bottom + 6, window.innerHeight - estimatedPanelHeight - 12)}px`;
+        panel.style.bottom = 'auto';
     };
 
     const openPanel = () => {
@@ -242,6 +270,8 @@ const createAutocomplete = (root, options = {}) => {
         panel.hidden = true;
         root.classList.remove('is-open');
         highlightedIndex = -1;
+        panel.classList.remove('ajax-autocomplete-panel--fixed');
+        clearPanelPosition();
         renderResults();
     };
 
@@ -419,6 +449,20 @@ const createAutocomplete = (root, options = {}) => {
             closePanel();
         }
     });
+
+    if (useFixedPanel) {
+        window.addEventListener('resize', () => {
+            if (!panel.hidden) {
+                positionPanel();
+            }
+        });
+
+        window.addEventListener('scroll', () => {
+            if (!panel.hidden) {
+                positionPanel();
+            }
+        }, true);
+    }
 
     root.dataset.autocompleteBound = 'true';
     setStatus(messages.empty);
@@ -1422,5 +1466,3 @@ if (document.readyState === 'loading') {
 } else {
     boot();
 }
-
-

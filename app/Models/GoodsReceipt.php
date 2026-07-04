@@ -47,6 +47,8 @@ class GoodsReceipt extends Model
         'created_by',
         'confirmed_by',
         'confirmed_at',
+        'stock_applied_at',
+        'stock_applied_by',
     ];
 
     protected function casts(): array
@@ -55,6 +57,7 @@ class GoodsReceipt extends Model
             'received_at' => 'date',
             'document_processed_at' => 'datetime',
             'confirmed_at' => 'datetime',
+            'stock_applied_at' => 'datetime',
             'ai_extracted_data' => 'array',
         ];
     }
@@ -79,6 +82,11 @@ class GoodsReceipt extends Model
         return $this->belongsTo(User::class, 'confirmed_by');
     }
 
+    public function stockAppliedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'stock_applied_by');
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(GoodsReceiptLine::class);
@@ -92,6 +100,11 @@ class GoodsReceipt extends Model
     public function isConfirmed(): bool
     {
         return $this->status === self::STATUS_CONFIRMED;
+    }
+
+    public function hasStockApplied(): bool
+    {
+        return $this->stock_applied_at !== null;
     }
 
     public function statusLabel(): string

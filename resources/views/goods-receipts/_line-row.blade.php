@@ -3,7 +3,7 @@
 <tr data-line-row>
     <td>
         <div
-            class="ajax-autocomplete"
+            class="ajax-autocomplete ajax-autocomplete--table"
             data-ajax-autocomplete
             data-endpoint="{{ $searchEndpoint }}"
             data-min-chars="2"
@@ -11,6 +11,7 @@
             data-no-results-message="Sin resultados"
             data-searching-message="Buscando..."
             data-error-message="Error al buscar"
+            data-autocomplete-floating="fixed"
             data-receipt-item-picker
         >
             <div class="ajax-autocomplete-control">

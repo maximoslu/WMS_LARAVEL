@@ -1,12 +1,10 @@
 @php
     $isEditing = $receipt->exists;
     $breadcrumbs = [
-
-
-    ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-    ['label' => 'Operaciones'],
-    ['label' => 'Entradas', 'href' => route('goods-receipts.index')],
-    ['label' => $isEditing ? 'Editar' : 'Crear'],
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Operaciones'],
+        ['label' => 'Entradas', 'href' => route('goods-receipts.index')],
+        ['label' => $isEditing ? 'Editar' : 'Crear'],
     ];
 @endphp
 <x-breadcrumbs :items="$breadcrumbs" />
@@ -14,7 +12,7 @@
 <div class="goods-receipt-shell">
     <section class="surface-card item-form-card entity-form compact-card">
         <div class="app-copy">
-            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Borrador' }}</span>
+            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edición' : 'Borrador' }}</span>
             <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar entrada' : 'Nueva entrada de mercancía' }}</h2>
             <p>Registra cabecera, adjunto y líneas. La generación de stock se realiza al confirmar la entrada.</p>
         </div>
@@ -67,7 +65,7 @@
                 </label>
 
                 <label class="auth-field">
-                    <span>Numero de albaran</span>
+                    <span>Número de albarán</span>
                     <input type="text" name="receipt_number" value="{{ old('receipt_number', $receipt->receipt_number) }}" class="auth-input" maxlength="150">
                     @error('receipt_number')
                         <small class="form-error">{{ $message }}</small>
@@ -89,7 +87,7 @@
                 </label>
 
                 <label class="auth-field">
-                    <span>Fecha recepcion</span>
+                    <span>Fecha recepción</span>
                     <input
                         type="date"
                         name="received_at"
@@ -102,7 +100,7 @@
                 </label>
 
                 <label class="auth-field">
-                    <span>Adjunto albaran</span>
+                    <span>Adjunto albarán</span>
                     <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
                     @error('document')
                         <small class="form-error">{{ $message }}</small>
@@ -124,26 +122,26 @@
             <section class="goods-receipt-lines-card">
                 <div class="goods-receipt-lines-tools">
                     <div class="app-copy">
-                        <strong>Lineas de entrada</strong>
-                        <p>Selecciona articulo y cantidad; el sistema calcula palets y pico.</p>
+                        <strong>Líneas de entrada</strong>
+                        <p>Busca el artículo, indica la cantidad y revisa el paletizado antes de confirmar.</p>
                     </div>
 
                     <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Añadir línea</button>
                 </div>
 
                 <div class="data-table-wrap goods-receipt-lines-wrap">
-                    <table class="data-table table-compact goods-receipt-lines-table" aria-label="Lineas de entrada">
+                    <table class="data-table table-compact goods-receipt-lines-table" aria-label="Líneas de entrada">
                         <thead>
                             <tr>
-                                <th>Articulo</th>
+                                <th>Artículo</th>
                                 <th>SKU</th>
-                                <th>Descripcion</th>
+                                <th>Descripción</th>
                                 <th>Lote</th>
                                 <th>Total uds</th>
                                 <th>Uds/palet</th>
                                 <th>Palets</th>
                                 <th>Pico</th>
-                                <th>Ubicacion</th>
+                                <th>Ubicación</th>
                                 <th>Notas</th>
                                 <th></th>
                             </tr>
@@ -160,7 +158,7 @@
                     @include('goods-receipts._line-row', ['index' => '__INDEX__', 'line' => null])
                 </template>
 
-                <p class="helper-text">Puedes ajustar manualmente las uds/palet de una entrada concreta sin cambiar el maestro del articulo.</p>
+                <p class="helper-text">Puedes ajustar manualmente las uds/palet de una entrada concreta sin cambiar el maestro del artículo.</p>
             </section>
 
             <div class="item-form-actions action-buttons">
@@ -174,8 +172,3 @@
         </form>
     </section>
 </div>
-
-
-
-
-

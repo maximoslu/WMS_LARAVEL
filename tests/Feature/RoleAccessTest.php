@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Support\WmsNavigation;
 use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
@@ -78,6 +79,38 @@ class RoleAccessTest extends TestCase
             ->assertOk()
             ->assertSee('Pedidos')
             ->assertSee(route('merchandise-requests.index'), false);
+    }
+
+    public function test_dashboard_stock_no_muestra_palets(): void
+    {
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Stock actual')
+            ->assertSee('Articulos')
+            ->assertSee('Ubicaciones')
+            ->assertDontSee('Palets');
+    }
+
+    public function test_contador_stock_refleja_tres_opciones_visibles(): void
+    {
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $response = $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk();
+
+        $stockSection = collect($response->viewData('navigationSections'))
+            ->firstWhere('key', 'stock');
+
+        $this->assertNotNull($stockSection);
+        $this->assertCount(3, $stockSection['children']);
+        $this->assertSame(
+            3,
+            count(collect(WmsNavigation::sectionsForUser($user))->firstWhere('key', 'stock')['children'])
+        );
     }
 
     public function test_higher_role_can_access_lower_role_route(): void

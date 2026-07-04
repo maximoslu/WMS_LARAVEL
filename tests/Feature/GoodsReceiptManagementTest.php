@@ -8,6 +8,7 @@ use App\Models\GoodsReceiptLine;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
+use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -153,7 +154,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('goods-receipt-header-card', false)
             ->assertSee('goods-receipt-card--document', false)
             ->assertSee('Guardar documento')
-            ->assertSee('Procesar con IA (proximamente)');
+            ->assertSee('Procesar con IA (próximamente)');
     }
 
     public function test_superadmin_can_create_supplier(): void
@@ -608,6 +609,359 @@ class GoodsReceiptManagementTest extends TestCase
             'active' => true,
             'pallet_code' => null,
         ]);
+    }
+
+    public function test_entrada_borrador_no_suma_stock(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-DRAFT-NO-STOCK',
+                'received_at' => '2026-07-04',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-DRAFT-001',
+                        'description' => 'Borrador sin stock',
+                        'lot' => 'LOT-DRAFT',
+                        'quantity_units' => 1200,
+                        'units_per_pallet' => 600,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-DRAFT-NO-STOCK')->firstOrFail();
+
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
+        $this->assertNull($receipt->stock_applied_at);
+        $this->assertDatabaseMissing('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+        ]);
+    }
+
+    public function test_confirmar_entrada_suma_stock_y_marca_stock_aplicado(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-STOCK-APPLY-001',
+                'received_at' => '2026-07-04',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-STOCK-APPLY',
+                        'description' => 'Entrada con stock aplicado',
+                        'lot' => 'LOT-APPLY',
+                        'quantity_units' => 1800,
+                        'units_per_pallet' => 600,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-STOCK-APPLY-001')->firstOrFail();
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt))
+            ->assertSessionHas('status', 'Entrada confirmada y stock actualizado correctamente.');
+
+        $receipt->refresh();
+
+        $this->assertSame(GoodsReceipt::STATUS_CONFIRMED, $receipt->status);
+        $this->assertNotNull($receipt->stock_applied_at);
+        $this->assertSame($user->id, $receipt->stock_applied_by);
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'client_id' => $client->id,
+            'lot' => 'LOT-APPLY',
+            'quantity_units' => 1800,
+            'full_pallets' => 3,
+            'location_id' => $location->id,
+        ]);
+    }
+
+    public function test_confirmar_entrada_no_suma_dos_veces(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-IDEMP-001',
+                'received_at' => '2026-07-04',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-IDEMP-001',
+                        'description' => 'Entrada idempotente',
+                        'lot' => 'LOT-IDEMP',
+                        'quantity_units' => 2500,
+                        'units_per_pallet' => 1000,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-IDEMP-001')->firstOrFail();
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $firstAppliedAt = $receipt->fresh()->stock_applied_at;
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.show', $receipt))
+            ->patch(route('goods-receipts.confirm', $receipt->fresh()))
+            ->assertRedirect(route('goods-receipts.show', $receipt))
+            ->assertSessionHasErrors('goods_receipt');
+
+        $this->assertDatabaseCount('stock_pallets', 1);
+        $this->assertEquals($firstAppliedAt, $receipt->fresh()->stock_applied_at);
+        $this->assertDatabaseHas('stock_pallets', [
+            'quantity_units' => 2500,
+            'full_pallets' => 2,
+            'peak_1' => 500,
+        ]);
+    }
+
+    public function test_entrada_suma_stock_en_cliente_correcto(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$clientA, $supplierA, $location] = $this->makeReceiptContext();
+        [$clientB] = $this->makeReceiptContext();
+
+        Item::factory()->create([
+            'client_id' => $clientA->id,
+            'sku' => 'SKU-CLIENTE',
+            'description' => 'Cliente A',
+            'units_per_pallet' => 500,
+        ]);
+        Item::factory()->create([
+            'client_id' => $clientB->id,
+            'sku' => 'SKU-CLIENTE',
+            'description' => 'Cliente B',
+            'units_per_pallet' => 500,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $clientA->id,
+                'supplier_id' => $supplierA->id,
+                'receipt_number' => 'ALB-CLIENT-A',
+                'received_at' => '2026-07-04',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-CLIENTE',
+                        'description' => 'Cliente A',
+                        'lot' => 'LOT-CLIENT-A',
+                        'quantity_units' => 1000,
+                        'units_per_pallet' => 500,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-CLIENT-A')->firstOrFail();
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'client_id' => $clientA->id,
+            'lot' => 'LOT-CLIENT-A',
+            'quantity_units' => 1000,
+        ]);
+
+        $this->assertDatabaseMissing('stock_pallets', [
+            'client_id' => $clientB->id,
+            'goods_receipt_id' => $receipt->id,
+        ]);
+    }
+
+    public function test_entrada_crea_partida_si_no_existe(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-CREATE-BATCH',
+            'description' => 'Nueva partida',
+            'units_per_pallet' => 1000,
+        ]);
+
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-CREATE-BATCH',
+            'created_by' => $user->id,
+            'received_at' => '2026-07-04',
+        ]);
+        GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'lot' => 'LOT-CREATE',
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'pallet_count' => 1,
+            'pico_units' => null,
+            'location_id' => $location->id,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-CREATE',
+            'location_id' => $location->id,
+            'quantity_units' => 1000,
+        ]);
+    }
+
+    public function test_entrada_actualiza_partida_existente_si_coincide_item_lote_ubicacion(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-MERGE-001',
+            'description' => 'Partida acumulable',
+            'units_per_pallet' => 1000,
+        ]);
+
+        $existingBatch = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'goods_receipt_id' => null,
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'lot' => 'LOT-MERGE',
+            'quantity_units' => 1500,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 1,
+            'peaks_count' => 1,
+            'peak_1' => 500,
+            'peak_2' => 0,
+            'peak_3' => 0,
+            'peak_4' => 0,
+            'peak_5' => 0,
+            'peak_6' => 0,
+            'peak_7' => 0,
+            'peak_8' => 0,
+            'peak_9' => 0,
+            'peak_10' => 0,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
+
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-MERGE-001',
+            'created_by' => $user->id,
+            'received_at' => '2026-07-04',
+        ]);
+        GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'lot' => 'LOT-MERGE',
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'pallet_count' => 1,
+            'pico_units' => null,
+            'location_id' => $location->id,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $existingBatch->refresh();
+
+        $this->assertSame(2500, $existingBatch->quantity_units);
+        $this->assertSame(2, $existingBatch->full_pallets);
+        $this->assertSame(1, $existingBatch->peaks_count);
+        $this->assertSame(500, $existingBatch->peak_1);
+        $this->assertSame($receipt->id, $existingBatch->goods_receipt_id);
+        $this->assertDatabaseCount('stock_pallets', 1);
+    }
+
+    public function test_autocomplete_entrada_renderiza_sin_mojibake_y_con_contenedor_visible(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.create'))
+            ->assertOk()
+            ->assertSee('Nueva entrada de mercancía')
+            ->assertSee('Añadir línea')
+            ->assertSee('data-autocomplete-floating="fixed"', false)
+            ->assertSee('ajax-autocomplete--table', false)
+            ->assertDontSee('AÃ±adir')
+            ->assertDontSee('mercancÃ­a');
+    }
+
+    public function test_flujo_entrada_sigue_funcionando_para_superadmin_almacen_administracion(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        foreach ([Role::SUPERADMIN, Role::ADMINISTRACION, Role::ALMACEN] as $roleSlug) {
+            $user = $this->makeUserWithRole($roleSlug);
+
+            $this->actingAs($user)
+                ->get(route('goods-receipts.create'))
+                ->assertOk()
+                ->assertSee('Nueva entrada de mercancía')
+                ->assertSee('Crear borrador');
+        }
     }
 
     private function createDraftReceipt(User $user): GoodsReceipt

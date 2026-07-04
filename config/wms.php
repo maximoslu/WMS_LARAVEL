@@ -51,19 +51,6 @@ return [
                     'active_patterns' => ['items.*'],
                 ],
                 [
-                    'key' => 'pallets',
-                    'route' => 'modules.pallets',
-                    'path' => '/palets',
-                    'title' => 'Palets',
-                    'icon' => 'pallets',
-                    'summary' => 'Control futuro de palets individuales, trazabilidad y detalle operativo.',
-                    'minimum_role' => 'almacen',
-                    'tag' => 'Operacion',
-                    'status' => 'placeholder',
-                    'next_step' => 'Definir modelo de palet y cantidad real por unidad logistica.',
-                    'active_patterns' => ['modules.pallets'],
-                ],
-                [
                     'key' => 'locations',
                     'route' => 'locations.index',
                     'path' => '/ubicaciones',
@@ -273,4 +260,3 @@ return [
         ],
     ],
 ];
-

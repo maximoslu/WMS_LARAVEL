@@ -181,7 +181,7 @@ class GoodsReceiptController extends Controller
 
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)
-            ->with('status', 'Entrada confirmada y stock generado correctamente.');
+            ->with('status', 'Entrada confirmada y stock actualizado correctamente.');
     }
 
     public function cancel(GoodsReceipt $goodsReceipt): RedirectResponse
