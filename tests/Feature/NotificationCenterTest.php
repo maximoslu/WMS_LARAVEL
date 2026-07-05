@@ -17,7 +17,7 @@ class NotificationCenterTest extends TestCase
 
     public function test_dashboard_limits_recent_notifications_and_keeps_unread_counter(): void
     {
-        $user = $this->makeUserWithRole(Role::CLIENTE);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->createNotifications($user, 7);
 
@@ -63,10 +63,17 @@ class NotificationCenterTest extends TestCase
 
     public function test_notifications_empty_state_is_clear_on_dashboard_and_index(): void
     {
-        $user = $this->makeUserWithRole(Role::CLIENTE);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->actingAs($user)
             ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('No hay notificaciones recientes.');
+
+        $client = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($client)
+            ->get(route('notifications.index'))
             ->assertOk()
             ->assertSee('No hay notificaciones recientes.');
 

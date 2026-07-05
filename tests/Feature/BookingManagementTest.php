@@ -301,16 +301,17 @@ class BookingManagementTest extends TestCase
     {
         [$friesland, $edelvives] = $this->seedBaseData();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
 
         $ownBooking = Booking::factory()->create([
             'client_id' => $friesland->id,
             'booking_code' => 'BK-210001',
-            'scheduled_date' => now()->addDay()->toDateString(),
+            'scheduled_date' => $calendarDate,
         ]);
         $foreignBooking = Booking::factory()->create([
             'client_id' => $edelvives->id,
             'booking_code' => 'BK-210002',
-            'scheduled_date' => now()->addDay()->toDateString(),
+            'scheduled_date' => $calendarDate,
         ]);
 
         $this->actingAs($cliente)

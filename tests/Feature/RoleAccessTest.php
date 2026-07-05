@@ -70,6 +70,83 @@ class RoleAccessTest extends TestCase
             ->assertSee(route('merchandise-requests.create'), false);
     }
 
+    public function test_cliente_dashboard_no_muestra_panel_proximo_booking(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Proximos BOOKING')
+            ->assertDontSee('Ver agenda');
+    }
+
+    public function test_cliente_dashboard_no_muestra_panel_notificaciones(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Notificaciones recientes')
+            ->assertDontSee('Ver todas');
+    }
+
+    public function test_cliente_dashboard_mantiene_agenda_operativa(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Agenda de BOOKING')
+            ->assertSee('Abrir agenda');
+    }
+
+    public function test_footer_global_se_renderiza_en_dashboard(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('app-footer', false);
+    }
+
+    public function test_footer_global_muestra_jorge_monge(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Jorge Monge')
+            ->assertSee('WMS creado y desarrollado por Jorge Monge.');
+    }
+
+    public function test_footer_global_enlaza_a_jorgemonge(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('https://www.jorgemonge.es', false)
+            ->assertSee('target="_blank"', false)
+            ->assertSee('rel="noopener noreferrer"', false);
+    }
+
+    public function test_footer_global_aparece_para_superadmin(): void
+    {
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Jorge Monge')
+            ->assertSee('www.jorgemonge.es');
+    }
+
     public function test_almacen_sees_pedidos_link_pointing_to_internal_listing(): void
     {
         $user = $this->makeUserWithRole(Role::ALMACEN);
@@ -79,6 +156,17 @@ class RoleAccessTest extends TestCase
             ->assertOk()
             ->assertSee('Pedidos')
             ->assertSee(route('merchandise-requests.index'), false);
+    }
+
+    public function test_superadmin_dashboard_no_pierde_paneles_operativos_si_los_usa(): void
+    {
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Proximos bookings')
+            ->assertSee('Notificaciones recientes');
     }
 
     public function test_dashboard_stock_no_muestra_palets(): void

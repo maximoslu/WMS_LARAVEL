@@ -19,29 +19,33 @@
         </div>
 
         <main class="auth-frame">
-            <section class="auth-panel surface-card" aria-label="Acceso a MAXIMO WMS">
-                <div class="auth-logo-mark">
-                    <img
-                        src="{{ asset('brand/maximo-logo-horizontal.png') }}"
-                        alt="MAXIMO WMS"
-                        class="auth-brand-mark"
-                    >
-                </div>
-
-                @if (session('status'))
-                    <div class="alert alert-success">
-                        {{ session('status') }}
+            <div class="auth-stack">
+                <section class="auth-panel surface-card" aria-label="Acceso a MAXIMO WMS">
+                    <div class="auth-logo-mark">
+                        <img
+                            src="{{ asset('brand/maximo-logo-horizontal.png') }}"
+                            alt="MAXIMO WMS"
+                            class="auth-brand-mark"
+                        >
                     </div>
-                @endif
 
-                @if ($errors->any())
-                    <div class="alert alert-error">
-                        {{ $errors->first() }}
-                    </div>
-                @endif
+                    @if (session('status'))
+                        <div class="alert alert-success">
+                            {{ session('status') }}
+                        </div>
+                    @endif
 
-                @yield('content')
-            </section>
+                    @if ($errors->any())
+                        <div class="alert alert-error">
+                            {{ $errors->first() }}
+                        </div>
+                    @endif
+
+                    @yield('content')
+                </section>
+
+                <x-app-footer variant="auth" />
+            </div>
         </main>
     </body>
 </html>

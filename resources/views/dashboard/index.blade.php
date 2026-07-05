@@ -106,64 +106,66 @@
         </div>
     </section>
 
-    <section class="surface-card compact-card dashboard-notifications-card">
-        <div class="ops-section-heading dashboard-notifications-header">
-            <div class="dashboard-notifications-intro">
-                <strong>{{ $isClient ? 'Proximos BOOKING' : 'Proximos bookings' }}</strong>
-                <p class="merchandise-request-summary-copy">
-                    {{ $isClient ? 'Consulta tus entradas y salidas previstas de un vistazo.' : 'Agenda operativa interna y proximas solicitudes previstas.' }}
-                </p>
+    @unless ($isClient)
+        <section class="surface-card compact-card dashboard-notifications-card">
+            <div class="ops-section-heading dashboard-notifications-header">
+                <div class="dashboard-notifications-intro">
+                    <strong>Proximos bookings</strong>
+                    <p class="merchandise-request-summary-copy">
+                        Agenda operativa interna y proximas solicitudes previstas.
+                    </p>
+                </div>
+                <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Ver agenda</a>
             </div>
-            <a href="{{ route('bookings.calendar') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Ver agenda</a>
-        </div>
 
-        @if ($upcomingBookings->isEmpty())
-            <div class="merchandise-request-summary-empty dashboard-notifications-empty">
-                {{ $isClient ? 'No hay bookings proximos para este usuario.' : 'No hay bookings proximos para este usuario.' }}
-            </div>
-        @else
-            <div class="dashboard-notification-list">
-                @foreach ($upcomingBookings as $booking)
-                    <article class="dashboard-notification-item">
-                        <strong>{{ $booking->referenceCode() }} - {{ $booking->typeLabel() }}</strong>
-                        <p>{{ $booking->scheduledWindowLabel() }} - {{ $booking->client?->name ?? 'Sin cliente' }}</p>
-                        <div class="dashboard-notification-meta">
-                            <span class="ops-status badge-compact">{{ number_format($booking->pallets_expected ?? 0, 0, ',', '.') }} pallets</span>
-                            <span>{{ $booking->statusLabel() }}</span>
-                        </div>
-                    </article>
-                @endforeach
-            </div>
-        @endif
-    </section>
+            @if ($upcomingBookings->isEmpty())
+                <div class="merchandise-request-summary-empty dashboard-notifications-empty">
+                    No hay bookings proximos para este usuario.
+                </div>
+            @else
+                <div class="dashboard-notification-list">
+                    @foreach ($upcomingBookings as $booking)
+                        <article class="dashboard-notification-item">
+                            <strong>{{ $booking->referenceCode() }} - {{ $booking->typeLabel() }}</strong>
+                            <p>{{ $booking->scheduledWindowLabel() }} - {{ $booking->client?->name ?? 'Sin cliente' }}</p>
+                            <div class="dashboard-notification-meta">
+                                <span class="ops-status badge-compact">{{ number_format($booking->pallets_expected ?? 0, 0, ',', '.') }} pallets</span>
+                                <span>{{ $booking->statusLabel() }}</span>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            @endif
+        </section>
 
-    <section class="surface-card compact-card dashboard-notifications-card">
-        <div class="ops-section-heading dashboard-notifications-header">
-            <div class="dashboard-notifications-intro">
-                <strong>Notificaciones recientes</strong>
-                <p class="merchandise-request-summary-copy">Avisos internos y seguimiento operativo reciente en el SGA.</p>
+        <section class="surface-card compact-card dashboard-notifications-card">
+            <div class="ops-section-heading dashboard-notifications-header">
+                <div class="dashboard-notifications-intro">
+                    <strong>Notificaciones recientes</strong>
+                    <p class="merchandise-request-summary-copy">Avisos internos y seguimiento operativo reciente en el SGA.</p>
+                </div>
+                <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Ver todas</a>
             </div>
-            <a href="{{ route('notifications.index') }}" class="button-secondary compact-button btn-table dashboard-notifications-link">Ver todas</a>
-        </div>
 
-        @if ($recentNotifications->isEmpty())
-            <div class="merchandise-request-summary-empty dashboard-notifications-empty">
-                No hay notificaciones recientes.
-            </div>
-        @else
-            <div class="dashboard-notification-list">
-                @foreach ($recentNotifications as $notification)
-                    <article class="dashboard-notification-item{{ $notification->read_at === null ? ' is-unread' : '' }}">
-                        <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
-                        <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
-                        <div class="dashboard-notification-meta">
-                            <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
-                            <span>{{ $notification->created_at?->format('d/m/Y H:i') }}</span>
-                        </div>
-                    </article>
-                @endforeach
-            </div>
-        @endif
-    </section>
+            @if ($recentNotifications->isEmpty())
+                <div class="merchandise-request-summary-empty dashboard-notifications-empty">
+                    No hay notificaciones recientes.
+                </div>
+            @else
+                <div class="dashboard-notification-list">
+                    @foreach ($recentNotifications as $notification)
+                        <article class="dashboard-notification-item{{ $notification->read_at === null ? ' is-unread' : '' }}">
+                            <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
+                            <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
+                            <div class="dashboard-notification-meta">
+                                <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
+                                <span>{{ $notification->created_at?->format('d/m/Y H:i') }}</span>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            @endif
+        </section>
+    @endunless
 @endsection
 

@@ -192,6 +192,8 @@
                     @yield('content')
                 </div>
             </main>
+
+            <x-app-footer />
         </div>
     </body>
 </html>
