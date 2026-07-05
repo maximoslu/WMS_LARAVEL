@@ -5903,3 +5903,184 @@ body.brand-body.app-shell-body .pagination-card {
         grid-column: 2;
     }
 }
+
+.alert-warning {
+    border-color: rgba(191, 124, 32, 0.32);
+    background: linear-gradient(135deg, rgba(255, 204, 120, 0.14), rgba(191, 124, 32, 0.08));
+    color: #5f430f;
+}
+
+body.brand-body.app-shell-body .alert-warning {
+    border-color: rgba(240, 166, 54, 0.26);
+    background: linear-gradient(135deg, rgba(240, 166, 54, 0.18), rgba(240, 166, 54, 0.08));
+    color: #ffe3b0;
+}
+
+.notification-list {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.notification-card {
+    padding: 0.95rem 1rem;
+    border-left: 4px solid rgba(80, 96, 113, 0.28);
+}
+
+.notification-card-head,
+.notification-card-meta {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.9rem;
+}
+
+.notification-card-copy {
+    display: grid;
+    gap: 0.38rem;
+    min-width: 0;
+}
+
+.notification-card-copy p {
+    margin: 0;
+    color: var(--brand-soft);
+    line-height: 1.45;
+}
+
+.notification-card-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.notification-kind-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.22rem 0.58rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid rgba(80, 96, 113, 0.22);
+}
+
+.notification-state-badge {
+    font-size: 0.72rem;
+}
+
+.notification-card-date {
+    color: var(--brand-soft);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.notification-card-actions {
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.notification-card-actions form {
+    margin: 0;
+}
+
+.notification-card--booking {
+    border-left-color: rgba(40, 148, 201, 0.55);
+}
+
+.notification-card--pedido {
+    border-left-color: rgba(214, 144, 41, 0.58);
+}
+
+.notification-card--salida {
+    border-left-color: rgba(38, 148, 92, 0.56);
+}
+
+.notification-card--stock {
+    border-left-color: rgba(33, 146, 139, 0.56);
+}
+
+.notification-card--sistema {
+    border-left-color: rgba(98, 108, 121, 0.5);
+}
+
+.notification-card--error {
+    border-left-color: rgba(184, 66, 66, 0.62);
+}
+
+.notification-kind-badge--booking {
+    background: rgba(54, 168, 219, 0.14);
+    color: #0f6892;
+}
+
+.notification-kind-badge--pedido {
+    background: rgba(214, 144, 41, 0.15);
+    color: #8a5610;
+}
+
+.notification-kind-badge--salida {
+    background: rgba(38, 148, 92, 0.15);
+    color: #16684d;
+}
+
+.notification-kind-badge--stock {
+    background: rgba(33, 146, 139, 0.15);
+    color: #155f5b;
+}
+
+.notification-kind-badge--sistema {
+    background: rgba(98, 108, 121, 0.15);
+    color: #48525b;
+}
+
+.notification-kind-badge--error {
+    background: rgba(184, 66, 66, 0.14);
+    color: #932f2f;
+}
+
+body.brand-body.app-shell-body .notification-card {
+    padding: 0.9rem 1rem;
+}
+
+body.brand-body.app-shell-body .notification-kind-badge--booking {
+    background: rgba(56, 189, 248, 0.18);
+    color: #9adfff;
+}
+
+body.brand-body.app-shell-body .notification-kind-badge--pedido {
+    background: rgba(245, 158, 11, 0.18);
+    color: #ffd799;
+}
+
+body.brand-body.app-shell-body .notification-kind-badge--salida {
+    background: rgba(34, 197, 94, 0.16);
+    color: #9ce7bb;
+}
+
+body.brand-body.app-shell-body .notification-kind-badge--stock {
+    background: rgba(45, 212, 191, 0.16);
+    color: #9df2e6;
+}
+
+body.brand-body.app-shell-body .notification-kind-badge--sistema {
+    background: rgba(148, 163, 184, 0.14);
+    color: #d1dae6;
+}
+
+body.brand-body.app-shell-body .notification-kind-badge--error {
+    background: rgba(248, 113, 113, 0.16);
+    color: #ffb8b8;
+}
+
+@media (max-width: 767px) {
+    .notification-card-head,
+    .notification-card-meta {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .notification-card-date {
+        white-space: normal;
+    }
+}

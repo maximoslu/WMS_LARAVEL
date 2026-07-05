@@ -616,7 +616,7 @@ class StockOverviewTest extends TestCase
         }
     }
 
-    public function test_stock_table_does_not_show_cliente_column_and_summary_shows_operational_kpis(): void
+    public function test_stock_muestra_pallets_totales_como_kpi_principal(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -640,10 +640,150 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Pallets completos')
-            ->assertSeeText('Picos totales')
-            ->assertSeeText('Unidades logisticas')
+            ->assertSeeText('Pallets totales')
+            ->assertSeeText('2')
             ->assertDontSee('<th>Cliente</th>', false);
+    }
+
+    public function test_stock_no_muestra_unidades_logisticas_como_label_tecnico(): void
+    {
+        [$client] = $this->seedBaseData();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 1000,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 2500,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 2,
+            'peaks_count' => 1,
+            'peak_1' => 500,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertDontSeeText('Unidades logisticas');
+    }
+
+    public function test_stock_no_muestra_metricas_excesivas_en_cabecera(): void
+    {
+        [$client] = $this->seedBaseData();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 1000,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 2000,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 2,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertDontSeeText('Total referencias')
+            ->assertDontSeeText('Pallets completos')
+            ->assertDontSeeText('Total unidades')
+            ->assertDontSeeText('Picos totales');
+    }
+
+    public function test_valor_pallets_totales_equivale_a_unidades_logisticas(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-KPI-TOTAL',
+            'units_per_pallet' => 1000,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 3500,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 3,
+            'peaks_count' => 1,
+            'peak_1' => 500,
+        ]);
+
+        $overview = app(\App\Support\Stock\StockOverviewBuilder::class)->build(
+            $this->makeUserWithRole(Role::ALMACEN),
+            []
+        );
+
+        $this->assertSame(4, $overview['summary']['total_logistic_units']);
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Pallets totales')
+            ->assertSeeText('4');
+    }
+
+    public function test_cliente_ve_pallets_totales(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 800,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 1600,
+            'units_per_pallet' => 800,
+            'full_pallets' => 2,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Pallets totales')
+            ->assertDontSeeText('Unidades logisticas');
+    }
+
+    public function test_superadmin_ve_pallets_totales(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 600,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 1295,
+            'units_per_pallet' => 600,
+            'full_pallets' => 2,
+            'peaks_count' => 1,
+            'peak_1' => 95,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Pallets totales')
+            ->assertSeeText('3');
     }
 
     public function test_stock_index_is_paginated_by_default(): void

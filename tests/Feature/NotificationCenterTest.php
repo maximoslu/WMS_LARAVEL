@@ -114,6 +114,80 @@ class NotificationCenterTest extends TestCase
         $this->assertNotNull(DB::table('notifications')->where('id', $notificationId)->value('read_at'));
     }
 
+    public function test_panel_notificaciones_renderiza_filas_compactas(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->createTypedNotification($user, [
+            'type' => 'nueva_solicitud_mercancia',
+            'title' => 'Nueva solicitud de mercancia',
+            'body' => 'Pedido registrado',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee('notification-card', false)
+            ->assertSee('notification-card-badges', false)
+            ->assertSee('notification-card-actions', false);
+    }
+
+    public function test_notificacion_booking_muestra_badge_booking(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->createTypedNotification($user, [
+            'type' => 'booking_estado_actualizado',
+            'title' => 'Tu booking ha cambiado de estado',
+            'body' => 'BK-000001 ha pasado a confirmado.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee('notification-card--booking', false)
+            ->assertSee('notification-kind-badge--booking', false)
+            ->assertSee('BOOKING');
+    }
+
+    public function test_notificacion_pedido_muestra_badge_pedido(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->createTypedNotification($user, [
+            'type' => 'estado_solicitud_mercancia',
+            'title' => 'Tu solicitud ha cambiado de estado',
+            'body' => 'Pedido en preparacion.',
+            'url' => '/solicitudes-mercancia/1',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee('notification-card--pedido', false)
+            ->assertSee('notification-kind-badge--pedido', false)
+            ->assertSee('PEDIDO');
+    }
+
+    public function test_notificacion_salida_muestra_badge_salida(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->createTypedNotification($user, [
+            'type' => 'albaran_salida',
+            'title' => 'Albaran de salida disponible',
+            'body' => 'Salida expedida.',
+            'url' => '/salidas/1',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee('notification-card--salida', false)
+            ->assertSee('notification-kind-badge--salida', false)
+            ->assertSee('SALIDA');
+    }
+
     private function createNotifications(User $user, int $count): void
     {
         $rows = [];
@@ -134,6 +208,22 @@ class NotificationCenterTest extends TestCase
         }
 
         DB::table('notifications')->insert($rows);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function createTypedNotification(User $user, array $data): void
+    {
+        DB::table('notifications')->insert([
+            'id' => (string) Str::uuid(),
+            'type' => 'test',
+            'notifiable_type' => User::class,
+            'notifiable_id' => $user->id,
+            'data' => json_encode($data, JSON_THROW_ON_ERROR),
+            'created_at' => '2026-07-03 09:00:00',
+            'updated_at' => '2026-07-03 09:00:00',
+        ]);
     }
 
     private function makeUserWithRole(string $roleSlug): User

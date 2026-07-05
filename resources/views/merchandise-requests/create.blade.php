@@ -40,6 +40,12 @@
         </div>
     @endif
 
+    @if ($contractualWindowWarning)
+        <div class="alert alert-warning">
+            {{ $contractualWindowWarning }}
+        </div>
+    @endif
+
     @if (! $hasActiveItems)
         <article class="surface-card compact-card wms-empty-state">
             <span class="status-chip">Sin mercancías</span>

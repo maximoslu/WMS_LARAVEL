@@ -41,7 +41,6 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             ->line('Total de pallets: '.number_format($request->requestedPalletsCount(), 0, ',', '.'))
             ->line('Lineas solicitadas:')
             ->line(implode(PHP_EOL, $lines))
-            ->line('Aviso horario provisional: el horario operativo actual es temporal y queda pendiente de configuracion definitiva.')
             ->action('Ver solicitud', route('merchandise-requests.show', $request));
     }
 }

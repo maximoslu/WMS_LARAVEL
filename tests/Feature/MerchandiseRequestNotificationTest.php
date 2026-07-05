@@ -152,6 +152,32 @@ class MerchandiseRequestNotificationTest extends TestCase
         );
     }
 
+    public function test_cliente_no_recibe_email_en_cambios_intermedios_de_pedido(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'cliente@friesland.test']);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+
+        (new ProcessMerchandiseRequestStatusChangedJob(
+            $merchandiseRequest->id,
+            MerchandiseRequest::STATUS_PENDING
+        ))->handle(app(MerchandiseRequestNotificationService::class));
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestStatusChangedNotification::class,
+            fn ($notification, array $channels): bool => $channels === ['database']
+        );
+    }
+
     public function test_sent_dispatch_job_delivers_delivery_note_notification(): void
     {
         Notification::fake();
@@ -206,6 +232,50 @@ class MerchandiseRequestNotificationTest extends TestCase
 
         $this->assertNotNull($dispatch->fresh()->delivery_note_sent_at);
         Notification::assertSentTo($cliente, CustomerDispatchDeliveryNoteNotification::class);
+    }
+
+    public function test_cliente_no_recibe_email_al_generar_salida(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'cliente@friesland.test']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 700,
+        ]);
+
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'lot' => $item->lot,
+            'units_per_pallet' => $item->units_per_pallet,
+            'requested_pallets' => 3,
+            'requested_units' => 2100,
+        ]);
+        $merchandiseRequest->update(['status' => MerchandiseRequest::STATUS_PENDING]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        (new ProcessMerchandiseRequestStatusChangedJob(
+            $merchandiseRequest->id,
+            MerchandiseRequest::STATUS_PENDING
+        ))->handle(app(MerchandiseRequestNotificationService::class));
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestStatusChangedNotification::class,
+            fn ($notification, array $channels): bool => $channels === ['database']
+        );
     }
 
     private function seedBaseData(): void

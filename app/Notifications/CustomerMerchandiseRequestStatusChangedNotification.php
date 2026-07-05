@@ -20,13 +20,7 @@ class CustomerMerchandiseRequestStatusChangedNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
-
-        if (filter_var($notifiable->email ?? null, FILTER_VALIDATE_EMAIL)) {
-            $channels[] = 'mail';
-        }
-
-        return $channels;
+        return ['database'];
     }
 
     public function toMail(object $notifiable): MailMessage
@@ -81,6 +75,7 @@ class CustomerMerchandiseRequestStatusChangedNotification extends Notification
         $dispatchNumber = $request->dispatch?->dispatchNumber();
 
         return [
+            'type' => 'estado_solicitud_mercancia',
             'title' => 'Tu solicitud ha cambiado de estado',
             'body' => sprintf(
                 '%s ahora esta en estado %s.',

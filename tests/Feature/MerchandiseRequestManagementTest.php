@@ -14,6 +14,7 @@ use App\Models\User;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Tests\TestCase;
 
@@ -114,6 +115,146 @@ class MerchandiseRequestManagementTest extends TestCase
             ProcessMerchandiseRequestSubmittedNotificationsJob::class,
             fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $request->id
         );
+    }
+
+    public function test_pedido_cliente_dentro_de_horario_no_muestra_aviso_fuera_ventana(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 700,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->travelTo(Carbon::parse('2026-01-05 08:00:00', config('app.timezone')));
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => 2,
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionMissing('warning');
+
+        $this->travelBack();
+    }
+
+    public function test_pedido_cliente_antes_de_las_7_muestra_aviso_fuera_ventana(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 700,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->travelTo(Carbon::parse('2026-01-05 05:59:59', config('app.timezone')));
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => 2,
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('warning');
+
+        $this->travelBack();
+    }
+
+    public function test_pedido_cliente_despues_de_las_15_muestra_aviso_fuera_ventana(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 700,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->travelTo(Carbon::parse('2026-01-05 14:01:00', config('app.timezone')));
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => 2,
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('warning');
+
+        $this->travelBack();
+    }
+
+    public function test_pedido_cliente_fin_de_semana_muestra_aviso_fuera_ventana(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 700,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->travelTo(Carbon::parse('2026-01-03 10:00:00', config('app.timezone')));
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.create'))
+            ->assertOk()
+            ->assertSee('Estas realizando el pedido fuera de la ventana operativa contractual de planificacion.');
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => 2,
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('warning');
+
+        $this->travelBack();
+    }
+
+    public function test_pedido_fuera_de_horario_se_registra_igualmente(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 700,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->travelTo(Carbon::parse('2026-01-03 10:00:00', config('app.timezone')));
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => 3,
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('warning');
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertSame(MerchandiseRequest::STATUS_PENDING, $request->status);
+        $this->assertSame(3, $request->requestedPalletsCount());
+
+        $this->travelBack();
     }
 
     public function test_cliente_can_create_request_with_peak_line_from_stock_variant(): void

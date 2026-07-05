@@ -38,32 +38,7 @@
 
         <section class="notification-list">
             @foreach ($notifications as $notification)
-                <article class="surface-card compact-card notification-card{{ $notification->read_at === null ? ' is-unread' : '' }}">
-                    <div class="notification-card-head">
-                        <div>
-                            <strong>{{ $notification->data['title'] ?? 'Notificacion' }}</strong>
-                            <p>{{ $notification->data['body'] ?? 'Sin detalle adicional.' }}</p>
-                        </div>
-                        <span class="ops-status badge-compact">{{ $notification->read_at === null ? 'Pendiente' : 'Leida' }}</span>
-                    </div>
-
-                    <div class="notification-card-meta">
-                        <span>{{ $notification->created_at?->format('d/m/Y H:i') }}</span>
-                        <div class="inline-actions action-buttons">
-                            @if (! empty($notification->data['url']))
-                                <a href="{{ $notification->data['url'] }}" class="button-secondary compact-button btn-table">Abrir</a>
-                            @endif
-
-                            @if ($notification->read_at === null)
-                                <form method="POST" action="{{ route('notifications.read', $notification->id) }}">
-                                    @csrf
-                                    @method('PATCH')
-                                    <button type="submit" class="button-secondary compact-button btn-table">Marcar leida</button>
-                                </form>
-                            @endif
-                        </div>
-                    </div>
-                </article>
+                @include('notifications._card', ['notification' => $notification])
             @endforeach
         </section>
 

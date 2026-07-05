@@ -506,6 +506,36 @@ class GoodsDispatchManagementTest extends TestCase
         );
     }
 
+    public function test_cliente_no_recibe_email_al_confirmar_carga_real(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'cliente@friesland.test']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 1,
+            'loaded_pallets' => 1,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        (new ProcessGoodsDispatchLoadingConfirmedNotificationsJob($dispatch->id, $almacen->id))
+            ->handle(app(MerchandiseRequestNotificationService::class));
+
+        Notification::assertSentTo($almacen, InternalGoodsDispatchLoadingConfirmedNotification::class);
+        Notification::assertNotSentTo($cliente, InternalGoodsDispatchLoadingConfirmedNotification::class);
+        Notification::assertNotSentTo($cliente, CustomerDispatchDeliveryNoteNotification::class);
+        Notification::assertNotSentTo($cliente, CustomerMerchandiseRequestStatusChangedNotification::class);
+    }
+
     public function test_confirming_loading_can_add_extra_reference_lines(): void
     {
         $this->seedBaseData();

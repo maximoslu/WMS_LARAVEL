@@ -41,24 +41,9 @@
 
     <section class="stock-summary" aria-label="Resumen de stock">
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Total referencias</strong>
-            <span>{{ number_format($summary['references_with_stock'], 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Pallets completos</strong>
-            <span>{{ number_format($summary['total_full_pallets'], 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Total unidades</strong>
-            <span>{{ number_format($summary['total_units'], 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Picos totales</strong>
-            <span>{{ number_format($summary['total_peaks'], 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Unidades logisticas</strong>
+            <strong>Pallets totales</strong>
             <span>{{ number_format($summary['total_logistic_units'], 0, ',', '.') }}</span>
+            <small>Total operativo visible para preparacion y expedicion.</small>
         </article>
     </section>
 

@@ -12,8 +12,8 @@ return [
         'schedule' => [
             'timezone' => env('APP_TIMEZONE', 'Europe/Madrid'),
             'business_days' => [1, 2, 3, 4, 5],
-            'start' => '08:00',
-            'end' => '17:00',
+            'start' => '07:00',
+            'end' => '15:00',
             // TODO: Configurar aqui el horario real de empresa y el mensaje final definitivo para pedidos.
         ],
     ],

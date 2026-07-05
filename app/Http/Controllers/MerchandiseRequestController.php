@@ -81,7 +81,11 @@ class MerchandiseRequestController extends Controller
         ]);
     }
 
-    public function create(Request $request, StockVariantCatalog $variantCatalog): View
+    public function create(
+        Request $request,
+        StockVariantCatalog $variantCatalog,
+        MerchandiseRequestScheduleService $scheduleService,
+    ): View
     {
         $user = $request->user();
 
@@ -95,6 +99,7 @@ class MerchandiseRequestController extends Controller
             'selectedItems' => $variantCatalog->hydrateSelections(old('lines', old('quantities', [])), (int) $user->client_id),
             'client' => $user->client,
             'searchEndpoint' => route('merchandise-requests.items.search'),
+            'contractualWindowWarning' => $scheduleService->preSubmissionWarning(),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
@@ -153,9 +158,17 @@ class MerchandiseRequestController extends Controller
 
         $notificationService->notifySubmitted($merchandiseRequest);
 
-        return redirect()
+        $response = redirect()
             ->route('merchandise-requests.show', $merchandiseRequest)
-            ->with('status', $scheduleService->submissionNotice($merchandiseRequest->submittedAt()).' Solicitud registrada y notificada correctamente.');
+            ->with('status', 'Solicitud registrada y notificada correctamente.');
+
+        $outsideWindowWarning = $scheduleService->postSubmissionWarning($merchandiseRequest->submittedAt());
+
+        if ($outsideWindowWarning !== null) {
+            $response->with('warning', $outsideWindowWarning);
+        }
+
+        return $response;
     }
 
     public function show(Request $request, MerchandiseRequest $merchandiseRequest): View
