@@ -18,14 +18,6 @@ class DashboardController extends Controller
         $navigationSections = WmsNavigation::sectionsForUser($user);
         $calendarStart = now()->startOfWeek(Carbon::MONDAY);
         $calendarEnd = $calendarStart->copy()->addDays(6);
-        $upcomingBookings = Booking::query()
-            ->with(['client'])
-            ->when($user->hasRole(Role::CLIENTE), fn ($query) => $query->where('client_id', $user->client_id))
-            ->whereDate('scheduled_date', '>=', now()->toDateString())
-            ->orderBy('scheduled_date')
-            ->orderBy('scheduled_time_from')
-            ->limit(7)
-            ->get();
         $calendarBookings = Booking::query()
             ->with(['client'])
             ->when($user->hasRole(Role::CLIENTE), fn ($query) => $query->where('client_id', $user->client_id))
@@ -62,11 +54,6 @@ class DashboardController extends Controller
             'bookingCalendarStart' => $calendarStart,
             'bookingCalendarEnd' => $calendarEnd,
             'showGoogleCalendarLayer' => $showGoogleCalendarLayer,
-            'upcomingBookings' => $upcomingBookings,
-            'recentNotifications' => $user->notifications()
-                ->latest()
-                ->limit(5)
-                ->get(),
         ]);
     }
 }

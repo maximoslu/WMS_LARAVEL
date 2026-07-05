@@ -231,3 +231,79 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Confirmar en Forge si GD/Imagick est√° instalado para que el logo aparezca en los PDFs en producci√≥n.
 - No se hizo una revisi√≥n visual exhaustiva de "Salida enviada/completada" con datos reales de env√≠o completo (se revis√≥ la estructura y los estilos base, que ya heredan las correcciones de padding/alerts, pero no se forz√≥ el flujo completo hasta "completado").
 - Los puntos P1/P2/P3 de la auditor√≠a inicial siguen abiertos.
+
+---
+
+## 2026-07-05 - Simplificacion global del dashboard y actualizacion del footer (15:58:03 +02:00)
+
+**Contexto:** Continuacion del trabajo iniciado en `38dd779 style: simplify client dashboard and add global footer`. En ese commit el dashboard limpio solo se aplicaba al cliente. La nueva decision de producto fue extender esa limpieza a todos los roles y ajustar el footer global para mostrar `© 2026`, manteniendo accesibles notificaciones y bookings desde sus puntos naturales de navegacion.
+
+**Commit de partida:**
+- `38dd779 style: simplify client dashboard and add global footer`
+- Ultimo commit actual antes de esta tarea: `38dd779 style: simplify client dashboard and add global footer`
+
+**Resumen de la decision aplicada:**
+- Se elimino del dashboard para todos los roles:
+  - `Proximos bookings`
+  - `Notificaciones recientes`
+- Esta informacion sigue accesible desde:
+  - topbar y drawer de notificaciones
+  - modulo de bookings
+  - agenda/calendario operativo del dashboard
+  - calendario de bookings
+
+**Cambios funcionales y de vista realizados:**
+- `resources/views/dashboard/index.blade.php`
+  - eliminados los dos paneles resumen para cliente, almacen, administracion y superadmin
+  - se mantiene la agenda semanal como bloque operativo principal
+- `app/Http/Controllers/DashboardController.php`
+  - eliminada la carga de `upcomingBookings`
+  - eliminada la carga de `recentNotifications`
+  - se mantiene la carga de agenda WMS y capa Google Calendar para roles internos
+- `resources/views/components/app-footer.blade.php`
+  - texto actualizado a:
+    - `© 2026 ∑ WMS creado y desarrollado por Jorge Monge. Soluciones web corporativas para empresas que buscan control, eficiencia y trazabilidad.`
+  - enlace mantenido a `https://www.jorgemonge.es`
+  - apertura en nueva pestana con `target="_blank"` y `rel="noopener noreferrer"`
+
+**Archivos principales modificados:**
+- `app/Http/Controllers/DashboardController.php`
+- `resources/views/dashboard/index.blade.php`
+- `resources/views/components/app-footer.blade.php`
+- `tests/Feature/AuthenticationFlowTest.php`
+- `tests/Feature/BookingManagementTest.php`
+- `tests/Feature/NotificationCenterTest.php`
+- `tests/Feature/RoleAccessTest.php`
+
+**Resultado de validacion:**
+- `php artisan optimize:clear`: OK
+- `php artisan test`: `325 passed`
+- `npm run build`: OK
+
+**Migraciones:**
+- No hubo migraciones nuevas
+
+**Estado del footer global:**
+- Visible en layout autenticado
+- Visible tambien en login/guest
+- Muestra `© 2026`
+- Mantiene credito explicito a Jorge Monge
+- Mantiene enlace visible `www.jorgemonge.es`
+
+**Estado final del dashboard:**
+- Se mantienen los modulos principales por rol
+- Se mantiene la agenda/calendario operativo
+- Se mantienen permisos por rol, topbar, drawer, acceso a bookings, pedidos, stock, salidas y notificaciones
+- Se elimina duplicidad visual de bookings/notificaciones en la home
+
+**Forge:**
+- `Deploy Now`
+- `php artisan optimize:clear`
+- `php artisan queue:restart` no necesario para este hito al no tocar colas ni notificaciones de backend
+
+**Control de alcance:**
+- No se tocaron migraciones
+- No se toco Google Calendar
+- No se toco importacion Friesland/Edelvives
+- No se toco facturacion
+- `.claude/` no se anadio al commit

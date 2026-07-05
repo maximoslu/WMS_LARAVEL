@@ -92,6 +92,72 @@ class RoleAccessTest extends TestCase
             ->assertDontSee('Ver todas');
     }
 
+    public function test_superadmin_dashboard_no_muestra_panel_proximo_booking(): void
+    {
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Proximos bookings')
+            ->assertDontSee('Ver agenda');
+    }
+
+    public function test_superadmin_dashboard_no_muestra_panel_notificaciones(): void
+    {
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Notificaciones recientes')
+            ->assertDontSee('Ver todas');
+    }
+
+    public function test_almacen_dashboard_no_muestra_panel_proximo_booking(): void
+    {
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Proximos bookings')
+            ->assertDontSee('Ver agenda');
+    }
+
+    public function test_almacen_dashboard_no_muestra_panel_notificaciones(): void
+    {
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Notificaciones recientes')
+            ->assertDontSee('Ver todas');
+    }
+
+    public function test_administracion_dashboard_no_muestra_panel_proximo_booking(): void
+    {
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Proximos bookings')
+            ->assertDontSee('Ver agenda');
+    }
+
+    public function test_administracion_dashboard_no_muestra_panel_notificaciones(): void
+    {
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Notificaciones recientes')
+            ->assertDontSee('Ver todas');
+    }
+
     public function test_cliente_dashboard_mantiene_agenda_operativa(): void
     {
         $user = $this->makeUserWithRole(Role::CLIENTE);
@@ -122,6 +188,17 @@ class RoleAccessTest extends TestCase
             ->assertOk()
             ->assertSee('Jorge Monge')
             ->assertSee('WMS creado y desarrollado por Jorge Monge.');
+    }
+
+    public function test_footer_global_muestra_2026(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('© 2026')
+            ->assertSee('www.jorgemonge.es');
     }
 
     public function test_footer_global_enlaza_a_jorgemonge(): void
@@ -158,15 +235,25 @@ class RoleAccessTest extends TestCase
             ->assertSee(route('merchandise-requests.index'), false);
     }
 
-    public function test_superadmin_dashboard_no_pierde_paneles_operativos_si_los_usa(): void
+    public function test_dashboard_mantiene_accesos_principales_por_rol(): void
     {
-        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
 
-        $this->actingAs($user)
+        $this->actingAs($cliente)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Proximos bookings')
-            ->assertSee('Notificaciones recientes');
+            ->assertSee('STOCK')
+            ->assertSee('BOOKING')
+            ->assertSee('PEDIDOS');
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Stock actual')
+            ->assertSee('Pedidos')
+            ->assertSee('Salidas');
     }
 
     public function test_dashboard_stock_no_muestra_palets(): void

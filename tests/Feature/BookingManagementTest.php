@@ -280,20 +280,21 @@ class BookingManagementTest extends TestCase
             ->assertSee('Lunes');
     }
 
-    public function test_dashboard_shows_upcoming_bookings(): void
+    public function test_dashboard_shows_bookings_inside_operational_agenda(): void
     {
         [$client] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
         $booking = Booking::factory()->create([
             'client_id' => $client->id,
             'booking_code' => 'BK-200001',
-            'scheduled_date' => now()->addDay()->toDateString(),
+            'scheduled_date' => $calendarDate,
         ]);
 
         $this->actingAs($almacen)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Proximos bookings')
+            ->assertSee('Agenda operativa WMS')
             ->assertSee($booking->referenceCode());
     }
 
@@ -325,16 +326,17 @@ class BookingManagementTest extends TestCase
     {
         [$friesland, $edelvives] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
 
         Booking::factory()->create([
             'client_id' => $friesland->id,
             'booking_code' => 'BK-220001',
-            'scheduled_date' => now()->addDay()->toDateString(),
+            'scheduled_date' => $calendarDate,
         ]);
         Booking::factory()->create([
             'client_id' => $edelvives->id,
             'booking_code' => 'BK-220002',
-            'scheduled_date' => now()->addDay()->toDateString(),
+            'scheduled_date' => $calendarDate,
         ]);
 
         $this->actingAs($almacen)

@@ -15,7 +15,7 @@ class NotificationCenterTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_dashboard_limits_recent_notifications_and_keeps_unread_counter(): void
+    public function test_dashboard_keeps_unread_counter_in_topbar_without_notification_panel(): void
     {
         $user = $this->makeUserWithRole(Role::ALMACEN);
 
@@ -24,14 +24,8 @@ class NotificationCenterTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Aviso 007')
-            ->assertSee('Aviso 006')
-            ->assertSee('Aviso 005')
-            ->assertSee('Aviso 004')
-            ->assertSee('Aviso 003')
-            ->assertDontSee('Aviso 002')
-            ->assertDontSee('Aviso 001')
-            ->assertSee('Ver todas')
+            ->assertDontSee('Notificaciones recientes')
+            ->assertDontSee('Aviso 007')
             ->assertSee(route('notifications.index'), false)
             ->assertSee('aria-label="Notificaciones, 7 sin leer"', false)
             ->assertSee('users-pending-count', false)
@@ -61,14 +55,15 @@ class NotificationCenterTest extends TestCase
             ->assertSee('Aviso 001');
     }
 
-    public function test_notifications_empty_state_is_clear_on_dashboard_and_index(): void
+    public function test_notifications_empty_state_is_clear_on_index_and_dashboard_has_no_panel(): void
     {
         $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('No hay notificaciones recientes.');
+            ->assertDontSee('Notificaciones recientes')
+            ->assertSee('Notificaciones');
 
         $client = $this->makeUserWithRole(Role::CLIENTE);
 

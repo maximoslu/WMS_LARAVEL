@@ -32,6 +32,16 @@ class AuthenticationFlowTest extends TestCase
             ->assertSee('Iniciar sesión');
     }
 
+    public function test_footer_global_aparece_en_login(): void
+    {
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee('© 2026')
+            ->assertSee('Jorge Monge')
+            ->assertSee('https://www.jorgemonge.es', false)
+            ->assertSee('www.jorgemonge.es');
+    }
+
     public function test_user_can_authenticate_and_reach_dashboard(): void
     {
         $user = User::factory()->create([
