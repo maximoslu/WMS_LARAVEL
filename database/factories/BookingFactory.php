@@ -47,6 +47,7 @@ class BookingFactory extends Factory
             'loading_dock' => fake()->optional()->randomElement(['Muelle 1', 'Muelle 2', 'Muelle 3']),
             'google_calendar_event_id' => null,
             'google_calendar_synced_at' => null,
+            'google_calendar_sync_error' => null,
             'approved_at' => null,
             'cancelled_at' => null,
         ];

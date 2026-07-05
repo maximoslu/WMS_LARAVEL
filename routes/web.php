@@ -230,6 +230,9 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/bookings/{booking}/estado', [BookingController::class, 'updateStatus'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('bookings.update-status');
+    Route::patch('/bookings/{booking}/google-calendar/reintentar', [BookingController::class, 'retryGoogleCalendarSync'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('bookings.google-calendar.retry');
     Route::delete('/bookings/{booking}', [BookingController::class, 'destroy'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('bookings.destroy');

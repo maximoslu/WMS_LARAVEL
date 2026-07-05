@@ -71,7 +71,7 @@
                         <span>{{ $day['date']->format('d/m') }}</span>
                     </div>
 
-                    @if ($day['bookings']->isEmpty())
+                    @if ($day['bookings']->isEmpty() && (! $showGoogleCalendarLayer || $day['google_events']->isEmpty()))
                         <div class="dashboard-booking-day-empty">Sin actividad</div>
                     @else
                         <div class="dashboard-booking-day-list">
@@ -82,6 +82,23 @@
                                     <span>{{ number_format($booking->pallets_expected ?? 0, 0, ',', '.') }} pallets</span>
                                 </a>
                             @endforeach
+
+                            @if ($showGoogleCalendarLayer)
+                                @foreach ($day['google_events'] as $googleEvent)
+                                    <article class="dashboard-google-event-chip">
+                                        <div class="wms-calendar-chip-top">
+                                            <span class="wms-calendar-source wms-calendar-source-google">Google</span>
+                                            <strong>{{ $googleEvent['title'] }}</strong>
+                                        </div>
+                                        <span>
+                                            {{ $googleEvent['all_day'] ? 'Todo el dia' : $googleEvent['starts_at']->format('H:i') . ' - ' . $googleEvent['ends_at']->format('H:i') }}
+                                        </span>
+                                        @if ($googleEvent['location'])
+                                            <span>{{ $googleEvent['location'] }}</span>
+                                        @endif
+                                    </article>
+                                @endforeach
+                            @endif
                         </div>
                     @endif
                 </article>

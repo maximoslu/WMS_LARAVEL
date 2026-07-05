@@ -52,6 +52,7 @@ class Booking extends Model
         'loading_dock',
         'google_calendar_event_id',
         'google_calendar_synced_at',
+        'google_calendar_sync_error',
         'approved_at',
         'cancelled_at',
     ];
@@ -71,7 +72,6 @@ class Booking extends Model
     {
         static::created(function (self $booking): void {
             if (blank($booking->booking_code)) {
-                // TODO: Mantener este identificador como referencia maestra al sincronizar con Google Workspace Calendar.
                 $booking->forceFill([
                     'booking_code' => 'BK-'.str_pad((string) $booking->id, 6, '0', STR_PAD_LEFT),
                 ])->saveQuietly();
@@ -209,5 +209,32 @@ class Booking extends Model
     public function canClientCancel(): bool
     {
         return in_array($this->status, [self::STATUS_REQUESTED, self::STATUS_APPROVED], true);
+    }
+
+    public function googleCalendarSyncState(): string
+    {
+        if (filled($this->google_calendar_sync_error)) {
+            return 'error';
+        }
+
+        if ($this->status === self::STATUS_CANCELLED && $this->google_calendar_synced_at !== null) {
+            return 'cancelled';
+        }
+
+        if (filled($this->google_calendar_event_id) && $this->google_calendar_synced_at !== null) {
+            return 'synced';
+        }
+
+        return 'pending';
+    }
+
+    public function googleCalendarSyncLabel(): string
+    {
+        return match ($this->googleCalendarSyncState()) {
+            'synced' => 'Sincronizado con Google Calendar',
+            'cancelled' => 'Cancelado en Google Calendar',
+            'error' => 'Error de sincronizacion con Google Calendar',
+            default => 'Pendiente de sincronizar',
+        };
     }
 }

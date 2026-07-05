@@ -34,6 +34,10 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
+    @if (session('warning'))
+        <div class="alert alert-error">{{ session('warning') }}</div>
+    @endif
+
     <section class="surface-card item-filter-card compact-card wms-filter-card">
         <form method="GET" action="{{ route('bookings.index') }}" class="item-filter-form compact-filters filters-compact">
             @unless ($isClient)
@@ -114,6 +118,9 @@
                                 <th>Matricula</th>
                             @endunless
                             <th>Estado</th>
+                            @unless ($isClient)
+                                <th>Google Calendar</th>
+                            @endunless
                             <th>Acciones</th>
                         </tr>
                     </thead>
@@ -136,6 +143,20 @@
                                         {{ $booking->statusLabel() }}
                                     </span>
                                 </td>
+                                @unless ($isClient)
+                                    @php
+                                        $googleState = match ($booking->googleCalendarSyncState()) {
+                                            'synced', 'cancelled' => 'connected',
+                                            'error' => 'error',
+                                            default => 'pending',
+                                        };
+                                    @endphp
+                                    <td>
+                                        <span class="status-badge dashboard-google-status dashboard-google-status--{{ $googleState }}">
+                                            {{ $booking->googleCalendarSyncLabel() }}
+                                        </span>
+                                    </td>
+                                @endunless
                                 <td>
                                     <div class="inline-actions action-buttons">
                                         <a href="{{ route('bookings.show', $booking) }}" class="button-secondary compact-button btn-table">Ver</a>

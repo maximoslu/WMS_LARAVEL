@@ -31,6 +31,10 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
+    @if (session('warning'))
+        <div class="alert alert-error">{{ session('warning') }}</div>
+    @endif
+
     @if ($errors->any())
         <div class="alert alert-error">
             @foreach ($errors->all() as $message)
@@ -113,6 +117,19 @@
                         <strong>Asignado a</strong>
                         <p>{{ $booking->assignedTo?->name ?? 'Sin asignar' }}</p>
                     </article>
+                    <article class="dashboard-notification-item">
+                        <strong>Google Calendar</strong>
+                        <p>{{ $booking->googleCalendarSyncLabel() }}</p>
+                        @if ($booking->google_calendar_synced_at)
+                            <p>Ultima sincronizacion: {{ $booking->google_calendar_synced_at->format('d/m/Y H:i') }}</p>
+                        @endif
+                        @if ($booking->google_calendar_sync_error)
+                            <p>Error: {{ $booking->google_calendar_sync_error }}</p>
+                        @endif
+                        @if ($booking->google_calendar_event_id)
+                            <p>Evento: {{ $booking->google_calendar_event_id }}</p>
+                        @endif
+                    </article>
                 @endunless
             </div>
         </article>
@@ -151,6 +168,16 @@
                         <button type="submit" class="button-secondary compact-button btn-compact">Guardar notas internas</button>
                     </div>
                 </form>
+
+                @if (in_array($booking->googleCalendarSyncState(), ['pending', 'error'], true))
+                    <form method="POST" action="{{ route('bookings.google-calendar.retry', $booking) }}" class="item-form" style="margin-top: 1rem;">
+                        @csrf
+                        @method('PATCH')
+                        <div class="item-form-actions action-buttons">
+                            <button type="submit" class="button-secondary compact-button btn-compact">Reintentar sincronizacion Google</button>
+                        </div>
+                    </form>
+                @endif
             @endunless
         </article>
     </section>
