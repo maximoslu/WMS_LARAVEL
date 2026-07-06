@@ -24,7 +24,11 @@ class GoodsReceipt extends Model
 
     public const AI_STATUS_PENDING = 'pending';
 
-    public const AI_STATUS_PROCESSED = 'processed';
+    public const AI_STATUS_PROCESSING = 'processing';
+
+    public const AI_STATUS_COMPLETED = 'completed';
+
+    public const AI_STATUS_REVIEWED = 'reviewed';
 
     public const AI_STATUS_FAILED = 'failed';
 
@@ -120,10 +124,11 @@ class GoodsReceipt extends Model
     public function aiStatusLabel(): string
     {
         return match ($this->ai_status) {
-            self::AI_STATUS_PENDING => 'Pendiente',
-            self::AI_STATUS_PROCESSED => 'Procesado',
-            self::AI_STATUS_FAILED => 'Fallido',
-            null => 'Proximamente',
+            self::AI_STATUS_PENDING, null => 'Sin interpretar',
+            self::AI_STATUS_PROCESSING => 'Interpretando',
+            self::AI_STATUS_COMPLETED => 'Interpretado',
+            self::AI_STATUS_REVIEWED => 'Revisado',
+            self::AI_STATUS_FAILED => 'Error',
             default => ucfirst((string) $this->ai_status),
         };
     }

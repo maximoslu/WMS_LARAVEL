@@ -189,6 +189,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/entradas/{goodsReceipt}/documento', [GoodsReceiptController::class, 'downloadDocument'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.document');
+    Route::post('/entradas/{goodsReceipt}/ia-extraer', [GoodsReceiptController::class, 'extractAi'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.ai-extract');
+    Route::post('/entradas/{goodsReceipt}/ia-aplicar', [GoodsReceiptController::class, 'applyAi'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.ai-apply');
 
     Route::get('/operaciones-diarias', [DailyOperationController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

@@ -164,6 +164,19 @@
         </div>
 
         <div class="goods-receipt-document">
+            <div class="goods-receipt-ai-summary">
+                <div>
+                    <strong>Estado IA</strong>
+                    <span class="goods-receipt-ai-status goods-receipt-ai-status--{{ $receipt->ai_status ?: 'pending' }}">{{ $receipt->aiStatusLabel() }}</span>
+                </div>
+                @if ($receipt->document_processed_at)
+                    <div>
+                        <strong>Ultima interpretacion</strong>
+                        <span>{{ $receipt->document_processed_at->format('d/m/Y H:i') }}</span>
+                    </div>
+                @endif
+            </div>
+
             @if ($receipt->document_path)
                 <p>
                     <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer">
@@ -172,6 +185,7 @@
                 </p>
             @else
                 <p>No hay documento adjunto en esta entrada.</p>
+                <p class="goods-receipt-ai-inline-note">Adjunta un albaran o documento del proveedor para poder interpretarlo con IA.</p>
             @endif
 
             <form method="POST" action="{{ route('goods-receipts.attach-document', $receipt) }}" enctype="multipart/form-data" class="goods-receipt-document-form">
@@ -185,8 +199,30 @@
                     <button type="submit" class="button-secondary compact-button btn-compact">Guardar documento</button>
                 </div>
             </form>
+
+            @if ($receipt->document_path && $aiEnabled && ! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
+                <form method="POST" action="{{ route('goods-receipts.ai-extract', $receipt) }}" class="goods-receipt-document-actions action-buttons">
+                    @csrf
+                    <button type="submit" class="button-primary compact-button btn-compact">Interpretar albaran con IA</button>
+                </form>
+            @endif
+
+            @if (! $aiEnabled)
+                <p class="goods-receipt-ai-inline-note">Interpretacion IA pendiente de activar en configuracion.</p>
+            @endif
+
+            @if ($receipt->ai_error)
+                <div class="goods-receipt-ai-error">
+                    <strong>Error IA</strong>
+                    <p>{{ $receipt->ai_error }}</p>
+                </div>
+            @endif
         </div>
     </section>
+
+    @if (is_array($receipt->ai_extracted_data) && $receipt->ai_extracted_data !== [])
+        @include('goods-receipts._ai-proposal-panel')
+    @endif
 
     @if ($receipt->stockPallets->isNotEmpty())
         <section class="surface-card stock-table-shell compact-card">

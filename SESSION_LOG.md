@@ -445,4 +445,144 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `Deploy Now`
 - `php artisan optimize:clear`
 - `php artisan queue:restart` no es necesario para este hito
+- `php artisan migrate --force` no aplica en este hito---
+
+## 2026-07-06 - Extraccion IA asistida para entradas y albaranes (19:32:30 +02:00)
+
+**Contexto:** Se ha implementado la primera fase de interpretacion IA de albaranes para entradas de mercancia, manteniendo la regla operativa clave de que la IA solo propone datos y el equipo de almacen sigue siendo quien revisa, corrige y aplica la informacion antes de confirmar stock.
+
+**Commit previo de partida:**
+- `64df2bc fix: improve goods receipt entry workflow`
+
+**Resumen de la decision aplicada:**
+- Se confirma que los documentos de entradas ya estaban pasando a storage privado del WMS mediante disco `local` y descarga protegida por controlador.
+- Se reutiliza la persistencia existente en `goods_receipts` para IA:
+  - `ai_status`
+  - `ai_extracted_data`
+  - `ai_error`
+  - `document_processed_at`
+- No se anade migracion nueva en este hito.
+- Se anade arquitectura configurable y testeable para IA:
+  - extractor desacoplado por interfaz
+  - soporte real preparado para OpenAI por HTTP client de Laravel
+  - tests con fake/mock para no depender de API real
+- La IA interpreta documento y guarda propuesta estructurada, pero:
+  - no crea stock automaticamente
+  - no confirma la entrada automaticamente
+  - el almacenero revisa y aplica manualmente
+
+**Configuracion IA anadida:**
+- `.env.example`
+  - `OPENAI_API_KEY=`
+  - `OPENAI_RECEIPT_MODEL=gpt-4.1`
+  - `OPENAI_RECEIPT_ENABLED=false`
+- `config/services.php`
+  - bloque `openai` para clave, modelo y activacion de extraccion de entradas
+
+**Cambios principales realizados:**
+- `app/Services/GoodsReceipts/GoodsReceiptDocumentStorage.php` (nuevo)
+  - centraliza guardado, borrado, resolucion de disco y lectura del documento adjunto
+  - mantiene compatibilidad con adjuntos antiguos en `public` si existieran
+- `app/Services/GoodsReceipts/GoodsReceiptAiExtractorInterface.php` (nuevo)
+  - contrato del extractor de documentos
+- `app/Services/GoodsReceipts/GoodsReceiptAiExtractionResult.php` (nuevo)
+  - normaliza resultado estructurado y recalcula pallets/pico si la propuesta no cuadra
+- `app/Services/GoodsReceipts/OpenAiGoodsReceiptExtractor.php` (nuevo)
+  - integra llamada real preparada a OpenAI Responses API
+  - usa `text.format` con `json_schema`
+  - acepta PDF e imagenes desde storage privado
+- `app/Services/GoodsReceipts/GoodsReceiptAiExtractionService.php`
+  - orquesta la extraccion
+  - comprueba activacion por configuracion
+  - enriquece el resultado con coincidencia automatica de proveedor y avisos de baja confianza
+- `app/Http/Requests/ApplyGoodsReceiptAiProposalRequest.php` (nuevo)
+  - reutiliza validacion de entradas para aplicar propuesta IA sobre la entrada actual
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - reutiliza `GoodsReceiptDocumentStorage`
+  - anade `extractAi()` y `applyAi()`
+  - guarda `processing/completed/failed/reviewed`
+  - aplica cabecera y lineas revisadas sin confirmar stock
+- `app/Models/GoodsReceipt.php`
+  - nuevos labels/estados IA: `pending`, `processing`, `completed`, `reviewed`, `failed`
+- `app/Providers/AppServiceProvider.php`
+  - binding del extractor IA
+- `routes/web.php`
+  - `POST /entradas/{goodsReceipt}/ia-extraer`
+  - `POST /entradas/{goodsReceipt}/ia-aplicar`
+- `resources/views/goods-receipts/show.blade.php`
+- `resources/views/goods-receipts/_ai-proposal-panel.blade.php` (nuevo)
+  - boton `Interpretar albaran con IA`
+  - estado IA
+  - errores y avisos
+  - panel de propuesta editable antes de aplicar
+- `resources/css/app.css`
+  - estilos del panel IA, estados, avisos y tarjetas de propuesta
+- `tests/Feature/GoodsReceiptManagementTest.php`
+  - cobertura nueva para interpretacion, aplicacion, errores y seguridad documental
+
+**Como se guarda el resultado IA:**
+- En `goods_receipts.ai_extracted_data` como JSON estructurado
+- `goods_receipts.ai_status` guarda el estado del ciclo IA
+- `goods_receipts.ai_error` guarda el error legible si la interpretacion falla
+- `goods_receipts.document_processed_at` guarda la ultima interpretacion completada
+
+**Como se interpreta el documento:**
+- El usuario adjunta PDF o imagen del albaran en la entrada
+- El documento queda en storage privado del WMS
+- Al pulsar `Interpretar albaran con IA`:
+  - se verifica que hay documento
+  - se llama al extractor configurado
+  - si OpenAI esta activo, se manda el fichero por Responses API con schema JSON estricto
+  - si falla, se guarda error y la entrada sigue intacta
+- La propuesta resultante devuelve:
+  - proveedor detectado
+  - numero de albaran
+  - fecha
+  - confianza
+  - lineas
+  - avisos
+
+**Como se aplica la propuesta a lineas:**
+- La pantalla de detalle muestra `Propuesta IA del albaran`
+- El almacenero puede editar proveedor, numero, fecha y cada linea
+- Al aplicar:
+  - se refrescan las lineas de la entrada
+  - si el SKU ya existe, se reutiliza
+  - si el SKU no existe, se crea el articulo con SKU, descripcion y `units_per_pallet`
+  - el lote se mantiene solo en la linea/stock como trazabilidad operativa
+  - la entrada sigue en borrador hasta que una persona la confirme
+
+**Seguridad y alcance documental:**
+- La descarga documental sigue protegida para roles internos autorizados
+- Los clientes siguen sin acceso directo al documento en este hito
+- El documento sigue asociado a la entrada y por tanto a `client_id`
+- El listado de entradas ya permite filtrado por cliente
+- No se ha creado aun la pantalla cliente de `Mis albaranes`; queda para fase siguiente
+
+**Google Drive:**
+- No se implementa subida o espejo a Google Drive en este hito
+- Queda preparada como fase futura:
+  - espejo documental por cliente/ano/entrada
+  - WMS seguira como fuente principal
+  - la operacion no debe bloquearse si Drive falla
+
+**Resultado de validacion:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: no aplica en este hito
+- `php artisan test`: `357 passed` (1628 assertions)
+- `npm run build`: OK
+
+**Migraciones:**
+- No hubo migraciones nuevas
+- No fue necesario ejecutar `php artisan migrate`
+
+**Control de alcance:**
+- No se tocaron Google Calendar, facturacion ni importaciones Friesland/Edelvives
+- No se tocaron datos productivos ni se uso `migrate:fresh`
+- `.claude/` sigue fuera del commit
+
+**Forge:**
+- `Deploy Now`
 - `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
+- `php artisan queue:restart` no es necesario salvo operativa posterior ligada a colas

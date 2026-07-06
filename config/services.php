@@ -40,4 +40,10 @@ return [
         ],
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'receipt_model' => env('OPENAI_RECEIPT_MODEL', 'gpt-4.1'),
+        'receipt_enabled' => env('OPENAI_RECEIPT_ENABLED', false),
+    ],
+
 ];

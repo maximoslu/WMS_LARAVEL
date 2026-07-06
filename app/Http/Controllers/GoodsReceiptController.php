@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ApplyGoodsReceiptAiProposalRequest;
 use App\Http\Requests\AttachGoodsReceiptDocumentRequest;
 use App\Http\Requests\StoreGoodsReceiptRequest;
 use App\Http\Requests\UpdateGoodsReceiptRequest;
@@ -11,14 +12,16 @@ use App\Models\GoodsReceiptLine;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Supplier;
+use App\Services\GoodsReceipts\GoodsReceiptAiExtractionService;
 use App\Services\GoodsReceipts\GoodsReceiptConfirmationService;
+use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -28,6 +31,8 @@ class GoodsReceiptController extends Controller
     public function __construct(
         private readonly GoodsReceiptConfirmationService $confirmationService,
         private readonly GoodsReceiptItemResolver $itemResolver,
+        private readonly GoodsReceiptAiExtractionService $aiExtractionService,
+        private readonly GoodsReceiptDocumentStorage $documentStorage,
     ) {}
 
     public function index(Request $request): View
@@ -99,7 +104,9 @@ class GoodsReceiptController extends Controller
                 'received_at' => $validated['received_at'] ?? today()->toDateString(),
                 'notes' => $validated['notes'] ?? null,
                 'created_by' => $request->user()->id,
-                ...$this->documentPayload($request->file('document')),
+                ...($request->file('document') !== null
+                    ? $this->documentStorage->store($request->file('document'))
+                    : []),
             ]);
 
             $this->syncLines($receipt, $validated['lines']);
@@ -127,6 +134,17 @@ class GoodsReceiptController extends Controller
 
         return view('goods-receipts.show', [
             'receipt' => $goodsReceipt,
+            'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
+            'suppliers' => Supplier::query()
+                ->where('active', true)
+                ->where(function ($query) use ($goodsReceipt): void {
+                    $query
+                        ->whereNull('client_id')
+                        ->orWhere('client_id', $goodsReceipt->client_id);
+                })
+                ->orderBy('name')
+                ->get(),
+            'aiEnabled' => (bool) config('services.openai.receipt_enabled', false),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -159,7 +177,7 @@ class GoodsReceiptController extends Controller
             if ($request->hasFile('document')) {
                 $payload = [
                     ...$payload,
-                    ...$this->documentPayload($request->file('document'), $goodsReceipt),
+                    ...$this->documentStorage->store($request->file('document'), $goodsReceipt),
                 ];
             }
 
@@ -210,18 +228,120 @@ class GoodsReceiptController extends Controller
 
     public function attachDocument(AttachGoodsReceiptDocumentRequest $request, GoodsReceipt $goodsReceipt): RedirectResponse
     {
-        $goodsReceipt->update($this->documentPayload($request->file('document'), $goodsReceipt));
+        $goodsReceipt->update($this->documentStorage->store($request->file('document'), $goodsReceipt));
 
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)
             ->with('status', 'Documento adjuntado correctamente.');
     }
 
+    public function extractAi(GoodsReceipt $goodsReceipt): RedirectResponse
+    {
+        if ($goodsReceipt->isConfirmed() || $goodsReceipt->status === GoodsReceipt::STATUS_CANCELLED) {
+            return redirect()
+                ->route('goods-receipts.show', $goodsReceipt)
+                ->withErrors([
+                    'goods_receipt' => 'Solo se puede interpretar con IA una entrada en borrador o pendiente de revision.',
+                ]);
+        }
+
+        if ($goodsReceipt->document_path === null) {
+            return redirect()
+                ->route('goods-receipts.show', $goodsReceipt)
+                ->withErrors([
+                    'goods_receipt' => 'Adjunta un albaran o documento del proveedor para poder interpretarlo con IA.',
+                ]);
+        }
+
+        $goodsReceipt->update([
+            'ai_status' => GoodsReceipt::AI_STATUS_PROCESSING,
+            'ai_error' => null,
+        ]);
+
+        try {
+            $result = $this->aiExtractionService->extractFromDocument($goodsReceipt);
+
+            $goodsReceipt->update([
+                'ai_status' => GoodsReceipt::AI_STATUS_COMPLETED,
+                'ai_extracted_data' => $result->toArray(),
+                'ai_error' => null,
+                'document_processed_at' => now(),
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            $goodsReceipt->update([
+                'ai_status' => GoodsReceipt::AI_STATUS_FAILED,
+                'ai_error' => Str::limit(trim($exception->getMessage()) ?: 'No se pudo interpretar el documento.', 500),
+            ]);
+
+            return redirect()
+                ->route('goods-receipts.show', $goodsReceipt)
+                ->withErrors([
+                    'goods_receipt' => 'La interpretacion IA no pudo completarse. Revisa el error y vuelve a intentarlo.',
+                ]);
+        }
+
+        return redirect()
+            ->route('goods-receipts.show', $goodsReceipt)
+            ->with('status', 'Documento interpretado con IA. Revisa la propuesta antes de aplicarla.');
+    }
+
+    public function applyAi(ApplyGoodsReceiptAiProposalRequest $request, GoodsReceipt $goodsReceipt): RedirectResponse
+    {
+        if ($goodsReceipt->isConfirmed() || $goodsReceipt->status === GoodsReceipt::STATUS_CANCELLED) {
+            return redirect()
+                ->route('goods-receipts.show', $goodsReceipt)
+                ->withErrors([
+                    'goods_receipt' => 'No se puede aplicar una propuesta IA sobre una entrada confirmada o cancelada.',
+                ]);
+        }
+
+        if (! is_array($goodsReceipt->ai_extracted_data) || $goodsReceipt->ai_extracted_data === []) {
+            return redirect()
+                ->route('goods-receipts.show', $goodsReceipt)
+                ->withErrors([
+                    'goods_receipt' => 'No hay una propuesta IA disponible para aplicar en esta entrada.',
+                ]);
+        }
+
+        $validated = $request->validated();
+
+        DB::transaction(function () use ($goodsReceipt, $validated, $request): void {
+            $this->syncLines($goodsReceipt, $validated['lines']);
+
+            $currentAiData = is_array($goodsReceipt->ai_extracted_data) ? $goodsReceipt->ai_extracted_data : [];
+
+            $goodsReceipt->update([
+                'supplier_id' => $validated['supplier_id'] ?? null,
+                'receipt_number' => $validated['receipt_number'] ?? null,
+                'received_at' => $validated['received_at'] ?? null,
+                'ai_status' => GoodsReceipt::AI_STATUS_REVIEWED,
+                'ai_error' => null,
+                'ai_extracted_data' => [
+                    ...$currentAiData,
+                    'reviewed_payload' => [
+                        'supplier_id' => $validated['supplier_id'] ?? null,
+                        'receipt_number' => $validated['receipt_number'] ?? null,
+                        'received_at' => $validated['received_at'] ?? null,
+                        'lines' => $validated['lines'],
+                    ],
+                    'applied_at' => now()->toIso8601String(),
+                    'applied_by' => $request->user()->id,
+                ],
+            ]);
+        });
+
+        return redirect()
+            ->route('goods-receipts.show', $goodsReceipt)
+            ->with('status', 'Propuesta IA aplicada correctamente a la entrada. Revisa y confirma cuando proceda.');
+    }
+
     public function downloadDocument(GoodsReceipt $goodsReceipt): StreamedResponse
     {
         abort_if($goodsReceipt->document_path === null, 404);
 
-        $disk = $this->documentDisk($goodsReceipt->document_path);
+        $disk = $this->documentStorage->resolveDisk($goodsReceipt->document_path);
 
         abort_if($disk === null, 404);
 
@@ -313,53 +433,4 @@ class GoodsReceiptController extends Controller
         }
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function documentPayload(?UploadedFile $document, ?GoodsReceipt $receipt = null): array
-    {
-        if ($document === null) {
-            return [];
-        }
-
-        $this->deleteDocument($receipt?->document_path);
-
-        return [
-            'document_path' => $document->store('goods-receipts', 'local'),
-            'document_original_name' => $document->getClientOriginalName(),
-            'document_mime' => $document->getMimeType(),
-            'document_processed_at' => null,
-            'ai_status' => null,
-            'ai_extracted_data' => null,
-            'ai_error' => null,
-        ];
-    }
-
-    private function deleteDocument(?string $path): void
-    {
-        if ($path === null || $path === '') {
-            return;
-        }
-
-        foreach (['local', 'public'] as $disk) {
-            if (Storage::disk($disk)->exists($path)) {
-                Storage::disk($disk)->delete($path);
-            }
-        }
-    }
-
-    private function documentDisk(?string $path): ?string
-    {
-        if ($path === null || $path === '') {
-            return null;
-        }
-
-        foreach (['local', 'public'] as $disk) {
-            if (Storage::disk($disk)->exists($path)) {
-                return $disk;
-            }
-        }
-
-        return null;
-    }
 }
