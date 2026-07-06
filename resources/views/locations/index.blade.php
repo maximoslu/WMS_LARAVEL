@@ -5,6 +5,8 @@
 
 @section('content')
     @php
+        $canManageLocations = auth()->user()->canAccessRole(\App\Models\Role::ALMACEN);
+        $canToggleLocations = auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION);
         $breadcrumbs = [
 
 
@@ -21,7 +23,7 @@
             <span class="ops-page-meta">{{ $locations->total() }} registros</span>
         </div>
 
-        @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+        @if ($canManageLocations)
             <div class="ops-page-actions page-actions-compact action-buttons">
                 <a href="{{ route('locations.create') }}" class="button-primary compact-button btn-compact">Nueva ubicacion</a>
             </div>
@@ -104,16 +106,19 @@
                                     </span>
                                 </td>
                                 <td>
-                                    @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+                                    @if ($canManageLocations)
                                         <div class="inline-actions action-buttons">
                                             <a href="{{ route('locations.edit', $location) }}" class="button-secondary compact-button btn-table">Editar</a>
-                                            <form method="POST" action="{{ route('locations.toggle-active', $location) }}">
-                                                @csrf
-                                                @method('PATCH')
-                                                <button type="submit" class="button-secondary compact-button btn-table">
-                                                    {{ $location->active ? 'Desactivar' : 'Activar' }}
-                                                </button>
-                                            </form>
+
+                                            @if ($canToggleLocations)
+                                                <form method="POST" action="{{ route('locations.toggle-active', $location) }}">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="button-secondary compact-button btn-table">
+                                                        {{ $location->active ? 'Desactivar' : 'Activar' }}
+                                                    </button>
+                                                </form>
+                                            @endif
                                         </div>
                                     @else
                                         <span class="text-muted">Sin acciones</span>

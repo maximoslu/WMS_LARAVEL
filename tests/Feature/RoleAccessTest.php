@@ -307,6 +307,78 @@ class RoleAccessTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_almacen_no_puede_importar_stock_masivo(): void
+    {
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('stock.import'))
+            ->assertForbidden();
+    }
+
+    public function test_almacen_no_puede_acceder_a_usuarios_roles_auditoria_y_backups(): void
+    {
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('users.index'))
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->get(route('audit.index'))
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->get(route('modules.backups'))
+            ->assertForbidden();
+    }
+
+    public function test_superadmin_sigue_pudiendo_todo_en_maestros_y_sistema(): void
+    {
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('items.create'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('locations.create'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('suppliers.create'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('users.index'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('audit.index'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('modules.backups'))
+            ->assertOk();
+    }
+
+    public function test_administracion_sigue_pudiendo_gestionar_datos_maestros(): void
+    {
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($user)
+            ->get(route('items.create'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('locations.create'))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('suppliers.create'))
+            ->assertOk();
+    }
+
     public function test_role_seeder_creates_expected_roles(): void
     {
         $this->seed(RoleSeeder::class);

@@ -81,16 +81,16 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('items.index');
     Route::get('/articulos/crear', [ItemController::class, 'create'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('items.create');
     Route::post('/articulos', [ItemController::class, 'store'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('items.store');
     Route::get('/articulos/{item}/editar', [ItemController::class, 'edit'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('items.edit');
     Route::put('/articulos/{item}', [ItemController::class, 'update'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('items.update');
     Route::patch('/articulos/{item}/activar-desactivar', [ItemController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
@@ -118,16 +118,16 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.index');
     Route::get('/ubicaciones/crear', [LocationController::class, 'create'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.create');
     Route::post('/ubicaciones', [LocationController::class, 'store'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.store');
     Route::get('/ubicaciones/{location}/editar', [LocationController::class, 'edit'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.edit');
     Route::put('/ubicaciones/{location}', [LocationController::class, 'update'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.update');
     Route::patch('/ubicaciones/{location}/activar-desactivar', [LocationController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
@@ -310,16 +310,16 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('suppliers.index');
     Route::get('/proveedores/crear', [SupplierController::class, 'create'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('suppliers.create');
     Route::post('/proveedores', [SupplierController::class, 'store'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('suppliers.store');
     Route::get('/proveedores/{supplier}/editar', [SupplierController::class, 'edit'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('suppliers.edit');
     Route::put('/proveedores/{supplier}', [SupplierController::class, 'update'])
-        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('suppliers.update');
     Route::patch('/proveedores/{supplier}/activar-desactivar', [SupplierController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)

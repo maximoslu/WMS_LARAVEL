@@ -81,12 +81,39 @@ class ItemManagementTest extends TestCase
         ]);
     }
 
-    public function test_almacen_can_view_items_but_cannot_create(): void
+    public function test_almacen_can_create_item(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+
+        $this->actingAs($user)
+            ->post(route('items.store'), [
+                'client_id' => $client->id,
+                'sku' => ' alm-100 ',
+                'description' => ' Alta rapida desde almacen ',
+                'units_per_pallet' => 320,
+                'status' => Item::STATUS_ACTIVE,
+            ])
+            ->assertRedirect(route('items.index'));
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $client->id,
+            'sku' => 'ALM-100',
+            'description' => 'Alta rapida desde almacen',
+            'units_per_pallet' => 320,
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+    }
+
+    public function test_almacen_sees_new_item_button_and_edit_action(): void
     {
         $this->seedBaseData();
 
         $client = Client::query()->firstOrFail();
-        Item::factory()->create([
+        $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-ALM-01',
         ]);
@@ -96,11 +123,15 @@ class ItemManagementTest extends TestCase
         $this->actingAs($user)
             ->get(route('items.index'))
             ->assertOk()
-            ->assertSee('SKU-ALM-01');
+            ->assertSee('Nuevo articulo')
+            ->assertSee(route('items.create'), false)
+            ->assertSee(route('items.edit', $item), false)
+            ->assertDontSee(route('items.toggle-active', $item), false);
 
         $this->actingAs($user)
             ->get(route('items.create'))
-            ->assertForbidden();
+            ->assertOk()
+            ->assertSee('Nuevo articulo');
     }
 
     public function test_items_index_defaults_to_list_view(): void

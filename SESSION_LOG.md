@@ -307,3 +307,68 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - No se toco importacion Friesland/Edelvives
 - No se toco facturacion
 - `.claude/` no se anadio al commit
+---
+
+## 2026-07-06 - Permisos operativos de ALMACEN para maestros de trabajo (18:40:48 +02:00)
+
+**Contexto:** Se revisaron permisos, rutas, vistas y tests para preparar la operativa de almacen de cara a EDELVIVES, con la decision de negocio de permitir al rol `ALMACEN` crear y editar articulos, ubicaciones y proveedores sin abrir zonas de sistema ni acciones destructivas no necesarias.
+
+**Commit previo de partida:**
+- `74628ef style: simplify dashboards and update global footer`
+
+**Resumen de la decision aplicada:**
+- `ALMACEN` ya puede:
+  - ver, abrir formulario, crear y editar articulos
+  - ver, abrir formulario, crear y editar ubicaciones
+  - ver, abrir formulario, crear y editar proveedores
+- Se mantiene bloqueado para `ALMACEN`:
+  - importar stock masivo
+  - usuarios y roles
+  - solicitudes de acceso
+  - auditoria
+  - backups
+  - activacion/desactivacion de maestros operativos
+  - creacion de almacenes
+
+**Cambios principales realizados:**
+- `routes/web.php`
+  - apertura de `create/store/edit/update` de articulos, ubicaciones y proveedores a `minimum.role:almacen`
+  - sin cambios en `toggle-active`, importacion masiva ni rutas de sistema
+- `app/Http/Requests/StoreItemRequest.php`
+- `app/Http/Requests/UpdateItemRequest.php`
+- `app/Http/Requests/StoreLocationRequest.php`
+- `app/Http/Requests/UpdateLocationRequest.php`
+- `app/Http/Requests/StoreSupplierRequest.php`
+  - autorizacion reforzada a nivel `FormRequest` para exigir `canAccessRole(Role::ALMACEN)`
+- `resources/views/items/index.blade.php`
+- `resources/views/locations/index.blade.php`
+- `resources/views/suppliers/index.blade.php`
+  - CTAs visibles para `ALMACEN`
+  - enlace `Editar` visible para `ALMACEN`
+  - acciones de activar/desactivar siguen reservadas a `ADMINISTRACION` o superior
+- `tests/Feature/ItemManagementTest.php`
+- `tests/Feature/WarehouseLocationManagementTest.php`
+- `tests/Feature/SupplierManagementTest.php` (nuevo)
+- `tests/Feature/RoleAccessTest.php`
+- `tests/Feature/GoodsReceiptManagementTest.php`
+  - cobertura nueva y ajuste de expectativas heredadas para reflejar la nueva politica
+
+**Resultado de validacion:**
+- `php artisan optimize:clear`: OK
+- `php artisan test`: `335 passed` (1538 assertions)
+- `npm run build`: OK
+
+**Migraciones:**
+- No hubo migraciones nuevas
+- No fue necesario ejecutar `php artisan migrate`
+
+**Control de alcance:**
+- No se tocaron Google Calendar, facturacion ni la importacion de stock Friesland/Edelvives
+- No se tocaron datos productivos ni se uso `migrate:fresh`
+- `.claude/` sigue fuera del commit
+
+**Forge:**
+- `Deploy Now`
+- `php artisan optimize:clear`
+- `php artisan queue:restart` si procede
+- `php artisan migrate --force` no aplica en este hito

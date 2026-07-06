@@ -6,6 +6,8 @@
 @section('content')
     @php
         $isCardsView = $filters['view'] === 'cards';
+        $canManageItems = auth()->user()->canAccessRole(\App\Models\Role::ALMACEN);
+        $canToggleItems = auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION);
         $breadcrumbs = [
             ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
             ['label' => 'Stock'],
@@ -21,7 +23,7 @@
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons">
-            @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+            @if ($canManageItems)
                 <a href="{{ route('items.create') }}" class="button-primary compact-button btn-compact">Nuevo articulo</a>
             @endif
         </div>
@@ -125,17 +127,19 @@
                         </div>
                     </dl>
 
-                    @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+                    @if ($canManageItems)
                         <div class="item-card-actions action-buttons">
                             <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button btn-table">Editar</a>
 
-                            <form method="POST" action="{{ route('items.toggle-active', $item) }}">
-                                @csrf
-                                @method('PATCH')
-                                <button type="submit" class="button-secondary compact-button btn-table">
-                                    {{ $item->status === \App\Models\Item::STATUS_ACTIVE ? 'Bloquear' : 'Activar' }}
-                                </button>
-                            </form>
+                            @if ($canToggleItems)
+                                <form method="POST" action="{{ route('items.toggle-active', $item) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" class="button-secondary compact-button btn-table">
+                                        {{ $item->status === \App\Models\Item::STATUS_ACTIVE ? 'Bloquear' : 'Activar' }}
+                                    </button>
+                                </form>
+                            @endif
                         </div>
                     @endif
                 </article>
@@ -170,17 +174,19 @@
                                     </span>
                                 </td>
                                 <td>
-                                    @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+                                    @if ($canManageItems)
                                         <div class="inline-actions action-buttons">
                                             <a href="{{ route('items.edit', $item) }}" class="button-secondary compact-button btn-table">Editar</a>
 
-                                            <form method="POST" action="{{ route('items.toggle-active', $item) }}">
-                                                @csrf
-                                                @method('PATCH')
-                                                <button type="submit" class="button-secondary compact-button btn-table">
-                                                    {{ $item->status === \App\Models\Item::STATUS_ACTIVE ? 'Bloquear' : 'Activar' }}
-                                                </button>
-                                            </form>
+                                            @if ($canToggleItems)
+                                                <form method="POST" action="{{ route('items.toggle-active', $item) }}">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="button-secondary compact-button btn-table">
+                                                        {{ $item->status === \App\Models\Item::STATUS_ACTIVE ? 'Bloquear' : 'Activar' }}
+                                                    </button>
+                                                </form>
+                                            @endif
                                         </div>
                                     @else
                                         <span class="text-muted">Sin acciones</span>

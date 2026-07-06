@@ -97,14 +97,14 @@ class WarehouseLocationManagementTest extends TestCase
             ->assertSee('A1-01');
     }
 
-    public function test_administracion_can_create_location_inside_warehouse(): void
+    public function test_almacen_can_create_location_inside_warehouse(): void
     {
         $this->seedBaseData();
         $warehouse = Warehouse::factory()->create([
             'code' => 'MAX-01',
         ]);
 
-        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->actingAs($user)
             ->post(route('locations.store'), [
@@ -127,6 +127,28 @@ class WarehouseLocationManagementTest extends TestCase
             'zone' => 'BULK',
             'aisle' => 'A1',
         ]);
+    }
+
+    public function test_almacen_sees_new_location_button_and_edit_action(): void
+    {
+        $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create([
+            'code' => 'MAX-01',
+        ]);
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'A1-01',
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('locations.index'))
+            ->assertOk()
+            ->assertSee('Nueva ubicacion')
+            ->assertSee(route('locations.create'), false)
+            ->assertSee(route('locations.edit', $location), false)
+            ->assertDontSee(route('locations.toggle-active', $location), false);
     }
 
     public function test_duplicate_location_code_is_not_allowed_within_same_warehouse(): void

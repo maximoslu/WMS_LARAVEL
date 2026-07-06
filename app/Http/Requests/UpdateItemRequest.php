@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Item;
+use App\Models\Role;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -11,7 +12,7 @@ class UpdateItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->canAccessRole(Role::ALMACEN) ?? false;
     }
 
     protected function prepareForValidation(): void

@@ -5,6 +5,8 @@
 
 @section('content')
     @php
+        $canManageSuppliers = auth()->user()->canAccessRole(\App\Models\Role::ALMACEN);
+        $canToggleSuppliers = auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION);
         $breadcrumbs = [
 
 
@@ -21,7 +23,7 @@
             <span class="ops-page-meta">{{ $suppliers->total() }} registros</span>
         </div>
 
-        @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+        @if ($canManageSuppliers)
             <div class="ops-page-actions page-actions-compact action-buttons">
                 <a href="{{ route('suppliers.create') }}" class="button-primary compact-button btn-compact">Nuevo proveedor</a>
             </div>
@@ -109,16 +111,19 @@
                                     </span>
                                 </td>
                                 <td>
-                                    @if (auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+                                    @if ($canManageSuppliers)
                                         <div class="inline-actions action-buttons">
                                             <a href="{{ route('suppliers.edit', $supplier) }}" class="button-secondary compact-button btn-table">Editar</a>
-                                            <form method="POST" action="{{ route('suppliers.toggle-active', $supplier) }}">
-                                                @csrf
-                                                @method('PATCH')
-                                                <button type="submit" class="button-secondary compact-button btn-table">
-                                                    {{ $supplier->active ? 'Desactivar' : 'Activar' }}
-                                                </button>
-                                            </form>
+
+                                            @if ($canToggleSuppliers)
+                                                <form method="POST" action="{{ route('suppliers.toggle-active', $supplier) }}">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="button-secondary compact-button btn-table">
+                                                        {{ $supplier->active ? 'Desactivar' : 'Activar' }}
+                                                    </button>
+                                                </form>
+                                            @endif
                                         </div>
                                     @else
                                         <span class="text-muted">Solo lectura</span>

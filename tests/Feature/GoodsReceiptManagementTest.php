@@ -188,7 +188,7 @@ class GoodsReceiptManagementTest extends TestCase
         ]);
     }
 
-    public function test_almacen_can_view_suppliers_but_cannot_create_or_edit(): void
+    public function test_almacen_can_view_create_and_edit_suppliers(): void
     {
         $this->seed(RoleSeeder::class);
 
@@ -204,11 +204,11 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->actingAs($almacen)
             ->get(route('suppliers.create'))
-            ->assertForbidden();
+            ->assertOk();
 
         $this->actingAs($almacen)
             ->get(route('suppliers.edit', $supplier))
-            ->assertForbidden();
+            ->assertOk();
     }
 
     public function test_can_create_draft_goods_receipt_with_one_line(): void
