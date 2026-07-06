@@ -1064,6 +1064,9 @@ const setupGoodsReceiptLines = () => {
     const addButton = document.querySelector('[data-add-line]');
     const template = document.querySelector('[data-line-template]');
     const clientSelect = document.querySelector('[data-receipt-client]');
+    const documentInput = document.querySelector('[data-receipt-document-input]');
+    const aiSubmitButton = document.querySelector('[data-ai-create-submit]');
+    const aiSubmitHelp = document.querySelector('[data-ai-submit-help]');
 
     if (!form || !container || !addButton || !template || !clientSelect || container.dataset.linesBound === 'true') {
         return;
@@ -1161,6 +1164,20 @@ const setupGoodsReceiptLines = () => {
                 lineNumber.textContent = `Linea ${index + 1}`;
             }
         });
+    };
+
+    const updateAiSubmitState = () => {
+        if (!aiSubmitButton) {
+            return;
+        }
+
+        const hasDocument = documentInput?.files?.length > 0;
+
+        aiSubmitButton.disabled = !hasDocument;
+
+        if (aiSubmitHelp) {
+            aiSubmitHelp.hidden = hasDocument;
+        }
     };
 
     const bindRow = (row) => {
@@ -1310,7 +1327,10 @@ const setupGoodsReceiptLines = () => {
         });
     });
 
+    documentInput?.addEventListener('change', updateAiSubmitState);
+
     container.dataset.linesBound = 'true';
+    updateAiSubmitState();
 };
 
 const bindDispatchExtraAutocomplete = (row, clientId, endpoint) => {

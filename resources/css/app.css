@@ -3609,6 +3609,11 @@ body.brand-body.app-shell-body .pagination-card {
     letter-spacing: 0.01em;
 }
 
+.goods-receipt-ai-form-note {
+    margin-top: 0.45rem;
+    color: #5c7386;
+}
+
 .goods-receipt-lines-card {
     gap: 0.9rem;
     padding: 1rem 1.05rem;
@@ -3757,6 +3762,16 @@ body.brand-body.app-shell-body .pagination-card {
     white-space: nowrap;
 }
 
+.goods-receipt-ai-submit[disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.goods-receipt-ai-submit-help {
+    margin-top: 0.85rem;
+}
+
 .receipt-status-pill {
     display: inline-flex;
     align-items: center;
@@ -3841,6 +3856,30 @@ body.brand-body.app-shell-body .pagination-card {
 
 .goods-receipt-card--document-secondary {
     margin-top: 0.95rem;
+}
+
+.goods-receipt-ai-callout {
+    display: grid;
+    gap: 1rem;
+    margin-top: 0.95rem;
+    padding: 1.15rem;
+    border: 1px solid rgba(53, 83, 107, 0.1);
+    background:
+        radial-gradient(circle at top right, rgba(27, 118, 164, 0.11), transparent 40%),
+        linear-gradient(145deg, rgba(245, 249, 252, 0.98), rgba(238, 244, 248, 0.95));
+}
+
+.goods-receipt-ai-callout-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.goods-receipt-ai-callout-copy {
+    margin: 0;
+    color: #4e6477;
+    line-height: 1.6;
 }
 
 .goods-receipt-ai-summary {

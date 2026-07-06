@@ -1,4 +1,6 @@
 @php
+    use App\Http\Requests\StoreGoodsReceiptRequest;
+
     $isEditing = $receipt->exists;
     $breadcrumbs = [
         ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
@@ -87,11 +89,11 @@
 
                 <label class="auth-field item-form-field--full">
                     <span>Documento del proveedor / albaran</span>
-                    <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                    <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp" data-receipt-document-input>
                     @error('document')
                         <small class="form-error">{{ $message }}</small>
                     @enderror
-                    <small class="helper-text">Opcional. Puedes adjuntar foto o PDF del albaran recibido.</small>
+                    <small class="helper-text">Adjunta el albaran en PDF o foto. Puedes crear la entrada manualmente o dejar que la IA proponga las lineas para revision.</small>
                     @if ($receipt->document_original_name)
                         <small class="helper-text">Actual: {{ $receipt->document_original_name }}</small>
                     @endif
@@ -111,6 +113,9 @@
                     <div class="app-copy">
                         <strong>Lineas de entrada</strong>
                         <p>Busca el articulo, indica cantidad y revisa el paletizado. Si el SKU no existe, podras crearlo desde la propia linea.</p>
+                        @if (! $isEditing)
+                            <p class="goods-receipt-ai-form-note">Si vas a interpretar un albaran con IA, puedes dejar las lineas vacias. La propuesta aparecera en el siguiente paso para revision.</p>
+                        @endif
                     </div>
 
                     <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Añadir linea</button>
@@ -133,10 +138,31 @@
                 <a href="{{ $isEditing ? route('goods-receipts.show', $receipt) : route('goods-receipts.index') }}" class="button-secondary compact-button btn-compact">
                     Cancelar
                 </a>
-                <button type="submit" class="button-primary compact-button btn-compact">
-                    {{ $isEditing ? 'Guardar entrada' : 'Crear borrador' }}
-                </button>
+
+                @if ($isEditing)
+                    <button type="submit" class="button-primary compact-button btn-compact">
+                        Guardar entrada
+                    </button>
+                @else
+                    <button type="submit" name="action" value="{{ StoreGoodsReceiptRequest::ACTION_CREATE_DRAFT }}" class="button-secondary compact-button btn-compact">
+                        Crear borrador
+                    </button>
+                    <button
+                        type="submit"
+                        name="action"
+                        value="{{ StoreGoodsReceiptRequest::ACTION_CREATE_AND_EXTRACT_AI }}"
+                        class="button-primary compact-button btn-compact goods-receipt-ai-submit"
+                        data-ai-create-submit
+                        disabled
+                    >
+                        Crear borrador e interpretar con IA
+                    </button>
+                @endif
             </div>
+
+            @if (! $isEditing)
+                <p class="helper-text goods-receipt-ai-submit-help" data-ai-submit-help>Adjunta un albaran para activar la interpretacion IA desde este paso.</p>
+            @endif
         </form>
     </section>
 </div>

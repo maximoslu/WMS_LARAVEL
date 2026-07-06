@@ -585,4 +585,92 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `Deploy Now`
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
+- `php artisan queue:restart` no es necesario salvo operativa posterior ligada a colas---
+
+## 2026-07-06 - Flujo visible de "Crear borrador e interpretar con IA" en entradas (19:48:20 +02:00)
+
+**Contexto:** Tras el hito `2ef167e4 feat: add AI-assisted goods receipt extraction`, el sistema ya interpretaba albaranes desde el detalle de la entrada, pero la UX de alta inicial no dejaba claro que el usuario podia crear el borrador y lanzar la IA directamente desde el formulario de nueva entrada.
+
+**Commit previo de partida:**
+- `2ef167e4 feat: add AI-assisted goods receipt extraction`
+
+**Resumen del cambio UX aplicado:**
+- Se hace visible el flujo IA desde la propia creacion de entrada.
+- El formulario ahora ofrece dos caminos claros:
+  - `Crear borrador`
+  - `Crear borrador e interpretar con IA`
+- La opcion IA se activa desde el formulario cuando se adjunta un documento.
+- Se anade copy explicativo para dejar claro que, si se va a interpretar el albaran con IA, las lineas pueden quedar vacias en ese paso.
+- En el detalle de la entrada se anade un bloque protagonista para que el usuario no tenga que buscar la accion de interpretar o reintentar.
+
+**Nuevo flujo "Crear borrador e interpretar con IA":**
+1. El usuario selecciona cliente y adjunta PDF/foto del albaran.
+2. Puede dejar las lineas vacias.
+3. Pulsa `Crear borrador e interpretar con IA`.
+4. El sistema crea la entrada como borrador.
+5. Guarda el documento privado.
+6. Si la IA esta activa, lanza la extraccion.
+7. Redirige al detalle con la propuesta IA visible para revision.
+8. La entrada sigue sin confirmar y sin aplicar stock hasta validacion humana.
+
+**Comportamiento por escenario:**
+- Si no hay documento y se pulsa el flujo IA:
+  - se crea el borrador igualmente
+  - se redirige al detalle con error claro para adjuntar albaran antes de interpretar
+- Si `OPENAI_RECEIPT_ENABLED=false`:
+  - se crea el borrador
+  - se guarda el documento
+  - se avisa de que la interpretacion IA esta pendiente de activar en configuracion
+- Si la IA falla:
+  - la entrada se mantiene creada
+  - el documento se conserva
+  - se guarda `ai_error`
+  - el detalle muestra error legible y CTA de reintento
+
+**Cambios principales realizados:**
+- `app/Http/Requests/StoreGoodsReceiptRequest.php`
+  - anade acciones de formulario `create_draft` y `create_and_extract_ai`
+  - permite borrador con `lines` vacias solo en el flujo IA
+  - mantiene exigencia de lineas para el flujo manual
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - `store()` ya soporta crear y extraer en una sola accion
+  - reutiliza logica comun de extraccion con `performAiExtraction()`
+  - conserva el borrador y el documento si la IA falla o esta desactivada
+- `resources/views/goods-receipts/_form.blade.php`
+  - helper nuevo junto al documento
+  - nota explicita de lineas vacias para el flujo IA
+  - nuevo CTA `Crear borrador e interpretar con IA`
+- `resources/js/app.js`
+  - activa/desactiva el CTA IA segun haya documento adjunto
+- `resources/views/goods-receipts/show.blade.php`
+  - bloque destacado `Albaran adjunto pendiente de interpretar`
+  - bloque de error con `Reintentar interpretacion IA`
+- `resources/css/app.css`
+  - estilos del CTA IA en formulario y del callout protagonista del detalle
+- `tests/Feature/GoodsReceiptManagementTest.php`
+  - cobertura nueva del flujo crear+interpretar, lineas vacias, IA desactivada, error y reintento
+
+**Regla funcional confirmada:**
+- La IA no confirma stock automaticamente.
+- La IA no confirma la entrada.
+- La IA solo propone datos y deja la revision/aplicacion en manos del usuario interno.
+
+**Resultado de validacion:**
+- `php artisan optimize:clear`: OK
+- `php artisan test`: `369 passed` (1682 assertions)
+- `npm run build`: OK
+
+**Migraciones:**
+- No hubo migraciones nuevas
+- No fue necesario ejecutar `php artisan migrate`
+
+**Control de alcance:**
+- No se tocaron Google Calendar, facturacion ni importaciones Friesland/Edelvives
+- No se tocararon datos productivos ni se uso `migrate:fresh`
+- `.claude/` sigue fuera del commit
+
+**Forge:**
+- `Deploy Now`
+- `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
 - `php artisan queue:restart` no es necesario salvo operativa posterior ligada a colas

@@ -11,6 +11,10 @@ use Illuminate\Validation\Validator;
 
 class StoreGoodsReceiptRequest extends FormRequest
 {
+    public const ACTION_CREATE_DRAFT = 'create_draft';
+
+    public const ACTION_CREATE_AND_EXTRACT_AI = 'create_and_extract_ai';
+
     public function authorize(): bool
     {
         return $this->user()?->canAccessRole(Role::ALMACEN) ?? false;
@@ -88,6 +92,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             ->all();
 
         $this->merge([
+            'action' => $this->normalizeAction($this->input('action')),
             'receipt_number' => $this->normalizeNullableUpper($this->input('receipt_number')),
             'external_document_number' => $this->normalizeNullableUpper($this->input('external_document_number')),
             'notes' => $this->normalizeNullableText($this->input('notes')),
@@ -98,6 +103,7 @@ class StoreGoodsReceiptRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'action' => ['nullable', 'in:'.implode(',', [self::ACTION_CREATE_DRAFT, self::ACTION_CREATE_AND_EXTRACT_AI])],
             'client_id' => ['required', 'exists:clients,id'],
             'supplier_id' => ['nullable', 'exists:suppliers,id'],
             'receipt_number' => ['nullable', 'string', 'max:150'],
@@ -105,7 +111,9 @@ class StoreGoodsReceiptRequest extends FormRequest
             'received_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
             'document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
-            'lines' => ['required', 'array', 'min:1'],
+            'lines' => $this->expectsAiCreationFlow()
+                ? ['present', 'array']
+                : ['required', 'array', 'min:1'],
             'lines.*.item_id' => ['nullable', 'exists:items,id'],
             'lines.*.sku' => ['nullable', 'string', 'max:100'],
             'lines.*.description' => ['nullable', 'string', 'max:255'],
@@ -122,6 +130,12 @@ class StoreGoodsReceiptRequest extends FormRequest
     {
         $validator->after(function (Validator $validator): void {
             if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            if (! $this->expectsAiCreationFlow() && count($this->input('lines', [])) === 0) {
+                $validator->errors()->add('lines', 'Añade al menos una linea o usa "Crear borrador e interpretar con IA" con un documento adjunto.');
+
                 return;
             }
 
@@ -212,5 +226,19 @@ class StoreGoodsReceiptRequest extends FormRequest
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    public function expectsAiCreationFlow(): bool
+    {
+        return $this->input('action') === self::ACTION_CREATE_AND_EXTRACT_AI;
+    }
+
+    private function normalizeAction(mixed $value): string
+    {
+        $normalized = trim((string) $value);
+
+        return in_array($normalized, [self::ACTION_CREATE_DRAFT, self::ACTION_CREATE_AND_EXTRACT_AI], true)
+            ? $normalized
+            : self::ACTION_CREATE_DRAFT;
     }
 }

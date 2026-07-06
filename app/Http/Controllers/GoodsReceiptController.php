@@ -93,6 +93,7 @@ class GoodsReceiptController extends Controller
     public function store(StoreGoodsReceiptRequest $request): RedirectResponse
     {
         $validated = $request->validated();
+        $expectsAiFlow = $request->expectsAiCreationFlow();
 
         $receipt = DB::transaction(function () use ($request, $validated): GoodsReceipt {
             $receipt = GoodsReceipt::query()->create([
@@ -113,6 +114,38 @@ class GoodsReceiptController extends Controller
 
             return $receipt;
         });
+
+        if ($expectsAiFlow) {
+            if ($receipt->document_path === null) {
+                return redirect()
+                    ->route('goods-receipts.show', $receipt)
+                    ->with('status', 'Entrada creada correctamente como borrador.')
+                    ->withErrors([
+                        'goods_receipt' => 'Adjunta un albaran para interpretar la entrada con IA.',
+                    ]);
+            }
+
+            if (! config('services.openai.receipt_enabled', false)) {
+                return redirect()
+                    ->route('goods-receipts.show', $receipt)
+                    ->with('status', 'Entrada creada. La interpretacion IA esta pendiente de activar en configuracion.');
+            }
+
+            try {
+                $this->performAiExtraction($receipt);
+            } catch (\Throwable $exception) {
+                return redirect()
+                    ->route('goods-receipts.show', $receipt)
+                    ->with('status', 'Entrada creada, pero no se pudo interpretar el documento con IA. Puedes rellenar las lineas manualmente o reintentar.')
+                    ->withErrors([
+                        'goods_receipt' => 'La interpretacion IA no pudo completarse. Revisa el error y vuelve a intentarlo.',
+                    ]);
+            }
+
+            return redirect()
+                ->route('goods-receipts.show', $receipt)
+                ->with('status', 'Entrada creada e interpretada con IA. Revisa la propuesta antes de aplicarla.');
+        }
 
         return redirect()
             ->route('goods-receipts.show', $receipt)
@@ -253,28 +286,9 @@ class GoodsReceiptController extends Controller
                 ]);
         }
 
-        $goodsReceipt->update([
-            'ai_status' => GoodsReceipt::AI_STATUS_PROCESSING,
-            'ai_error' => null,
-        ]);
-
         try {
-            $result = $this->aiExtractionService->extractFromDocument($goodsReceipt);
-
-            $goodsReceipt->update([
-                'ai_status' => GoodsReceipt::AI_STATUS_COMPLETED,
-                'ai_extracted_data' => $result->toArray(),
-                'ai_error' => null,
-                'document_processed_at' => now(),
-            ]);
+            $this->performAiExtraction($goodsReceipt);
         } catch (\Throwable $exception) {
-            report($exception);
-
-            $goodsReceipt->update([
-                'ai_status' => GoodsReceipt::AI_STATUS_FAILED,
-                'ai_error' => Str::limit(trim($exception->getMessage()) ?: 'No se pudo interpretar el documento.', 500),
-            ]);
-
             return redirect()
                 ->route('goods-receipts.show', $goodsReceipt)
                 ->withErrors([
@@ -430,6 +444,34 @@ class GoodsReceiptController extends Controller
                 'pico_units' => $line['pico_units'] ?? null,
                 'location_id' => $line['location_id'] ?? null,
             ]);
+        }
+    }
+
+    private function performAiExtraction(GoodsReceipt $goodsReceipt): void
+    {
+        $goodsReceipt->update([
+            'ai_status' => GoodsReceipt::AI_STATUS_PROCESSING,
+            'ai_error' => null,
+        ]);
+
+        try {
+            $result = $this->aiExtractionService->extractFromDocument($goodsReceipt);
+
+            $goodsReceipt->update([
+                'ai_status' => GoodsReceipt::AI_STATUS_COMPLETED,
+                'ai_extracted_data' => $result->toArray(),
+                'ai_error' => null,
+                'document_processed_at' => now(),
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            $goodsReceipt->update([
+                'ai_status' => GoodsReceipt::AI_STATUS_FAILED,
+                'ai_error' => Str::limit(trim($exception->getMessage()) ?: 'No se pudo interpretar el documento.', 500),
+            ]);
+
+            throw $exception;
         }
     }
 

@@ -177,7 +177,23 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertDontSee('goods-receipt-lines-table', false)
             ->assertDontSee('[notes]', false)
             ->assertSee('Referencia y cantidades')
-            ->assertSee('Trazabilidad de esta entrada. No se guarda como maestro del articulo.');
+            ->assertSee('Trazabilidad de esta entrada. No se guarda como maestro del articulo.')
+            ->assertSee('Crear borrador e interpretar con IA')
+            ->assertSee('Si vas a interpretar un albaran con IA, puedes dejar las lineas vacias.');
+    }
+
+    public function test_crear_borrador_con_documento_muestra_cta_ia(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.create'))
+            ->assertOk()
+            ->assertSee('Crear borrador')
+            ->assertSee('Crear borrador e interpretar con IA')
+            ->assertSee('Adjunta un albaran para activar la interpretacion IA desde este paso.');
     }
 
     public function test_superadmin_can_create_supplier(): void
@@ -243,6 +259,7 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('goods-receipts.store'), [
+                'action' => 'create_draft',
                 'client_id' => $client->id,
                 'supplier_id' => $supplier->id,
                 'receipt_number' => 'ALB-2026-001',
@@ -283,6 +300,42 @@ class GoodsReceiptManagementTest extends TestCase
             'pico_units' => 500,
             'location_id' => $location->id,
         ]);
+    }
+
+    public function test_crear_borrador_manual_sigue_funcionando(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_draft',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-MANUAL-001',
+                'received_at' => '2026-07-06',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-MANUAL-001',
+                        'description' => 'Entrada manual intacta',
+                        'lot' => 'LOT-MANUAL',
+                        'quantity_units' => 1200,
+                        'units_per_pallet' => 600,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-MANUAL-001')->firstOrFail();
+
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
+        $this->assertSame(1, $receipt->lines()->count());
     }
 
     public function test_creating_goods_receipt_with_item_id_completes_sku_description_and_units_per_pallet(): void
@@ -828,6 +881,180 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('Estado IA');
     }
 
+    public function test_crear_borrador_e_interpretar_ia_guarda_entrada_y_documento(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => false]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-STORE-001',
+                'received_at' => '2026-07-06',
+                'lines' => [],
+                'document' => UploadedFile::fake()->create('albaran-ai.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-STORE-001')->firstOrFail();
+
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
+        $this->assertNotNull($receipt->document_path);
+        Storage::disk('local')->assertExists($receipt->document_path);
+    }
+
+    public function test_crear_borrador_e_interpretar_ia_guarda_resultado_si_ia_ok(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+        $this->bindFakeAiExtractor($this->sampleAiProposal());
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-STORE-OK',
+                'received_at' => '2026-07-06',
+                'lines' => [],
+                'document' => UploadedFile::fake()->create('albaran-ai.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-STORE-OK')->firstOrFail();
+
+        $this->assertSame(GoodsReceipt::AI_STATUS_COMPLETED, $receipt->ai_status);
+        $this->assertSame('IA-SKU-001', data_get($receipt->ai_extracted_data, 'lines.0.sku'));
+    }
+
+    public function test_crear_borrador_e_interpretar_ia_no_confirma_stock(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+        $this->bindFakeAiExtractor($this->sampleAiProposal());
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-NO-STOCK',
+                'lines' => [],
+                'document' => UploadedFile::fake()->create('albaran-ai.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-NO-STOCK')->firstOrFail();
+
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
+        $this->assertNull($receipt->stock_applied_at);
+        $this->assertDatabaseMissing('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+        ]);
+    }
+
+    public function test_crear_borrador_e_interpretar_ia_con_ia_desactivada_crea_borrador_y_avisa(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => false]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $response = $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-DISABLED',
+                'lines' => [],
+                'document' => UploadedFile::fake()->create('albaran-ai.pdf', 120, 'application/pdf'),
+            ]);
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-DISABLED')->firstOrFail();
+
+        $response
+            ->assertRedirect(route('goods-receipts.show', $receipt))
+            ->assertSessionHas('status', 'Entrada creada. La interpretacion IA esta pendiente de activar en configuracion.');
+
+        $this->assertSame(GoodsReceipt::AI_STATUS_PENDING, $receipt->ai_status);
+    }
+
+    public function test_crear_borrador_e_interpretar_ia_sin_documento_muestra_error_claro(): void
+    {
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $response = $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-NO-DOC',
+                'lines' => [],
+            ]);
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-NO-DOC')->firstOrFail();
+
+        $response
+            ->assertRedirect(route('goods-receipts.show', $receipt))
+            ->assertSessionHasErrors('goods_receipt')
+            ->assertSessionHas('status', 'Entrada creada correctamente como borrador.');
+
+        $this->assertNull($receipt->document_path);
+        $this->assertSame(0, $receipt->lines()->count());
+    }
+
+    public function test_fallo_ia_no_borra_entrada_ni_documento(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+        $this->bindFakeAiExtractor([], 'Fallo IA en alta.');
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $response = $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-FAIL-STORE',
+                'lines' => [],
+                'document' => UploadedFile::fake()->create('albaran-ai.pdf', 120, 'application/pdf'),
+            ]);
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-FAIL-STORE')->firstOrFail();
+
+        $response
+            ->assertRedirect(route('goods-receipts.show', $receipt))
+            ->assertSessionHasErrors('goods_receipt')
+            ->assertSessionHas('status', 'Entrada creada, pero no se pudo interpretar el documento con IA. Puedes rellenar las lineas manualmente o reintentar.');
+
+        $this->assertSame(GoodsReceipt::AI_STATUS_FAILED, $receipt->ai_status);
+        $this->assertNotNull($receipt->document_path);
+        Storage::disk('local')->assertExists($receipt->document_path);
+    }
+
     public function test_almacen_no_puede_interpretar_ia_sin_documento(): void
     {
         $this->seed(RoleSeeder::class);
@@ -1051,6 +1278,68 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('Fallo de interpretacion IA de prueba.');
     }
 
+    public function test_detalle_entrada_con_documento_pendiente_muestra_boton_interpretar(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $receipt = $this->attachStoredDocument($this->createDraftReceipt($almacen));
+
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('Albaran adjunto pendiente de interpretar')
+            ->assertSee('Interpretar albaran con IA');
+    }
+
+    public function test_detalle_entrada_con_error_ia_muestra_reintentar(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $receipt = $this->attachStoredDocument($this->createDraftReceipt($almacen));
+        $receipt->update([
+            'ai_status' => GoodsReceipt::AI_STATUS_FAILED,
+            'ai_error' => 'Fallo en detalle.',
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('No se pudo interpretar el albaran')
+            ->assertSee('Reintentar interpretacion IA');
+    }
+
+    public function test_entrada_con_ia_permite_lineas_vacias_en_borrador(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => false]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-EMPTY-LINES',
+                'lines' => [],
+                'document' => UploadedFile::fake()->create('albaran-ai.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-EMPTY-LINES')->firstOrFail();
+
+        $this->assertSame(0, $receipt->lines()->count());
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
+    }
+
     public function test_documento_de_cliente_no_es_accesible_por_otro_cliente(): void
     {
         Storage::fake('local');
@@ -1063,6 +1352,37 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($otroCliente)
             ->get(route('goods-receipts.document', $receipt))
             ->assertForbidden();
+    }
+
+    public function test_confirmar_entrada_sigue_requiriendo_lineas_validas_si_corresponde(): void
+    {
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_and_extract_ai',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-AI-NO-LINES-CONFIRM',
+                'lines' => [],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-AI-NO-LINES-CONFIRM')->firstOrFail();
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.show', $receipt))
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt))
+            ->assertSessionHasErrors('goods_receipt');
+
+        $this->assertDatabaseMissing('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+        ]);
     }
 
     public function test_confirming_goods_receipt_generates_one_aggregated_stock_batch_and_prevents_duplicates(): void

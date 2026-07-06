@@ -11,6 +11,12 @@
             ['label' => 'Entradas', 'href' => route('goods-receipts.index')],
             ['label' => $receipt->receipt_number ?: 'Entrada #'.$receipt->id],
         ];
+        $hasAiProposal = is_array($receipt->ai_extracted_data) && $receipt->ai_extracted_data !== [];
+        $canTriggerAi = $receipt->document_path
+            && $aiEnabled
+            && ! $receipt->isConfirmed()
+            && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED;
+        $showPendingAiCallout = $receipt->document_path && ! $hasAiProposal && $receipt->ai_status !== \App\Models\GoodsReceipt::AI_STATUS_FAILED;
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
 
@@ -119,6 +125,46 @@
         </article>
     </section>
 
+    @if ($showPendingAiCallout)
+        <section class="surface-card compact-card goods-receipt-ai-callout">
+            <div class="goods-receipt-ai-callout-head">
+                <div class="app-copy">
+                    <strong>Albaran adjunto pendiente de interpretar</strong>
+                    <p class="goods-receipt-ai-callout-copy">Ya tienes documento guardado en la entrada. Puedes lanzar ahora la interpretacion IA para que proponga proveedor, cabecera y lineas antes de revisar y aplicar.</p>
+                </div>
+                <span class="goods-receipt-ai-status goods-receipt-ai-status--{{ $receipt->ai_status ?: 'pending' }}">{{ $receipt->aiStatusLabel() }}</span>
+            </div>
+
+            @if ($canTriggerAi)
+                <form method="POST" action="{{ route('goods-receipts.ai-extract', $receipt) }}" class="goods-receipt-document-actions action-buttons">
+                    @csrf
+                    <button type="submit" class="button-primary compact-button btn-compact">Interpretar albaran con IA</button>
+                </form>
+            @else
+                <p class="goods-receipt-ai-inline-note">Interpretacion IA pendiente de activar en configuracion.</p>
+            @endif
+        </section>
+    @endif
+
+    @if ($receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED && $receipt->document_path)
+        <section class="surface-card compact-card goods-receipt-ai-callout">
+            <div class="goods-receipt-ai-callout-head">
+                <div class="app-copy">
+                    <strong>No se pudo interpretar el albaran</strong>
+                    <p class="goods-receipt-ai-callout-copy">La entrada y el documento siguen guardados. Puedes reintentar la interpretacion IA o continuar completando las lineas manualmente.</p>
+                </div>
+                <span class="goods-receipt-ai-status goods-receipt-ai-status--failed">Error</span>
+            </div>
+
+            @if ($canTriggerAi)
+                <form method="POST" action="{{ route('goods-receipts.ai-extract', $receipt) }}" class="goods-receipt-document-actions action-buttons">
+                    @csrf
+                    <button type="submit" class="button-primary compact-button btn-compact">Reintentar interpretacion IA</button>
+                </form>
+            @endif
+        </section>
+    @endif
+
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-index-heading">
             <strong>Lineas previstas</strong>
@@ -200,10 +246,12 @@
                 </div>
             </form>
 
-            @if ($receipt->document_path && $aiEnabled && ! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
+            @if ($canTriggerAi)
                 <form method="POST" action="{{ route('goods-receipts.ai-extract', $receipt) }}" class="goods-receipt-document-actions action-buttons">
                     @csrf
-                    <button type="submit" class="button-primary compact-button btn-compact">Interpretar albaran con IA</button>
+                    <button type="submit" class="button-primary compact-button btn-compact">
+                        {{ $receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED ? 'Reintentar interpretacion IA' : 'Interpretar albaran con IA' }}
+                    </button>
                 </form>
             @endif
 
@@ -220,7 +268,7 @@
         </div>
     </section>
 
-    @if (is_array($receipt->ai_extracted_data) && $receipt->ai_extracted_data !== [])
+    @if ($hasAiProposal)
         @include('goods-receipts._ai-proposal-panel')
     @endif
 
