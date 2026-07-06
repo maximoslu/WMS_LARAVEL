@@ -3576,6 +3576,10 @@ body.brand-body.app-shell-body .pagination-card {
     grid-template-columns: 1fr;
 }
 
+.goods-receipt-grid--single {
+    grid-template-columns: 1fr;
+}
+
 .goods-receipt-card {
     display: grid;
     gap: 0.9rem;
@@ -3600,6 +3604,11 @@ body.brand-body.app-shell-body .pagination-card {
     gap: 1rem;
 }
 
+.goods-receipt-notes-field > span {
+    font-size: 0.82rem;
+    letter-spacing: 0.01em;
+}
+
 .goods-receipt-lines-card {
     gap: 0.9rem;
     padding: 1rem 1.05rem;
@@ -3612,6 +3621,80 @@ body.brand-body.app-shell-body .pagination-card {
     gap: 1rem;
     flex-wrap: wrap;
     margin-bottom: 0.15rem;
+}
+
+.goods-receipt-line-list {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.goods-receipt-line-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem 1.05rem;
+    border: 1px solid rgba(53, 83, 107, 0.08);
+    box-shadow: 0 18px 40px rgba(18, 32, 44, 0.04);
+}
+
+.goods-receipt-line-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.goods-receipt-line-card-copy {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.goods-receipt-line-card-copy p {
+    margin: 0;
+    color: #52687a;
+    line-height: 1.5;
+}
+
+.goods-receipt-line-grid {
+    display: grid;
+    gap: 0.85rem 1rem;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.goods-receipt-line-field {
+    grid-column: span 3;
+    min-width: 0;
+}
+
+.goods-receipt-line-field--wide {
+    grid-column: span 6;
+}
+
+.goods-receipt-line-picker {
+    width: 100%;
+}
+
+.goods-receipt-line-picker .auth-input,
+.goods-receipt-line-field .auth-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.goods-receipt-line-warning {
+    margin: 0;
+    padding: 0.8rem 0.9rem;
+    border-radius: 12px;
+    border: 1px solid rgba(20, 184, 196, 0.16);
+    background: rgba(20, 184, 196, 0.08);
+    color: #0f5f74;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.goods-receipt-line-warning.is-pending {
+    border-color: rgba(191, 126, 20, 0.18);
+    background: rgba(191, 126, 20, 0.08);
+    color: #7a5511;
 }
 
 .goods-receipt-lines-wrap {
@@ -3662,6 +3745,12 @@ body.brand-body.app-shell-body .pagination-card {
 .goods-receipt-total-input {
     font-weight: 800;
     color: var(--brand-slate-dark);
+}
+
+.goods-receipt-derived-output {
+    font-weight: 800;
+    color: var(--brand-slate-dark);
+    background: rgba(235, 243, 248, 0.9);
 }
 
 .goods-receipt-line-actions {
@@ -3748,6 +3837,10 @@ body.brand-body.app-shell-body .pagination-card {
     display: flex;
     flex-wrap: wrap;
     gap: 0.6rem;
+}
+
+.goods-receipt-card--document-secondary {
+    margin-top: 0.95rem;
 }
 
 .goods-receipts-mobile-list {
@@ -4038,6 +4131,10 @@ body.brand-body.app-shell-body .pagination-card {
         align-items: start;
     }
 
+    .goods-receipt-grid--single {
+        grid-template-columns: 1fr;
+    }
+
     .audit-grid {
         grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.85fr);
         align-items: start;
@@ -4075,6 +4172,11 @@ body.brand-body.app-shell-body .pagination-card {
     .goods-receipt-header-actions .button-primary,
     .goods-receipt-lines-tools .button-secondary {
         width: 100%;
+    }
+
+    .goods-receipt-line-field,
+    .goods-receipt-line-field--wide {
+        grid-column: 1 / -1;
     }
 
     .goods-receipt-lines-card,

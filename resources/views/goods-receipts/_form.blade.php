@@ -12,9 +12,9 @@
 <div class="goods-receipt-shell">
     <section class="surface-card item-form-card entity-form compact-card">
         <div class="app-copy">
-            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edición' : 'Borrador' }}</span>
-            <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar entrada' : 'Nueva entrada de mercancía' }}</h2>
-            <p>Registra cabecera, adjunto y líneas. La generación de stock se realiza al confirmar la entrada.</p>
+            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Borrador' }}</span>
+            <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar entrada' : 'Nueva entrada de mercancia' }}</h2>
+            <p>Registra la cabecera y las lineas operativas. El stock quedara pendiente hasta confirmar la entrada.</p>
         </div>
 
         @if ($errors->has('goods_receipt'))
@@ -65,7 +65,7 @@
                 </label>
 
                 <label class="auth-field">
-                    <span>Número de albarán</span>
+                    <span>Numero de albaran</span>
                     <input type="text" name="receipt_number" value="{{ old('receipt_number', $receipt->receipt_number) }}" class="auth-input" maxlength="150">
                     @error('receipt_number')
                         <small class="form-error">{{ $message }}</small>
@@ -73,21 +73,7 @@
                 </label>
 
                 <label class="auth-field">
-                    <span>Documento externo</span>
-                    <input
-                        type="text"
-                        name="external_document_number"
-                        value="{{ old('external_document_number', $receipt->external_document_number) }}"
-                        class="auth-input"
-                        maxlength="150"
-                    >
-                    @error('external_document_number')
-                        <small class="form-error">{{ $message }}</small>
-                    @enderror
-                </label>
-
-                <label class="auth-field">
-                    <span>Fecha recepción</span>
+                    <span>Fecha recepcion</span>
                     <input
                         type="date"
                         name="received_at"
@@ -99,18 +85,19 @@
                     @enderror
                 </label>
 
-                <label class="auth-field">
-                    <span>Adjunto albarán</span>
+                <label class="auth-field item-form-field--full">
+                    <span>Documento del proveedor / albaran</span>
                     <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
                     @error('document')
                         <small class="form-error">{{ $message }}</small>
                     @enderror
+                    <small class="helper-text">Opcional. Puedes adjuntar foto o PDF del albaran recibido.</small>
                     @if ($receipt->document_original_name)
                         <small class="helper-text">Actual: {{ $receipt->document_original_name }}</small>
                     @endif
                 </label>
 
-                <label class="auth-field item-form-field--full">
+                <label class="auth-field item-form-field--full goods-receipt-notes-field">
                     <span>Notas</span>
                     <textarea name="notes" rows="4" class="auth-input">{{ old('notes', $receipt->notes) }}</textarea>
                     @error('notes')
@@ -122,43 +109,24 @@
             <section class="goods-receipt-lines-card">
                 <div class="goods-receipt-lines-tools">
                     <div class="app-copy">
-                        <strong>Líneas de entrada</strong>
-                        <p>Busca el artículo, indica la cantidad y revisa el paletizado antes de confirmar.</p>
+                        <strong>Lineas de entrada</strong>
+                        <p>Busca el articulo, indica cantidad y revisa el paletizado. Si el SKU no existe, podras crearlo desde la propia linea.</p>
                     </div>
 
-                    <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Añadir línea</button>
+                    <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Añadir linea</button>
                 </div>
 
-                <div class="data-table-wrap goods-receipt-lines-wrap">
-                    <table class="data-table table-compact goods-receipt-lines-table" aria-label="Líneas de entrada">
-                        <thead>
-                            <tr>
-                                <th>Artículo</th>
-                                <th>SKU</th>
-                                <th>Descripción</th>
-                                <th>Lote</th>
-                                <th>Total uds</th>
-                                <th>Uds/palet</th>
-                                <th>Palets</th>
-                                <th>Pico</th>
-                                <th>Ubicación</th>
-                                <th>Notas</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody data-receipt-lines>
-                            @foreach ($lineValues as $index => $line)
-                                @include('goods-receipts._line-row', ['index' => $index, 'line' => $line])
-                            @endforeach
-                        </tbody>
-                    </table>
+                <div class="goods-receipt-line-list" data-receipt-lines aria-label="Lineas de entrada">
+                    @foreach ($lineValues as $index => $line)
+                        @include('goods-receipts._line-row', ['index' => $index, 'line' => $line])
+                    @endforeach
                 </div>
 
                 <template data-line-template>
                     @include('goods-receipts._line-row', ['index' => '__INDEX__', 'line' => null])
                 </template>
 
-                <p class="helper-text">Puedes ajustar manualmente las uds/palet de una entrada concreta sin cambiar el maestro del artículo.</p>
+                <p class="helper-text">Las uds/palet pueden ajustarse para esta recepcion sin cambiar el maestro del articulo existente.</p>
             </section>
 
             <div class="item-form-actions action-buttons">

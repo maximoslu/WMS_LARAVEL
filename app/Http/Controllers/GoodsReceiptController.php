@@ -12,6 +12,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\Supplier;
 use App\Services\GoodsReceipts\GoodsReceiptConfirmationService;
+use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,11 +21,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class GoodsReceiptController extends Controller
 {
     public function __construct(
         private readonly GoodsReceiptConfirmationService $confirmationService,
+        private readonly GoodsReceiptItemResolver $itemResolver,
     ) {}
 
     public function index(Request $request): View
@@ -214,6 +217,20 @@ class GoodsReceiptController extends Controller
             ->with('status', 'Documento adjuntado correctamente.');
     }
 
+    public function downloadDocument(GoodsReceipt $goodsReceipt): StreamedResponse
+    {
+        abort_if($goodsReceipt->document_path === null, 404);
+
+        $disk = $this->documentDisk($goodsReceipt->document_path);
+
+        abort_if($disk === null, 404);
+
+        return Storage::disk($disk)->download(
+            $goodsReceipt->document_path,
+            $goodsReceipt->document_original_name ?: basename($goodsReceipt->document_path)
+        );
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -254,7 +271,6 @@ class GoodsReceiptController extends Controller
                     'pallet_count' => $line->pallet_count,
                     'pico_units' => $line->pico_units,
                     'location_id' => $line->location_id,
-                    'notes' => $line->notes,
                 ])
                 ->all();
         }
@@ -270,7 +286,6 @@ class GoodsReceiptController extends Controller
             'pallet_count' => null,
             'pico_units' => null,
             'location_id' => null,
-            'notes' => null,
         ]];
     }
 
@@ -282,17 +297,18 @@ class GoodsReceiptController extends Controller
         $receipt->lines()->delete();
 
         foreach ($lines as $line) {
+            $item = $this->itemResolver->resolveForPayload((int) $receipt->client_id, $line);
+
             $receipt->lines()->create([
-                'item_id' => $line['item_id'] ?? null,
-                'sku' => $line['sku'] ?? null,
-                'description' => $line['description'] ?? null,
+                'item_id' => $item?->id ?? null,
+                'sku' => $item?->sku ?? ($line['sku'] ?? null),
+                'description' => $item?->description ?? ($line['description'] ?? null),
                 'lot' => $line['lot'] ?? null,
                 'quantity_units' => $line['quantity_units'] ?? 0,
-                'units_per_pallet' => $line['units_per_pallet'] ?? null,
+                'units_per_pallet' => $line['units_per_pallet'] ?? $item?->units_per_pallet,
                 'pallet_count' => $line['pallet_count'] ?? 0,
                 'pico_units' => $line['pico_units'] ?? null,
                 'location_id' => $line['location_id'] ?? null,
-                'notes' => $line['notes'] ?? null,
             ]);
         }
     }
@@ -306,12 +322,10 @@ class GoodsReceiptController extends Controller
             return [];
         }
 
-        if ($receipt?->document_path !== null) {
-            Storage::disk('public')->delete($receipt->document_path);
-        }
+        $this->deleteDocument($receipt?->document_path);
 
         return [
-            'document_path' => $document->store('goods-receipts', 'public'),
+            'document_path' => $document->store('goods-receipts', 'local'),
             'document_original_name' => $document->getClientOriginalName(),
             'document_mime' => $document->getMimeType(),
             'document_processed_at' => null,
@@ -319,5 +333,33 @@ class GoodsReceiptController extends Controller
             'ai_extracted_data' => null,
             'ai_error' => null,
         ];
+    }
+
+    private function deleteDocument(?string $path): void
+    {
+        if ($path === null || $path === '') {
+            return;
+        }
+
+        foreach (['local', 'public'] as $disk) {
+            if (Storage::disk($disk)->exists($path)) {
+                Storage::disk($disk)->delete($path);
+            }
+        }
+    }
+
+    private function documentDisk(?string $path): ?string
+    {
+        if ($path === null || $path === '') {
+            return null;
+        }
+
+        foreach (['local', 'public'] as $disk) {
+            if (Storage::disk($disk)->exists($path)) {
+                return $disk;
+            }
+        }
+
+        return null;
     }
 }

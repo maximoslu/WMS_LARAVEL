@@ -186,6 +186,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/entradas/{goodsReceipt}/documento', [GoodsReceiptController::class, 'attachDocument'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.attach-document');
+    Route::get('/entradas/{goodsReceipt}/documento', [GoodsReceiptController::class, 'downloadDocument'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.document');
 
     Route::get('/operaciones-diarias', [DailyOperationController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

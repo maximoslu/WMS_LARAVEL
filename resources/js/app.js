@@ -1069,7 +1069,8 @@ const setupGoodsReceiptLines = () => {
         return;
     }
 
-    const rowCount = () => container.querySelectorAll('[data-line-row]').length;
+    const rows = () => Array.from(container.querySelectorAll('[data-line-row]'));
+    const rowCount = () => rows().length;
 
     const markAutofilled = (field, isAutofilled) => {
         if (!field) {
@@ -1117,6 +1118,51 @@ const setupGoodsReceiptLines = () => {
         recalculateRow(row);
     };
 
+    const updateNewItemWarning = (row) => {
+        const warning = row.querySelector('[data-line-new-item-warning]');
+        const itemIdField = row.querySelector('[data-line-item-id]');
+        const skuField = row.querySelector('[data-line-sku]');
+        const descriptionField = row.querySelector('[data-line-description]');
+        const unitsField = row.querySelector('[data-line-units]');
+
+        if (!warning || !itemIdField || !skuField || !descriptionField || !unitsField) {
+            return;
+        }
+
+        const itemId = itemIdField.value.trim();
+        const sku = skuField.value.trim();
+        const description = descriptionField.value.trim();
+        const unitsPerPallet = Number.parseInt(unitsField.value, 10);
+
+        if (itemId !== '' || sku === '') {
+            warning.hidden = true;
+            warning.textContent = '';
+            warning.classList.remove('is-pending');
+            return;
+        }
+
+        if (description === '' || !Number.isFinite(unitsPerPallet) || unitsPerPallet <= 0) {
+            warning.hidden = false;
+            warning.textContent = `El SKU ${sku} no existe todavia. Completa descripcion y uds/palet para crearlo al guardar la entrada.`;
+            warning.classList.add('is-pending');
+            return;
+        }
+
+        warning.hidden = false;
+        warning.textContent = `El articulo con SKU ${sku} no existe. Al guardar la entrada se creara automaticamente con la descripcion "${description}" y ${unitsPerPallet} uds/palet.`;
+        warning.classList.remove('is-pending');
+    };
+
+    const renumberRows = () => {
+        rows().forEach((row, index) => {
+            const lineNumber = row.querySelector('[data-line-number]');
+
+            if (lineNumber) {
+                lineNumber.textContent = `Linea ${index + 1}`;
+            }
+        });
+    };
+
     const bindRow = (row) => {
         if (!row || row.dataset.rowBound === 'true') {
             return;
@@ -1161,6 +1207,7 @@ const setupGoodsReceiptLines = () => {
                 }
 
                 recalculateRow(row);
+                updateNewItemWarning(row);
             },
             onInputChange: () => {
                 if (itemIdField) {
@@ -1168,6 +1215,7 @@ const setupGoodsReceiptLines = () => {
                 }
 
                 clearAutofilledFields(row);
+                updateNewItemWarning(row);
             },
             onClear: () => {
                 if (itemIdField) {
@@ -1175,6 +1223,7 @@ const setupGoodsReceiptLines = () => {
                 }
 
                 clearAutofilledFields(row);
+                updateNewItemWarning(row);
             },
         });
 
@@ -1185,17 +1234,20 @@ const setupGoodsReceiptLines = () => {
                 }
 
                 recalculateRow(row);
+                updateNewItemWarning(row);
             });
         });
 
         [skuField, descriptionField].forEach((field) => {
             field?.addEventListener('input', () => {
                 markAutofilled(field, false);
+                updateNewItemWarning(row);
             });
         });
 
         row.dataset.rowBound = 'true';
         recalculateRow(row);
+        updateNewItemWarning(row);
     };
 
     const resetRow = (row) => {
@@ -1217,6 +1269,7 @@ const setupGoodsReceiptLines = () => {
         const markup = template.innerHTML.replaceAll('__INDEX__', String(rowCount()));
         container.insertAdjacentHTML('beforeend', markup);
         bindRow(container.querySelectorAll('[data-line-row]')[rowCount() - 1]);
+        renumberRows();
     });
 
     container.addEventListener('click', (event) => {
@@ -1234,13 +1287,16 @@ const setupGoodsReceiptLines = () => {
 
         if (rowCount() === 1) {
             resetRow(row);
+            updateNewItemWarning(row);
             return;
         }
 
         row.remove();
+        renumberRows();
     });
 
     container.querySelectorAll('[data-line-row]').forEach(bindRow);
+    renumberRows();
 
     clientSelect.addEventListener('change', () => {
         container.querySelectorAll('[data-line-row]').forEach((row) => {
@@ -1249,6 +1305,8 @@ const setupGoodsReceiptLines = () => {
             if (itemIdField?.value) {
                 itemIdField.value = '';
             }
+
+            updateNewItemWarning(row);
         });
     });
 

@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 
 class GoodsReceipt extends Model
 {
@@ -132,7 +131,7 @@ class GoodsReceipt extends Model
     protected function documentUrl(): Attribute
     {
         return Attribute::get(fn (): ?string => $this->document_path !== null
-            ? Storage::disk('public')->url($this->document_path)
+            ? route('goods-receipts.document', $this)
             : null);
     }
 }

@@ -1,4 +1,4 @@
-﻿@extends('layouts.dashboard')
+@extends('layouts.dashboard')
 
 @section('title', 'Detalle de entrada | MAXIMO WMS')
 @section('topbar_title', 'Detalle de entrada')
@@ -6,12 +6,10 @@
 @section('content')
     @php
         $breadcrumbs = [
-
-
-        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-        ['label' => 'Operaciones'],
-        ['label' => 'Entradas', 'href' => route('goods-receipts.index')],
-        ['label' => $receipt->receipt_number ?: 'Entrada #'.$receipt->id],
+            ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+            ['label' => 'Operaciones'],
+            ['label' => 'Entradas', 'href' => route('goods-receipts.index')],
+            ['label' => $receipt->receipt_number ?: 'Entrada #'.$receipt->id],
         ];
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
@@ -22,9 +20,7 @@
                 <h2 class="ops-page-title page-title-compact">{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</h2>
                 <span class="receipt-status-pill receipt-status-pill--{{ $receipt->status }}">{{ $receipt->statusLabel() }}</span>
             </div>
-            <span class="ops-page-meta">
-                {{ $receipt->supplier?->name ?: 'Sin proveedor' }} / {{ $receipt->client->name }}
-            </span>
+            <span class="ops-page-meta">{{ $receipt->supplier?->name ?: 'Sin proveedor' }} / {{ $receipt->client->name }}</span>
             @if ($receipt->hasStockApplied())
                 <span class="ops-page-meta goods-receipt-stock-meta">
                     Stock actualizado el {{ $receipt->stock_applied_at?->format('d/m/Y H:i') }}
@@ -75,20 +71,16 @@
             <span>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Fecha recepción</strong>
+            <strong>Fecha recepcion</strong>
             <span>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</span>
         </article>
         <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Partidas generadas</strong>
-            <span>{{ number_format($receipt->stockPallets->count(), 0, ',', '.') }}</span>
-        </article>
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
             <strong>Stock</strong>
-            <span>{{ $receipt->hasStockApplied() ? 'Stock sumado' : 'Pendiente de aplicar' }}</span>
+            <span>{{ $receipt->hasStockApplied() ? 'Stock sumado correctamente.' : 'Stock pendiente de aplicar hasta confirmar entrada.' }}</span>
         </article>
     </section>
 
-    <section class="goods-receipt-grid">
+    <section class="goods-receipt-grid goods-receipt-grid--single">
         <article class="surface-card compact-card goods-receipt-card goods-receipt-card--header">
             <div class="ops-index-heading">
                 <strong>Cabecera</strong>
@@ -97,13 +89,15 @@
 
             <dl class="goods-receipt-meta">
                 <div>
-                    <dt>Albarán</dt>
+                    <dt>Albaran</dt>
                     <dd>{{ $receipt->receipt_number ?: '-' }}</dd>
                 </div>
-                <div>
-                    <dt>Documento externo</dt>
-                    <dd>{{ $receipt->external_document_number ?: '-' }}</dd>
-                </div>
+                @if ($receipt->external_document_number)
+                    <div>
+                        <dt>Documento externo</dt>
+                        <dd>{{ $receipt->external_document_number }}</dd>
+                    </div>
+                @endif
                 <div>
                     <dt>Confirmada por</dt>
                     <dd>{{ $receipt->confirmer?->name ?: 'Pendiente' }}</dd>
@@ -123,64 +117,26 @@
                 <p>{{ $receipt->notes ?: 'Sin notas operativas.' }}</p>
             </div>
         </article>
-
-        <article class="surface-card compact-card goods-receipt-card goods-receipt-card--document">
-            <div class="ops-index-heading">
-                <strong>Documento e IA futura</strong>
-                <span class="receipt-status-pill receipt-status-pill--ai">{{ $receipt->aiStatusLabel() }}</span>
-            </div>
-
-            <div class="goods-receipt-document">
-                @if ($receipt->document_url)
-                    <p>
-                        <a href="{{ $receipt->document_url }}" target="_blank" rel="noreferrer">
-                            {{ $receipt->document_original_name ?: 'Abrir documento adjunto' }}
-                        </a>
-                    </p>
-                @else
-                    <p>Sin documento adjunto todavía.</p>
-                @endif
-
-                <form method="POST" action="{{ route('goods-receipts.attach-document', $receipt) }}" enctype="multipart/form-data" class="goods-receipt-document-form">
-                    @csrf
-                    <label class="auth-field">
-                        <span>Adjuntar o reemplazar documento</span>
-                        <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                    </label>
-                    <div class="goods-receipt-document-actions action-buttons">
-                        <button type="submit" class="button-secondary compact-button btn-compact">Guardar documento</button>
-                        <button type="button" class="button-secondary compact-button btn-compact" disabled>Procesar con IA (próximamente)</button>
-                    </div>
-                </form>
-
-                @if ($receipt->ai_extracted_data)
-                    <pre class="goods-receipt-ai-dump">{{ json_encode($receipt->ai_extracted_data, JSON_PRETTY_PRINT) }}</pre>
-                @else
-                    <p class="helper-text">La arquitectura ya guarda documento, estado de IA y datos extraídos para una futura fase OCR/IA.</p>
-                @endif
-            </div>
-        </article>
     </section>
 
     <section class="surface-card stock-table-shell compact-card">
         <div class="ops-index-heading">
-            <strong>Líneas y stock previsto</strong>
+            <strong>Lineas previstas</strong>
             <span class="ops-page-meta">{{ $receipt->lines->count() }} {{ \Illuminate\Support\Str::plural('línea', $receipt->lines->count()) }}</span>
         </div>
 
         <div class="data-table-wrap goods-receipt-lines-wrap">
-            <table class="data-table table-compact goods-receipt-lines-table" aria-label="Líneas de entrada">
+            <table class="data-table table-compact goods-receipt-lines-table" aria-label="Lineas de entrada">
                 <thead>
                     <tr>
                         <th>SKU</th>
-                        <th>Descripción</th>
+                        <th>Descripcion</th>
                         <th>Lote</th>
                         <th>Total uds</th>
                         <th>Uds/pallet</th>
                         <th>Pallets</th>
                         <th>Pico</th>
-                        <th>Ubicación</th>
-                        <th>Notas</th>
+                        <th>Ubicacion</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -193,8 +149,7 @@
                             <td>{{ $line->units_per_pallet ? number_format($line->units_per_pallet, 0, ',', '.') : '-' }}</td>
                             <td>{{ number_format($line->pallet_count, 0, ',', '.') }}</td>
                             <td>{{ $line->pico_units !== null ? number_format($line->pico_units, 0, ',', '.') : '-' }}</td>
-                            <td>{{ $line->location?->code ?: 'Sin ubicación' }}</td>
-                            <td>{{ $line->notes ?: '-' }}</td>
+                            <td>{{ $line->location?->code ?: 'Sin ubicacion' }}</td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -202,11 +157,42 @@
         </div>
     </section>
 
+    <section class="surface-card compact-card goods-receipt-card goods-receipt-card--document-secondary">
+        <div class="ops-index-heading">
+            <strong>Documento adjunto</strong>
+            <span class="ops-page-meta">Opcional para esta entrada</span>
+        </div>
+
+        <div class="goods-receipt-document">
+            @if ($receipt->document_path)
+                <p>
+                    <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer">
+                        {{ $receipt->document_original_name ?: 'Abrir documento adjunto' }}
+                    </a>
+                </p>
+            @else
+                <p>No hay documento adjunto en esta entrada.</p>
+            @endif
+
+            <form method="POST" action="{{ route('goods-receipts.attach-document', $receipt) }}" enctype="multipart/form-data" class="goods-receipt-document-form">
+                @csrf
+                <label class="auth-field">
+                    <span>Documento del proveedor / albaran</span>
+                    <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                </label>
+                <small class="helper-text">Opcional. Puedes adjuntar o sustituir foto o PDF del albaran recibido.</small>
+                <div class="goods-receipt-document-actions action-buttons">
+                    <button type="submit" class="button-secondary compact-button btn-compact">Guardar documento</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
     @if ($receipt->stockPallets->isNotEmpty())
         <section class="surface-card stock-table-shell compact-card">
             <div class="ops-index-heading">
-                <strong>Partidas generadas</strong>
-                <span class="ops-page-meta">{{ $receipt->stockPallets->count() }} {{ \Illuminate\Support\Str::plural('línea', $receipt->stockPallets->count()) }} activas</span>
+                <strong>Stock generado</strong>
+                <span class="ops-page-meta">{{ $receipt->stockPallets->count() }} {{ \Illuminate\Support\Str::plural('partida', $receipt->stockPallets->count()) }} activas</span>
             </div>
 
             <div class="data-table-wrap goods-receipt-lines-wrap">
@@ -220,7 +206,7 @@
                             <th>Pallets</th>
                             <th>Picos</th>
                             <th>Pico 1</th>
-                            <th>Ubicación</th>
+                            <th>Ubicacion</th>
                             <th>Fecha</th>
                             <th>Estado</th>
                         </tr>
@@ -235,7 +221,7 @@
                                 <td>{{ number_format($stockPallet->full_pallets ?? 0, 0, ',', '.') }}</td>
                                 <td>{{ number_format($stockPallet->peaks_count ?? 0, 0, ',', '.') }}</td>
                                 <td>{{ number_format($stockPallet->peak_1 ?? 0, 0, ',', '.') }}</td>
-                                <td>{{ $stockPallet->location?->code ?: ($stockPallet->location_text ?: 'Sin ubicación') }}</td>
+                                <td>{{ $stockPallet->location?->code ?: ($stockPallet->location_text ?: 'Sin ubicacion') }}</td>
                                 <td>{{ optional($stockPallet->received_at)->format('d/m/Y') ?: '-' }}</td>
                                 <td>{{ $stockPallet->statusLabel() }}</td>
                             </tr>
@@ -246,8 +232,3 @@
         </section>
     @endif
 @endsection
-
-
-
-
-

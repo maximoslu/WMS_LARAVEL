@@ -152,9 +152,29 @@ class GoodsReceiptManagementTest extends TestCase
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
             ->assertSee('goods-receipt-header-card', false)
-            ->assertSee('goods-receipt-card--document', false)
+            ->assertSee('goods-receipt-card--document-secondary', false)
             ->assertSee('Guardar documento')
-            ->assertSee('Procesar con IA (próximamente)');
+            ->assertDontSee('Procesar con IA')
+            ->assertDontSee('Partidas generadas')
+            ->assertDontSee('Documento e IA futura');
+    }
+
+    public function test_goods_receipt_create_form_is_simplified_and_uses_cards_without_line_notes(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.create'))
+            ->assertOk()
+            ->assertDontSee('Documento externo')
+            ->assertSee('Documento del proveedor / albaran')
+            ->assertSee('goods-receipt-line-list', false)
+            ->assertDontSee('goods-receipt-lines-table', false)
+            ->assertDontSee('[notes]', false)
+            ->assertSee('Referencia y cantidades')
+            ->assertSee('Trazabilidad de esta entrada. No se guarda como maestro del articulo.');
     }
 
     public function test_superadmin_can_create_supplier(): void
@@ -223,7 +243,6 @@ class GoodsReceiptManagementTest extends TestCase
                 'client_id' => $client->id,
                 'supplier_id' => $supplier->id,
                 'receipt_number' => 'ALB-2026-001',
-                'external_document_number' => 'EXT-001',
                 'received_at' => '2026-06-26',
                 'notes' => 'Entrada inicial',
                 'lines' => [
@@ -237,7 +256,6 @@ class GoodsReceiptManagementTest extends TestCase
                         'pallet_count' => 0,
                         'pico_units' => '',
                         'location_id' => $location->id,
-                        'notes' => 'Linea principal',
                     ],
                 ],
             ])
@@ -295,7 +313,6 @@ class GoodsReceiptManagementTest extends TestCase
                         'pallet_count' => '',
                         'pico_units' => '',
                         'location_id' => $location->id,
-                        'notes' => 'Autocompletado desde item',
                     ],
                 ],
             ])
@@ -313,6 +330,311 @@ class GoodsReceiptManagementTest extends TestCase
             'pallet_count' => 21,
             'pico_units' => 300,
         ]);
+    }
+
+    public function test_almacen_puede_crear_entrada_con_articulo_existente(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-EXIST-001',
+            'description' => 'Articulo existente',
+            'units_per_pallet' => 600,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-ALM-EXIST-001',
+                'lines' => [
+                    [
+                        'item_id' => $item->id,
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => 'LOT-EXIST-001',
+                        'quantity_units' => 1200,
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-ALM-EXIST-001')->firstOrFail();
+
+        $this->assertDatabaseHas('goods_receipt_lines', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => 'SKU-EXIST-001',
+            'description' => 'Articulo existente',
+            'units_per_pallet' => 600,
+        ]);
+    }
+
+    public function test_almacen_puede_crear_entrada_con_articulo_nuevo_desde_linea(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-ALM-NEW-001',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'NEW-SKU-001',
+                        'description' => 'Articulo creado en entrada',
+                        'lot' => 'LOT-NEW-001',
+                        'quantity_units' => 900,
+                        'units_per_pallet' => 450,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('items', [
+            'client_id' => $client->id,
+            'sku' => 'NEW-SKU-001',
+            'description' => 'Articulo creado en entrada',
+            'units_per_pallet' => 450,
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+    }
+
+    public function test_articulo_nuevo_desde_entrada_guarda_sku_descripcion_y_uds_pallet(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-NEW-MASTER-001',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'MASTER-001',
+                        'description' => 'Master creado desde entrada',
+                        'lot' => 'LOT-MASTER-001',
+                        'quantity_units' => 700,
+                        'units_per_pallet' => 700,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $item = Item::query()
+            ->where('client_id', $client->id)
+            ->where('sku', 'MASTER-001')
+            ->firstOrFail();
+
+        $this->assertSame('Master creado desde entrada', $item->description);
+        $this->assertSame(700, $item->units_per_pallet);
+    }
+
+    public function test_lote_no_se_guarda_en_articulo_maestro(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-LOT-NO-MASTER',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'LOT-FREE-001',
+                        'description' => 'Articulo sin lote maestro',
+                        'lot' => 'LOTE-OPERATIVO-001',
+                        'quantity_units' => 800,
+                        'units_per_pallet' => 400,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $item = Item::query()
+            ->where('client_id', $client->id)
+            ->where('sku', 'LOT-FREE-001')
+            ->firstOrFail();
+
+        $this->assertNull($item->lot);
+        $this->assertSame('', $item->lot_key);
+    }
+
+    public function test_no_duplica_articulo_si_sku_ya_existe(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-DUP-ENTRY',
+            'description' => 'Articulo ya creado',
+            'units_per_pallet' => 300,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-DUP-ENTRY',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'sku-dup-entry',
+                        'description' => 'Texto alternativo ignorado',
+                        'lot' => 'LOT-DUP',
+                        'quantity_units' => 600,
+                        'units_per_pallet' => 333,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseCount('items', 1);
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-DUP-ENTRY')->firstOrFail();
+
+        $this->assertDatabaseHas('goods_receipt_lines', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => 'SKU-DUP-ENTRY',
+            'description' => 'Articulo ya creado',
+            'units_per_pallet' => 333,
+        ]);
+    }
+
+    public function test_valida_descripcion_si_articulo_no_existe(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-VALID-DESC',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-NO-DESC',
+                        'description' => '',
+                        'lot' => 'LOT-NO-DESC',
+                        'quantity_units' => 500,
+                        'units_per_pallet' => 250,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors('lines.0.description');
+    }
+
+    public function test_valida_uds_pallet_si_articulo_no_existe(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-VALID-UPP',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-NO-UPP',
+                        'description' => 'Articulo sin paletizado',
+                        'lot' => 'LOT-NO-UPP',
+                        'quantity_units' => 500,
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors('lines.0.units_per_pallet');
+    }
+
+    public function test_entrada_con_articulo_nuevo_sigue_generando_linea_correcta(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-LINE-NEW-001',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-LINE-NEW',
+                        'description' => 'Linea correcta',
+                        'lot' => 'LOT-LINE-NEW',
+                        'quantity_units' => 1500,
+                        'units_per_pallet' => 700,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-LINE-NEW-001')->firstOrFail();
+        $line = $receipt->lines()->firstOrFail();
+
+        $this->assertSame('SKU-LINE-NEW', $line->sku);
+        $this->assertSame('Linea correcta', $line->description);
+        $this->assertSame(700, $line->units_per_pallet);
+        $this->assertSame(2, $line->pallet_count);
+        $this->assertSame(100, $line->pico_units);
+        $this->assertNotNull($line->item_id);
     }
 
     public function test_store_calculates_pallet_count_and_pico_for_15000_units_and_700_units_per_pallet(): void
@@ -440,7 +762,7 @@ class GoodsReceiptManagementTest extends TestCase
 
     public function test_can_attach_valid_document_to_goods_receipt(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         $this->seed(RoleSeeder::class);
 
         $user = $this->makeUserWithRole(Role::ALMACEN);
@@ -456,7 +778,35 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->assertNotNull($receipt->document_path);
         $this->assertSame('albaran.pdf', $receipt->document_original_name);
-        Storage::disk('public')->assertExists($receipt->document_path);
+        Storage::disk('local')->assertExists($receipt->document_path);
+    }
+
+    public function test_attached_document_can_be_downloaded_only_by_internal_user(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $receipt = $this->createDraftReceipt($almacen);
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.attach-document', $receipt), [
+                'document' => UploadedFile::fake()->create('albaran.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        $receipt->refresh();
+
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.document', $receipt))
+            ->assertOk()
+            ->assertDownload('albaran.pdf');
+
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($cliente)
+            ->get(route('goods-receipts.document', $receipt))
+            ->assertForbidden();
     }
 
     public function test_confirming_goods_receipt_generates_one_aggregated_stock_batch_and_prevents_duplicates(): void
@@ -941,10 +1291,10 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($user)
             ->get(route('goods-receipts.create'))
             ->assertOk()
-            ->assertSee('Nueva entrada de mercancía')
-            ->assertSee('Añadir línea')
+            ->assertSee('Nueva entrada de mercancia')
+            ->assertSee('Añadir linea')
             ->assertSee('data-autocomplete-floating="fixed"', false)
-            ->assertSee('ajax-autocomplete--table', false)
+            ->assertSee('goods-receipt-line-picker', false)
             ->assertDontSee('AÃ±adir')
             ->assertDontSee('mercancÃ­a');
     }
@@ -959,7 +1309,7 @@ class GoodsReceiptManagementTest extends TestCase
             $this->actingAs($user)
                 ->get(route('goods-receipts.create'))
                 ->assertOk()
-                ->assertSee('Nueva entrada de mercancía')
+                ->assertSee('Nueva entrada de mercancia')
                 ->assertSee('Crear borrador');
         }
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Item;
+use App\Models\Role;
 use App\Models\Supplier;
 use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -12,16 +13,29 @@ class StoreGoodsReceiptRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->canAccessRole(Role::ALMACEN) ?? false;
     }
 
     protected function prepareForValidation(): void
     {
+        $clientId = $this->normalizeNullableInteger($this->input('client_id'));
+
         $lines = collect($this->input('lines', []))
-            ->map(function (mixed $line): array {
+            ->map(function (mixed $line) use ($clientId): array {
                 $line = is_array($line) ? $line : [];
 
                 $itemId = $this->normalizeNullableInteger($line['item_id'] ?? null);
+                $sku = $this->normalizeNullableUpper($line['sku'] ?? null);
+
+                if ($itemId === null && $clientId !== null && $sku !== null) {
+                    $existingItemId = Item::query()
+                        ->where('client_id', $clientId)
+                        ->where('sku', $sku)
+                        ->value('id');
+
+                    $itemId = $existingItemId !== null ? (int) $existingItemId : null;
+                }
+
                 $item = $itemId !== null ? Item::query()->find($itemId) : null;
                 $quantityUnits = $this->normalizeInteger($line['quantity_units'] ?? 0);
                 $unitsPerPallet = $this->normalizeNullableInteger($line['units_per_pallet'] ?? null)
@@ -49,7 +63,7 @@ class StoreGoodsReceiptRequest extends FormRequest
 
                 return [
                     'item_id' => $itemId,
-                    'sku' => $this->normalizeNullableUpper($line['sku'] ?? null) ?? $item?->sku,
+                    'sku' => $sku ?? $item?->sku,
                     'description' => $this->normalizeNullableText($line['description'] ?? null) ?? $item?->description,
                     'lot' => $this->normalizeNullableUpper($line['lot'] ?? null),
                     'quantity_units' => $quantityUnits,
@@ -57,7 +71,6 @@ class StoreGoodsReceiptRequest extends FormRequest
                     'pallet_count' => $palletCount ?? 0,
                     'pico_units' => ($picoUnits ?? 0) > 0 ? $picoUnits : null,
                     'location_id' => $this->normalizeNullableInteger($line['location_id'] ?? null),
-                    'notes' => $this->normalizeNullableText($line['notes'] ?? null),
                 ];
             })
             ->filter(function (array $line): bool {
@@ -69,8 +82,7 @@ class StoreGoodsReceiptRequest extends FormRequest
                     || $line['units_per_pallet'] !== null
                     || $line['pallet_count'] > 0
                     || ($line['pico_units'] ?? 0) > 0
-                    || $line['location_id'] !== null
-                    || $line['notes'] !== null;
+                    || $line['location_id'] !== null;
             })
             ->values()
             ->all();
@@ -103,7 +115,6 @@ class StoreGoodsReceiptRequest extends FormRequest
             'lines.*.pallet_count' => ['nullable', 'integer', 'min:0'],
             'lines.*.pico_units' => ['nullable', 'integer', 'min:0'],
             'lines.*.location_id' => ['nullable', 'exists:locations,id'],
-            'lines.*.notes' => ['nullable', 'string'],
         ];
     }
 
@@ -127,6 +138,8 @@ class StoreGoodsReceiptRequest extends FormRequest
 
             foreach ($this->input('lines', []) as $index => $line) {
                 $itemId = (int) ($line['item_id'] ?? 0);
+                $sku = trim((string) ($line['sku'] ?? ''));
+                $description = trim((string) ($line['description'] ?? ''));
                 $quantityUnits = (int) ($line['quantity_units'] ?? 0);
                 $unitsPerPallet = isset($line['units_per_pallet']) ? (int) $line['units_per_pallet'] : null;
                 $palletCount = (int) ($line['pallet_count'] ?? 0);
@@ -143,6 +156,18 @@ class StoreGoodsReceiptRequest extends FormRequest
 
                     if (! ($itemData?->active ?? false)) {
                         $validator->errors()->add("lines.$index.item_id", 'El articulo seleccionado no esta activo para nuevas entradas.');
+                    }
+                } else {
+                    if ($sku === '') {
+                        $validator->errors()->add("lines.$index.sku", 'Indica un SKU o selecciona un articulo existente.');
+                    }
+
+                    if ($description === '') {
+                        $validator->errors()->add("lines.$index.description", 'Indica la descripcion para crear el articulo nuevo desde la entrada.');
+                    }
+
+                    if ($unitsPerPallet === null || $unitsPerPallet <= 0) {
+                        $validator->errors()->add("lines.$index.units_per_pallet", 'Indica las unidades por pallet para crear el articulo nuevo desde la entrada.');
                     }
                 }
 

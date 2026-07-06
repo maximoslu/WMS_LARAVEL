@@ -11,6 +11,10 @@ use Illuminate\Validation\ValidationException;
 
 class GoodsReceiptStockApplicationService
 {
+    public function __construct(
+        private readonly GoodsReceiptItemResolver $itemResolver,
+    ) {}
+
     /**
      * Applies the stock impact of a confirmed receipt.
      * Must be called inside a DB transaction.
@@ -139,38 +143,7 @@ class GoodsReceiptStockApplicationService
 
     private function resolveItem(GoodsReceipt $receipt, GoodsReceiptLine $line): Item
     {
-        if ($line->item !== null) {
-            if ((int) $line->item->client_id !== (int) $receipt->client_id) {
-                throw ValidationException::withMessages([
-                    'goods_receipt' => "El articulo de la linea {$line->id} no pertenece al cliente de la entrada.",
-                ]);
-            }
-
-            return $line->item;
-        }
-
-        $sku = $line->sku;
-        $description = $line->description;
-        $unitsPerPallet = (int) ($line->units_per_pallet ?? 0);
-
-        if ($sku === null || $description === null || $unitsPerPallet <= 0) {
-            throw ValidationException::withMessages([
-                'goods_receipt' => "La linea {$line->id} necesita articulo o datos suficientes para crearlo (SKU, descripcion y unidades por pallet).",
-            ]);
-        }
-
-        return Item::query()->firstOrCreate(
-            [
-                'client_id' => $receipt->client_id,
-                'sku' => $sku,
-            ],
-            [
-                'description' => $description,
-                'units_per_pallet' => $unitsPerPallet,
-                'status' => Item::STATUS_ACTIVE,
-                'active' => true,
-            ]
-        );
+        return $this->itemResolver->resolveForLine($receipt, $line);
     }
 
     /**

@@ -371,4 +371,78 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `Deploy Now`
 - `php artisan optimize:clear`
 - `php artisan queue:restart` si procede
+- `php artisan migrate --force` no aplica en este hito---
+
+## 2026-07-06 - Mejora del flujo de entradas de mercancia (19:15:47 +02:00)
+
+**Contexto:** Se ha refinado el flujo operativo de entradas para que `ALMACEN` pueda registrar recepciones con menos friccion, crear articulos nuevos desde la propia linea cuando el SKU todavia no existe y mantener la trazabilidad por lote sin contaminar el maestro de articulos.
+
+**Commit previo de partida:**
+- `f58739d fix: allow warehouse role to manage operational masters`
+
+**Resumen de la decision aplicada:**
+- Se simplifica la alta de entradas:
+  - se elimina `Documento externo` del formulario inicial
+  - se mantiene una subida opcional del documento del proveedor o albaran
+  - la zona de observaciones queda mas contenida
+  - las lineas pasan a tarjetas verticales para evitar scroll horizontal
+- Cada linea ya no guarda observaciones propias.
+- Si un SKU no existe para el cliente seleccionado, la entrada crea automaticamente el articulo maestro al guardar.
+- El lote sigue siendo trazabilidad de la entrada y del stock, pero no se guarda como dato maestro del articulo.
+- El documento adjunto queda protegido tras autenticacion interna y se descarga mediante ruta controlada.
+- La vista de detalle de borrador/entrada se limpia retirando bloques no operativos y dejando foco en documento, lineas y estado de stock.
+
+**Cambios principales realizados:**
+- `app/Services/GoodsReceipts/GoodsReceiptItemResolver.php` (nuevo)
+  - resuelve articulos existentes o crea articulos nuevos desde la linea de entrada
+  - asegura `client_id`, `sku`, `description`, `units_per_pallet`, `status`, `active`, `lot`, `lot_key` y `default_location_id`
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - crea o reutiliza el articulo ya en guardado de borrador
+  - elimina manejo de notas por linea
+  - mueve la descarga de documentos a una ruta protegida
+  - guarda adjuntos en disco `local` con compatibilidad de lectura para adjuntos antiguos
+- `app/Services/GoodsReceipts/GoodsReceiptStockApplicationService.php`
+  - reutiliza el resolvedor para confirmar stock sin duplicar logica
+- `app/Http/Requests/StoreGoodsReceiptRequest.php`
+  - autoriza a `ALMACEN`
+  - completa automaticamente `item_id`, descripcion y uds/pallet si el SKU ya existe
+  - exige `sku`, `description` y `units_per_pallet` cuando el articulo todavia no existe
+  - elimina validacion de notas por linea
+- `app/Http/Requests/AttachGoodsReceiptDocumentRequest.php`
+  - autoriza a `ALMACEN`
+- `app/Models/GoodsReceipt.php`
+  - `document_url` pasa a usar ruta protegida
+- `routes/web.php`
+  - nueva ruta GET protegida para descarga de documento adjunto
+- `resources/views/goods-receipts/_form.blade.php`
+  - formulario simplificado y lineas en formato card
+- `resources/views/goods-receipts/_line-row.blade.php`
+  - nueva tarjeta por linea, sin notas, con aviso de creacion automatica de articulo
+- `resources/views/goods-receipts/show.blade.php`
+  - detalle depurado y bloque secundario de documento adjunto
+- `resources/js/app.js`
+  - avisos de articulo nuevo, renumeracion de lineas y soporte del nuevo layout
+- `resources/css/app.css`
+  - estilos del flujo en tarjetas y del bloque secundario de documento
+- `tests/Feature/GoodsReceiptManagementTest.php`
+  - cobertura nueva para articulos creados desde entrada, lote no persistido en maestro, descarga protegida y nueva UX
+
+**Resultado de validacion:**
+- `php artisan optimize:clear`: OK
+- `php artisan test`: `345 passed` (1580 assertions)
+- `npm run build`: OK
+
+**Migraciones:**
+- No hubo migraciones nuevas
+- No fue necesario ejecutar `php artisan migrate`
+
+**Control de alcance:**
+- No se tocaron Google Calendar, facturacion ni la importacion Friesland/Edelvives
+- No se tocaron datos productivos ni se uso `migrate:fresh`
+- `.claude/` sigue fuera del commit
+
+**Forge:**
+- `Deploy Now`
+- `php artisan optimize:clear`
+- `php artisan queue:restart` no es necesario para este hito
 - `php artisan migrate --force` no aplica en este hito
