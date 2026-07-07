@@ -4,8 +4,7 @@
     <div class="goods-receipt-line-card-head">
         <div class="goods-receipt-line-card-copy">
             <span class="status-chip small-badge badge-compact" data-line-number>Linea</span>
-            <strong>Referencia y cantidades</strong>
-            <p>Si el articulo no existe, completa SKU, descripcion y uds/palet para crearlo al guardar.</p>
+            <span class="goods-receipt-line-card-meta">SKU, lote, cantidades y ubicacion.</span>
         </div>
 
         <button type="button" class="button-secondary compact-button btn-table" data-remove-line>Quitar linea</button>

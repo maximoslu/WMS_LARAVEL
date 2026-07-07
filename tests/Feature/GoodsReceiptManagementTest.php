@@ -154,11 +154,10 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($user)
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
-            ->assertSee('goods-receipt-header-card', false)
-            ->assertSee('goods-receipt-card--document-secondary', false)
-            ->assertSee('Guardar documento')
-            ->assertDontSee('Procesar con IA')
-            ->assertDontSee('Partidas generadas')
+            ->assertSee('goods-receipt-ops-band', false)
+            ->assertSee('goods-receipt-detail-grid--readonly', false)
+            ->assertSee('Documento y estado')
+            ->assertSee('Lineas registradas')
             ->assertDontSee('Documento e IA futura');
     }
 
@@ -176,10 +175,30 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('goods-receipt-line-list', false)
             ->assertDontSee('goods-receipt-lines-table', false)
             ->assertDontSee('[notes]', false)
-            ->assertSee('Referencia y cantidades')
-            ->assertSee('Trazabilidad de esta entrada. No se guarda como maestro del articulo.')
+            ->assertSee('Linea')
+            ->assertSee('SKU, lote, cantidades y ubicacion.')
             ->assertSee('Crear borrador e interpretar con IA')
             ->assertSee('Si vas a interpretar un albaran con IA, puedes dejar las lineas vacias.');
+    }
+
+    public function test_detalle_borrador_con_ia_desactivada_permite_edicion_manual_desde_la_misma_pantalla(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => false]);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $receipt = $this->attachStoredDocument($this->createDraftReceipt($almacen));
+
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('IA desactivada')
+            ->assertSee('Documento guardado')
+            ->assertSee('Anadir linea manual')
+            ->assertSee('Guardar')
+            ->assertSee('data-goods-receipt-form', false)
+            ->assertSee('El stock no se aplicara hasta confirmar la entrada.');
     }
 
     public function test_crear_borrador_con_documento_muestra_cta_ia(): void
@@ -877,8 +896,8 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
-            ->assertSee('Interpretar albaran con IA')
-            ->assertSee('Estado IA');
+            ->assertSee('Interpretar con IA')
+            ->assertSee('Documento y estado');
     }
 
     public function test_crear_borrador_e_interpretar_ia_guarda_entrada_y_documento(): void
@@ -990,7 +1009,7 @@ class GoodsReceiptManagementTest extends TestCase
 
         $response
             ->assertRedirect(route('goods-receipts.show', $receipt))
-            ->assertSessionHas('status', 'Entrada creada. La interpretacion IA esta pendiente de activar en configuracion.');
+            ->assertSessionHas('status', 'Entrada creada. La IA esta desactivada ahora mismo; puedes completar la entrada manualmente.');
 
         $this->assertSame(GoodsReceipt::AI_STATUS_PENDING, $receipt->ai_status);
     }
@@ -1125,7 +1144,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->get(route('goods-receipts.show', $receipt->fresh()))
             ->assertOk()
             ->assertSee('Propuesta IA del albaran')
-            ->assertSee('Aplicar lineas a la entrada')
+            ->assertSee('Aplicar lineas')
             ->assertSee('PROVEEDOR IA DEMO')
             ->assertSee('IA-SKU-001');
     }
@@ -1290,8 +1309,9 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
-            ->assertSee('Albaran adjunto pendiente de interpretar')
-            ->assertSee('Interpretar albaran con IA');
+            ->assertSee('Documento guardado')
+            ->assertSee('Interpretar con IA')
+            ->assertSee('IA sin ejecutar');
     }
 
     public function test_detalle_entrada_con_error_ia_muestra_reintentar(): void
@@ -1310,8 +1330,60 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
-            ->assertSee('No se pudo interpretar el albaran')
-            ->assertSee('Reintentar interpretacion IA');
+            ->assertSee('No se pudo interpretar el documento')
+            ->assertSee('Reintentar IA');
+    }
+
+    public function test_almacen_puede_actualizar_entrada_desde_el_detalle_operativo(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $receipt = GoodsReceipt::query()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-DET-EDIT',
+            'status' => GoodsReceipt::STATUS_DRAFT,
+            'received_at' => '2026-07-06',
+            'created_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->put(route('goods-receipts.update', $receipt), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-DET-EDIT',
+                'received_at' => '2026-07-07',
+                'notes' => 'Carga manual desde detalle',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-DET-001',
+                        'description' => 'Articulo creado desde detalle',
+                        'lot' => 'LOT-DET-01',
+                        'quantity_units' => 1200,
+                        'units_per_pallet' => 500,
+                        'pallet_count' => 2,
+                        'pico_units' => 200,
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+        $line = $receipt->lines()->firstOrFail();
+
+        $this->assertSame('Carga manual desde detalle', $receipt->notes);
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
+        $this->assertNull($receipt->stock_applied_at);
+        $this->assertSame('SKU-DET-001', $line->sku);
+        $this->assertSame(1200, $line->quantity_units);
+        $this->assertSame(500, $line->units_per_pallet);
+        $this->assertSame(2, $line->pallet_count);
+        $this->assertSame(200, $line->pico_units);
     }
 
     public function test_entrada_con_ia_permite_lineas_vacias_en_borrador(): void

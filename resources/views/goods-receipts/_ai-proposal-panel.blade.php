@@ -13,7 +13,7 @@
     <div class="ops-index-heading">
         <div>
             <strong>Propuesta IA del albaran</strong>
-            <span class="ops-page-meta">La IA propone datos a partir del documento. Revisa cantidades, lotes y referencias antes de aplicar.</span>
+            <span class="ops-page-meta">La IA propone datos a partir del documento. Aplicar lineas no suma stock: el stock solo se aplica al confirmar la entrada.</span>
         </div>
         <span class="goods-receipt-ai-status goods-receipt-ai-status--{{ $receipt->ai_status ?: 'pending' }}">{{ $receipt->aiStatusLabel() }}</span>
     </div>
@@ -152,7 +152,7 @@
         </div>
 
         <div class="goods-receipt-document-actions action-buttons">
-            <button type="submit" class="button-primary compact-button btn-compact">Aplicar lineas a la entrada</button>
+            <button type="submit" class="button-primary compact-button btn-compact">Aplicar lineas</button>
         </div>
     </form>
 </section>

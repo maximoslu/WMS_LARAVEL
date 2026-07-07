@@ -128,7 +128,7 @@ class GoodsReceiptController extends Controller
             if (! config('services.openai.receipt_enabled', false)) {
                 return redirect()
                     ->route('goods-receipts.show', $receipt)
-                    ->with('status', 'Entrada creada. La interpretacion IA esta pendiente de activar en configuracion.');
+                    ->with('status', 'Entrada creada. La IA esta desactivada ahora mismo; puedes completar la entrada manualmente.');
             }
 
             try {
@@ -178,6 +178,8 @@ class GoodsReceiptController extends Controller
                 ->orderBy('name')
                 ->get(),
             'aiEnabled' => (bool) config('services.openai.receipt_enabled', false),
+            'lineValues' => $this->lineValues($request, $goodsReceipt),
+            'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -393,7 +395,7 @@ class GoodsReceiptController extends Controller
         }
 
         if ($receipt->exists) {
-            return $receipt->lines
+            $lines = $receipt->lines
                 ->map(fn (GoodsReceiptLine $line): array => [
                     'item_id' => $line->item_id,
                     'item_search' => $line->item ? $line->item->sku.' - '.$line->item->description : null,
@@ -407,6 +409,10 @@ class GoodsReceiptController extends Controller
                     'location_id' => $line->location_id,
                 ])
                 ->all();
+
+            if ($lines !== []) {
+                return $lines;
+            }
         }
 
         return [[

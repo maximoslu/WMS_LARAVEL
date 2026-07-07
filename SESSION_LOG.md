@@ -674,3 +674,75 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
 - `php artisan queue:restart` no es necesario salvo operativa posterior ligada a colas
+---
+
+## 2026-07-07 - Flujo manual compacto para entradas con IA desactivada o fallida (08:04:00 +02:00)
+
+**Contexto:** En EDELVIVES, al crear una entrada con PDF y pulsar `Crear borrador e interpretar con IA`, la entrada se guardaba pero quedaba en `Sin interpretar` con el mensaje de configuracion pendiente, sin un flujo operativo claro para seguir manualmente desde la misma pantalla.
+
+**Commit previo de partida:**
+- `f7ca2846 fix: make goods receipt AI flow discoverable`
+
+**Objetivo resuelto:**
+- La entrada ya no queda en un callejon sin salida cuando la IA esta desactivada, falla o todavia no se ha ejecutado.
+- El detalle de la entrada pasa a ser una pantalla operativa compacta y editable para almacen.
+
+**Cambios funcionales principales:**
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - el aviso al crear con IA desactivada ahora deja claro que la entrada puede completarse manualmente
+  - la vista `show` recibe `lineValues` y `searchEndpoint` para editar lineas desde el propio detalle
+  - si una entrada existente no tiene lineas, la pantalla prepara una linea vacia para continuar sin pasos extra
+- `resources/views/goods-receipts/show.blade.php`
+  - redisenada como detalle operativo editable para borradores
+  - banda compacta superior con cliente, proveedor, fecha, estado IA y estado stock
+  - botonera directa con `Descargar PDF`, `Reintentar IA` cuando procede, `Anadir linea manual`, `Guardar` y `Confirmar entrada`
+  - bloque operativo claro: `Documento guardado. Puedes interpretarlo con IA o anadir lineas manualmente.`
+  - estados mas utiles: `IA desactivada`, `IA sin ejecutar`, `Propuesta lista`, `Error IA`
+  - mensaje fijo de seguridad: `El stock no se aplicara hasta confirmar la entrada`
+  - cabecera y lineas editables desde la misma vista para borradores
+- `resources/views/goods-receipts/_line-row.blade.php`
+  - se compacta cada linea para reducir scroll y ruido visual
+- `resources/views/goods-receipts/_ai-proposal-panel.blade.php`
+  - copy mas claro: aplicar lineas no suma stock
+  - CTA simplificado a `Aplicar lineas`
+- `resources/js/app.js`
+  - soporte para varios botones `Anadir linea manual` dentro de la misma pantalla operativa
+- `resources/css/app.css`
+  - layout de escritorio mas compacto para la operativa de entradas
+  - chips de estado, grid de detalle y espaciado reducido
+
+**Reglas funcionales verificadas:**
+- La IA nunca confirma stock automaticamente
+- Aplicar lineas desde propuesta IA no aplica stock
+- El stock solo se aplica al confirmar manualmente la entrada
+- La confirmacion sigue siendo idempotente
+- Si la IA falla, la entrada y el documento permanecen disponibles
+- El documento sigue en storage privado con descarga protegida
+- El sistema lee `OPENAI_RECEIPT_ENABLED` y `OPENAI_RECEIPT_MODEL` desde `config/services.php`
+
+**Cobertura y validacion:**
+- `tests/Feature/GoodsReceiptManagementTest.php`
+  - nueva cobertura para:
+    - detalle editable con IA desactivada
+    - actualizacion manual desde el propio detalle
+    - copy y CTAs nuevos del flujo IA
+- `php artisan optimize:clear`: OK
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `60 passed` (304 assertions)
+- `php artisan test`: `371 passed` (1699 assertions)
+- `npm run build`: OK
+
+**Migraciones:**
+- No hubo migraciones nuevas
+- No fue necesario ejecutar `php artisan migrate`
+
+**Control de alcance:**
+- No se toco `.env`
+- No se tocaron Google Calendar, facturacion ni importaciones Friesland/Edelvives
+- No se tocaron datos productivos ni se uso `migrate:fresh`
+- `.claude/` sigue fuera del commit
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now`
+- `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
+- `php artisan queue:restart`

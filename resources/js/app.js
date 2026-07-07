@@ -1061,14 +1061,14 @@ const setupGoodsDispatchBuilder = () => {
 const setupGoodsReceiptLines = () => {
     const form = document.querySelector('[data-goods-receipt-form]');
     const container = document.querySelector('[data-receipt-lines]');
-    const addButton = document.querySelector('[data-add-line]');
+    const addButtons = Array.from(document.querySelectorAll('[data-add-line]'));
     const template = document.querySelector('[data-line-template]');
     const clientSelect = document.querySelector('[data-receipt-client]');
     const documentInput = document.querySelector('[data-receipt-document-input]');
     const aiSubmitButton = document.querySelector('[data-ai-create-submit]');
     const aiSubmitHelp = document.querySelector('[data-ai-submit-help]');
 
-    if (!form || !container || !addButton || !template || !clientSelect || container.dataset.linesBound === 'true') {
+    if (!form || !container || addButtons.length === 0 || !template || !clientSelect || container.dataset.linesBound === 'true') {
         return;
     }
 
@@ -1282,11 +1282,15 @@ const setupGoodsReceiptLines = () => {
         recalculateRow(row);
     };
 
-    addButton.addEventListener('click', () => {
+    const addRow = () => {
         const markup = template.innerHTML.replaceAll('__INDEX__', String(rowCount()));
         container.insertAdjacentHTML('beforeend', markup);
         bindRow(container.querySelectorAll('[data-line-row]')[rowCount() - 1]);
         renumberRows();
+    };
+
+    addButtons.forEach((button) => {
+        button.addEventListener('click', addRow);
     });
 
     container.addEventListener('click', (event) => {
