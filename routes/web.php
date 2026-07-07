@@ -162,6 +162,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/entradas', [GoodsReceiptController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.index');
+    Route::post('/entradas/articulos', [GoodsReceiptController::class, 'quickCreateItem'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.items.quick-create');
     Route::get('/entradas/crear', [GoodsReceiptController::class, 'create'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.create');

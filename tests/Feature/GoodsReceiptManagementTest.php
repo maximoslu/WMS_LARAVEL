@@ -806,6 +806,132 @@ class GoodsReceiptManagementTest extends TestCase
         ]);
     }
 
+    public function test_superadmin_puede_crear_articulo_rapido_desde_linea_manual(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$client] = $this->makeReceiptContext();
+
+        $response = $this->actingAs($user)
+            ->postJson(route('goods-receipts.items.quick-create'), [
+                'client_id' => $client->id,
+                'sku' => 'quick-sku-001',
+                'description' => 'Articulo creado rapido desde linea',
+                'units_per_pallet' => 250,
+            ]);
+
+        $response->assertCreated();
+        $response->assertJson([
+            'created' => true,
+        ]);
+
+        $itemId = $response->json('item.id');
+
+        $this->assertDatabaseHas('items', [
+            'id' => $itemId,
+            'client_id' => $client->id,
+            'sku' => 'QUICK-SKU-001',
+            'description' => 'Articulo creado rapido desde linea',
+            'units_per_pallet' => 250,
+        ]);
+    }
+
+    public function test_almacen_puede_crear_articulo_rapido_desde_linea_manual(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client] = $this->makeReceiptContext();
+
+        $response = $this->actingAs($user)
+            ->postJson(route('goods-receipts.items.quick-create'), [
+                'client_id' => $client->id,
+                'sku' => 'QUICK-ALMACEN-001',
+                'description' => 'Articulo creado por almacen',
+                'units_per_pallet' => 100,
+            ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('items', [
+            'client_id' => $client->id,
+            'sku' => 'QUICK-ALMACEN-001',
+        ]);
+    }
+
+    public function test_crear_articulo_rapido_no_duplica_sku_existente(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client] = $this->makeReceiptContext();
+
+        $existing = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'QUICK-DUP-001',
+            'description' => 'Ya existente',
+            'units_per_pallet' => 400,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->postJson(route('goods-receipts.items.quick-create'), [
+                'client_id' => $client->id,
+                'sku' => 'quick-dup-001',
+                'description' => 'Descripcion distinta que no debe pisar la existente',
+                'units_per_pallet' => 999,
+            ]);
+
+        $response->assertOk();
+        $response->assertJson([
+            'created' => false,
+            'item' => ['id' => $existing->id],
+        ]);
+
+        $this->assertDatabaseCount('items', 1);
+        $this->assertDatabaseHas('items', [
+            'id' => $existing->id,
+            'description' => 'Ya existente',
+            'units_per_pallet' => 400,
+        ]);
+    }
+
+    public function test_cliente_no_puede_crear_articulo_rapido(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        [$client] = $this->makeReceiptContext();
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->postJson(route('goods-receipts.items.quick-create'), [
+                'client_id' => $client->id,
+                'sku' => 'QUICK-FORBIDDEN',
+                'description' => 'No deberia crearse',
+                'units_per_pallet' => 50,
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('items', ['sku' => 'QUICK-FORBIDDEN']);
+    }
+
+    public function test_crear_articulo_rapido_valida_datos_obligatorios(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->postJson(route('goods-receipts.items.quick-create'), [
+                'client_id' => $client->id,
+                'sku' => '',
+                'description' => '',
+                'units_per_pallet' => 0,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['sku', 'description', 'units_per_pallet']);
+    }
+
     public function test_valida_descripcion_si_articulo_no_existe(): void
     {
         $this->seed(RoleSeeder::class);

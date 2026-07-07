@@ -81,6 +81,8 @@ const escapeHtml = (value) => String(value ?? '')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 
+const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
 const formatNumber = new Intl.NumberFormat('es-ES');
 
 const parsePositiveInteger = (value, allowZero = false) => {
@@ -357,6 +359,10 @@ const createAutocomplete = (root, options = {}) => {
             setStatus(results.length > 0 ? '' : messages.noResults);
             renderResults();
             openPanel();
+
+            if (results.length === 0) {
+                options.onNoResults?.(query);
+            }
         } catch (error) {
             if (error.name === 'AbortError') {
                 return;
@@ -1191,8 +1197,42 @@ const setupGoodsReceiptLines = () => {
         const unitsField = row.querySelector('[data-line-units]');
         const locationField = row.querySelector('[data-line-location]');
         const quantityField = row.querySelector('[data-line-quantity]');
+        const pickerRoot = row.querySelector('[data-receipt-item-picker]');
+        const createWrapper = row.querySelector('[data-line-create-item]');
+        const createTrigger = row.querySelector('[data-line-create-item-trigger]');
+        const createFeedback = row.querySelector('[data-line-create-item-feedback]');
+        const createEndpoint = pickerRoot?.dataset.createItemEndpoint;
+        let lastSearchQuery = '';
 
-        createAutocomplete(row.querySelector('[data-receipt-item-picker]'), {
+        const setCreateFeedback = (message, type = 'default') => {
+            if (!createFeedback) {
+                return;
+            }
+
+            createFeedback.textContent = message;
+            createFeedback.classList.toggle('helper-text--error', type === 'error');
+            createFeedback.classList.toggle('helper-text--success', type === 'success');
+        };
+
+        const hideCreateItem = () => {
+            if (createWrapper) {
+                createWrapper.hidden = true;
+            }
+
+            setCreateFeedback('');
+        };
+
+        const showCreateItem = (query) => {
+            if (!createWrapper || (itemIdField?.value ?? '') !== '') {
+                return;
+            }
+
+            lastSearchQuery = query;
+            createWrapper.hidden = false;
+            setCreateFeedback('');
+        };
+
+        const autocomplete = createAutocomplete(pickerRoot, {
             buildParams: () => ({
                 client_id: clientSelect.value ?? '',
                 active_only: '1',
@@ -1225,6 +1265,7 @@ const setupGoodsReceiptLines = () => {
 
                 recalculateRow(row);
                 updateNewItemWarning(row);
+                hideCreateItem();
             },
             onInputChange: () => {
                 if (itemIdField) {
@@ -1233,6 +1274,7 @@ const setupGoodsReceiptLines = () => {
 
                 clearAutofilledFields(row);
                 updateNewItemWarning(row);
+                hideCreateItem();
             },
             onClear: () => {
                 if (itemIdField) {
@@ -1241,7 +1283,81 @@ const setupGoodsReceiptLines = () => {
 
                 clearAutofilledFields(row);
                 updateNewItemWarning(row);
+                hideCreateItem();
             },
+            onNoResults: (query) => showCreateItem(query),
+        });
+
+        createTrigger?.addEventListener('click', async () => {
+            if (!window.confirm('No existe un artículo con esta referencia. ¿Quieres crearlo para este cliente?')) {
+                return;
+            }
+
+            if (skuField && skuField.value.trim() === '') {
+                skuField.value = lastSearchQuery;
+            }
+
+            const clientId = clientSelect.value ?? '';
+            const sku = skuField?.value.trim() ?? '';
+            const description = descriptionField?.value.trim() ?? '';
+            const unitsPerPallet = Number.parseInt(unitsField?.value ?? '', 10);
+
+            if (!clientId) {
+                setCreateFeedback('Selecciona primero el cliente de la entrada.', 'error');
+                return;
+            }
+
+            if (sku === '' || description === '' || !Number.isFinite(unitsPerPallet) || unitsPerPallet <= 0) {
+                setCreateFeedback('Completa SKU, descripcion y uds/pallet para crear el articulo.', 'error');
+                descriptionField?.focus();
+                return;
+            }
+
+            if (!createEndpoint) {
+                return;
+            }
+
+            createTrigger.disabled = true;
+            setCreateFeedback('Creando articulo...');
+
+            try {
+                const response = await fetch(createEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': csrfToken(),
+                    },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        sku,
+                        description,
+                        units_per_pallet: unitsPerPallet,
+                    }),
+                });
+
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok || !payload.item) {
+                    setCreateFeedback(payload.message ?? 'No se pudo crear el articulo.', 'error');
+                    return;
+                }
+
+                const item = payload.item;
+
+                // Reuses the same selection path as picking a search result, so the
+                // newly created (or reused) article ends up populated and marked as
+                // selected in the line exactly like any other autocomplete match.
+                autocomplete?.setItem({
+                    ...item,
+                    label: item.label ?? `${item.sku} - ${item.description}`,
+                });
+            } catch (error) {
+                setCreateFeedback('Error al crear el articulo. Intentalo de nuevo.', 'error');
+            } finally {
+                createTrigger.disabled = false;
+            }
         });
 
         [quantityField, unitsField].forEach((field) => {

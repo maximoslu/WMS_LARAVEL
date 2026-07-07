@@ -19,11 +19,12 @@
                 data-endpoint="{{ $searchEndpoint }}"
                 data-min-chars="2"
                 data-empty-message="Escribe al menos 2 caracteres para buscar articulos."
-                data-no-results-message="Sin resultados"
+                data-no-results-message="Sin resultados. Crear articulo nuevo."
                 data-searching-message="Buscando..."
                 data-error-message="Error al buscar"
                 data-autocomplete-floating="fixed"
                 data-receipt-item-picker
+                data-create-item-endpoint="{{ route('goods-receipts.items.quick-create') }}"
             >
                 <div class="ajax-autocomplete-control">
                     <input type="hidden" name="lines[{{ $index }}][item_id]" value="{{ $row['item_id'] ?? '' }}" data-line-item-id>
@@ -46,6 +47,10 @@
             @error("lines.$index.item_id")
                 <small class="form-error">{{ $message }}</small>
             @enderror
+            <div class="goods-receipt-line-create-item" data-line-create-item hidden>
+                <button type="button" class="button-secondary compact-button btn-compact" data-line-create-item-trigger>Crear articulo nuevo</button>
+                <small class="helper-text" data-line-create-item-feedback></small>
+            </div>
         </label>
 
         <label class="auth-field goods-receipt-line-field">

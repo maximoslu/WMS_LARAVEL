@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ApplyGoodsReceiptAiProposalRequest;
 use App\Http\Requests\AttachGoodsReceiptDocumentRequest;
+use App\Http\Requests\QuickCreateGoodsReceiptItemRequest;
 use App\Http\Requests\StoreGoodsReceiptRequest;
 use App\Http\Requests\UpdateGoodsReceiptRequest;
 use App\Models\Client;
@@ -18,6 +19,7 @@ use App\Services\GoodsReceipts\GoodsReceiptDeletionService;
 use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Support\WmsNavigation;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -90,6 +92,43 @@ class GoodsReceiptController extends Controller
             'status' => GoodsReceipt::STATUS_DRAFT,
             'received_at' => today(),
         ])));
+    }
+
+    public function quickCreateItem(QuickCreateGoodsReceiptItemRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        try {
+            $result = $this->itemResolver->createOrReuseForQuickAdd(
+                (int) $validated['client_id'],
+                (string) $validated['sku'],
+                (string) $validated['description'],
+                (int) $validated['units_per_pallet'],
+            );
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => collect($exception->errors())->flatten()->first() ?? 'No se pudo crear el articulo.',
+            ], 422);
+        }
+
+        $item = $result['item'];
+
+        return response()->json([
+            'created' => $result['created'],
+            'message' => $result['created']
+                ? 'Articulo creado y seleccionado para esta linea.'
+                : 'Ya existia un articulo con este SKU para este cliente. Se ha seleccionado el existente.',
+            'item' => [
+                'id' => $item->id,
+                'sku' => $item->sku,
+                'description' => $item->description,
+                'units_per_pallet' => $item->units_per_pallet,
+                'default_location_id' => $item->default_location_id,
+                'client_id' => $item->client_id,
+                'status' => $item->status,
+                'label' => $item->sku.' - '.$item->description,
+            ],
+        ], $result['created'] ? 201 : 200);
     }
 
     public function store(StoreGoodsReceiptRequest $request): RedirectResponse

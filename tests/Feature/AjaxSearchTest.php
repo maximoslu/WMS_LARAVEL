@@ -63,6 +63,70 @@ class AjaxSearchTest extends TestCase
         $this->assertSame('PRUEBA-OK', $data[0]['sku']);
     }
 
+    public function test_items_endpoint_finds_matches_by_description_only(): void
+    {
+        [$client] = $this->seedClients();
+
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'REF-0001',
+            'description' => 'Bobina papel couche brillo',
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'REF-0002',
+            'description' => 'Etiqueta adhesiva blanca',
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $response = $this->actingAs($user)
+            ->getJson(route('ajax.items', ['q' => 'couche', 'client_id' => $client->id]));
+
+        $response->assertOk();
+        $data = $response->json('data');
+
+        $this->assertCount(1, $data);
+        $this->assertSame('REF-0001', $data[0]['sku']);
+    }
+
+    public function test_items_endpoint_scopes_internal_role_search_to_requested_client(): void
+    {
+        [$client, $otherClient] = $this->seedClients();
+
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SCOPE-A',
+            'description' => 'Articulo del cliente A',
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+
+        Item::factory()->create([
+            'client_id' => $otherClient->id,
+            'sku' => 'SCOPE-B',
+            'description' => 'Articulo del cliente B',
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $response = $this->actingAs($user)
+            ->getJson(route('ajax.items', ['q' => 'SCOPE', 'client_id' => $client->id]));
+
+        $response->assertOk();
+        $data = $response->json('data');
+
+        $this->assertCount(1, $data);
+        $this->assertSame('SCOPE-A', $data[0]['sku']);
+    }
+
     public function test_items_endpoint_limits_results(): void
     {
         [$client] = $this->seedClients();

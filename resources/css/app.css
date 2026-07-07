@@ -3723,6 +3723,14 @@ body.brand-body.app-shell-body .pagination-card {
     min-width: 0;
 }
 
+.goods-receipt-line-create-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .goods-receipt-line-warning {
     margin: 0;
     padding: 0.8rem 0.9rem;

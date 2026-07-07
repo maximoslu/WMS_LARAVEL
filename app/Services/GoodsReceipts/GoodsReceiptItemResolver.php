@@ -65,6 +65,51 @@ class GoodsReceiptItemResolver
         return $this->findOrCreate((int) $receipt->client_id, $sku, $description, $unitsPerPallet);
     }
 
+    /**
+     * @return array{item: Item, created: bool}
+     */
+    public function createOrReuseForQuickAdd(int $clientId, string $sku, string $description, int $unitsPerPallet): array
+    {
+        $normalizedSku = $this->normalizeNullableUpper($sku);
+
+        if ($normalizedSku === null) {
+            throw ValidationException::withMessages([
+                'sku' => 'El SKU es obligatorio para crear el articulo.',
+            ]);
+        }
+
+        $existingItem = Item::query()
+            ->where('client_id', $clientId)
+            ->where('sku', $normalizedSku)
+            ->first();
+
+        if ($existingItem instanceof Item) {
+            return ['item' => $existingItem, 'created' => false];
+        }
+
+        $normalizedDescription = $this->normalizeNullableText($description);
+
+        if ($normalizedDescription === null || $unitsPerPallet <= 0) {
+            throw ValidationException::withMessages([
+                'description' => 'Descripcion y uds/pallet son obligatorias para crear un articulo nuevo.',
+            ]);
+        }
+
+        $item = Item::query()->create([
+            'client_id' => $clientId,
+            'sku' => $normalizedSku,
+            'description' => $normalizedDescription,
+            'units_per_pallet' => $unitsPerPallet,
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+            'lot' => null,
+            'lot_key' => '',
+            'default_location_id' => null,
+        ]);
+
+        return ['item' => $item, 'created' => true];
+    }
+
     private function findOrCreate(int $clientId, string $sku, ?string $description, int $unitsPerPallet): Item
     {
         $existingItem = Item::query()

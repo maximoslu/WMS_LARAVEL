@@ -930,3 +930,75 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
 - `php artisan queue:restart`
+
+---
+
+## 2026-07-07 - Autocompletado AJAX y creacion rapida de articulos en lineas manuales de entradas (20:29:34 +02:00)
+
+**Contexto:** El usuario reporto que, al anadir una linea manual en una entrada, el campo de articulo era "demasiado manual": no buscaba articulos existentes de forma dinamica ni ofrecia crear el articulo si no existia.
+
+**Commit previo de partida:**
+- `133c29d4 fix: allow superadmin to delete all goods receipts and restore receipt AI`
+
+**Diagnostico:** La busqueda AJAX de articulos ya existia (`ajax.items`, componente `createAutocomplete` en `resources/js/app.js`, ya usado en la linea de entrada via `data-receipt-item-picker`) y ya autorellenaba SKU/descripcion/uds-pallet/ubicacion al seleccionar un articulo existente. Lo que faltaba era la parte de creacion: cuando la busqueda no encontraba nada, solo aparecia un aviso de texto pasivo (se creaba el articulo en silencio al guardar la entrada), sin CTA explicito ni confirmacion, y sin que el articulo quedase "seleccionado" (con `item_id`) de forma inmediata.
+
+**Cambios principales realizados:**
+- `app/Services/GoodsReceipts/GoodsReceiptItemResolver.php`
+  - nuevo metodo publico `createOrReuseForQuickAdd()`: si el SKU ya existe para el cliente, devuelve el articulo existente (`created: false`); si no existe, lo crea con SKU/descripcion/uds-pallet (`created: true`)
+- `app/Http/Requests/QuickCreateGoodsReceiptItemRequest.php` (nuevo)
+  - autoriza solo a `almacen` o superior (`canAccessRole(Role::ALMACEN)`)
+  - valida `client_id`, `sku`, `description`, `units_per_pallet`
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - nueva accion `quickCreateItem()`: valida, resuelve via el resolver, devuelve JSON con el articulo (creado o reutilizado) y mensaje
+- `routes/web.php`
+  - nueva ruta `POST /entradas/articulos` -> `goods-receipts.items.quick-create`, protegida con `minimum.role:almacen`
+- `resources/views/layouts/dashboard.blade.php`
+  - anadido `<meta name="csrf-token">` (no existia; necesario para peticiones AJAX POST autenticadas)
+- `resources/views/goods-receipts/_line-row.blade.php`
+  - mensaje de "sin resultados" del picker cambiado a `Sin resultados. Crear articulo nuevo.`
+  - nuevo bloque `data-line-create-item` (oculto por defecto) con boton `Crear articulo nuevo` y una zona de feedback
+  - el picker expone el endpoint de creacion via `data-create-item-endpoint`
+- `resources/js/app.js`
+  - nuevo helper `csrfToken()`
+  - `createAutocomplete()` gana un hook `onNoResults(query)` que se dispara cuando una busqueda termina sin resultados
+  - `setupGoodsReceiptLines()` conecta el hook: al no haber resultados se muestra el boton `Crear articulo nuevo`; al pulsarlo se pide confirmacion con `confirm('No existe un articulo con esta referencia. ¿Quieres crearlo para este cliente?')`; si se confirma y SKU/descripcion/uds-pallet estan completos (los mismos campos ya visibles de la linea, sin duplicar formulario), se llama al endpoint AJAX; la respuesta reutiliza el mismo camino de seleccion (`autocomplete.setItem()`) que un resultado normal de busqueda, dejando el articulo nuevo (o el reutilizado si el SKU ya existia) seleccionado en la linea
+- `resources/css/app.css`
+  - estilo minimo `.goods-receipt-line-create-item` para el nuevo bloque
+
+**Reglas funcionales verificadas:**
+- La busqueda AJAX sigue filtrando por cliente de la entrada (reutiliza `ajax.items`, ya scoped por `client_id`)
+- Un articulo de un cliente no aparece en la busqueda de otro cliente
+- Guardar una linea (con articulo existente o recien creado) no aplica stock
+- Confirmar la entrada sigue siendo el unico punto que aplica stock, de forma idempotente
+- Si el SKU ya existe para el cliente, la creacion rapida devuelve el articulo existente y no crea duplicados
+- Todo el flujo funciona igual con la IA desactivada (la linea manual es independiente del flujo IA)
+
+**Cobertura y validacion real:**
+- `php artisan optimize:clear`: OK
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `82 passed` (440 assertions)
+- `php artisan test`: `395 passed` (1841 assertions)
+- `npm run build`: OK
+- Tests nuevos:
+  - `tests/Feature/AjaxSearchTest.php`: busqueda solo por descripcion, scope de cliente para roles internos con `client_id` explicito
+  - `tests/Feature/GoodsReceiptManagementTest.php`: creacion rapida por superadmin, por almacen, no duplica SKU existente, cliente no autorizado (403), validacion de datos obligatorios (422)
+
+**Verificacion visual real en navegador embebido:**
+- Login como superadmin de pruebas local, entrada borrador `UI-CHECK-001` (cliente `CLIENTE UI CODEX`, datos locales de verificacion, no productivos)
+- Buscar `VERIF` en el campo de articulo de una linea manual -> aparece `SKU-VERIF-CONFIRM` en el desplegable sin recargar pagina
+- Seleccionar el resultado -> SKU, descripcion y uds/pallet se autorellenan
+- Buscar una referencia inexistente (`REF-INEXISTENTE-001`) -> aparece `Sin resultados. Crear articulo nuevo.` y el boton correspondiente
+- Pulsar `Crear articulo nuevo` -> dialogo de confirmacion con el texto exacto pedido -> aceptar -> el articulo se crea via AJAX y queda seleccionado en la linea (verificado tambien por tinker en modo lectura: articulo creado con el `client_id` correcto)
+- Guardar la linea -> `Entrada actualizada correctamente.`, `Stock: Pendiente de confirmar` (verificado por tinker en modo lectura: `stock_applied_at` sigue `null`, cero `stock_pallets` para esa entrada)
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- No hubo migraciones nuevas
+- No se borraron datos manualmente desde BD (solo lecturas por tinker para verificar; la unica escritura de prueba fue via la propia aplicacion, en datos locales de verificacion ya existentes de sesiones anteriores)
+- No se uso `force push`
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now`
+- `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
+- `php artisan queue:restart`
