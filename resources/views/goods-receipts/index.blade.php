@@ -6,7 +6,7 @@
 @section('content')
     @php
         $canDeleteReceipts = auth()->user()?->canAccessRole(\App\Models\Role::SUPERADMIN) ?? false;
-        $deleteReceiptMessage = 'Vas a borrar esta entrada. Si el stock fue aplicado, se revertiran los movimientos asociados. Esta accion afecta a historicos y trazabilidad. ¿Confirmas?';
+        $deleteReceiptMessage = 'Vas a borrar esta entrada. Si tiene stock aplicado, se revertirá el stock asociado. Esta acción afecta a trazabilidad. ¿Confirmas?';
         $breadcrumbs = [
 
 

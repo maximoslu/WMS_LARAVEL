@@ -810,3 +810,59 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
 - `php artisan queue:restart`
+
+---
+
+## 2026-07-07 - Entradas realmente borrables y operativa manual visible (19:03:06 +02:00)
+
+**Contexto:** El trabajo anterior ya tenia la base funcional del borrado seguro, pero el usuario reporto que la UX seguia sin cumplir: el boton `Borrar` no destacaba lo suficiente, el detalle aun ocupaba demasiado alto y `Anadir linea manual` no se percibia como accion principal para trabajar sin IA.
+
+**Commit previo de partida:**
+- `4271575d fix: compact goods receipt workflow and add safe deletion`
+
+**Objetivo resuelto:**
+- Superadmin ve claramente `Borrar` en el listado de entradas.
+- El detalle de entrada en borrador muestra `Anadir linea manual` como accion visible y repetida.
+- El layout del detalle queda mas corto y operativo, con documento en una franja compacta y el bloque de lineas entrando en el primer pantallazo de escritorio.
+- No se ha seguido desarrollando la logica de IA; solo se ha compactado su presencia visual.
+
+**Cambios principales realizados:**
+- `resources/views/goods-receipts/index.blade.php`
+  - mensaje de confirmacion de borrado ajustado al texto funcional pedido por negocio
+- `resources/views/goods-receipts/show.blade.php`
+  - boton exacto `Anadir linea manual` en cabecera y en bloque de lineas
+  - cabecera aun mas compacta
+  - `Datos basicos` condensados
+  - documento movido a una sola franja compacta con `Ver/Descargar` o `Adjuntar/Cambiar archivo`
+  - mensaje `Sin lineas todavia.` visible antes del bloque editable cuando la entrada aun no tiene lineas guardadas
+- `resources/css/app.css`
+  - menos padding, menos gaps, menos sombra y menos altura en la operativa de entradas
+  - estilo mas visible para el boton `Borrar`
+  - estilo de accion protagonista para `Anadir linea manual`
+  - nueva franja compacta de documento
+- `tests/Feature/GoodsReceiptManagementTest.php`
+  - tests actualizados al texto y layout reales
+  - nueva cobertura para que `administracion` no vea `Borrar`
+  - nueva cobertura para que `administracion` y `cliente` tampoco puedan borrar por backend
+
+**Validacion funcional y visual real:**
+- `php artisan optimize:clear`: OK
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `69 passed` (339 assertions)
+- `php artisan test`: `380 passed` (1734 assertions)
+- `npm run build`: OK
+- Verificacion visual local en navegador embebido:
+  - listado `/entradas`: `Borrar` visible para superadmin
+  - detalle `/entradas/{id}` en borrador: `Anadir linea manual` visible
+  - detalle mas compacto con documento en franja y bloque de lineas entrando en el primer pantallazo desktop
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- No hubo migraciones nuevas
+- No se trabajo la logica de IA, solo su presencia residual como estado pequeno dentro del flujo manual
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now`
+- `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
+- `php artisan queue:restart`

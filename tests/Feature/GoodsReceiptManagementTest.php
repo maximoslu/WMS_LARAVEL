@@ -194,8 +194,8 @@ class GoodsReceiptManagementTest extends TestCase
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
             ->assertSee('IA desactivada')
-            ->assertSee('Datos de entrada')
-            ->assertSee('Anadir linea')
+            ->assertSee('Datos básicos')
+            ->assertSee('Añadir línea manual')
             ->assertSee('Guardar')
             ->assertSee('data-goods-receipt-form', false)
             ->assertSee('El stock no se aplica hasta confirmar entrada.');
@@ -212,7 +212,10 @@ class GoodsReceiptManagementTest extends TestCase
             ->get(route('goods-receipts.index'))
             ->assertOk()
             ->assertSee('goods-receipt-delete-button', false)
-            ->assertSee('Vas a borrar esta entrada. Si el stock fue aplicado, se revertiran los movimientos asociados. Esta accion afecta a historicos y trazabilidad. ¿Confirmas?');
+            ->assertSee('Si tiene stock aplicado')
+            ->assertSee('se revertirá el stock asociado')
+            ->assertSee('Esta acción afecta a trazabilidad')
+            ->assertSee('¿Confirmas?');
     }
 
     public function test_almacen_no_ve_boton_borrar_entrada_en_listado(): void
@@ -224,6 +227,20 @@ class GoodsReceiptManagementTest extends TestCase
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->actingAs($almacen)
+            ->get(route('goods-receipts.index'))
+            ->assertOk()
+            ->assertDontSee('goods-receipt-delete-button', false);
+    }
+
+    public function test_administracion_no_ve_boton_borrar_entrada_en_listado(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $this->createDraftReceipt($superadmin);
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
             ->get(route('goods-receipts.index'))
             ->assertOk()
             ->assertDontSee('goods-receipt-delete-button', false);
@@ -1502,6 +1519,32 @@ class GoodsReceiptManagementTest extends TestCase
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->actingAs($almacen)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertForbidden();
+    }
+
+    public function test_administracion_no_puede_borrar_entradas(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $receipt = $this->createDraftReceipt($superadmin);
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertForbidden();
+    }
+
+    public function test_cliente_no_puede_borrar_entradas(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $receipt = $this->createDraftReceipt($superadmin);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($cliente)
             ->delete(route('goods-receipts.destroy', $receipt))
             ->assertForbidden();
     }

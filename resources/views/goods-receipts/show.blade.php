@@ -45,6 +45,8 @@
         $stockStatusLabel = $receipt->hasStockApplied() ? 'Stock aplicado' : 'Pendiente de confirmar';
         $stockStatusTone = $receipt->hasStockApplied() ? 'confirmed' : 'pending';
         $lineCount = count($lineValues);
+        $hasPersistedLines = $receipt->lines->isNotEmpty();
+        $visibleLineCount = $hasPersistedLines ? $receipt->lines->count() : 0;
         $matchedSupplierId = data_get($receipt->ai_extracted_data, 'matched_supplier_id');
         $detectedSupplierName = data_get($receipt->ai_extracted_data, 'supplier_name');
     @endphp
@@ -69,25 +71,7 @@
         <div class="ops-page-actions page-actions-compact action-buttons goods-receipt-header-actions">
             @if ($isEditable)
                 <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-compact">Editar</a>
-            @endif
-
-            @if ($hasDocument)
-                <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer" class="button-secondary compact-button btn-compact">
-                    Descargar PDF
-                </a>
-            @endif
-
-            @if ($canTriggerAi)
-                <form method="POST" action="{{ route('goods-receipts.ai-extract', $receipt) }}">
-                    @csrf
-                    <button type="submit" class="button-secondary compact-button btn-compact">
-                        {{ $receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED ? 'Reintentar IA' : 'Interpretar IA' }}
-                    </button>
-                </form>
-            @endif
-
-            @if ($isEditable)
-                <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea</button>
+                <button type="button" class="button-primary compact-button btn-compact goods-receipt-manual-action" data-add-line>Añadir línea manual</button>
                 <button type="submit" form="goods-receipt-update-form" class="button-primary compact-button btn-compact">Guardar</button>
 
                 <form method="POST" action="{{ route('goods-receipts.confirm', $receipt) }}">
@@ -102,6 +86,15 @@
                     @csrf
                     @method('PATCH')
                     <button type="submit" class="button-secondary compact-button btn-compact">Cancelar</button>
+                </form>
+            @endif
+
+            @if ($canTriggerAi)
+                <form method="POST" action="{{ route('goods-receipts.ai-extract', $receipt) }}">
+                    @csrf
+                    <button type="submit" class="button-secondary compact-button btn-compact goods-receipt-ai-action">
+                        {{ $receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED ? 'Reintentar IA' : 'Interpretar IA' }}
+                    </button>
                 </form>
             @endif
         </div>
@@ -135,13 +128,12 @@
 
             <div class="goods-receipt-workbench-head">
                 <div>
-                    <strong>Datos de entrada</strong>
-                    <span class="ops-page-meta">Todo el trabajo manual queda en esta pantalla. El stock solo se aplica al confirmar.</span>
+                    <strong>Datos básicos</strong>
                 </div>
                 <span class="goods-receipt-ai-status goods-receipt-ai-status--{{ $aiStatusTone }}">{{ $aiStatusLabel }}</span>
             </div>
 
-            <div class="goods-receipt-compact-grid">
+            <div class="goods-receipt-compact-grid goods-receipt-compact-grid--dense">
                 <div class="goods-receipt-readonly-field">
                     <span>Cliente</span>
                     <strong>{{ $receipt->client->name }}</strong>
@@ -186,39 +178,49 @@
                     @enderror
                 </label>
 
-                <div class="goods-receipt-readonly-field goods-receipt-readonly-field--wide">
-                    <span>Documento e IA</span>
-                    <strong>{{ $receipt->document_original_name ?: 'Sin documento adjunto' }}</strong>
-                    <small>{{ $aiStatusMessage }}</small>
+                <div class="goods-receipt-readonly-field">
+                    <span>Stock</span>
+                    <strong>{{ $stockStatusLabel }}</strong>
                 </div>
-
-                <label class="auth-field goods-receipt-document-field">
-                    <span>Archivo</span>
-                    <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                    @error('document')
-                        <small class="form-error">{{ $message }}</small>
-                    @enderror
-                    <small class="helper-text">Puedes sustituir el documento sin perder la entrada.</small>
-                </label>
 
                 <label class="auth-field goods-receipt-notes-field">
                     <span>Notas</span>
-                    <textarea name="notes" rows="2" class="auth-input">{{ old('notes', $receipt->notes) }}</textarea>
+                    <textarea name="notes" rows="1" class="auth-input">{{ old('notes', $receipt->notes) }}</textarea>
                     @error('notes')
                         <small class="form-error">{{ $message }}</small>
                     @enderror
                 </label>
             </div>
 
+            <div class="goods-receipt-document-strip">
+                <div class="goods-receipt-document-strip-copy">
+                    <span>Documento</span>
+                    <strong>{{ $receipt->document_original_name ?: 'Sin documento adjunto' }}</strong>
+                    <small>{{ $aiStatusMessage }}</small>
+                </div>
+
+                <div class="goods-receipt-document-strip-actions">
+                    @if ($hasDocument)
+                        <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer" class="button-secondary compact-button btn-compact">
+                            Ver/Descargar
+                        </a>
+                    @endif
+
+                    <label class="button-secondary compact-button btn-compact goods-receipt-file-trigger">
+                        {{ $hasDocument ? 'Cambiar archivo' : 'Adjuntar archivo' }}
+                        <input type="file" name="document" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                    </label>
+                </div>
+            </div>
+
+            @error('document')
+                <small class="form-error goods-receipt-document-error">{{ $message }}</small>
+            @enderror
+
             <div class="goods-receipt-inline-state goods-receipt-inline-state--workbench">
                 <span>El stock no se aplica hasta confirmar entrada.</span>
                 @if ($receipt->document_processed_at)
                     <span>Ultima lectura IA: {{ $receipt->document_processed_at->format('d/m/Y H:i') }}</span>
-                @endif
-                @if ($hasDocument)
-                    <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer" class="goods-receipt-inline-link">
-                        Ver documento adjunto
-                    </a>
                 @endif
             </div>
 
@@ -237,10 +239,17 @@
                     </div>
 
                     <div class="goods-receipt-lines-tools-meta">
-                        <span>{{ $lineCount }} {{ \Illuminate\Support\Str::plural('linea', $lineCount) }}</span>
-                        <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea</button>
+                        <span>{{ $visibleLineCount }} {{ \Illuminate\Support\Str::plural('linea', $visibleLineCount) }}</span>
+                        <button type="button" class="button-primary compact-button btn-compact goods-receipt-manual-action" data-add-line>Añadir línea manual</button>
                     </div>
                 </div>
+
+                @if (! $hasPersistedLines)
+                    <div class="goods-receipt-empty-lines">
+                        <span>Sin líneas todavía.</span>
+                        <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Añadir línea manual</button>
+                    </div>
+                @endif
 
                 <div class="goods-receipt-line-list" data-receipt-lines aria-label="Lineas de entrada">
                     @foreach ($lineValues as $index => $line)
