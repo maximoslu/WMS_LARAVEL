@@ -43,6 +43,9 @@
                 @if (filled($proposal['supplier_name'] ?? null))
                     <small class="helper-text">Detectado por IA: {{ $proposal['supplier_name'] }}</small>
                 @endif
+                @if (filled($proposal['supplier_name'] ?? null) && blank($selectedSupplierId))
+                    <small class="helper-text">No hay coincidencia automatica. <a href="{{ route('suppliers.create') }}">Crear proveedor</a>.</small>
+                @endif
             </label>
 
             <label class="auth-field">

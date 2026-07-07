@@ -746,3 +746,67 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
 - `php artisan queue:restart`
+---
+
+## 2026-07-07 - Flujo compacto final, borrado seguro y mensajes IA mas claros (18:46:08 +02:00)
+
+**Contexto:** Se remata el flujo de entradas de mercancia para que almacen pueda trabajar con menos scroll, la IA no deje mensajes ambiguos y superadmin pueda borrar entradas de forma segura incluso si el stock ya se aplico.
+
+**Commit previo de partida:**
+- `38976d56 fix: simplify goods receipt AI fallback workflow`
+
+**Objetivo resuelto:**
+- La pantalla de detalle de entrada queda mas compacta y operativa.
+- Superadmin ya puede borrar entradas con confirmacion fuerte y reversa controlada de stock.
+- El flujo IA informa mejor cuando hay documento guardado, cuando falla y cuando el modelo/documento no es compatible.
+
+**Cambios funcionales principales:**
+- `app/Services/GoodsReceipts/GoodsReceiptDeletionService.php`
+  - nuevo servicio para borrar entradas dentro de transaccion
+  - si la entrada aplico stock, revierte cantidades por lote/ubicacion/articulo antes de borrar
+  - bloquea el borrado con `ValidationException` si la reversa dejaria inconsistencia o stock insuficiente
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - nueva accion `destroy()` para borrado seguro
+  - mantiene mensajes mas claros en detalle y flujo IA
+- `routes/web.php`
+  - nueva ruta `goods-receipts.destroy` solo para `superadmin`
+- `resources/views/goods-receipts/index.blade.php`
+  - boton de borrar solo visible para superadmin con confirmacion fuerte
+- `resources/views/goods-receipts/show.blade.php`
+  - toolbar y bloque de trabajo aun mas compactos
+  - mensajes nuevos: `Documento guardado...`, `No se pudo interpretar el documento...`, bloque persistente `Error IA`
+- `app/Services/GoodsReceipts/OpenAiGoodsReceiptExtractor.php`
+  - mejor manejo de errores del modelo para PDF/documento visual no compatible
+  - prompt ajustado para priorizar nombre de proveedor mas reconocible por almacen
+- `app/Services/GoodsReceipts/GoodsReceiptAiExtractionService.php`
+  - matching de proveedor mas tolerante por nombre normalizado y coincidencia parcial
+- `resources/views/goods-receipts/_ai-proposal-panel.blade.php`
+  - ayuda rapida para crear proveedor si la IA detecta uno sin coincidencia automatica
+- `tests/Feature/GoodsReceiptManagementTest.php`
+  - cobertura nueva de borrado seguro y de los mensajes/CTAs reales del flujo compacto
+
+**Notas tecnicas importantes para el siguiente relevo:**
+- La IA de entradas ya usa el fichero real en multimodal (`input_file` para PDF, `input_image` para imagenes); no depende solo de texto extraido.
+- No se han anadido migraciones nuevas.
+- `.claude/` sigue fuera del control de versiones.
+
+**Cobertura y validacion real:**
+- `php artisan optimize:clear`: OK
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `66 passed` (332 assertions)
+- `php artisan test`: `377 passed` (1727 assertions)
+- `npm run build`: OK
+
+**Migraciones:**
+- No hubo migraciones nuevas
+- No fue necesario ejecutar `php artisan migrate`
+
+**Control de alcance:**
+- No se toco `.env`
+- No se tocaron Google Calendar, facturacion ni importaciones Friesland/Edelvives
+- No se tocaron datos productivos ni se uso `migrate:fresh`
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now`
+- `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
+- `php artisan queue:restart`

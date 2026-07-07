@@ -14,6 +14,7 @@ use App\Models\Location;
 use App\Models\Supplier;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractionService;
 use App\Services\GoodsReceipts\GoodsReceiptConfirmationService;
+use App\Services\GoodsReceipts\GoodsReceiptDeletionService;
 use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Support\WmsNavigation;
@@ -30,6 +31,7 @@ class GoodsReceiptController extends Controller
 {
     public function __construct(
         private readonly GoodsReceiptConfirmationService $confirmationService,
+        private readonly GoodsReceiptDeletionService $deletionService,
         private readonly GoodsReceiptItemResolver $itemResolver,
         private readonly GoodsReceiptAiExtractionService $aiExtractionService,
         private readonly GoodsReceiptDocumentStorage $documentStorage,
@@ -268,6 +270,21 @@ class GoodsReceiptController extends Controller
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)
             ->with('status', 'Documento adjuntado correctamente.');
+    }
+
+    public function destroy(GoodsReceipt $goodsReceipt, Request $request): RedirectResponse
+    {
+        try {
+            $this->deletionService->delete($goodsReceipt, $request->user());
+        } catch (ValidationException $exception) {
+            return redirect()
+                ->route('goods-receipts.index')
+                ->withErrors($exception->errors());
+        }
+
+        return redirect()
+            ->route('goods-receipts.index')
+            ->with('status', 'Entrada borrada correctamente.');
     }
 
     public function extractAi(GoodsReceipt $goodsReceipt): RedirectResponse

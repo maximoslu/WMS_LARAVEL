@@ -67,7 +67,26 @@ class OpenAiGoodsReceiptExtractor implements GoodsReceiptAiExtractorInterface
                 ],
             ]);
 
-        $response->throw();
+        if ($response->failed()) {
+            $errorMessage = (string) data_get($response->json(), 'error.message', '');
+            $normalizedMessage = mb_strtolower($errorMessage);
+
+            if (
+                str_contains($normalizedMessage, 'vision')
+                || str_contains($normalizedMessage, 'pdf')
+                || str_contains($normalizedMessage, 'image')
+                || str_contains($normalizedMessage, 'input_file')
+                || str_contains($normalizedMessage, 'input_image')
+            ) {
+                throw new RuntimeException('Modelo IA no compatible con documento visual o PDF escaneado.');
+            }
+
+            if ($errorMessage !== '') {
+                throw new RuntimeException($errorMessage);
+            }
+
+            $response->throw();
+        }
 
         $payload = $response->json();
         $status = (string) ($payload['status'] ?? '');
@@ -132,6 +151,7 @@ Eres un asistente de recepcion WMS especializado en interpretar albaranes y docu
 
 Debes devolver solo una propuesta estructurada para revision humana:
 - Nunca inventes datos si el documento no los muestra con claridad.
+- Prioriza marca visible, logo, remitente, emisor y proveedor legal cuando aparezcan en el documento.
 - Si no puedes detectar un valor, usa null, 0 o lista de avisos.
 - SKU y descripcion son datos de articulo.
 - El lote es trazabilidad operativa de la entrada y no debe tratarse como maestro del articulo.
@@ -141,6 +161,7 @@ Debes devolver solo una propuesta estructurada para revision humana:
 - confidence debe ir de 0 a 1.
 - warnings debe recoger dudas, incoherencias o faltas de informacion.
 - Si hay varias lineas, devuelve una por referencia o producto claramente distinguible.
+- En supplier_name, devuelve el nombre comercial o legal mas reconocible para que un usuario de almacen pueda localizar el proveedor facilmente.
 TEXT;
     }
 

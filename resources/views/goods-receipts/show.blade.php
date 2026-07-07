@@ -15,6 +15,7 @@
         $isEditable = ! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED;
         $hasDocument = filled($receipt->document_path);
         $canTriggerAi = $hasDocument && $aiEnabled && $isEditable;
+        $canCreateSuppliers = auth()->user()?->canAccessRole(\App\Models\Role::ALMACEN) ?? false;
         $aiStatus = $receipt->ai_status ?: \App\Models\GoodsReceipt::AI_STATUS_PENDING;
         $aiStatusTone = match (true) {
             ! $hasDocument => 'idle',
@@ -31,45 +32,45 @@
             $aiStatus === \App\Models\GoodsReceipt::AI_STATUS_PROCESSING => 'Interpretando',
             $aiStatus === \App\Models\GoodsReceipt::AI_STATUS_COMPLETED => 'Propuesta lista',
             $aiStatus === \App\Models\GoodsReceipt::AI_STATUS_REVIEWED => 'Lineas aplicadas',
-            $aiStatus === \App\Models\GoodsReceipt::AI_STATUS_FAILED => 'Error IA',
+            $aiStatus === \App\Models\GoodsReceipt::AI_STATUS_FAILED => 'IA fallida',
             default => 'IA sin ejecutar',
+        };
+        $aiStatusMessage = match (true) {
+            ! $aiEnabled => 'IA desactivada. Puedes introducir lineas manualmente.',
+            $receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED => 'No se pudo interpretar el documento. Revisa el error o introduce lineas manualmente.',
+            $hasDocument && $receipt->document_processed_at !== null => 'La propuesta IA ya esta lista para revisar y aplicar.',
+            $hasDocument => 'Documento guardado. Puedes interpretar o introducir lineas manualmente.',
+            default => 'Adjunta un documento si quieres probar la interpretacion IA.',
         };
         $stockStatusLabel = $receipt->hasStockApplied() ? 'Stock aplicado' : 'Pendiente de confirmar';
         $stockStatusTone = $receipt->hasStockApplied() ? 'confirmed' : 'pending';
         $lineCount = count($lineValues);
+        $matchedSupplierId = data_get($receipt->ai_extracted_data, 'matched_supplier_id');
+        $detectedSupplierName = data_get($receipt->ai_extracted_data, 'supplier_name');
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
 
-    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card goods-receipt-header-card goods-receipt-ops-band">
-        <div class="goods-receipt-ops-grid">
-            <article class="goods-receipt-ops-chip goods-receipt-ops-chip--wide">
-                <span>Entrada</span>
-                <strong>{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</strong>
-                <small>{{ $receipt->statusLabel() }}</small>
-            </article>
-            <article class="goods-receipt-ops-chip">
-                <span>Cliente</span>
-                <strong>{{ $receipt->client->name }}</strong>
-            </article>
-            <article class="goods-receipt-ops-chip">
-                <span>Proveedor</span>
-                <strong>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</strong>
-            </article>
-            <article class="goods-receipt-ops-chip">
-                <span>Fecha</span>
-                <strong>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</strong>
-            </article>
-            <article class="goods-receipt-ops-chip">
-                <span>Estado IA</span>
-                <strong>{{ $aiStatusLabel }}</strong>
-            </article>
-            <article class="goods-receipt-ops-chip goods-receipt-ops-chip--{{ $stockStatusTone }}">
-                <span>Stock</span>
-                <strong>{{ $stockStatusLabel }}</strong>
-            </article>
+    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card goods-receipt-header-card goods-receipt-toolbar">
+        <div class="goods-receipt-toolbar-main">
+            <div class="goods-receipt-toolbar-title">
+                <h2 class="ops-page-title page-title-compact">{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</h2>
+                <span class="receipt-status-pill receipt-status-pill--{{ $receipt->status }}">{{ $receipt->statusLabel() }}</span>
+            </div>
+
+            <div class="goods-receipt-toolbar-meta">
+                <span><strong>Cliente:</strong> {{ $receipt->client->name }}</span>
+                <span><strong>Proveedor:</strong> {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
+                <span><strong>Fecha:</strong> {{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</span>
+                <span><strong>IA:</strong> {{ $aiStatusLabel }}</span>
+                <span><strong>Stock:</strong> {{ $stockStatusLabel }}</span>
+            </div>
         </div>
 
         <div class="ops-page-actions page-actions-compact action-buttons goods-receipt-header-actions">
+            @if ($isEditable)
+                <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-compact">Editar</a>
+            @endif
+
             @if ($hasDocument)
                 <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer" class="button-secondary compact-button btn-compact">
                     Descargar PDF
@@ -80,13 +81,13 @@
                 <form method="POST" action="{{ route('goods-receipts.ai-extract', $receipt) }}">
                     @csrf
                     <button type="submit" class="button-secondary compact-button btn-compact">
-                        {{ $receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED ? 'Reintentar IA' : 'Interpretar con IA' }}
+                        {{ $receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED ? 'Reintentar IA' : 'Interpretar IA' }}
                     </button>
                 </form>
             @endif
 
             @if ($isEditable)
-                <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea manual</button>
+                <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea</button>
                 <button type="submit" form="goods-receipt-update-form" class="button-primary compact-button btn-compact">Guardar</button>
 
                 <form method="POST" action="{{ route('goods-receipts.confirm', $receipt) }}">
@@ -118,217 +119,189 @@
         </div>
     @endif
 
-    @if ($hasDocument || $isEditable)
-        <section class="surface-card compact-card goods-receipt-ai-callout goods-receipt-ai-callout--compact">
-            <div class="goods-receipt-ai-callout-head">
-                <div class="app-copy">
-                    <strong>{{ $receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED ? 'No se pudo interpretar el documento' : ($hasDocument ? 'Documento guardado' : 'Entrada lista para completar') }}</strong>
-                    <p class="goods-receipt-ai-callout-copy">
-                        @if ($receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED)
-                            La entrada y el documento siguen guardados. Puedes reintentar la IA o continuar cargando lineas manualmente.
-                        @elseif ($hasDocument)
-                            Puedes interpretarlo con IA o anadir lineas manualmente desde esta misma pantalla.
-                        @else
-                            Puedes completar proveedor, fecha y lineas manualmente. Si adjuntas un documento, tambien podras pedir una propuesta IA.
-                        @endif
-                    </p>
+    @if ($isEditable)
+        <form
+            id="goods-receipt-update-form"
+            method="POST"
+            action="{{ route('goods-receipts.update', $receipt) }}"
+            enctype="multipart/form-data"
+            class="surface-card compact-card goods-receipt-workbench"
+            data-goods-receipt-form
+        >
+            @csrf
+            @method('PUT')
+
+            <input type="hidden" name="client_id" value="{{ old('client_id', $receipt->client_id) }}" data-receipt-client>
+
+            <div class="goods-receipt-workbench-head">
+                <div>
+                    <strong>Datos de entrada</strong>
+                    <span class="ops-page-meta">Todo el trabajo manual queda en esta pantalla. El stock solo se aplica al confirmar.</span>
                 </div>
                 <span class="goods-receipt-ai-status goods-receipt-ai-status--{{ $aiStatusTone }}">{{ $aiStatusLabel }}</span>
             </div>
 
-            <div class="goods-receipt-inline-state">
-                <span>El stock no se aplicara hasta confirmar la entrada.</span>
-                @if (! $aiEnabled)
-                    <span>La IA esta desactivada en esta configuracion.</span>
-                @elseif ($receipt->document_processed_at)
+            <div class="goods-receipt-compact-grid">
+                <div class="goods-receipt-readonly-field">
+                    <span>Cliente</span>
+                    <strong>{{ $receipt->client->name }}</strong>
+                </div>
+
+                <label class="auth-field">
+                    <span>Proveedor</span>
+                    <select name="supplier_id" class="auth-input">
+                        <option value="">Sin proveedor</option>
+                        @foreach ($suppliers as $supplier)
+                            <option value="{{ $supplier->id }}" @selected((string) old('supplier_id', $receipt->supplier_id) === (string) $supplier->id)>
+                                {{ $supplier->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('supplier_id')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                    @if (filled($detectedSupplierName))
+                        <small class="helper-text">Detectado por IA: {{ $detectedSupplierName }}</small>
+                    @endif
+                    @if (filled($detectedSupplierName) && blank($matchedSupplierId) && $canCreateSuppliers)
+                        <small class="helper-text">
+                            No hay coincidencia automatica. <a href="{{ route('suppliers.create') }}">Crear proveedor</a>.
+                        </small>
+                    @endif
+                </label>
+
+                <label class="auth-field">
+                    <span>Albaran</span>
+                    <input type="text" name="receipt_number" value="{{ old('receipt_number', $receipt->receipt_number) }}" class="auth-input" maxlength="150">
+                    @error('receipt_number')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                </label>
+
+                <label class="auth-field">
+                    <span>Fecha recepcion</span>
+                    <input type="date" name="received_at" value="{{ old('received_at', optional($receipt->received_at)->format('Y-m-d')) }}" class="auth-input">
+                    @error('received_at')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                </label>
+
+                <div class="goods-receipt-readonly-field goods-receipt-readonly-field--wide">
+                    <span>Documento e IA</span>
+                    <strong>{{ $receipt->document_original_name ?: 'Sin documento adjunto' }}</strong>
+                    <small>{{ $aiStatusMessage }}</small>
+                </div>
+
+                <label class="auth-field goods-receipt-document-field">
+                    <span>Archivo</span>
+                    <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                    @error('document')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                    <small class="helper-text">Puedes sustituir el documento sin perder la entrada.</small>
+                </label>
+
+                <label class="auth-field goods-receipt-notes-field">
+                    <span>Notas</span>
+                    <textarea name="notes" rows="2" class="auth-input">{{ old('notes', $receipt->notes) }}</textarea>
+                    @error('notes')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                </label>
+            </div>
+
+            <div class="goods-receipt-inline-state goods-receipt-inline-state--workbench">
+                <span>El stock no se aplica hasta confirmar entrada.</span>
+                @if ($receipt->document_processed_at)
                     <span>Ultima lectura IA: {{ $receipt->document_processed_at->format('d/m/Y H:i') }}</span>
-                @elseif ($hasDocument)
-                    <span>El documento ya esta disponible para revisar manualmente o reintentar.</span>
+                @endif
+                @if ($hasDocument)
+                    <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer" class="goods-receipt-inline-link">
+                        Ver documento adjunto
+                    </a>
+                @endif
+            </div>
+
+            @if ($receipt->ai_status === \App\Models\GoodsReceipt::AI_STATUS_FAILED && filled($receipt->ai_error))
+                <div class="alert alert-error">
+                    <strong>Error IA</strong>
+                    <div>{{ $receipt->ai_error }}</div>
+                </div>
+            @endif
+
+            <section class="goods-receipt-lines-card goods-receipt-lines-card--workbench">
+                <div class="goods-receipt-lines-tools goods-receipt-lines-tools--tight">
+                    <div class="app-copy">
+                        <strong>Lineas de entrada</strong>
+                        <p>SKU, descripcion, lote, cantidades y ubicacion. Si el SKU no existe, se creara al guardar.</p>
+                    </div>
+
+                    <div class="goods-receipt-lines-tools-meta">
+                        <span>{{ $lineCount }} {{ \Illuminate\Support\Str::plural('linea', $lineCount) }}</span>
+                        <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea</button>
+                    </div>
+                </div>
+
+                <div class="goods-receipt-line-list" data-receipt-lines aria-label="Lineas de entrada">
+                    @foreach ($lineValues as $index => $line)
+                        @include('goods-receipts._line-row', ['index' => $index, 'line' => $line])
+                    @endforeach
+                </div>
+
+                <template data-line-template>
+                    @include('goods-receipts._line-row', ['index' => '__INDEX__', 'line' => null])
+                </template>
+            </section>
+        </form>
+    @else
+        <section class="surface-card compact-card goods-receipt-workbench goods-receipt-workbench--readonly">
+            <div class="goods-receipt-workbench-head">
+                <div>
+                    <strong>Datos de entrada</strong>
+                    <span class="ops-page-meta">Entrada cerrada para edicion</span>
+                </div>
+                <span class="goods-receipt-ai-status goods-receipt-ai-status--{{ $aiStatusTone }}">{{ $aiStatusLabel }}</span>
+            </div>
+
+            <div class="goods-receipt-compact-grid goods-receipt-compact-grid--readonly">
+                <div class="goods-receipt-readonly-field">
+                    <span>Cliente</span>
+                    <strong>{{ $receipt->client->name }}</strong>
+                </div>
+                <div class="goods-receipt-readonly-field">
+                    <span>Proveedor</span>
+                    <strong>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</strong>
+                </div>
+                <div class="goods-receipt-readonly-field">
+                    <span>Albaran</span>
+                    <strong>{{ $receipt->receipt_number ?: '-' }}</strong>
+                </div>
+                <div class="goods-receipt-readonly-field">
+                    <span>Fecha recepcion</span>
+                    <strong>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</strong>
+                </div>
+                <div class="goods-receipt-readonly-field goods-receipt-readonly-field--wide">
+                    <span>Documento</span>
+                    <strong>{{ $receipt->document_original_name ?: 'Sin documento adjunto' }}</strong>
+                    @if ($hasDocument)
+                        <small><a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer">Descargar documento</a></small>
+                    @endif
+                </div>
+                <div class="goods-receipt-readonly-field goods-receipt-readonly-field--wide">
+                    <span>Notas</span>
+                    <strong>{{ $receipt->notes ?: 'Sin notas operativas.' }}</strong>
+                </div>
+            </div>
+
+            <div class="goods-receipt-inline-state goods-receipt-inline-state--workbench">
+                <span>{{ $stockStatusLabel }}</span>
+                @if ($receipt->stock_applied_at)
+                    <span>Stock aplicado el {{ $receipt->stock_applied_at->format('d/m/Y H:i') }}</span>
                 @endif
             </div>
         </section>
-    @endif
 
-    <section class="goods-receipt-detail-grid{{ $isEditable ? '' : ' goods-receipt-detail-grid--readonly' }}">
-        <article class="surface-card compact-card goods-receipt-card goods-receipt-card--document">
-            <div class="ops-index-heading">
-                <div>
-                    <strong>Documento y estado</strong>
-                    <span class="ops-page-meta">Storage privado con descarga protegida</span>
-                </div>
-                <span class="goods-receipt-ai-status goods-receipt-ai-status--{{ $aiStatusTone }}">{{ $aiStatusLabel }}</span>
-            </div>
-
-            <div class="goods-receipt-state-list">
-                <div class="goods-receipt-state-item">
-                    <span>Creada por</span>
-                    <strong>{{ $receipt->creator?->name ?: 'Usuario no disponible' }}</strong>
-                </div>
-                <div class="goods-receipt-state-item">
-                    <span>Confirmada por</span>
-                    <strong>{{ $receipt->confirmer?->name ?: 'Pendiente' }}</strong>
-                </div>
-                <div class="goods-receipt-state-item">
-                    <span>Stock aplicado</span>
-                    <strong>{{ $receipt->stock_applied_at?->format('d/m/Y H:i') ?: 'Pendiente' }}</strong>
-                </div>
-            </div>
-
-            @if ($hasDocument)
-                <div class="goods-receipt-document-link">
-                    <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer">
-                        {{ $receipt->document_original_name ?: 'Abrir documento adjunto' }}
-                    </a>
-                </div>
-            @else
-                <p class="goods-receipt-ai-inline-note">Todavia no hay documento adjunto para esta entrada.</p>
-            @endif
-
-            @if ($isEditable)
-                <form method="POST" action="{{ route('goods-receipts.attach-document', $receipt) }}" enctype="multipart/form-data" class="goods-receipt-document-form">
-                    @csrf
-                    <label class="auth-field">
-                        <span>Documento del proveedor / albaran</span>
-                        <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                    </label>
-                    <small class="helper-text">Puedes adjuntar o sustituir el PDF o la foto del documento sin perder la entrada.</small>
-                    <div class="goods-receipt-document-actions action-buttons">
-                        <button type="submit" class="button-secondary compact-button btn-compact">Guardar documento</button>
-                    </div>
-                </form>
-            @endif
-
-            @if ($receipt->ai_error)
-                <div class="goods-receipt-ai-error">
-                    <strong>Error IA</strong>
-                    <p>{{ $receipt->ai_error }}</p>
-                </div>
-            @endif
-        </article>
-
-        @if ($isEditable)
-            <form
-                id="goods-receipt-update-form"
-                method="POST"
-                action="{{ route('goods-receipts.update', $receipt) }}"
-                class="surface-card compact-card goods-receipt-card goods-receipt-detail-form"
-                data-goods-receipt-form
-            >
-                @csrf
-                @method('PUT')
-
-                <input type="hidden" name="client_id" value="{{ old('client_id', $receipt->client_id) }}" data-receipt-client>
-
-                <div class="goods-receipt-editor-grid">
-                    <label class="auth-field">
-                        <span>Proveedor</span>
-                        <select name="supplier_id" class="auth-input">
-                            <option value="">Sin proveedor</option>
-                            @foreach ($suppliers as $supplier)
-                                <option value="{{ $supplier->id }}" @selected((string) old('supplier_id', $receipt->supplier_id) === (string) $supplier->id)>
-                                    {{ $supplier->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('supplier_id')
-                            <small class="form-error">{{ $message }}</small>
-                        @enderror
-                    </label>
-
-                    <label class="auth-field">
-                        <span>Numero de albaran</span>
-                        <input type="text" name="receipt_number" value="{{ old('receipt_number', $receipt->receipt_number) }}" class="auth-input" maxlength="150">
-                        @error('receipt_number')
-                            <small class="form-error">{{ $message }}</small>
-                        @enderror
-                    </label>
-
-                    <label class="auth-field">
-                        <span>Fecha recepcion</span>
-                        <input type="date" name="received_at" value="{{ old('received_at', optional($receipt->received_at)->format('Y-m-d')) }}" class="auth-input">
-                        @error('received_at')
-                            <small class="form-error">{{ $message }}</small>
-                        @enderror
-                    </label>
-
-                    <label class="auth-field goods-receipt-notes-field">
-                        <span>Notas</span>
-                        <textarea name="notes" rows="3" class="auth-input">{{ old('notes', $receipt->notes) }}</textarea>
-                        @error('notes')
-                            <small class="form-error">{{ $message }}</small>
-                        @enderror
-                    </label>
-                </div>
-
-                <section class="goods-receipt-lines-card goods-receipt-lines-card--detail">
-                    <div class="goods-receipt-lines-tools">
-                        <div class="app-copy">
-                            <strong>Lineas operativas</strong>
-                            <p>Completa SKU, cantidades, lote y ubicacion. Si el SKU no existe, se creara al guardar con sus uds/palet.</p>
-                        </div>
-
-                        <div class="goods-receipt-lines-tools-meta">
-                            <span>{{ $lineCount }} {{ \Illuminate\Support\Str::plural('linea', $lineCount) }}</span>
-                            <button type="button" class="button-secondary compact-button btn-compact" data-add-line>Anadir linea manual</button>
-                        </div>
-                    </div>
-
-                    <div class="goods-receipt-inline-state">
-                        <span>El stock no se aplicara hasta confirmar la entrada.</span>
-                        <span>Puedes guardar cabecera y lineas tantas veces como necesites antes de confirmar.</span>
-                    </div>
-
-                    <div class="goods-receipt-line-list" data-receipt-lines aria-label="Lineas de entrada">
-                        @foreach ($lineValues as $index => $line)
-                            @include('goods-receipts._line-row', ['index' => $index, 'line' => $line])
-                        @endforeach
-                    </div>
-
-                    <template data-line-template>
-                        @include('goods-receipts._line-row', ['index' => '__INDEX__', 'line' => null])
-                    </template>
-                </section>
-            </form>
-        @else
-            <article class="surface-card compact-card goods-receipt-card goods-receipt-card--header">
-                <div class="ops-index-heading">
-                    <strong>Cabecera</strong>
-                    <span class="ops-page-meta">Entrada cerrada para edicion</span>
-                </div>
-
-                <dl class="goods-receipt-meta">
-                    <div>
-                        <dt>Albaran</dt>
-                        <dd>{{ $receipt->receipt_number ?: '-' }}</dd>
-                    </div>
-                    <div>
-                        <dt>Proveedor</dt>
-                        <dd>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</dd>
-                    </div>
-                    <div>
-                        <dt>Fecha recepcion</dt>
-                        <dd>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</dd>
-                    </div>
-                    <div>
-                        <dt>Confirmada el</dt>
-                        <dd>{{ optional($receipt->confirmed_at)->format('d/m/Y H:i') ?: 'Pendiente' }}</dd>
-                    </div>
-                </dl>
-
-                <div class="app-copy">
-                    <strong>Notas</strong>
-                    <p>{{ $receipt->notes ?: 'Sin notas operativas.' }}</p>
-                </div>
-            </article>
-        @endif
-    </section>
-
-    @if ($hasAiProposal)
-        @include('goods-receipts._ai-proposal-panel')
-    @endif
-
-    @if (! $isEditable)
-        <section class="surface-card stock-table-shell compact-card">
+        <section class="surface-card stock-table-shell compact-card goods-receipt-readonly-lines">
             <div class="ops-index-heading">
                 <strong>Lineas registradas</strong>
                 <span class="ops-page-meta">{{ $receipt->lines->count() }} {{ \Illuminate\Support\Str::plural('linea', $receipt->lines->count()) }}</span>
@@ -365,6 +338,10 @@
                 </table>
             </div>
         </section>
+    @endif
+
+    @if ($hasAiProposal)
+        @include('goods-receipts._ai-proposal-panel')
     @endif
 
     @if ($receipt->stockPallets->isNotEmpty())

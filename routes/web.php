@@ -189,6 +189,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/entradas/{goodsReceipt}/documento', [GoodsReceiptController::class, 'downloadDocument'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.document');
+    Route::delete('/entradas/{goodsReceipt}', [GoodsReceiptController::class, 'destroy'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('goods-receipts.destroy');
     Route::post('/entradas/{goodsReceipt}/ia-extraer', [GoodsReceiptController::class, 'extractAi'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.ai-extract');

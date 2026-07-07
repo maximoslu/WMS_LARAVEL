@@ -5,6 +5,8 @@
 
 @section('content')
     @php
+        $canDeleteReceipts = auth()->user()?->canAccessRole(\App\Models\Role::SUPERADMIN) ?? false;
+        $deleteReceiptMessage = 'Vas a borrar esta entrada. Si el stock fue aplicado, se revertiran los movimientos asociados. Esta accion afecta a historicos y trazabilidad. ¿Confirmas?';
         $breadcrumbs = [
 
 
@@ -148,6 +150,18 @@
                                         @if (! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
                                             <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-table">Editar</a>
                                         @endif
+
+                                        @if ($canDeleteReceipts)
+                                            <form
+                                                method="POST"
+                                                action="{{ route('goods-receipts.destroy', $receipt) }}"
+                                                onsubmit="return confirm('{{ $deleteReceiptMessage }}');"
+                                            >
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="button-secondary compact-button btn-table goods-receipt-delete-button">Borrar</button>
+                                            </form>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>
@@ -194,6 +208,17 @@
                         <a href="{{ route('goods-receipts.show', $receipt) }}" class="button-secondary compact-button btn-table">Ver</a>
                         @if (! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
                             <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-table">Editar</a>
+                        @endif
+                        @if ($canDeleteReceipts)
+                            <form
+                                method="POST"
+                                action="{{ route('goods-receipts.destroy', $receipt) }}"
+                                onsubmit="return confirm('{{ $deleteReceiptMessage }}');"
+                            >
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="button-secondary compact-button btn-table goods-receipt-delete-button">Borrar</button>
+                            </form>
                         @endif
                     </div>
                 </article>

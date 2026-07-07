@@ -154,9 +154,9 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($user)
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
-            ->assertSee('goods-receipt-ops-band', false)
-            ->assertSee('goods-receipt-detail-grid--readonly', false)
-            ->assertSee('Documento y estado')
+            ->assertSee('goods-receipt-toolbar', false)
+            ->assertSee('goods-receipt-workbench--readonly', false)
+            ->assertSee('Datos de entrada')
             ->assertSee('Lineas registradas')
             ->assertDontSee('Documento e IA futura');
     }
@@ -194,11 +194,39 @@ class GoodsReceiptManagementTest extends TestCase
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
             ->assertSee('IA desactivada')
-            ->assertSee('Documento guardado')
-            ->assertSee('Anadir linea manual')
+            ->assertSee('Datos de entrada')
+            ->assertSee('Anadir linea')
             ->assertSee('Guardar')
             ->assertSee('data-goods-receipt-form', false)
-            ->assertSee('El stock no se aplicara hasta confirmar la entrada.');
+            ->assertSee('El stock no se aplica hasta confirmar entrada.');
+    }
+
+    public function test_superadmin_ve_boton_borrar_entrada_en_listado_con_confirmacion_fuerte(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $receipt = $this->createDraftReceipt($superadmin);
+
+        $this->actingAs($superadmin)
+            ->get(route('goods-receipts.index'))
+            ->assertOk()
+            ->assertSee('goods-receipt-delete-button', false)
+            ->assertSee('Vas a borrar esta entrada. Si el stock fue aplicado, se revertiran los movimientos asociados. Esta accion afecta a historicos y trazabilidad. ¿Confirmas?');
+    }
+
+    public function test_almacen_no_ve_boton_borrar_entrada_en_listado(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $this->createDraftReceipt($superadmin);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.index'))
+            ->assertOk()
+            ->assertDontSee('goods-receipt-delete-button', false);
     }
 
     public function test_crear_borrador_con_documento_muestra_cta_ia(): void
@@ -896,8 +924,8 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
-            ->assertSee('Interpretar con IA')
-            ->assertSee('Documento y estado');
+            ->assertSee('Interpretar IA')
+            ->assertSee('Documento guardado');
     }
 
     public function test_crear_borrador_e_interpretar_ia_guarda_entrada_y_documento(): void
@@ -1310,7 +1338,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->get(route('goods-receipts.show', $receipt))
             ->assertOk()
             ->assertSee('Documento guardado')
-            ->assertSee('Interpretar con IA')
+            ->assertSee('Interpretar IA')
             ->assertSee('IA sin ejecutar');
     }
 
@@ -1384,6 +1412,98 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertSame(500, $line->units_per_pallet);
         $this->assertSame(2, $line->pallet_count);
         $this->assertSame(200, $line->pico_units);
+    }
+
+    public function test_superadmin_puede_borrar_borrador_sin_stock(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $receipt = GoodsReceipt::query()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-DELETE-DRAFT',
+            'status' => GoodsReceipt::STATUS_DRAFT,
+            'received_at' => '2026-07-07',
+            'created_by' => $superadmin->id,
+        ]);
+
+        $line = GoodsReceiptLine::query()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => null,
+            'sku' => 'SKU-DELETE-DRAFT',
+            'description' => 'Linea borrable',
+            'lot' => 'LOT-DEL-1',
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'pallet_count' => 1,
+            'pico_units' => null,
+            'location_id' => $location->id,
+        ]);
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'))
+            ->assertSessionHas('status', 'Entrada borrada correctamente.');
+
+        $this->assertDatabaseMissing('goods_receipts', ['id' => $receipt->id]);
+        $this->assertDatabaseMissing('goods_receipt_lines', ['id' => $line->id]);
+        $this->assertDatabaseCount('stock_pallets', 0);
+    }
+
+    public function test_superadmin_puede_borrar_confirmada_y_revertir_stock_una_sola_vez(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$receipt, $line] = $this->createConfirmedReceipt($superadmin, 'SKU-DELETE-CONF');
+
+        $stockBatch = StockPallet::query()->where('goods_receipt_id', $receipt->id)->firstOrFail();
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'))
+            ->assertSessionHas('status', 'Entrada borrada correctamente.');
+
+        $this->assertDatabaseMissing('goods_receipts', ['id' => $receipt->id]);
+        $this->assertDatabaseMissing('goods_receipt_lines', ['id' => $line->id]);
+        $this->assertDatabaseMissing('stock_pallets', ['id' => $stockBatch->id]);
+    }
+
+    public function test_no_se_puede_borrar_entrada_si_la_reversion_dejaria_inconsistencia(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$receipt] = $this->createConfirmedReceipt($superadmin, 'SKU-DELETE-BLOCK');
+
+        $stockBatch = StockPallet::query()->where('goods_receipt_id', $receipt->id)->firstOrFail();
+        $stockBatch->update([
+            'quantity_units' => 200,
+        ]);
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'))
+            ->assertSessionHasErrors('goods_receipt');
+
+        $this->assertDatabaseHas('goods_receipts', ['id' => $receipt->id]);
+        $this->assertDatabaseHas('stock_pallets', ['id' => $stockBatch->id]);
+    }
+
+    public function test_almacen_no_puede_borrar_entradas(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $receipt = $this->createDraftReceipt($superadmin);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($almacen)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertForbidden();
     }
 
     public function test_entrada_con_ia_permite_lineas_vacias_en_borrador(): void
