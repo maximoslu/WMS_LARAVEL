@@ -3677,6 +3677,18 @@ body.brand-body.app-shell-body .pagination-card {
     box-shadow: 0 12px 26px rgba(18, 32, 44, 0.03);
 }
 
+/* The line picker's dropdown uses position:fixed to escape this card and
+   float over the rest of the page. backdrop-filter creates a new containing
+   block for fixed/absolute descendants (same as transform), which breaks that
+   viewport-relative positioning and makes the dropdown render in the wrong
+   place. The card's background is already ~97% opaque, so dropping the blur
+   here has no visible effect. */
+body.brand-body.app-shell-body .goods-receipt-line-card,
+body.brand-body.app-shell-body .goods-receipt-form-card,
+body.brand-body.app-shell-body .goods-receipt-workbench {
+    backdrop-filter: none;
+}
+
 .goods-receipt-line-card-head {
     display: flex;
     align-items: flex-start;

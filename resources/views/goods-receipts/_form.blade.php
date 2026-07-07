@@ -12,7 +12,7 @@
 <x-breadcrumbs :items="$breadcrumbs" />
 
 <div class="goods-receipt-shell">
-    <section class="surface-card item-form-card entity-form compact-card">
+    <section class="surface-card item-form-card entity-form compact-card goods-receipt-form-card">
         <div class="app-copy">
             <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Borrador' }}</span>
             <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar entrada' : 'Nueva entrada de mercancia' }}</h2>

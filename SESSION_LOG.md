@@ -1002,3 +1002,46 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
 - `php artisan queue:restart`
+
+---
+
+## 2026-07-07 - Fix: desplegable de articulo descuadrado y bloqueaba el campo de cantidad (20:50:57 +02:00)
+
+**Contexto:** El usuario reporto, con captura de pantalla, que el desplegable de busqueda de articulo en una linea manual aparecia descuadrado (renderizado muy por debajo, superpuesto con los botones de pie de pagina) y que, una vez seleccionaba o indicaba el articulo, no podia escribir la cantidad de pallets.
+
+**Commit previo de partida:**
+- `ca94094d feat: add ajax item lookup to goods receipt lines`
+
+**Diagnostico real (confirmado en navegador, no solo por lectura de codigo):** El desplegable usa `position: fixed` con coordenadas calculadas en JS a partir de `getBoundingClientRect()` (pensado para "flotar" fuera de la tarjeta de la linea). El contenedor `.goods-receipt-line-card` (y, en el formulario de creacion, tambien `.item-form-card`) tiene `backdrop-filter: blur(...)` para el efecto cristal. Segun la especificacion CSS, `backdrop-filter` (igual que `transform` o `filter`) crea un nuevo *containing block* para los descendientes `position: fixed`, asi que el navegador no posicionaba el panel respecto al viewport como esperaba el JS, sino respecto a esa tarjeta con blur. Se confirmo con `element.offsetParent`, que devolvia la tarjeta en vez de `null`. El panel, mal posicionado, quedaba flotando sobre otros campos de la pagina (incluida la propia columna de "Total uds"), interceptando los clics y dando la sensacion de que "no dejaba escribir".
+
+**Cambios realizados:**
+- `resources/views/goods-receipts/_form.blade.php`
+  - la tarjeta del formulario de creacion gana una clase adicional `goods-receipt-form-card` para poder apuntarla de forma especifica sin afectar a `.item-form-card` de otros modulos (clientes, articulos, ubicaciones, proveedores, perfil, stock, usuarios, almacenes, que tambien usan esa clase compartida)
+- `resources/css/app.css`
+  - se quita `backdrop-filter` especificamente de `.goods-receipt-line-card`, `.goods-receipt-form-card` y `.goods-receipt-workbench` (los tres contenedores reales entre el picker y el `body` que rompian el `position: fixed`)
+  - el fondo de esas tarjetas ya es ~97% opaco, asi que quitar el blur no cambia nada visualmente
+
+**Verificacion real en navegador (antes y despues del fix):**
+- Antes: `panel.offsetParent` devolvia la tarjeta de la linea; la posicion calculada por JS (`panel.style.top`) no coincidia con la posicion real renderizada (diferencia de cientos de pixeles)
+- Despues: `panel.offsetParent` es `null` (viewport real) y el panel se renderiza justo debajo del campo de busqueda, tanto en el formulario de creacion (linea 2 de varias) como en el detalle de una entrada existente
+- Se repitio el flujo completo: buscar articulo existente -> seleccionar -> el foco y la escritura en "Total uds" funcionan con normalidad y los pallets/pico se recalculan correctamente
+
+**Cobertura y validacion:**
+- No se ha anadido un test automatizado nuevo para este fix: es un problema de posicionamiento CSS (containing block de `position: fixed`) que no se puede verificar de forma fiable con los tests HTTP/Blade existentes del proyecto (no hay suite de navegador headless); se verifico en vivo con el navegador embebido en su lugar
+- `php artisan optimize:clear`: OK
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `82 passed` (440 assertions)
+- `php artisan test`: `395 passed` (1841 assertions)
+- `npm run build`: OK
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- No hubo migraciones nuevas
+- No se toco ningun otro modulo que comparte `.item-form-card` (clientes, articulos, ubicaciones, proveedores, perfil, stock, usuarios, almacenes quedan exactamente igual)
+- No se uso `force push`
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now`
+- `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
+- `php artisan queue:restart`
