@@ -12,7 +12,9 @@
             ['label' => $receipt->receipt_number ?: 'Entrada #'.$receipt->id],
         ];
         $hasAiProposal = is_array($receipt->ai_extracted_data) && $receipt->ai_extracted_data !== [];
-        $isEditable = ! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED;
+        $canSuperEdit = auth()->user()?->canAccessRole(\App\Models\Role::SUPERADMIN) ?? false;
+        $isEditingConfirmed = $receipt->isConfirmed() && $canSuperEdit;
+        $isEditable = ($isEditingConfirmed || ! $receipt->isConfirmed()) && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED;
         $hasDocument = filled($receipt->document_path);
         $canTriggerAi = $hasDocument && $aiEnabled && $isEditable;
         $canCreateSuppliers = auth()->user()?->canAccessRole(\App\Models\Role::ALMACEN) ?? false;
@@ -74,11 +76,13 @@
                 <button type="button" class="button-primary compact-button btn-compact goods-receipt-manual-action" data-add-line>Añadir línea manual</button>
                 <button type="submit" form="goods-receipt-update-form" class="button-primary compact-button btn-compact">Guardar</button>
 
-                <form method="POST" action="{{ route('goods-receipts.confirm', $receipt) }}">
-                    @csrf
-                    @method('PATCH')
-                    <button type="submit" class="button-primary compact-button btn-compact">Confirmar entrada</button>
-                </form>
+                @unless ($receipt->isConfirmed())
+                    <form method="POST" action="{{ route('goods-receipts.confirm', $receipt) }}">
+                        @csrf
+                        @method('PATCH')
+                        <button type="submit" class="button-primary compact-button btn-compact">Confirmar entrada</button>
+                    </form>
+                @endunless
             @endif
 
             @if ($receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
@@ -112,6 +116,12 @@
         </div>
     @endif
 
+    @if ($isEditingConfirmed)
+        <div class="alert alert-error">
+            Estas editando una entrada CONFIRMADA como superadmin. Al guardar, el stock generado se revertira y se volvera a aplicar con los datos nuevos.
+        </div>
+    @endif
+
     @if ($isEditable)
         <form
             id="goods-receipt-update-form"
@@ -139,19 +149,8 @@
                     <strong>{{ $receipt->client->name }}</strong>
                 </div>
 
-                <label class="auth-field">
-                    <span>Proveedor</span>
-                    <select name="supplier_id" class="auth-input">
-                        <option value="">Sin proveedor</option>
-                        @foreach ($suppliers as $supplier)
-                            <option value="{{ $supplier->id }}" @selected((string) old('supplier_id', $receipt->supplier_id) === (string) $supplier->id)>
-                                {{ $supplier->name }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('supplier_id')
-                        <small class="form-error">{{ $message }}</small>
-                    @enderror
+                <div>
+                    @include('goods-receipts._supplier-picker', ['receipt' => $receipt])
                     @if (filled($detectedSupplierName))
                         <small class="helper-text">Detectado por IA: {{ $detectedSupplierName }}</small>
                     @endif
@@ -160,7 +159,7 @@
                             No hay coincidencia automatica. <a href="{{ route('suppliers.create') }}">Crear proveedor</a>.
                         </small>
                     @endif
-                </label>
+                </div>
 
                 <label class="auth-field">
                     <span>Albaran</span>

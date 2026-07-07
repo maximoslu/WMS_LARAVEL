@@ -932,6 +932,112 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertJsonValidationErrors(['sku', 'description', 'units_per_pallet']);
     }
 
+    public function test_superadmin_puede_crear_proveedor_rapido_desde_entrada(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$client] = $this->makeReceiptContext();
+
+        $response = $this->actingAs($user)
+            ->postJson(route('goods-receipts.suppliers.quick-create'), [
+                'client_id' => $client->id,
+                'name' => 'Proveedor Rapido SA',
+            ]);
+
+        $response->assertCreated();
+        $response->assertJson(['created' => true]);
+
+        $supplierId = $response->json('supplier.id');
+
+        $this->assertDatabaseHas('suppliers', [
+            'id' => $supplierId,
+            'client_id' => $client->id,
+            'name' => 'Proveedor Rapido SA',
+            'active' => true,
+        ]);
+    }
+
+    public function test_almacen_y_administracion_pueden_crear_proveedor_rapido(): void
+    {
+        $this->seed(RoleSeeder::class);
+        [$client] = $this->makeReceiptContext();
+
+        foreach ([Role::ALMACEN, Role::ADMINISTRACION] as $roleSlug) {
+            $user = $this->makeUserWithRole($roleSlug);
+
+            $this->actingAs($user)
+                ->postJson(route('goods-receipts.suppliers.quick-create'), [
+                    'client_id' => $client->id,
+                    'name' => 'Proveedor '.$roleSlug,
+                ])
+                ->assertCreated();
+        }
+
+        $this->assertDatabaseHas('suppliers', ['name' => 'Proveedor '.Role::ALMACEN]);
+        $this->assertDatabaseHas('suppliers', ['name' => 'Proveedor '.Role::ADMINISTRACION]);
+    }
+
+    public function test_crear_proveedor_rapido_no_duplica_nombre_existente(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client] = $this->makeReceiptContext();
+
+        $existing = Supplier::factory()->create([
+            'client_id' => $client->id,
+            'name' => 'Proveedor Duplicado',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->postJson(route('goods-receipts.suppliers.quick-create'), [
+                'client_id' => $client->id,
+                'name' => 'proveedor duplicado',
+            ]);
+
+        $response->assertOk();
+        $response->assertJson([
+            'created' => false,
+            'supplier' => ['id' => $existing->id],
+        ]);
+
+        $this->assertSame(1, Supplier::query()->where('name', 'Proveedor Duplicado')->count());
+    }
+
+    public function test_cliente_no_puede_crear_proveedor_rapido(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        [$client] = $this->makeReceiptContext();
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->postJson(route('goods-receipts.suppliers.quick-create'), [
+                'client_id' => $client->id,
+                'name' => 'Proveedor prohibido',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('suppliers', ['name' => 'Proveedor prohibido']);
+    }
+
+    public function test_crear_proveedor_rapido_valida_nombre_obligatorio(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->postJson(route('goods-receipts.suppliers.quick-create'), [
+                'client_id' => $client->id,
+                'name' => '',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['name']);
+    }
+
     public function test_valida_descripcion_si_articulo_no_existe(): void
     {
         $this->seed(RoleSeeder::class);
@@ -1864,6 +1970,170 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertSame(500, $line->units_per_pallet);
         $this->assertSame(2, $line->pallet_count);
         $this->assertSame(200, $line->pico_units);
+    }
+
+    public function test_superadmin_puede_editar_entrada_confirmada_y_revertir_reaplica_stock(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$receipt, $line, $location] = $this->createConfirmedReceipt($superadmin, 'SKU-EDIT-CONFIRM');
+
+        $this->assertNotNull($receipt->stock_applied_at);
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'quantity_units' => 1500,
+        ]);
+
+        $this->actingAs($superadmin)
+            ->put(route('goods-receipts.update', $receipt), [
+                'client_id' => $receipt->client_id,
+                'supplier_id' => $receipt->supplier_id,
+                'receipt_number' => $receipt->receipt_number,
+                'received_at' => $receipt->received_at->format('Y-m-d'),
+                'lines' => [
+                    [
+                        'item_id' => $line->item_id,
+                        'sku' => $line->sku,
+                        'description' => $line->description,
+                        'lot' => $line->lot,
+                        'quantity_units' => 2000,
+                        'units_per_pallet' => 1000,
+                        'pallet_count' => 2,
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+        $this->assertSame(GoodsReceipt::STATUS_CONFIRMED, $receipt->status);
+        $this->assertNotNull($receipt->stock_applied_at);
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $line->item_id,
+            'quantity_units' => 2000,
+        ]);
+
+        // Proves revert-then-reapply, not double-add: a single batch with the new quantity.
+        $this->assertSame(1, StockPallet::where('goods_receipt_id', $receipt->id)->count());
+    }
+
+    public function test_almacen_y_administracion_no_pueden_editar_entrada_confirmada(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$receipt, $line, $location] = $this->createConfirmedReceipt($superadmin, 'SKU-EDIT-BLOQ');
+
+        foreach ([Role::ALMACEN, Role::ADMINISTRACION] as $roleSlug) {
+            $user = $this->makeUserWithRole($roleSlug);
+
+            $this->actingAs($user)
+                ->get(route('goods-receipts.edit', $receipt))
+                ->assertForbidden();
+
+            $this->actingAs($user)
+                ->put(route('goods-receipts.update', $receipt), [
+                    'client_id' => $receipt->client_id,
+                    'supplier_id' => $receipt->supplier_id,
+                    'receipt_number' => $receipt->receipt_number,
+                    'received_at' => $receipt->received_at->format('Y-m-d'),
+                    'lines' => [
+                        [
+                            'item_id' => $line->item_id,
+                            'quantity_units' => 9999,
+                            'units_per_pallet' => 1000,
+                            'pallet_count' => 9,
+                            'pico_units' => 999,
+                            'location_id' => $location->id,
+                        ],
+                    ],
+                ])
+                ->assertForbidden();
+        }
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'quantity_units' => 1500,
+        ]);
+    }
+
+    public function test_ni_superadmin_puede_editar_entrada_cancelada(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $receipt = $this->createDraftReceipt($superadmin);
+
+        $this->actingAs($superadmin)
+            ->patch(route('goods-receipts.cancel', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->actingAs($superadmin)
+            ->get(route('goods-receipts.edit', $receipt))
+            ->assertForbidden();
+    }
+
+    public function test_editar_entrada_confirmada_bloquea_si_reversion_dejaria_stock_negativo(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$receipt, $line, $location] = $this->createConfirmedReceipt($superadmin, 'SKU-EDIT-NEG');
+
+        // Simulates part of the stock already being moved/consumed elsewhere.
+        StockPallet::where('goods_receipt_id', $receipt->id)->update(['quantity_units' => 100]);
+
+        $response = $this->actingAs($superadmin)
+            ->put(route('goods-receipts.update', $receipt), [
+                'client_id' => $receipt->client_id,
+                'supplier_id' => $receipt->supplier_id,
+                'receipt_number' => $receipt->receipt_number,
+                'received_at' => $receipt->received_at->format('Y-m-d'),
+                'lines' => [
+                    [
+                        'item_id' => $line->item_id,
+                        'quantity_units' => 2000,
+                        'units_per_pallet' => 1000,
+                        'pallet_count' => 2,
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ]);
+
+        $response->assertRedirect(route('goods-receipts.show', $receipt));
+        $response->assertSessionHasErrors('goods_receipt');
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'quantity_units' => 100,
+        ]);
+        $this->assertSame(1500, $receipt->fresh()->lines()->first()->quantity_units);
+    }
+
+    public function test_superadmin_ve_editar_en_confirmada_otros_roles_no(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$receipt] = $this->createConfirmedReceipt($superadmin, 'SKU-EDIT-VIEW');
+
+        $editUrl = route('goods-receipts.edit', $receipt);
+
+        $this->actingAs($superadmin)
+            ->get(route('goods-receipts.index'))
+            ->assertOk()
+            ->assertSee('href="'.$editUrl.'"', false);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.index'))
+            ->assertOk()
+            ->assertDontSee('href="'.$editUrl.'"', false);
     }
 
     public function test_superadmin_puede_borrar_borrador_sin_stock(): void

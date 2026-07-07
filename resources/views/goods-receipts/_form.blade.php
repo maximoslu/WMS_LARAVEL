@@ -16,7 +16,11 @@
         <div class="app-copy">
             <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Borrador' }}</span>
             <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar entrada' : 'Nueva entrada de mercancia' }}</h2>
-            <p>Registra la cabecera y las lineas operativas. El stock quedara pendiente hasta confirmar la entrada.</p>
+            @if ($isEditing && $receipt->isConfirmed())
+                <p>Esta entrada ya esta confirmada. Al guardar, el stock generado se revertira y se volvera a aplicar con los datos nuevos.</p>
+            @else
+                <p>Registra la cabecera y las lineas operativas. El stock quedara pendiente hasta confirmar la entrada.</p>
+            @endif
         </div>
 
         @if ($errors->has('goods_receipt'))
@@ -51,20 +55,7 @@
                     @enderror
                 </label>
 
-                <label class="auth-field">
-                    <span>Proveedor</span>
-                    <select name="supplier_id" class="auth-input">
-                        <option value="">Sin proveedor</option>
-                        @foreach ($suppliers as $supplier)
-                            <option value="{{ $supplier->id }}" @selected((string) old('supplier_id', $receipt->supplier_id) === (string) $supplier->id)>
-                                {{ $supplier->name }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('supplier_id')
-                        <small class="form-error">{{ $message }}</small>
-                    @enderror
-                </label>
+                @include('goods-receipts._supplier-picker', ['receipt' => $receipt])
 
                 <label class="auth-field">
                     <span>Numero de albaran</span>

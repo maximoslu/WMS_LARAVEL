@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ApplyGoodsReceiptAiProposalRequest;
 use App\Http\Requests\AttachGoodsReceiptDocumentRequest;
 use App\Http\Requests\QuickCreateGoodsReceiptItemRequest;
+use App\Http\Requests\QuickCreateGoodsReceiptSupplierRequest;
 use App\Http\Requests\StoreGoodsReceiptRequest;
 use App\Http\Requests\UpdateGoodsReceiptRequest;
 use App\Models\Client;
@@ -12,12 +13,15 @@ use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
 use App\Models\Item;
 use App\Models\Location;
+use App\Models\Role;
 use App\Models\Supplier;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractionService;
 use App\Services\GoodsReceipts\GoodsReceiptConfirmationService;
 use App\Services\GoodsReceipts\GoodsReceiptDeletionService;
 use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
+use App\Services\GoodsReceipts\GoodsReceiptStockApplicationService;
+use App\Services\GoodsReceipts\GoodsReceiptSupplierResolver;
 use App\Support\WmsNavigation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -35,8 +39,10 @@ class GoodsReceiptController extends Controller
         private readonly GoodsReceiptConfirmationService $confirmationService,
         private readonly GoodsReceiptDeletionService $deletionService,
         private readonly GoodsReceiptItemResolver $itemResolver,
+        private readonly GoodsReceiptSupplierResolver $supplierResolver,
         private readonly GoodsReceiptAiExtractionService $aiExtractionService,
         private readonly GoodsReceiptDocumentStorage $documentStorage,
+        private readonly GoodsReceiptStockApplicationService $stockApplicationService,
     ) {}
 
     public function index(Request $request): View
@@ -127,6 +133,37 @@ class GoodsReceiptController extends Controller
                 'client_id' => $item->client_id,
                 'status' => $item->status,
                 'label' => $item->sku.' - '.$item->description,
+            ],
+        ], $result['created'] ? 201 : 200);
+    }
+
+    public function quickCreateSupplier(QuickCreateGoodsReceiptSupplierRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        try {
+            $result = $this->supplierResolver->createOrReuseForQuickAdd(
+                (int) $validated['client_id'],
+                (string) $validated['name'],
+            );
+        } catch (ValidationException $exception) {
+            return response()->json([
+                'message' => collect($exception->errors())->flatten()->first() ?? 'No se pudo crear el proveedor.',
+            ], 422);
+        }
+
+        $supplier = $result['supplier'];
+
+        return response()->json([
+            'created' => $result['created'],
+            'message' => $result['created']
+                ? 'Proveedor creado y seleccionado.'
+                : 'Ya existia un proveedor con este nombre. Se ha seleccionado el existente.',
+            'supplier' => [
+                'id' => $supplier->id,
+                'name' => $supplier->name,
+                'client_id' => $supplier->client_id,
+                'label' => $supplier->name,
             ],
         ], $result['created'] ? 201 : 200);
     }
@@ -227,7 +264,7 @@ class GoodsReceiptController extends Controller
 
     public function edit(Request $request, GoodsReceipt $goodsReceipt): View
     {
-        abort_if($goodsReceipt->isConfirmed(), 403);
+        $this->authorizeEdit($goodsReceipt, $request);
 
         $goodsReceipt->load('lines');
 
@@ -236,34 +273,62 @@ class GoodsReceiptController extends Controller
 
     public function update(UpdateGoodsReceiptRequest $request, GoodsReceipt $goodsReceipt): RedirectResponse
     {
-        abort_if($goodsReceipt->isConfirmed(), 403);
+        $this->authorizeEdit($goodsReceipt, $request);
 
         $validated = $request->validated();
 
-        DB::transaction(function () use ($request, $validated, $goodsReceipt): void {
-            $payload = [
-                'client_id' => $validated['client_id'],
-                'supplier_id' => $validated['supplier_id'] ?? null,
-                'receipt_number' => $validated['receipt_number'] ?? null,
-                'external_document_number' => $validated['external_document_number'] ?? null,
-                'received_at' => $validated['received_at'] ?? null,
-                'notes' => $validated['notes'] ?? null,
-            ];
+        try {
+            DB::transaction(function () use ($request, $validated, $goodsReceipt): void {
+                $mustReapplyStock = $goodsReceipt->isConfirmed() && $goodsReceipt->hasStockApplied();
 
-            if ($request->hasFile('document')) {
+                if ($mustReapplyStock) {
+                    $this->stockApplicationService->revert($goodsReceipt);
+                }
+
                 $payload = [
-                    ...$payload,
-                    ...$this->documentStorage->store($request->file('document'), $goodsReceipt),
+                    'client_id' => $validated['client_id'],
+                    'supplier_id' => $validated['supplier_id'] ?? null,
+                    'receipt_number' => $validated['receipt_number'] ?? null,
+                    'external_document_number' => $validated['external_document_number'] ?? null,
+                    'received_at' => $validated['received_at'] ?? null,
+                    'notes' => $validated['notes'] ?? null,
                 ];
-            }
 
-            $goodsReceipt->update($payload);
-            $this->syncLines($goodsReceipt, $validated['lines']);
-        });
+                if ($request->hasFile('document')) {
+                    $payload = [
+                        ...$payload,
+                        ...$this->documentStorage->store($request->file('document'), $goodsReceipt),
+                    ];
+                }
+
+                $goodsReceipt->update($payload);
+                $this->syncLines($goodsReceipt, $validated['lines']);
+
+                if ($mustReapplyStock) {
+                    $this->stockApplicationService->apply($goodsReceipt->fresh(['lines.item', 'lines.location']));
+                }
+            });
+        } catch (ValidationException $exception) {
+            return redirect()
+                ->route('goods-receipts.show', $goodsReceipt)
+                ->withErrors($exception->errors())
+                ->withInput();
+        }
 
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)
-            ->with('status', 'Entrada actualizada correctamente.');
+            ->with('status', $goodsReceipt->isConfirmed()
+                ? 'Entrada confirmada actualizada. El stock se ha revertido y vuelto a aplicar con los datos nuevos.'
+                : 'Entrada actualizada correctamente.');
+    }
+
+    private function authorizeEdit(GoodsReceipt $goodsReceipt, Request $request): void
+    {
+        abort_if($goodsReceipt->status === GoodsReceipt::STATUS_CANCELLED, 403);
+
+        if ($goodsReceipt->isConfirmed()) {
+            abort_unless($request->user()?->canAccessRole(Role::SUPERADMIN), 403);
+        }
     }
 
     public function confirm(GoodsReceipt $goodsReceipt, Request $request): RedirectResponse

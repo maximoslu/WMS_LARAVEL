@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
+use App\Models\Supplier;
 use App\Support\Stock\StockVariantCatalog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -98,6 +99,51 @@ class AjaxSearchController extends Controller
             ->all();
 
         return response()->json(['data' => $items]);
+    }
+
+    public function suppliers(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
+
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:20'],
+        ]);
+
+        $query = trim((string) ($validated['q'] ?? ''));
+
+        if (mb_strlen($query) < 2) {
+            return response()->json(['data' => []]);
+        }
+
+        $clientId = isset($validated['client_id']) ? (int) $validated['client_id'] : null;
+
+        $suppliers = Supplier::query()
+            ->where('active', true)
+            ->when($clientId !== null, function (Builder $builder) use ($clientId): void {
+                $builder->where(function (Builder $builder) use ($clientId): void {
+                    $builder
+                        ->whereNull('client_id')
+                        ->orWhere('client_id', $clientId);
+                });
+            })
+            ->where('name', 'like', '%'.$query.'%')
+            ->orderBy('name')
+            ->limit((int) ($validated['limit'] ?? 10))
+            ->get()
+            ->map(fn (Supplier $supplier): array => [
+                'id' => $supplier->id,
+                'label' => $supplier->name,
+                'value' => $supplier->name,
+                'meta' => $supplier->client_id === null ? 'Proveedor global' : null,
+                'name' => $supplier->name,
+                'client_id' => $supplier->client_id,
+            ])
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $suppliers]);
     }
 
     public function clients(Request $request): JsonResponse

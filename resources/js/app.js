@@ -1453,6 +1453,142 @@ const setupGoodsReceiptLines = () => {
     updateAiSubmitState();
 };
 
+const setupSupplierPicker = () => {
+    const pickerRoot = document.querySelector('[data-receipt-supplier-picker]');
+    const clientField = document.querySelector('[data-receipt-client]');
+
+    if (!pickerRoot || !clientField || pickerRoot.dataset.supplierPickerBound === 'true') {
+        return;
+    }
+
+    const wrapper = pickerRoot.closest('label');
+    const supplierIdField = pickerRoot.querySelector('[data-supplier-id]');
+    const createWrapper = wrapper?.querySelector('[data-supplier-create-item]');
+    const createTrigger = createWrapper?.querySelector('[data-supplier-create-trigger]');
+    const createFeedback = createWrapper?.querySelector('[data-supplier-create-feedback]');
+    const createEndpoint = pickerRoot.dataset.createSupplierEndpoint;
+
+    if (!supplierIdField || !createEndpoint) {
+        return;
+    }
+
+    let lastSearchQuery = '';
+
+    const setCreateFeedback = (message, type = 'default') => {
+        if (!createFeedback) {
+            return;
+        }
+
+        createFeedback.textContent = message;
+        createFeedback.classList.toggle('helper-text--error', type === 'error');
+        createFeedback.classList.toggle('helper-text--success', type === 'success');
+    };
+
+    const hideCreateSupplier = () => {
+        if (createWrapper) {
+            createWrapper.hidden = true;
+        }
+
+        setCreateFeedback('');
+    };
+
+    const showCreateSupplier = (query) => {
+        if (!createWrapper || (supplierIdField.value ?? '') !== '') {
+            return;
+        }
+
+        lastSearchQuery = query;
+        createWrapper.hidden = false;
+        setCreateFeedback('');
+    };
+
+    const autocomplete = createAutocomplete(pickerRoot, {
+        buildParams: () => ({
+            client_id: clientField.value ?? '',
+            limit: '10',
+        }),
+        hasSelection: () => (supplierIdField.value ?? '') !== '',
+        onSelect: (supplier) => {
+            supplierIdField.value = String(supplier.id);
+            hideCreateSupplier();
+        },
+        onInputChange: () => {
+            supplierIdField.value = '';
+            hideCreateSupplier();
+        },
+        onClear: () => {
+            supplierIdField.value = '';
+            hideCreateSupplier();
+        },
+        onNoResults: (query) => showCreateSupplier(query),
+    });
+
+    createTrigger?.addEventListener('click', async () => {
+        if (!window.confirm('No existe un proveedor con este nombre. ¿Quieres crearlo?')) {
+            return;
+        }
+
+        const clientId = clientField.value ?? '';
+        const name = lastSearchQuery.trim();
+
+        if (!clientId) {
+            setCreateFeedback('Selecciona primero el cliente de la entrada.', 'error');
+            return;
+        }
+
+        if (name === '') {
+            setCreateFeedback('Escribe el nombre del proveedor antes de crearlo.', 'error');
+            return;
+        }
+
+        createTrigger.disabled = true;
+        setCreateFeedback('Creando proveedor...');
+
+        try {
+            const response = await fetch(createEndpoint, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+                body: JSON.stringify({
+                    client_id: clientId,
+                    name,
+                }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+
+            if (!response.ok || !payload.supplier) {
+                setCreateFeedback(payload.message ?? 'No se pudo crear el proveedor.', 'error');
+                return;
+            }
+
+            // Reuses the same selection path as picking a search result.
+            autocomplete?.setItem({
+                ...payload.supplier,
+                label: payload.supplier.label ?? payload.supplier.name,
+            });
+        } catch (error) {
+            setCreateFeedback('Error al crear el proveedor. Intentalo de nuevo.', 'error');
+        } finally {
+            createTrigger.disabled = false;
+        }
+    });
+
+    if (clientField.tagName === 'SELECT') {
+        clientField.addEventListener('change', () => {
+            supplierIdField.value = '';
+            autocomplete?.clear();
+            hideCreateSupplier();
+        });
+    }
+
+    pickerRoot.dataset.supplierPickerBound = 'true';
+};
+
 const bindDispatchExtraAutocomplete = (row, clientId, endpoint) => {
     const itemIdField = row.querySelector('[data-dispatch-extra-item-id]');
     const lineTypeField = row.querySelector('[data-dispatch-extra-line-type]');
@@ -1654,6 +1790,7 @@ const boot = () => {
     setupStockFilters();
     setupStockDetailToggles();
     setupGoodsReceiptLines();
+    setupSupplierPicker();
     setupMerchandiseRequestBuilder();
     setupGoodsDispatchBuilder();
     setupDispatchLoadingEditor();

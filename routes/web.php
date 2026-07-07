@@ -57,6 +57,8 @@ Route::middleware('auth')->group(function (): void {
         ->name('ajax.locations');
     Route::get('/ajax/lots', [AjaxSearchController::class, 'lots'])
         ->name('ajax.lots');
+    Route::get('/ajax/suppliers', [AjaxSearchController::class, 'suppliers'])
+        ->name('ajax.suppliers');
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::get('/google-calendar/oauth/redirect', [GoogleCalendarOAuthController::class, 'redirect'])
@@ -165,6 +167,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/entradas/articulos', [GoodsReceiptController::class, 'quickCreateItem'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.items.quick-create');
+    Route::post('/entradas/proveedores', [GoodsReceiptController::class, 'quickCreateSupplier'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.suppliers.quick-create');
     Route::get('/entradas/crear', [GoodsReceiptController::class, 'create'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.create');

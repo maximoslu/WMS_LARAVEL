@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
 use Database\Seeders\ClientSeeder;
@@ -169,6 +170,56 @@ class AjaxSearchTest extends TestCase
                 'id' => $location->id,
                 'label' => 'A1-TEST',
             ]);
+    }
+
+    public function test_suppliers_endpoint_finds_matches_scoped_to_client_and_global(): void
+    {
+        [$client, $otherClient] = $this->seedClients();
+
+        Supplier::factory()->create([
+            'client_id' => $client->id,
+            'name' => 'PROVEEDOR PROPIO',
+            'active' => true,
+        ]);
+
+        Supplier::factory()->create([
+            'client_id' => null,
+            'name' => 'PROVEEDOR GLOBAL',
+            'active' => true,
+        ]);
+
+        Supplier::factory()->create([
+            'client_id' => $otherClient->id,
+            'name' => 'PROVEEDOR AJENO',
+            'active' => true,
+        ]);
+
+        Supplier::factory()->create([
+            'client_id' => $client->id,
+            'name' => 'PROVEEDOR INACTIVO',
+            'active' => false,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $response = $this->actingAs($user)
+            ->getJson(route('ajax.suppliers', ['q' => 'PROVEEDOR', 'client_id' => $client->id]));
+
+        $response->assertOk();
+        $names = collect($response->json('data'))->pluck('name')->sort()->values()->all();
+
+        $this->assertSame(['PROVEEDOR GLOBAL', 'PROVEEDOR PROPIO'], $names);
+    }
+
+    public function test_suppliers_endpoint_requires_authorized_role(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->getJson(route('ajax.suppliers', ['q' => 'PROVEEDOR']))
+            ->assertForbidden();
     }
 
     /**

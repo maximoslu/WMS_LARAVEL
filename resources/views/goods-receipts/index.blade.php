@@ -147,7 +147,7 @@
                                     <div class="inline-actions action-buttons">
                                         <a href="{{ route('goods-receipts.show', $receipt) }}" class="button-secondary compact-button btn-table">Ver</a>
 
-                                        @if (! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
+                                        @if (($canDeleteReceipts || ! $receipt->isConfirmed()) && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
                                             <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-table">Editar</a>
                                         @endif
 
@@ -206,7 +206,7 @@
 
                     <div class="inline-actions action-buttons">
                         <a href="{{ route('goods-receipts.show', $receipt) }}" class="button-secondary compact-button btn-table">Ver</a>
-                        @if (! $receipt->isConfirmed() && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
+                        @if (($canDeleteReceipts || ! $receipt->isConfirmed()) && $receipt->status !== \App\Models\GoodsReceipt::STATUS_CANCELLED)
                             <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-table">Editar</a>
                         @endif
                         @if ($canDeleteReceipts)

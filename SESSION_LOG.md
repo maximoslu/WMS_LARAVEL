@@ -1045,3 +1045,80 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
 - `php artisan queue:restart`
+
+---
+
+## 2026-07-07 - Proveedor manual por AJAX, edicion de entradas confirmadas para superadmin (21:42:25 +02:00)
+
+**Contexto:** El usuario pidio tres cosas sobre el mismo modulo de entradas: (1) poder escribir manualmente un proveedor nuevo al crear/editar una entrada, guardandolo para los 3 roles internos; (2) revisar por que, segun el, no podia seguir editando/anadiendo lineas a un borrador ya guardado; (3) permitir que solo superadmin pueda editar (no solo borrar) una entrada ya CONFIRMADA, algo que hasta ahora bloqueaba el sistema para todos sin excepcion.
+
+**Commit previo de partida:**
+- `c19c41e2 fix: correct goods receipt article dropdown position and unblock quantity input`
+
+**Punto 2 (edicion de borrador ya guardado): no se pudo reproducir el bug.** Se probo en vivo, en navegador real, con superadmin y con almacen: abrir `/entradas/{id}/editar`, guardar cambios de cabecera, volver al detalle, anadir una linea manual nueva y guardar desde el workbench — todo funciono correctamente en ambos roles, sin bloqueos. La hipotesis mas probable es que lo que el usuario vio fue el mismo bug de posicionamiento del desplegable (`backdrop-filter` rompiendo `position: fixed`) corregido en el commit anterior, que podia interceptar clics sobre otros campos de la fila y dar sensacion de pantalla bloqueada. Si el problema persiste tras esta sesion, hace falta un paso a paso mas concreto (rol exacto, boton exacto, si aparece algun error) para poder reproducirlo.
+
+**Punto 1 - Proveedor manual (nuevo flujo AJAX, mismo patron que los articulos):**
+- `app/Http/Controllers/AjaxSearchController.php`
+  - nuevo metodo `suppliers()`: busca proveedores activos por nombre, proveedores globales (`client_id` nulo) o del cliente indicado, solo para roles `almacen` o superior
+- `app/Services/GoodsReceipts/GoodsReceiptSupplierResolver.php` (nuevo)
+  - `createOrReuseForQuickAdd()`: si ya existe un proveedor con ese nombre (comparacion insensible a mayusculas) para el cliente o global, lo reutiliza; si no, lo crea asociado al cliente de la entrada
+- `app/Http/Requests/QuickCreateGoodsReceiptSupplierRequest.php` (nuevo)
+  - autoriza solo a `almacen` o superior
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - nueva accion `quickCreateSupplier()`
+- `routes/web.php`
+  - `GET /ajax/suppliers` -> `ajax.suppliers`
+  - `POST /entradas/proveedores` -> `goods-receipts.suppliers.quick-create` (`minimum.role:almacen`)
+- `resources/views/goods-receipts/_supplier-picker.blade.php` (nuevo, parcial compartido)
+  - sustituye el `<select>` de Proveedor por el mismo componente de autocompletado AJAX que ya usan los articulos de la linea
+- `resources/views/goods-receipts/_form.blade.php` y `resources/views/goods-receipts/show.blade.php`
+  - usan el nuevo parcial en vez del `<select>` plano
+- `resources/js/app.js`
+  - `createAutocomplete()` ya tenia el hook `onNoResults` (reutilizado de la funcionalidad de articulos)
+  - nueva funcion `setupSupplierPicker()`: busca, muestra "Crear proveedor nuevo" si no hay resultados, pide confirmacion (`confirm('No existe un proveedor con este nombre. ¿Quieres crearlo?')`) y crea por AJAX, dejando el proveedor nuevo (o el existente si el nombre ya estaba usado) seleccionado en la entrada
+- Funciona igual para `superadmin`, `administracion` y `almacen` (mismo nivel de permiso que ya tenian para gestionar proveedores desde `/proveedores`)
+
+**Punto 3 - Edicion de entradas confirmadas (solo superadmin):**
+- `app/Services/GoodsReceipts/GoodsReceiptStockApplicationService.php`
+  - nuevo metodo publico `revert()`: reversa robusta anclada en `goods_receipt_id` (misma logica que ya se uso para el borrado seguro), movida aqui para poder reutilizarla tanto al borrar como al editar
+- `app/Services/GoodsReceipts/GoodsReceiptDeletionService.php`
+  - simplificado para delegar la reversa de stock en `GoodsReceiptStockApplicationService::revert()` en vez de duplicar la logica
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - `edit()`/`update()` ya no bloquean siempre que la entrada este confirmada: bloquean si esta CANCELADA (para cualquier rol) o si esta CONFIRMADA y el usuario no es superadmin
+  - si superadmin edita una entrada CONFIRMADA con stock aplicado, `update()` hace, dentro de una unica transaccion: revertir el stock existente -> guardar cabecera y lineas nuevas -> volver a aplicar stock con los datos nuevos. Si la reversa dejaria stock negativo (por ejemplo, porque parte del stock ya se movio o se envio), se bloquea con un error claro y no se guarda ningun cambio
+- `resources/views/goods-receipts/show.blade.php`
+  - `$isEditable` ahora es verdadero para una entrada confirmada si el usuario es superadmin
+  - el boton `Confirmar entrada` se oculta si la entrada ya esta confirmada (evita una doble confirmacion inutil, aunque ya estaba protegida por codigo)
+  - aviso visible: "Estas editando una entrada CONFIRMADA como superadmin. Al guardar, el stock generado se revertira y se volvera a aplicar con los datos nuevos."
+- `resources/views/goods-receipts/_form.blade.php`
+  - mismo aviso adaptado para la pantalla completa de edicion (`/entradas/{id}/editar`)
+- `resources/views/goods-receipts/index.blade.php`
+  - el enlace `Editar` del listado (tabla y tarjeta movil) ahora tambien aparece en entradas confirmadas, solo para superadmin
+
+**Cobertura y validacion real:**
+- `php artisan optimize:clear`: OK
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `92 passed` (489 assertions)
+- `php artisan test`: `407 passed` (1893 assertions)
+- `npm run build`: OK
+- Tests nuevos:
+  - `tests/Feature/AjaxSearchTest.php`: busqueda de proveedores por nombre con scope cliente/global, acceso restringido a roles internos
+  - `tests/Feature/GoodsReceiptManagementTest.php`: creacion rapida de proveedor por superadmin/almacen/administracion, no duplica nombre existente, cliente no autorizado (403), validacion de nombre obligatorio; superadmin edita entrada confirmada y el stock se revierte y reaplica sin duplicar (una sola partida con la cantidad nueva); almacen y administracion siguen bloqueados (403) para editar confirmadas; ninguna entrada CANCELADA es editable ni por superadmin; edicion de confirmada bloqueada con error claro si la reversa dejaria stock negativo, sin cambios parciales; el enlace Editar en el listado solo aparece para superadmin en confirmadas
+
+**Verificacion visual real en navegador embebido:**
+- Proveedor: se busco "SAICA" (sin resultados para el cliente de prueba), aparecio el boton "Crear proveedor nuevo", el dialogo de confirmacion mostro el texto exacto, y tras confirmar el proveedor quedo creado (scope correcto al cliente) y seleccionado en la entrada; se guardo la entrada completa y el proveedor quedo enlazado correctamente
+- Edicion de confirmada: se creo una entrada, se confirmo (300 uds, 3 pallets), se edito como superadmin cambiando a 500 uds, se guardo, y el detalle mostro "Entrada confirmada actualizada. El stock se ha revertido y vuelto a aplicar con los datos nuevos.", con el stock generado mostrando 500 uds / 5 pallets en una unica partida (no 800, confirmando que no hubo duplicado)
+- Se verifico que `almacen` no ve ni el enlace `Editar` ni el boton `Añadir línea manual` en esa misma entrada confirmada, y que un acceso directo por URL a `/entradas/{id}/editar` devuelve 403 para ese rol
+
+**Nota de disciplina de datos:** durante la verificacion en vivo se borro un registro de prueba (`GoodsReceipt` id 3, sin stock aplicado) directamente por `tinker` en vez de usar el flujo de borrado de la propia aplicacion. Fue en base de datos local de desarrollo y sin stock implicado, pero no debio hacerse asi; se deja constancia explicita y no se ha repetido en el resto de la sesion.
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- No hubo migraciones nuevas
+- No se uso `force push`
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now`
+- `php artisan migrate --force` no aplica en este hito
+- `php artisan optimize:clear`
+- `php artisan queue:restart`
