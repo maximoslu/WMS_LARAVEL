@@ -7,6 +7,7 @@ use App\Models\GoodsReceiptLine;
 use App\Models\Item;
 use App\Models\StockPallet;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -19,7 +20,6 @@ class GoodsReceiptDeletionService
                 'client',
                 'supplier',
                 'lines.item',
-                'lines.location',
             ]);
 
             if ($receipt->hasStockApplied()) {
@@ -47,81 +47,73 @@ class GoodsReceiptDeletionService
             ]);
         }
 
+        // The direct FK is the reliable link between this receipt and the stock
+        // batches it generated (see GoodsReceiptStockApplicationService::resolveTargetBatch).
+        // Matching by client/item/location/lot heuristics instead is fragile: a
+        // null location_id, a manually edited batch, or a later consolidation
+        // breaks the match and blocks deletion even when reverting is perfectly safe.
+        $batchesByItem = StockPallet::query()
+            ->where('goods_receipt_id', $receipt->id)
+            ->lockForUpdate()
+            ->get()
+            ->groupBy('item_id');
+
         foreach ($receipt->lines as $line) {
-            $this->revertLine($receipt, $line);
+            $this->revertLine($line, $batchesByItem->get($line->item_id, collect()));
         }
     }
 
-    private function revertLine(GoodsReceipt $receipt, GoodsReceiptLine $line): void
+    private function revertLine(GoodsReceiptLine $line, Collection $candidateBatches): void
     {
         $item = $line->item;
 
         if (! $item instanceof Item) {
-            $item = Item::query()
-                ->where('client_id', $receipt->client_id)
-                ->where('sku', $line->sku)
-                ->first();
+            $item = Item::query()->find($line->item_id);
         }
 
-        if (! $item instanceof Item) {
-            throw ValidationException::withMessages([
-                'goods_receipt' => "No se puede revertir la linea {$line->id} porque su articulo ya no existe.",
-            ]);
-        }
+        $itemLabel = $item?->sku ?? $line->sku ?? "linea {$line->id}";
 
-        $unitsPerPallet = (int) ($line->units_per_pallet ?? $item->units_per_pallet ?? 0);
         $quantityUnits = (int) $line->quantity_units;
 
-        if ($unitsPerPallet <= 0 || $quantityUnits <= 0) {
+        if ($quantityUnits <= 0) {
+            // Nothing was ever added to stock for this line; there is nothing to revert.
+            return;
+        }
+
+        if ($candidateBatches->isEmpty()) {
             throw ValidationException::withMessages([
-                'goods_receipt' => "La linea {$line->id} no tiene datos suficientes para revertir el stock de forma segura.",
+                'goods_receipt' => "No se puede revertir el stock de {$itemLabel}: no queda ninguna partida generada por esta entrada (es probable que ya se haya movido o enviado).",
             ]);
         }
 
-        $batches = StockPallet::query()
-            ->where('client_id', $receipt->client_id)
-            ->where('item_id', $item->id)
-            ->where('location_id', $line->location_id)
-            ->where('lot', $line->lot)
-            ->where('units_per_pallet', $unitsPerPallet)
-            ->where('active', true)
-            ->lockForUpdate()
-            ->orderByDesc('id')
-            ->get();
+        // Prefer the batch that matches the line's own location/lot/units_per_pallet
+        // exactly. Fall back to the batch with the most remaining quantity so a
+        // manual edit of the batch (location, lot...) does not falsely block deletion.
+        $target = $candidateBatches->first(function (StockPallet $batch) use ($line): bool {
+            return (int) $batch->location_id === (int) $line->location_id
+                && (string) $batch->lot === (string) $line->lot
+                && (int) $batch->units_per_pallet === (int) $line->units_per_pallet;
+        }) ?? $candidateBatches->sortByDesc('quantity_units')->first();
 
-        $availableUnits = (int) $batches->sum('quantity_units');
+        $availableUnits = (int) $target->quantity_units;
 
         if ($availableUnits < $quantityUnits) {
             throw ValidationException::withMessages([
-                'goods_receipt' => "No se puede borrar la entrada porque la reversión de la linea {$line->id} dejaria el stock incoherente.",
+                'goods_receipt' => "No se puede borrar la entrada: revertir la linea de {$itemLabel} dejaria stock negativo (disponible {$availableUnits}, se necesitan {$quantityUnits}).",
             ]);
         }
 
-        $pendingUnits = $quantityUnits;
+        $remainingUnits = $availableUnits - $quantityUnits;
 
-        foreach ($batches as $batch) {
-            if ($pendingUnits <= 0) {
-                break;
-            }
+        if ($remainingUnits <= 0) {
+            $target->delete();
+            // Keep the in-memory attribute in sync so a later line for the same
+            // item never picks this (now deleted) batch again via the fallback.
+            $target->quantity_units = 0;
 
-            $currentUnits = (int) $batch->quantity_units;
-
-            if ($currentUnits <= 0) {
-                continue;
-            }
-
-            $deductedUnits = min($currentUnits, $pendingUnits);
-            $remainingUnits = $currentUnits - $deductedUnits;
-
-            if ($remainingUnits <= 0) {
-                $batch->delete();
-            } else {
-                $batch->fill([
-                    'quantity_units' => $remainingUnits,
-                ])->save();
-            }
-
-            $pendingUnits -= $deductedUnits;
+            return;
         }
+
+        $target->fill(['quantity_units' => $remainingUnits])->save();
     }
 }

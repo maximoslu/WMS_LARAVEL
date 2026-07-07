@@ -218,6 +218,32 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('¿Confirmas?');
     }
 
+    public function test_superadmin_ve_boton_borrar_en_entrada_confirmada_y_cancelada(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$confirmedReceipt] = $this->createConfirmedReceipt($superadmin, 'SKU-LIST-CONFIRMED');
+
+        $draftForCancel = $this->createDraftReceipt($superadmin);
+        $this->actingAs($superadmin)
+            ->patch(route('goods-receipts.cancel', $draftForCancel))
+            ->assertRedirect(route('goods-receipts.show', $draftForCancel));
+
+        $response = $this->actingAs($superadmin)
+            ->get(route('goods-receipts.index'))
+            ->assertOk();
+
+        $response->assertSee(
+            'action="'.route('goods-receipts.destroy', $confirmedReceipt).'"',
+            false
+        );
+        $response->assertSee(
+            'action="'.route('goods-receipts.destroy', $draftForCancel->fresh()).'"',
+            false
+        );
+    }
+
     public function test_almacen_no_ve_boton_borrar_entrada_en_listado(): void
     {
         $this->seed(RoleSeeder::class);
@@ -244,6 +270,64 @@ class GoodsReceiptManagementTest extends TestCase
             ->get(route('goods-receipts.index'))
             ->assertOk()
             ->assertDontSee('goods-receipt-delete-button', false);
+    }
+
+    public function test_superadmin_puede_borrar_entrada_cancelada(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $receipt = $this->createDraftReceipt($superadmin);
+
+        $this->actingAs($superadmin)
+            ->patch(route('goods-receipts.cancel', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'));
+
+        $this->assertDatabaseMissing('goods_receipts', ['id' => $receipt->id]);
+    }
+
+    public function test_superadmin_puede_borrar_entrada_confirmada_sin_stock_aplicado(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $receipt = GoodsReceipt::query()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-CONFIRMED-NOSTOCK',
+            'status' => GoodsReceipt::STATUS_CONFIRMED,
+            'received_at' => '2026-06-26',
+            'created_by' => $superadmin->id,
+            'confirmed_by' => $superadmin->id,
+            'confirmed_at' => now(),
+        ]);
+
+        GoodsReceiptLine::query()->create([
+            'goods_receipt_id' => $receipt->id,
+            'sku' => 'SKU-CONFIRMED-NOSTOCK',
+            'description' => 'Linea confirmada sin aplicar stock',
+            'lot' => 'LOT-NOSTOCK',
+            'quantity_units' => 500,
+            'units_per_pallet' => 500,
+            'pallet_count' => 1,
+            'pico_units' => 0,
+            'location_id' => $location->id,
+        ]);
+
+        $this->assertNull($receipt->fresh()->stock_applied_at);
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'));
+
+        $this->assertDatabaseMissing('goods_receipts', ['id' => $receipt->id]);
+        $this->assertDatabaseMissing('goods_receipt_lines', ['goods_receipt_id' => $receipt->id]);
     }
 
     public function test_crear_borrador_con_documento_muestra_cta_ia(): void
@@ -400,6 +484,72 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
         $this->assertSame(1, $receipt->lines()->count());
+    }
+
+    public function test_anadir_linea_manual_desde_detalle_de_borrador_no_aplica_stock_y_confirmar_si(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $receipt = GoodsReceipt::query()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-MANUAL-DETAIL',
+            'status' => GoodsReceipt::STATUS_DRAFT,
+            'received_at' => '2026-07-07',
+            'created_by' => $user->id,
+        ]);
+
+        $this->assertSame(0, $receipt->lines()->count());
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('Añadir línea manual');
+
+        // Simulates pressing "Anadir linea manual" (JS adds a blank row) and
+        // then "Guardar", which submits the full line set via update().
+        $this->actingAs($user)
+            ->put(route('goods-receipts.update', $receipt), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-MANUAL-DETAIL',
+                'received_at' => '2026-07-07',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-MANUAL-DETAIL',
+                        'description' => 'Linea manual anadida desde detalle',
+                        'lot' => 'LOT-MANUAL-DETAIL',
+                        'quantity_units' => 900,
+                        'units_per_pallet' => 300,
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+        $this->assertSame(1, $receipt->lines()->count());
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->status);
+        $this->assertNull($receipt->stock_applied_at);
+        $this->assertDatabaseMissing('stock_pallets', ['goods_receipt_id' => $receipt->id]);
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+        $this->assertNotNull($receipt->stock_applied_at);
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'quantity_units' => 900,
+            'full_pallets' => 3,
+        ]);
     }
 
     public function test_creating_goods_receipt_with_item_id_completes_sku_description_and_units_per_pallet(): void
@@ -1315,6 +1465,165 @@ class GoodsReceiptManagementTest extends TestCase
         ]);
     }
 
+    public function test_propuesta_ia_fake_mondi_detecta_proveedor_y_lineas(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $receipt = $this->attachStoredDocument($this->createDraftReceipt($almacen), 'EDV_10_MONDI.pdf');
+
+        // Existing supplier so the tolerant name matching (MONDI -> Mondi Paper
+        // Sales GmbH) can be proven, mirroring the real EDELVIVES scenario.
+        $mondiSupplier = Supplier::factory()->create([
+            'client_id' => $receipt->client_id,
+            'name' => 'Mondi Paper Sales GmbH',
+            'active' => true,
+        ]);
+
+        $proposal = [
+            'supplier_name' => 'MONDI',
+            'delivery_note_number' => '800916937',
+            'received_date' => '2026-06-10',
+            'confidence' => 0.88,
+            'warnings' => [],
+            'lines' => [
+                [
+                    'sku' => '180148050',
+                    'description' => 'DNS HIGH-SPEED INKJET NF, 80 gsm, WHITE, 480 mm width, 76.0 mm core',
+                    'lot' => 'LOTE-MONDI-1',
+                    'units_per_pallet' => 2,
+                    'total_units' => 62,
+                    'full_pallets' => 31,
+                    'peak_units' => 0,
+                    'confidence' => 0.9,
+                    'warnings' => [],
+                ],
+            ],
+        ];
+        $this->bindFakeAiExtractor($proposal);
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.ai-extract', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+
+        $this->assertSame(GoodsReceipt::AI_STATUS_COMPLETED, $receipt->ai_status);
+        $this->assertSame('MONDI', data_get($receipt->ai_extracted_data, 'supplier_name'));
+        $this->assertSame($mondiSupplier->id, data_get($receipt->ai_extracted_data, 'matched_supplier_id'));
+        $this->assertSame('800916937', data_get($receipt->ai_extracted_data, 'delivery_note_number'));
+        $this->assertSame('180148050', data_get($receipt->ai_extracted_data, 'lines.0.sku'));
+        $this->assertSame(62, data_get($receipt->ai_extracted_data, 'lines.0.total_units'));
+        $this->assertSame(31, data_get($receipt->ai_extracted_data, 'lines.0.full_pallets'));
+
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('MONDI')
+            ->assertSee('180148050');
+
+        // Aplicar la propuesta no debe aplicar stock todavia.
+        $applyPayload = $this->proposalApplyPayload($receipt, $proposal);
+        $applyPayload['supplier_id'] = $mondiSupplier->id;
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.ai-apply', $receipt->fresh()), $applyPayload)
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+        $this->assertNull($receipt->stock_applied_at);
+        $this->assertSame($mondiSupplier->id, $receipt->supplier_id);
+        $this->assertSame('800916937', $receipt->receipt_number);
+
+        $line = $receipt->lines()->firstOrFail();
+        $this->assertSame(62, $line->quantity_units);
+        $this->assertSame(2, $line->units_per_pallet);
+        $this->assertSame(31, $line->pallet_count);
+
+        // Confirmar la entrada aplica stock una sola vez.
+        $this->actingAs($almacen)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+        $this->assertNotNull($receipt->stock_applied_at);
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $line->item_id,
+            'quantity_units' => 62,
+        ]);
+    }
+
+    public function test_propuesta_ia_fake_lecta_sin_proveedor_existente_propone_crear(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        config(['services.openai.receipt_enabled' => true]);
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $receipt = $this->attachStoredDocument($this->createDraftReceipt($almacen), 'EDV_17_LECTA.pdf');
+
+        $proposal = [
+            'supplier_name' => 'LECTA / CARTIERE DEL GARDA SPA',
+            'delivery_note_number' => '480695482',
+            'received_date' => '2026-06-10',
+            'confidence' => 0.79,
+            'warnings' => [],
+            'lines' => [
+                [
+                    'sku' => '70000742',
+                    'description' => 'CreatorMatt 150,00 g/m2, 93,0 x 116,0, PB PALLET BLOCK',
+                    'lot' => 'LOTE-LECTA-480695482',
+                    'units_per_pallet' => 1,
+                    'total_units' => 12,
+                    'full_pallets' => 12,
+                    'peak_units' => 0,
+                    'confidence' => 0.8,
+                    'warnings' => [],
+                ],
+                [
+                    'sku' => '70000742',
+                    'description' => 'CreatorMatt 150,00 g/m2, 156,0 x 105,0, PB PALLET BLOCK',
+                    'lot' => 'LOTE-LECTA-480695484',
+                    'units_per_pallet' => 1,
+                    'total_units' => 7,
+                    'full_pallets' => 7,
+                    'peak_units' => 0,
+                    'confidence' => 0.8,
+                    'warnings' => [],
+                ],
+            ],
+        ];
+        $this->bindFakeAiExtractor($proposal);
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.ai-extract', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $receipt->refresh();
+
+        $this->assertSame(GoodsReceipt::AI_STATUS_COMPLETED, $receipt->ai_status);
+        $this->assertSame('LECTA / CARTIERE DEL GARDA SPA', data_get($receipt->ai_extracted_data, 'supplier_name'));
+        $this->assertNull(data_get($receipt->ai_extracted_data, 'matched_supplier_id'));
+        $this->assertSame('70000742', data_get($receipt->ai_extracted_data, 'lines.0.sku'));
+        $this->assertSame('70000742', data_get($receipt->ai_extracted_data, 'lines.1.sku'));
+        $this->assertSame(12, data_get($receipt->ai_extracted_data, 'lines.0.full_pallets'));
+        $this->assertSame(7, data_get($receipt->ai_extracted_data, 'lines.1.full_pallets'));
+        $this->assertContains(
+            'El proveedor detectado no coincide automaticamente con un proveedor activo del cliente. Revisa la cabecera antes de aplicar.',
+            data_get($receipt->ai_extracted_data, 'warnings')
+        );
+
+        $this->actingAs($almacen)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('LECTA / CARTIERE DEL GARDA SPA')
+            ->assertSee('70000742')
+            ->assertSee('Crear proveedor');
+    }
+
     public function test_error_ia_se_guarda_y_muestra_sin_romper_entrada(): void
     {
         Storage::fake('local');
@@ -1508,6 +1817,87 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->assertDatabaseHas('goods_receipts', ['id' => $receipt->id]);
         $this->assertDatabaseHas('stock_pallets', ['id' => $stockBatch->id]);
+    }
+
+    public function test_superadmin_puede_borrar_confirmada_sin_ubicacion_asignada(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $client = Client::factory()->create();
+        $supplier = Supplier::factory()->create(['client_id' => $client->id]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-NO-LOCATION',
+            'units_per_pallet' => 1000,
+        ]);
+
+        $receipt = GoodsReceipt::query()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-NO-LOCATION',
+            'status' => GoodsReceipt::STATUS_DRAFT,
+            'received_at' => '2026-07-07',
+            'created_by' => $superadmin->id,
+        ]);
+
+        $line = GoodsReceiptLine::query()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'lot' => null,
+            'quantity_units' => 1500,
+            'units_per_pallet' => 1000,
+            'pallet_count' => 1,
+            'pico_units' => 500,
+            'location_id' => null,
+        ]);
+
+        $this->actingAs($superadmin)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $stockBatch = StockPallet::query()->where('goods_receipt_id', $receipt->id)->firstOrFail();
+        $this->assertNull($stockBatch->location_id);
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'))
+            ->assertSessionHas('status', 'Entrada borrada correctamente.');
+
+        $this->assertDatabaseMissing('goods_receipts', ['id' => $receipt->id]);
+        $this->assertDatabaseMissing('goods_receipt_lines', ['id' => $line->id]);
+        $this->assertDatabaseMissing('stock_pallets', ['id' => $stockBatch->id]);
+    }
+
+    public function test_superadmin_puede_borrar_confirmada_tras_editar_partida_manualmente(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$receipt, $line] = $this->createConfirmedReceipt($superadmin, 'SKU-DELETE-EDITED');
+
+        $stockBatch = StockPallet::query()->where('goods_receipt_id', $receipt->id)->firstOrFail();
+
+        // Simulates a superadmin manually re-locating/re-lotting the batch after
+        // confirmation (via the batch edit screen), which must not block deletion.
+        $otherLocation = Location::factory()->create([
+            'warehouse_id' => $stockBatch->location?->warehouse_id ?? \App\Models\Warehouse::factory()->create()->id,
+        ]);
+        $stockBatch->update([
+            'location_id' => $otherLocation->id,
+            'lot' => 'LOT-CHANGED-AFTER-CONFIRM',
+        ]);
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'))
+            ->assertSessionHas('status', 'Entrada borrada correctamente.');
+
+        $this->assertDatabaseMissing('goods_receipts', ['id' => $receipt->id]);
+        $this->assertDatabaseMissing('goods_receipt_lines', ['id' => $line->id]);
+        $this->assertDatabaseMissing('stock_pallets', ['id' => $stockBatch->id]);
     }
 
     public function test_almacen_no_puede_borrar_entradas(): void

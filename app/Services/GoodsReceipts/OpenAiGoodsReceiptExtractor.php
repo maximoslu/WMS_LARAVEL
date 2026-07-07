@@ -131,17 +131,15 @@ class OpenAiGoodsReceiptExtractor implements GoodsReceiptAiExtractorInterface
             ];
         }
 
-        $payload = [
+        // Note: unlike input_image, the Responses API does not accept a
+        // `detail` field on input_file parts (PDF/scanned documents). Sending
+        // it previously caused OpenAI to reject the request for exactly the
+        // scanned-PDF case this extractor exists for.
+        return [
             'type' => 'input_file',
             'filename' => $filename,
             'file_data' => 'data:'.$mime.';base64,'.$base64,
         ];
-
-        if ($mime === 'application/pdf') {
-            $payload['detail'] = 'high';
-        }
-
-        return $payload;
     }
 
     private function instructionPrompt(): string
