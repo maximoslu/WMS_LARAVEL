@@ -1011,6 +1011,74 @@ class StockImportTest extends TestCase
         $this->assertSame(800, $stock->peak_1);
     }
 
+    public function test_edelvives_imports_same_sku_in_multiple_locations_without_overwriting(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeCurrentEdelvivesWorkbookRows([
+                $this->makeCurrentEdelvivesDataRow('21', 80, 'ED-MULTI-LOC', '=', 500, 2, 0, [], 2),
+                $this->makeCurrentEdelvivesDataRow('40-41', 80, 'ED-MULTI-LOC', '=', 500, 1, 1, [200], 2),
+            ]),
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertDontSee('ubicacion no reconocida')
+            ->assertSee('1.700')
+            ->assertSee('3')
+            ->assertSee('1')
+            ->assertSee('4');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(2, $stockImport->summary_json['available_rows']);
+        $this->assertSame(1, $stockImport->summary_json['catalog_items_detected']);
+        $this->assertSame(1700, $stockImport->summary_json['total_units']);
+        $this->assertSame(3, $stockImport->summary_json['total_full_pallets']);
+        $this->assertSame(1, $stockImport->summary_json['total_peaks_count']);
+        $this->assertSame(4, $stockImport->summary_json['total_logistic_units']);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect(route('stock.index', ['client_id' => $edelvives->id]));
+
+        $stocks = StockPallet::query()
+            ->where('client_id', $edelvives->id)
+            ->whereHas('item', fn ($query) => $query->where('sku', 'ED-MULTI-LOC'))
+            ->orderBy('location_text')
+            ->get();
+
+        $this->assertCount(2, $stocks);
+        $this->assertSame(['21', '40-41'], $stocks->pluck('location_text')->all());
+        $this->assertSame([1000, 700], $stocks->pluck('quantity_units')->all());
+        $this->assertSame([2, 1], $stocks->pluck('full_pallets')->all());
+        $this->assertSame([0, 1], $stocks->pluck('peaks_count')->all());
+        $this->assertSame([0, 200], $stocks->pluck('peak_1')->all());
+        $this->assertTrue($stocks->every(fn (StockPallet $stock): bool => $stock->lot === 'SIN LOTE'));
+
+        $this->assertDatabaseHas('locations', [
+            'code' => '40-41',
+        ]);
+
+        $overview = app(StockOverviewBuilder::class)->build($user, [
+            'client_id' => $edelvives->id,
+            'search' => 'ED-MULTI-LOC',
+            'stock_state' => 'with_stock',
+        ]);
+
+        $this->assertSame(1, $overview['summary']['references_with_stock']);
+        $this->assertSame(1700, $overview['summary']['total_units']);
+        $this->assertSame(3, $overview['summary']['total_full_pallets']);
+        $this->assertSame(1, $overview['summary']['total_peaks']);
+        $this->assertSame(4, $overview['summary']['total_logistic_units']);
+        $this->assertEqualsCanonicalizing(['21', '40-41'], $overview['rows']->pluck('location_label')->all());
+    }
+
     public function test_edelvives_preview_and_import_align_with_realistic_workbook_totals_and_logistic_rows(): void
     {
         [, $edelvives] = $this->seedBaseData();
@@ -1337,6 +1405,35 @@ class StockImportTest extends TestCase
     }
 
     /**
+     * @param  array<int, array<int, mixed>>  $dataRows
+     * @return array<int, array<int, mixed>>
+     */
+    private function makeCurrentEdelvivesWorkbookRows(array $dataRows, mixed $formatHeader = 13.0, mixed $auxHeader = '=SUM(R2:R1000)'): array
+    {
+        return array_merge([[
+            'NAVE 19',
+            'GRAMAJE',
+            $formatHeader,
+            'CANTIDAD',
+            'UNIDADES x PALLET',
+            'PALLETS',
+            'PICOS',
+            'PICO 1',
+            'PICO 2',
+            'PICO 3',
+            'PICO 4',
+            'PICO 5 ',
+            'PICO 6',
+            'PICO 7',
+            'PICO 8',
+            'PICO 9',
+            'PICO 10',
+            'TOTAL PALLETS',
+            $auxHeader,
+        ]], $dataRows);
+    }
+
+    /**
      * @param  array<int, mixed>  $peakValues
      * @return array<int, mixed>
      */
@@ -1358,6 +1455,42 @@ class StockImportTest extends TestCase
             $grammage,
             $sku,
             $description,
+            $quantity,
+            $unitsPerPallet,
+            $fullPallets,
+            $peaksCount,
+        ];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $row[] = $peakValues[$peakNumber - 1] ?? 0;
+        }
+
+        $row[] = $reportedTotalPallets;
+        $row[] = $ignoredAux;
+
+        return $row;
+    }
+
+    /**
+     * @param  array<int, mixed>  $peakValues
+     * @return array<int, mixed>
+     */
+    private function makeCurrentEdelvivesDataRow(
+        mixed $location,
+        mixed $grammage,
+        string $reference,
+        mixed $quantity,
+        mixed $unitsPerPallet,
+        mixed $fullPallets,
+        mixed $peaksCount,
+        array $peakValues = [],
+        mixed $reportedTotalPallets = null,
+        mixed $ignoredAux = null,
+    ): array {
+        $row = [
+            $location,
+            $grammage,
+            $reference,
             $quantity,
             $unitsPerPallet,
             $fullPallets,

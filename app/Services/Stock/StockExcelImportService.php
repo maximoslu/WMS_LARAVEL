@@ -194,7 +194,15 @@ class StockExcelImportService
             $createdItems = 0;
             $updatedItems = 0;
             $edelvivesLocations = ($preview['profile'] ?? null) === self::PROFILE_EDELVIVES
-                ? $this->ensureEdelvivesLocations($lockedImport->client)
+                ? $this->ensureEdelvivesLocations(
+                    $lockedImport->client,
+                    collect($preview['rows'])
+                        ->pluck('location_code')
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all(),
+                )
                 : [];
 
             foreach ($preview['catalog_items'] as $catalogItem) {
@@ -1283,7 +1291,7 @@ class StockExcelImportService
     {
         $values = $row->toArray();
 
-        $matchesExpectedStructure = $this->normalizeHeaderCellValue($values[1] ?? null) === 'gramaje'
+        $matchesSeparatedDescriptionStructure = $this->normalizeHeaderCellValue($values[1] ?? null) === 'gramaje'
             && $this->matchesHeaderAlias('sku', $this->normalizeHeaderCellValue($values[2] ?? null))
             && $this->matchesHeaderAlias('quantity_units', $this->normalizeHeaderCellValue($values[4] ?? null))
             && $this->matchesHeaderAlias('units_per_pallet', $this->normalizeHeaderCellValue($values[5] ?? null))
@@ -1292,23 +1300,50 @@ class StockExcelImportService
             && preg_match('/^(pico|peak)\s*1$/', $this->normalizeHeaderCellValue($values[8] ?? null)) === 1
             && $this->matchesHeaderAlias('reported_total_pallets', $this->normalizeHeaderCellValue($values[18] ?? null));
 
-        if (! $matchesExpectedStructure) {
+        if ($matchesSeparatedDescriptionStructure) {
+            $map = [
+                'location_text' => 0,
+                'sku' => 2,
+                'description' => 3,
+                'quantity_units' => 4,
+                'units_per_pallet' => 5,
+                'full_pallets' => 6,
+                'peaks_count' => 7,
+                'reported_total_pallets' => 18,
+            ];
+
+            foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+                $map['peak_'.$peakNumber] = 7 + $peakNumber;
+            }
+
+            return $map;
+        }
+
+        $matchesCombinedReferenceStructure = $this->normalizeHeaderCellValue($values[1] ?? null) === 'gramaje'
+            && $this->matchesHeaderAlias('quantity_units', $this->normalizeHeaderCellValue($values[3] ?? null))
+            && $this->matchesHeaderAlias('units_per_pallet', $this->normalizeHeaderCellValue($values[4] ?? null))
+            && $this->matchesHeaderAlias('full_pallets', $this->normalizeHeaderCellValue($values[5] ?? null))
+            && $this->matchesHeaderAlias('peaks_count', $this->normalizeHeaderCellValue($values[6] ?? null))
+            && preg_match('/^(pico|peak)\s*1$/', $this->normalizeHeaderCellValue($values[7] ?? null)) === 1
+            && $this->matchesHeaderAlias('reported_total_pallets', $this->normalizeHeaderCellValue($values[17] ?? null));
+
+        if (! $matchesCombinedReferenceStructure) {
             return null;
         }
 
         $map = [
             'location_text' => 0,
             'sku' => 2,
-            'description' => 3,
-            'quantity_units' => 4,
-            'units_per_pallet' => 5,
-            'full_pallets' => 6,
-            'peaks_count' => 7,
-            'reported_total_pallets' => 18,
+            'description' => 2,
+            'quantity_units' => 3,
+            'units_per_pallet' => 4,
+            'full_pallets' => 5,
+            'peaks_count' => 6,
+            'reported_total_pallets' => 17,
         ];
 
         foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-            $map['peak_'.$peakNumber] = 7 + $peakNumber;
+            $map['peak_'.$peakNumber] = 6 + $peakNumber;
         }
 
         return $map;
@@ -1717,7 +1752,7 @@ class StockExcelImportService
     /**
      * @return array<string, Location>
      */
-    private function ensureEdelvivesLocations(Client $client): array
+    private function ensureEdelvivesLocations(Client $client, array $locationCodes = []): array
     {
         $warehouse = Warehouse::query()
             ->where(function ($query) use ($client): void {
@@ -1743,7 +1778,12 @@ class StockExcelImportService
 
         $codes = collect(range(0, 45))
             ->map(fn (int $value): string => (string) $value)
-            ->merge(['A', 'B', 'C', 'D', 'E', 'F', 'FONDO', 'SIN UBICACION']);
+            ->merge(['A', 'B', 'C', 'D', 'E', 'F', 'FONDO', 'SIN UBICACION'])
+            ->merge($locationCodes)
+            ->map(fn (mixed $code): string => Str::upper($this->normalizeText((string) $code)))
+            ->filter(fn (string $code): bool => $code !== '')
+            ->unique()
+            ->values();
 
         foreach ($codes as $code) {
             Location::query()->updateOrCreate(
@@ -1827,6 +1867,20 @@ class StockExcelImportService
                 'code' => $normalized,
                 'warning_groups' => [],
             ];
+        }
+
+        $normalizedRange = preg_replace('/\s*-\s*/u', '-', $normalized) ?? $normalized;
+
+        if (preg_match('/^(\d{1,2})-(\d{1,2})$/', $normalizedRange, $matches) === 1) {
+            $from = (int) $matches[1];
+            $to = (int) $matches[2];
+
+            if ($from >= 0 && $from <= 45 && $to >= 0 && $to <= 45) {
+                return [
+                    'code' => $normalizedRange,
+                    'warning_groups' => [],
+                ];
+            }
         }
 
         return [

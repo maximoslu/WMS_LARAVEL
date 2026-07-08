@@ -1261,3 +1261,84 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - **`php artisan migrate --force` SI aplica en este hito** (hay una migracion nueva: `client_receipt_email_recipients`) - confirmar que el script de deploy de Forge la ejecuta, o lanzarla manualmente si no
 - `php artisan optimize:clear`
 - `php artisan queue:restart` (el envio de avisos sigue despachandose por cola)
+
+---
+
+## 2026-07-08 - Fix multiubicacion en importacion stock EDELVIVES (17:17:22 +02:00)
+
+**Contexto:** Preparacion del lanzamiento real de pruebas con cliente EDELVIVES usando el archivo local `C:\Users\jorge\Downloads\STOCK_EDELVIVES.xlsx`. La regla critica revisada fue que una misma referencia/SKU puede aparecer en varias ubicaciones logisticas y no se debe pisar ni agrupar por SKU eliminando el detalle de ubicacion. Clave operativa esperada: cliente + SKU + ubicacion + lote (`SIN LOTE` si el Excel no trae lote).
+
+**Diagnostico real:**
+- El flujo de confirmacion ya crea una partida `stock_pallets` por cada fila importable, por lo que no hacia `update` de stock por SKU.
+- El reemplazo de stock del cliente ya estaba dentro de `DB::transaction()` y borra solo `stock_pallets` del `client_id` importado antes de crear la nueva foto de stock.
+- El punto fragil estaba en EDELVIVES: `resolveEdelvivesLocation()` solo aceptaba numeros `0..45`, letras `A..F`, `FONDO` y vacio. Una ubicacion tipo `40-41` o `41-19` caia en `SIN UBICACION`, perdiendo la ubicacion real.
+- El Excel actualizado tambien trae una cabecera real distinta al fixture anterior: columna C contiene la referencia completa, la cabecera C es numerica (`13`) y `CANTIDAD` esta en D como formula. El detector anterior esperaba literalmente `SKU` en C y `CANTIDAD` en E, por lo que rechazaba el archivo con `La hoja STOCK no tiene el formato esperado para Edelvives`.
+
+**Cambio aplicado:**
+- `app/Services/Stock/StockExcelImportService.php`
+  - `buildEdelvivesColumnMap()` ahora acepta los dos formatos:
+    - formato anterior con `SKU` en C, descripcion en D, cantidad en E;
+    - formato actualizado con referencia en C, cantidad/formula en D, unidades por pallet en E, pallets en F, picos en G y `TOTAL PALLETS` en R.
+  - Cuando no hay descripcion separada, la descripcion se toma de la misma referencia de columna C.
+  - `resolveEdelvivesLocation()` acepta rangos numericos con guion (`40-41`, `41-19`, etc.) si ambos extremos estan entre `0` y `45`, preservando el guion.
+  - `ensureEdelvivesLocations()` recibe las ubicaciones detectadas en el preview y crea dinamicamente las ubicaciones nuevas necesarias en NAVE 38, ademas de las calles base.
+- `tests/Feature/StockImportTest.php`
+  - nuevo test de regresion `test_edelvives_imports_same_sku_in_multiple_locations_without_overwriting`.
+  - El test usa la cabecera real actualizada y valida mismo SKU en `21` y `40-41`, dos partidas separadas, `SIN LOTE`, unidades por ubicacion, pallets, picos, total visual por SKU y ubicacion `40-41` creada.
+
+**Validacion del Excel real `STOCK_EDELVIVES.xlsx`:**
+- Hoja procesada: `STOCK`
+- Filas leidas: `413`
+- Partidas de stock importables: `178`
+- Articulos detectados en el preview: `171`
+- Total unidades: `5.149.956`
+- Pallets completos: `858`
+- Picos totales: `96`
+- Unidades logisticas: `954`
+- Filas sin SKU ignoradas: `235`
+- Errores bloqueantes: `0`
+- Ubicaciones detectadas: `50`
+- Lote aplicado a todas las partidas importadas: `SIN LOTE`
+- Nota importante: el archivo actualizado suma `96` picos y `954` unidades logisticas. Esto difiere de la expectativa antigua `95/953` del workbook anterior; la diferencia viene del contenido real del archivo actual, no de un fallo de importacion.
+
+**Multiubicacion validada en el Excel real:**
+- `96x125 120 - ORIA PRINT NATURAL OFFSET`: ubicaciones `1` y `3`, `348.000` uds, `48` pallets, `0` picos.
+- `131x101 150 - MAGNO NATURAL`: ubicaciones `17` y `43`, `163.125` uds, `45` pallets, `0` picos.
+- `115x153 115 - MAGNO SATIN`: ubicaciones `32` y `41`, `35.000` uds, `10` pallets, `0` picos.
+- `92x114 80 - MAGNO MATT`: ubicaciones `C` y `D`, `33.350` uds, `3` pallets, `1` pico.
+
+**Importacion local controlada:**
+- Ejecutada localmente usando el servicio existente (`createPreview()` + `confirm()`), no SQL manual.
+- Resultado local EDELVIVES tras confirmar:
+  - `178` partidas de stock
+  - `5.149.956` unidades
+  - `858` pallets completos
+  - `96` picos
+  - `954` unidades logisticas
+  - `178` partidas con lote `SIN LOTE`
+- FRIESLAND antes/despues en local: sin cambios (`0` filas antes y `0` filas despues en esta base local).
+- El flujo sigue siendo reemplazo completo del stock del cliente importado, en transaccion, y no toca otros clientes.
+
+**Validacion automatizada:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: `Nothing to migrate`
+- `php artisan test tests/Feature/StockImportTest.php`: `29 passed` (302 assertions)
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `92 passed` (489 assertions)
+- `php artisan test`: `453 passed` (2044 assertions)
+- `npm run build`: OK
+
+**Control de alcance:**
+- No se toco `.env`
+- No se tocaron secretos ni JSON privados
+- No se uso `migrate:fresh`
+- No se uso `force push`
+- No se anadio `.claude/`
+- No hay migraciones nuevas en este hito
+- No se toco FRIESLAND, facturacion ni Google Calendar
+
+**Cierre operativo:**
+- Commit previsto para este hito: `fix: preserve multiple locations in Edelvives stock import`
+- Push previsto: `origin/main`
+- Deploy previsto: Forge `Deploy Now` sobre `wms.maximosl.com`
+- Comandos Forge recomendados tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
+- `php artisan migrate --force` no aplica por codigo nuevo de este hito (sin migraciones nuevas), aunque puede ejecutarse de forma segura si el script de Forge lo incluye.
