@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ClientGoodsReceiptDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DailyOperationController;
 use App\Http\Controllers\GoodsDispatchController;
@@ -206,6 +207,13 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/entradas/{goodsReceipt}/ia-aplicar', [GoodsReceiptController::class, 'applyAi'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.ai-apply');
+
+    Route::get('/mis-albaranes', [ClientGoodsReceiptDocumentController::class, 'index'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('client-goods-receipts.index');
+    Route::get('/mis-albaranes/{goodsReceipt}/descargar', [ClientGoodsReceiptDocumentController::class, 'download'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('client-goods-receipts.download');
 
     Route::get('/operaciones-diarias', [DailyOperationController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

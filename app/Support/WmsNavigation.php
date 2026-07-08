@@ -15,7 +15,13 @@ class WmsNavigation
         return collect(config('wms.navigation_sections', []))
             ->map(function (array $section) use ($user): ?array {
                 $children = collect($section['children'] ?? [])
-                    ->filter(fn (array $child) => $user->canAccessRole($child['minimum_role']))
+                    ->filter(function (array $child) use ($user): bool {
+                        if (isset($child['exact_role']) && ! $user->hasRole($child['exact_role'])) {
+                            return false;
+                        }
+
+                        return $user->canAccessRole($child['minimum_role']);
+                    })
                     ->map(fn (array $child): array => self::decorateChild($child, $user))
                     ->values()
                     ->all();

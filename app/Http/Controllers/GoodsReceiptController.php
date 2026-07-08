@@ -18,6 +18,7 @@ use App\Models\Supplier;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractionService;
 use App\Services\GoodsReceipts\GoodsReceiptConfirmationService;
 use App\Services\GoodsReceipts\GoodsReceiptDeletionService;
+use App\Services\GoodsReceipts\GoodsReceiptDocumentNotificationService;
 use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Services\GoodsReceipts\GoodsReceiptStockApplicationService;
@@ -43,6 +44,7 @@ class GoodsReceiptController extends Controller
         private readonly GoodsReceiptAiExtractionService $aiExtractionService,
         private readonly GoodsReceiptDocumentStorage $documentStorage,
         private readonly GoodsReceiptStockApplicationService $stockApplicationService,
+        private readonly GoodsReceiptDocumentNotificationService $documentNotificationService,
     ) {}
 
     public function index(Request $request): View
@@ -193,6 +195,10 @@ class GoodsReceiptController extends Controller
             return $receipt;
         });
 
+        if ($receipt->document_path !== null) {
+            $this->documentNotificationService->notifyDocumentAvailable($receipt);
+        }
+
         if ($expectsAiFlow) {
             if ($receipt->document_path === null) {
                 return redirect()
@@ -276,6 +282,7 @@ class GoodsReceiptController extends Controller
         $this->authorizeEdit($goodsReceipt, $request);
 
         $validated = $request->validated();
+        $documentReplaced = $request->hasFile('document');
 
         try {
             DB::transaction(function () use ($request, $validated, $goodsReceipt): void {
@@ -313,6 +320,10 @@ class GoodsReceiptController extends Controller
                 ->route('goods-receipts.show', $goodsReceipt)
                 ->withErrors($exception->errors())
                 ->withInput();
+        }
+
+        if ($documentReplaced) {
+            $this->documentNotificationService->notifyDocumentAvailable($goodsReceipt->fresh());
         }
 
         return redirect()
@@ -370,6 +381,8 @@ class GoodsReceiptController extends Controller
     public function attachDocument(AttachGoodsReceiptDocumentRequest $request, GoodsReceipt $goodsReceipt): RedirectResponse
     {
         $goodsReceipt->update($this->documentStorage->store($request->file('document'), $goodsReceipt));
+
+        $this->documentNotificationService->notifyDocumentAvailable($goodsReceipt->fresh());
 
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)

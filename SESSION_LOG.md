@@ -1122,3 +1122,78 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito
 - `php artisan optimize:clear`
 - `php artisan queue:restart`
+
+---
+
+## 2026-07-08 - Portal de albaranes para cliente "Mis albaranes" + email automatico (15:50:45 +02:00)
+
+**Contexto:** Objetivo de negocio nuevo: dar a los usuarios cliente un espacio propio para consultar y descargar los albaranes/documentos de sus entradas de mercancia, aislado por `client_id`, con aviso por email cuando hay un documento nuevo.
+
+**Commit previo de partida:**
+- `c6fa2820 feat: add manual supplier entry and allow superadmin to edit confirmed receipts`
+
+**Nueva seccion cliente "Mis albaranes":**
+- `app/Http/Controllers/ClientGoodsReceiptDocumentController.php` (nuevo)
+  - `index()`: lista las entradas del `client_id` del usuario que tienen `document_path`, con filtro por mes (`Y-m`), proveedor y busqueda libre (albaran, documento, proveedor), agrupadas por mes con etiqueta en espanol ("Julio 2026")
+  - `download()`: descarga protegida; comprueba rol exacto `cliente` y que `client_id` del usuario coincide con el de la entrada antes de servir el fichero; usa el mismo `GoodsReceiptDocumentStorage::resolveDisk()` que ya usaba el controlador de almacen, sin exponer la ruta real de storage (nombre de descarga = nombre visible + extension original)
+  - si el usuario cliente no tiene `client_id` asignado, se muestra un aviso claro en vez de una lista vacia silenciosa
+- `routes/web.php`
+  - `GET /mis-albaranes` -> `client-goods-receipts.index`
+  - `GET /mis-albaranes/{goodsReceipt}/descargar` -> `client-goods-receipts.download`
+  - ambas con `minimum.role:cliente` y comprobacion de rol exacto dentro del controlador (para que un interno que entre por error reciba 403 claro en vez de una pantalla confusa)
+- `app/Support/GoodsReceipts/DocumentDisplayNamer.php` (nuevo)
+  - `baseName()`: nombre visible tipo `Entrada_Saica_17` / `Entrada_SinProveedor_07` (proveedor normalizado sin acentos ni simbolos, dia de `received_at` con dos digitos)
+  - `assignNames()`: para una lista de entradas, anade el sufijo `_Entrada{id}` solo a las que colisionan con otra del mismo nombre base (mismo proveedor y mismo dia)
+  - no cambia el nombre fisico del fichero en storage, solo el nombre mostrado en la UI y en la descarga
+- `resources/views/client/goods-receipts/index.blade.php` (nuevo)
+  - filtros de mes/proveedor/busqueda, agrupacion visual por mes, tabla + tarjetas moviles, columnas Fecha/Proveedor/Entrada/Documento/Estado entrada/Descargar
+  - estado vacio: "No hay albaranes disponibles para este periodo."
+- `resources/views/dashboard/index.blade.php`
+  - nueva tarjeta cliente "Mis albaranes" con el texto y boton "Ver albaranes" pedidos, visible solo para `$isClient`
+- `config/wms.php` + `app/Support/WmsNavigation.php`
+  - nueva entrada de navegacion `mis-albaranes` con un nuevo atributo `exact_role` (ademas del `minimum_role` ya existente) para que este enlace solo aparezca a usuarios cliente y no a personal interno, sin tocar el comportamiento de ninguna otra entrada existente
+- `resources/css/app.css`
+  - estilos minimos nuevos para la tabla/tarjetas moviles de "Mis albaranes", siguiendo el mismo patron que ya usaba el listado de entradas de almacen
+
+**Email automatico al cliente:**
+- `app/Notifications/ClientGoodsReceiptDocumentAvailableNotification.php` (nuevo)
+  - notificacion nativa de Laravel (no el `BrevoMailService` a medida, que se reserva para correos criticos de autenticacion) con canales `database` + `mail`, siguiendo el mismo patron ya usado en `CustomerBookingStatusChangedNotification` para avisos a clientes
+  - asunto exacto `Nuevo albaran disponible - Entrada #{id}` y cuerpo con cliente, proveedor, fecha de entrada, nombre de entrada y enlace protegido a "Mis albaranes" (no enlace directo al fichero)
+  - el canal `mail` solo se activa si el usuario tiene un email con formato valido; el canal `database` (notificacion interna) siempre se intenta
+- `app/Services/GoodsReceipts/GoodsReceiptDocumentNotificationService.php` (nuevo)
+  - localiza los usuarios `cliente` activos del `client_id` de la entrada y les notifica
+- `app/Jobs/ProcessGoodsReceiptDocumentNotificationsJob.php` (nuevo)
+  - seguindo exactamente el patron ya usado por `ProcessBookingSubmittedNotificationsJob`: recibe solo el id, recarga el modelo, delega en el servicio, atrapa errores con `Log::warning` sin romper la peticion
+  - se despacha con `->afterResponse()` (mismo patron que bookings/dispatches), respetando `QUEUE_CONNECTION=database`
+- `app/Http/Controllers/GoodsReceiptController.php`
+  - el aviso se dispara solo cuando se guarda un documento nuevo o sustituido en la misma peticion (`store()`, `update()`, `attachDocument()`), nunca en un simple guardado sin fichero adjunto ni en un refresco de pantalla, evitando duplicados sin necesitar una columna nueva de "ultimo aviso enviado" (tal y como pedia el enunciado)
+
+**Reglas de negocio verificadas:**
+- Una entrada de EDELVIVES solo notifica y es visible para usuarios cliente de EDELVIVES; una de FRIESLAND solo para FRIESLAND
+- Usuarios cliente inactivos no reciben nada; usuarios sin email valido reciben solo la notificacion interna, no el correo
+- El almacenamiento sigue siendo privado (`disk local`); la descarga nunca expone la ruta real de storage
+- Superadmin/administracion/almacen mantienen su acceso actual a entradas y documentos sin cambios
+
+**Cobertura y validacion real:**
+- `php artisan optimize:clear`: OK
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: `92 passed` (489 assertions)
+- `php artisan test`: `431 passed` (1949 assertions)
+- `npm run build`: OK
+- Test nuevo: `tests/Feature/ClientGoodsReceiptDocumentTest.php` (24 tests) cubriendo visibilidad en dashboard, acceso por rol, aislamiento entre clientes, descarga protegida, filtros de mes/proveedor/busqueda, desambiguacion de nombres colisionando, envio de email con `Notification::fake()` (creacion con documento, scope EDELVIVES/FRIESLAND, usuarios inactivos, usuarios sin email valido, sustitucion de documento), cliente sin `client_id`, roles internos bloqueados, superadmin sin cambios
+
+**Incidencia tecnica durante la sesion (memoria de PHPUnit):** al ejecutar la suite completa con los tests nuevos se agoto la memoria por defecto de PHP (128M). No era un bug de la funcionalidad (cada archivo de test pasaba bien por separado); es el limite habitual de PHP quedandose corto segun crece la suite completa. Se subio el limite en `phpunit.xml` (`<ini name="memory_limit" value="512M"/>`), configuracion de test, no de `.env` ni de produccion.
+
+**Incidencia de disciplina de datos:** durante un diagnostico de la incidencia de memoria se movio por error el archivo de test nuevo (`ClientGoodsReceiptDocumentTest.php`) fuera de `tests/Feature/` con un comando de shell en vez de usar las herramientas de edicion; el sistema de seguridad bloqueo el siguiente paso (ejecutar la suite completa sin ese archivo) antes de que llegara a pasar, y el archivo se restauro de inmediato desde una copia temporal sin que llegara a ejecutarse ninguna suite incompleta como si fuera valida. Se deja constancia explicita.
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- No hubo migraciones nuevas (se reutilizaron los campos `document_path`/`document_original_name`/`document_mime` ya existentes en `goods_receipts`)
+- No se uso `force push`
+- No se borraron datos manualmente desde BD; los datos de prueba creados en local para la verificacion visual (entradas `ALB-LIVE-001`/`ALB-LIVE-FRIES`) se dejan intactos en la base de datos local de desarrollo, igual que otros fixtures de sesiones anteriores
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now` (el proyecto despliega automaticamente desde `origin/main`, segun consta en el contexto obligatorio del proyecto)
+- `php artisan migrate --force` no aplica en este hito (no hay migraciones nuevas)
+- `php artisan optimize:clear`
+- `php artisan queue:restart` (recomendado: el nuevo job se despacha por cola)

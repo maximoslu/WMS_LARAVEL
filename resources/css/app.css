@@ -4306,6 +4306,20 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     gap: 0.8rem;
 }
 
+.client-goods-receipts-mobile {
+    display: none;
+}
+
+.client-goods-receipts-group {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.client-goods-receipt-card {
+    display: grid;
+    gap: 0.5rem;
+}
+
 @media (max-width: 1180px) {
     .goods-receipt-compact-grid .auth-field,
     .goods-receipt-readonly-field {
@@ -4698,6 +4712,15 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
 
     .goods-receipts-table {
         min-width: 64rem;
+    }
+
+    .client-goods-receipts-mobile {
+        display: grid;
+        gap: 0.85rem;
+    }
+
+    .client-goods-receipts-table {
+        min-width: 50rem;
     }
 
     .goods-receipt-ai-line-grid .auth-field,

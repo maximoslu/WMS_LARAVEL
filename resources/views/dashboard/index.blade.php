@@ -52,6 +52,18 @@
         @endforeach
     </section>
 
+    @if ($isClient)
+        <section class="surface-card compact-card dashboard-mis-albaranes-card">
+            <div class="ops-section-heading dashboard-notifications-header">
+                <div class="dashboard-notifications-intro">
+                    <strong>Mis albaranes</strong>
+                    <p class="merchandise-request-summary-copy">Consulta los documentos de entrada clasificados por mes y proveedor.</p>
+                </div>
+                <a href="{{ route('client-goods-receipts.index') }}" class="button-primary compact-button btn-table dashboard-notifications-link">Ver albaranes</a>
+            </div>
+        </section>
+    @endif
+
     <section class="surface-card compact-card dashboard-calendar-card">
         <div class="ops-section-heading dashboard-notifications-header">
             <div class="dashboard-notifications-intro">
