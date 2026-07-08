@@ -1342,3 +1342,45 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Deploy previsto: Forge `Deploy Now` sobre `wms.maximosl.com`
 - Comandos Forge recomendados tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
 - `php artisan migrate --force` no aplica por codigo nuevo de este hito (sin migraciones nuevas), aunque puede ejecutarse de forma segura si el script de Forge lo incluye.
+
+---
+
+## 2026-07-08 - Produccion: deploy e importacion EDELVIVES confirmada (17:41:33 +02:00)
+
+**Deploy Forge:**
+- Commit desplegado: `2d91b8c fix: preserve multiple locations in Edelvives stock import`
+- Forge mostro el deployment `72954833` como `Deployed` para `2d91b8ca4e2249094014c7817be1f9afe697aceb`.
+- No hubo migraciones nuevas en este hito.
+
+**Importacion productiva EDELVIVES:**
+- URL usada: `https://wms.maximosl.com/stock/importar`
+- Usuario en sesion: superadmin (`BOSS` en UI)
+- Cliente seleccionado: `EDELVIVES`
+- Archivo cargado por usuario en navegador: `STOCK_EDELVIVES.xlsx`
+- Preview productivo mostrado antes de confirmar:
+  - Filas leidas: `412`
+  - Ubicaciones usadas: `51`
+  - Articulos detectados: `159`
+  - Articulos nuevos: `5`
+  - Articulos actualizados: `154`
+  - Partidas de stock: `179`
+  - Total unidades: `5.146.516`
+  - Pallets completos: `948`
+  - Picos totales: `97`
+  - Unidades logisticas: `1.045`
+  - Filas ignoradas: `233`
+  - Errores bloqueantes: `0`
+- Se aviso de que estos totales no coincidian con la validacion local anterior (`413`/`178`/`5.149.956`/`858`/`96`/`954`). El usuario confirmo continuar con `ok dale a ver`.
+- Confirmacion ejecutada en produccion: OK.
+- Mensaje posterior: `Importacion completada para EDELVIVES. Filas importadas: 179.`
+- Historial de importaciones: `08/07/2026 15:36 | EDELVIVES | STOCK_EDELVIVES.xlsx | Importada | 412 | 179`.
+
+**Validacion post-import en produccion:**
+- `/stock?client_id=2` mostro `PALLETS TOTALES 1.045` y `Mostrando 1 a 25 de 179 registros`.
+- Multiubicacion validada con SKU `110x89 135`:
+  - partida 1: ubicacion `19`, lote `SIN LOTE`, `7.426` uds, `1` pallet, `0` picos
+  - partida 2: ubicacion `38`, lote `SIN LOTE`, `16.500` uds, `3` pallets, `0` picos
+  - KPI filtrado: `PALLETS TOTALES 4`
+- Aislamiento por cliente validado desde superadmin filtrando FRIESLAND:
+  - `/stock?client_id=1&search=110x89%20135&stock_state=with_stock` devolvio `SIN RESULTADOS`.
+- No se valido login como usuario cliente EDELVIVES/FRIESLAND en esta sesion porque no se disponia de credenciales de cliente; se valido el filtrado servidor/UI desde superadmin.
