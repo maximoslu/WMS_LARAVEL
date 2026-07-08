@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreClientReceiptEmailRecipientRequest;
 use App\Http\Requests\StoreClientRequest;
 use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
+use App\Models\ClientReceiptEmailRecipient;
+use App\Models\Role;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -66,8 +69,30 @@ class ClientController extends Controller
     {
         return view('clients.edit', [
             'client' => $client,
+            'receiptEmailRecipients' => $client->receiptEmailRecipients()->orderBy('email')->get(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
+    }
+
+    public function storeReceiptEmailRecipient(StoreClientReceiptEmailRecipientRequest $request, Client $client): RedirectResponse
+    {
+        $client->receiptEmailRecipients()->create($request->validated());
+
+        return redirect()
+            ->route('clients.edit', $client)
+            ->with('status', 'Email para albaranes anadido correctamente.');
+    }
+
+    public function destroyReceiptEmailRecipient(Request $request, Client $client, ClientReceiptEmailRecipient $clientReceiptEmailRecipient): RedirectResponse
+    {
+        abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
+        abort_unless((int) $clientReceiptEmailRecipient->client_id === (int) $client->id, 404);
+
+        $clientReceiptEmailRecipient->delete();
+
+        return redirect()
+            ->route('clients.edit', $client)
+            ->with('status', 'Email para albaranes eliminado correctamente.');
     }
 
     public function update(UpdateClientRequest $request, Client $client): RedirectResponse

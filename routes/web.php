@@ -314,6 +314,12 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/clientes/{client}/activar-desactivar', [ClientController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('clients.toggle-active');
+    Route::post('/clientes/{client}/emails-albaranes', [ClientController::class, 'storeReceiptEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.receipt-emails.store');
+    Route::delete('/clientes/{client}/emails-albaranes/{clientReceiptEmailRecipient}', [ClientController::class, 'destroyReceiptEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.receipt-emails.destroy');
 
     Route::get('/almacenes', [WarehouseController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
@@ -388,6 +394,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/auditoria/limpieza/ejecutar', [AuditController::class, 'executeCleanup'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('audit.cleanup.execute');
+    Route::post('/auditoria/limpieza-archivos', [AuditController::class, 'executeDocumentCleanup'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('audit.documents-cleanup.execute');
 
     Route::get('/backups', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::SUPERADMIN)

@@ -80,6 +80,11 @@ class Client extends Model
         return $this->hasMany(Booking::class);
     }
 
+    public function receiptEmailRecipients(): HasMany
+    {
+        return $this->hasMany(ClientReceiptEmailRecipient::class);
+    }
+
     public function formattedDeliveryAddress(): string
     {
         $lines = collect([

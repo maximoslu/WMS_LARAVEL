@@ -1197,3 +1197,67 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito (no hay migraciones nuevas)
 - `php artisan optimize:clear`
 - `php artisan queue:restart` (recomendado: el nuevo job se despacha por cola)
+
+---
+
+## 2026-07-08 - Pulido visual "Mis albaranes" + limpieza de archivos antiguos (Sistema) + emails adicionales por cliente
+
+**Contexto:** Tres encargos sobre el hito anterior del portal "Mis albaranes" (commit de partida `7bb698d1`): (1) el cliente veia letras tocando los bordes en `/mis-albaranes`; (2) el superadmin necesita una herramienta en Sistema para liberar espacio borrando documentos adjuntos de mas de 12 meses sin perder trazabilidad; (3) algunos clientes quieren que los avisos de albaran lleguen tambien a correos de administracion que no son usuarios de la plataforma.
+
+**Tarea 1 - Pulido visual de "Mis albaranes":**
+- Diagnostico: `.surface-card`/`.compact-card` nunca aportan padding por si solas en este proyecto (se confirmo revisando todas sus definiciones); el padding real siempre viene de una clase mas especifica anadida a una lista de selectores compartida. Tres clases del hito anterior se habian quedado fuera de esas listas y renderizaban completamente pegadas al borde: `.client-goods-receipts-group` (tarjeta de grupo por mes), `.client-goods-receipt-card` (tarjeta movil) y `.dashboard-mis-albaranes-card` (tarjeta del dashboard).
+- `resources/css/app.css`: se anadieron esas tres clases a las listas de padding ya existentes (`padding: 1.15rem 1.2rem` para las tarjetas de listado, junto a `.item-card`/`.placeholder-card`; `padding: 1.2rem` para la tarjeta de dashboard, junto a `.dashboard-calendar-card`), sin tocar el padding compacto de las celdas de tabla (`.data-table`/`.table-compact`), que es intencionadamente ajustado en toda la app.
+- Verificado en navegador real como usuario cliente (`codex.cliente.local@example.com`): filtros, cabecera del listado, tarjetas de grupo por mes y tarjetas moviles ya no tocan el borde; la descarga (`/mis-albaranes/{id}/descargar`) sigue funcionando.
+
+**Tarea 2 - Limpieza de archivos antiguos (Sistema, solo superadmin):**
+- `app/Services/Audit/OldDocumentCleanupService.php` (nuevo): umbral fijo de 12 meses (`now()->subMonths(12)->startOfDay()`); candidato = `GoodsReceipt` con `document_path` no nulo y `received_at` (o `created_at` si no hay `received_at`) anterior al corte.
+  - `candidates()`: cuenta candidatos y suma el tamano real en disco (`Storage::size()`); si algun fichero no se puede resolver en disco, el tamano estimado se marca como no disponible en vez de dar una cifra incorrecta.
+  - `cleanup(actorId)`: dentro de `DB::transaction`, borra el fichero fisico (reutilizando `GoodsReceiptDocumentStorage::resolveDisk()`, sin aceptar ninguna ruta del request) y pone a `null` `document_path`/`document_mime`; **mantiene `document_original_name`** a proposito como rastro minimo de que existio un documento; si el fichero ya no esta en disco, no rompe el proceso, cuenta el caso como "referencia saneada" y deja constancia en el log de aplicacion (`Log::warning('goods_receipt_documents_cleanup', ...)`).
+  - No se toca la entrada, sus lineas ni el stock generado; no hay borrado de carpetas completas ni de nada que no este referenciado en base de datos.
+- `app/Http/Controllers/AuditController.php`: `index()` calcula el resumen (`candidates()`) solo si el usuario es superadmin y lo pasa a la vista; nueva accion `executeDocumentCleanup()` con `abort_unless($request->user()?->isSuperAdmin(), 403)` ademas del middleware de ruta (doble comprobacion, igual que el resto de acciones destructivas de Auditoria).
+- `routes/web.php`: `POST /auditoria/limpieza-archivos` -> `audit.documents-cleanup.execute`, con `minimum.role:superadmin`.
+- `resources/views/audit/index.blade.php`: nuevo bloque "Limpieza de archivos antiguos" (solo visible si `$isSuperAdmin`) con el texto exacto solicitado, contador de candidatos, tamano estimado, fecha limite y tipos incluidos; boton "Limpiar archivos de más de 12 meses" con `onsubmit="confirm(...)"` con el texto de confirmacion exacto pedido (no se reutilizo el patron de frase escrita "CONFIRMAR LIMPIEZA" de la herramienta generica existente porque el enunciado pedia un umbral fijo sin rango de fechas y un dialogo de confirmacion, no una previsualizacion en dos pasos).
+- **No se ejecuto la limpieza real en ningun momento de la sesion** (ni en local ni en produccion): se verifico el flujo completo mediante los tests automatizados de abajo (que corren en transacciones de base de datos de test) y, para la verificacion visual en navegador, solo se inspecciono el atributo `onsubmit` del formulario sin dispararlo.
+
+**Tarea 3 - Emails adicionales para avisos de albaran por cliente:**
+- Persistencia: se reviso el modelo/migraciones de `Client` y se confirmo que no existe ningun campo JSON/metadata reutilizable (solo columnas escalares). Se opto por la Opcion B del enunciado: tabla nueva dedicada.
+  - `database/migrations/2026_07_08_000001_create_client_receipt_email_recipients_table.php` (nueva, unica migracion de esta sesion): `client_receipt_email_recipients` (`client_id` FK con cascade delete, `email`, `name` nullable, `unique(client_id, email)`).
+  - `app/Models/ClientReceiptEmailRecipient.php` + `database/factories/ClientReceiptEmailRecipientFactory.php` (nuevos); `Client::receiptEmailRecipients()` (nueva relacion `hasMany`).
+- `app/Http/Requests/StoreClientReceiptEmailRecipientRequest.php` (nuevo): valida email obligatorio y unico *por cliente* (`Rule::unique(...)->where('client_id', ...)`, no unico global), normaliza a minusculas; autoriza solo a partir del rol administracion (`canAccessRole(Role::ADMINISTRACION)`).
+- `app/Http/Controllers/ClientController.php`: `storeReceiptEmailRecipient()` y `destroyReceiptEmailRecipient()` (esta ultima comprueba ademas que el recipient pertenece al cliente de la URL antes de borrar, para evitar borrar el de otro cliente por id).
+- `routes/web.php`: `POST` y `DELETE /clientes/{client}/emails-albaranes[/{clientReceiptEmailRecipient}]`, ambas con `minimum.role:administracion`.
+- `resources/views/clients/_form.blade.php`: nuevo bloque "Emails para albaranes" (solo en edicion, no en alta, porque un cliente nuevo aun no tiene id al que asociar destinatarios) con el texto de ayuda exacto pedido, formulario de alta y listado con boton "Eliminar" por fila.
+- `resources/css/app.css`: estilos nuevos `.client-receipt-email-list`/`.client-receipt-email-item` siguiendo el lenguaje visual ya usado en el resto de tarjetas.
+- **Envio de avisos:** `app/Services/GoodsReceipts/GoodsReceiptDocumentNotificationService.php` ahora calcula, ademas de los usuarios cliente activos de siempre, los emails adicionales del `client_id` de la entrada, en minuscula y sin duplicados, **excluyendo cualquiera que ya coincida (case-insensitive) con el email de un usuario cliente ya notificado** para no duplicar el envio. Los emails adicionales se notifican con `Notification::route('mail', $email)->notify(...)` (patron "on-demand"/anonimo nativo de Laravel; no existia precedente en el proyecto, se introdujo en esta sesion).
+- `app/Notifications/ClientGoodsReceiptDocumentAvailableNotification.php`: se corrigio un bug real detectado durante el desarrollo: `via()` comprobaba `$notifiable->email` directamente, que no existe en un notificable anonimo; ahora usa `$notifiable->routeNotificationFor('mail', $this)`, valido tanto para `User` como para destinatarios anonimos, y excluye el canal `database` para estos ultimos (no tienen bandeja interna). Para usuarios de la plataforma se mantiene el enlace protegido a "Mis albaranes"; para destinatarios externos (no dados de alta en WMS) se adjunta el documento real en el correo (`attachData`, reutilizando `GoodsReceiptDocumentStorage::read()`), evitando enviarles un enlace que exigiria iniciar sesion sin explicacion; si el documento no se puede leer en ese momento, el correo se envia igualmente con una linea indicandolo, sin adjunto roto.
+
+**Cobertura y validacion real:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: aplicada `2026_07_08_000001_create_client_receipt_email_recipients_table` (unica migracion nueva de esta sesion, justificada arriba)
+- `php artisan test tests/Feature/ClientGoodsReceiptDocumentTest.php`: `29 passed` (69 aserciones)
+- `php artisan test tests/Feature/GoodsReceiptManagementTest.php`: OK (incluido en la suite completa)
+- `php artisan test`: `452 passed` (2016 aserciones)
+- `npm run build`: OK
+- Tests nuevos:
+  - `tests/Feature/OldDocumentCleanupTest.php` (nuevo, 11 tests): superadmin ve el bloque; administracion no lo ve y no puede ejecutar (403); almacen y cliente no acceden a Auditoria ni pueden ejecutar (403); el resumen solo cuenta candidatos de mas de 12 meses; ejecutar la limpieza borra fisicamente el fichero antiguo y anula `document_path`/`document_mime`; la entrada, sus lineas y el stock generado sobreviven intactos y `document_original_name` se conserva; un fichero reciente (1 mes) no se borra; pasar rutas/paths arbitrarios en el request no afecta a ficheros no referenciados en BD; una referencia a un fichero que ya no existe en disco se sanea sin romper el proceso
+  - `tests/Feature/ClientManagementTest.php` (+5 tests): anadir email adicional valido; rechazar email invalido; no duplicar email (unico por cliente); eliminar email; roles sin permiso (almacen, cliente) no pueden gestionar emails de albaranes (403)
+  - `tests/Feature/ClientGoodsReceiptDocumentTest.php` (+5 tests): entrada EDELVIVES con documento notifica a la vez a usuarios cliente y a emails adicionales de EDELVIVES; los emails adicionales de FRIESLAND no reciben el aviso de una entrada de EDELVIVES; un email adicional que coincide con un usuario cliente existente no duplica el envio; sustituir el documento de una entrada vuelve a notificar a los emails adicionales; crear una entrada sin documento no dispara ningun aviso de albaran
+
+**Verificacion visual real en navegador embebido:**
+- Como superadmin: bloque "Limpieza de archivos antiguos" visible en `/auditoria` con el texto exacto pedido, contador de candidatos, tamano estimado ("27 B") y fecha limite calculada correctamente (12 meses atras desde la fecha de hoy); no se pulso el boton de ejecucion en ningun momento
+- Como superadmin: en `/clientes/{id}/editar` se anadio un email de prueba (`administracion@edelvives-test.com`), aparecio en el listado con boton "Eliminar", y se elimino correctamente confirmando el ciclo completo alta/baja
+- Como usuario cliente (`codex.cliente.local@example.com`, contrasena temporal generada y luego invalidada solo para esta verificacion): `/mis-albaranes` ya no tiene texto pegado a los bordes en filtros, cabecera, tarjetas de grupo por mes ni tarjetas moviles; el boton "Descargar" sigue enlazando correctamente al documento
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- Migracion nueva: si, una sola (`client_receipt_email_recipients`), justificada arriba porque `Client` no tenia ningun campo JSON/metadata reutilizable; aplicada en local con `php artisan migrate` (no `migrate:fresh`)
+- No se uso `force push`
+- No se borraron datos; la unica accion sobre datos reales en local fue temporal y reversible (contrasena de prueba del usuario cliente local, invalidada de nuevo al terminar la verificacion) para poder iniciar sesion y comprobar el pulido visual
+- No se ejecuto la limpieza real de archivos antiguos en ningun momento (ni local ni produccion); la logica destructiva solo se valido mediante los tests automatizados
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now` (el proyecto despliega automaticamente desde `origin/main`)
+- **`php artisan migrate --force` SI aplica en este hito** (hay una migracion nueva: `client_receipt_email_recipients`) - confirmar que el script de deploy de Forge la ejecuta, o lanzarla manualmente si no
+- `php artisan optimize:clear`
+- `php artisan queue:restart` (el envio de avisos sigue despachandose por cola)

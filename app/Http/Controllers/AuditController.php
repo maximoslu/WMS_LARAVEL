@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\Role;
 use App\Models\StockImport;
 use App\Services\Audit\AuditCleanupService;
+use App\Services\Audit\OldDocumentCleanupService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,11 +18,14 @@ class AuditController extends Controller
 {
     public function __construct(
         private readonly AuditCleanupService $cleanupService,
+        private readonly OldDocumentCleanupService $documentCleanupService,
     ) {}
 
     public function index(Request $request): View
     {
         abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
+
+        $isSuperAdmin = $request->user()?->isSuperAdmin() === true;
 
         return view('audit.index', [
             'clients' => Client::query()->orderBy('name')->get(),
@@ -39,9 +43,27 @@ class AuditController extends Controller
                 'client_id' => old('client_id'),
                 'status' => old('status'),
             ],
-            'canExecuteCleanup' => $request->user()?->isSuperAdmin() === true,
+            'canExecuteCleanup' => $isSuperAdmin,
+            'isSuperAdmin' => $isSuperAdmin,
+            'documentCleanupSummary' => $isSuperAdmin ? $this->documentCleanupService->candidates() : null,
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
+    }
+
+    public function executeDocumentCleanup(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $result = $this->documentCleanupService->cleanup((int) $request->user()->id);
+
+        $status = $result['deleted'] > 0 || $result['missing'] > 0
+            ? "Limpieza de archivos ejecutada. Eliminados: {$result['deleted']}."
+                .($result['missing'] > 0 ? " Referencias sin archivo en disco saneadas: {$result['missing']}." : '')
+            : 'No habia archivos de mas de 12 meses para limpiar.';
+
+        return redirect()
+            ->route('audit.index')
+            ->with('status', $status);
     }
 
     public function previewCleanup(PreviewAuditCleanupRequest $request): RedirectResponse

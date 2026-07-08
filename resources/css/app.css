@@ -3146,7 +3146,9 @@ body.brand-body.app-shell-body .pagination-card,
 body.brand-body.app-shell-body .item-card,
 body.brand-body.app-shell-body .item-empty-state,
 body.brand-body.app-shell-body .placeholder-card,
-body.brand-body.app-shell-body .placeholder-meta {
+body.brand-body.app-shell-body .placeholder-meta,
+body.brand-body.app-shell-body .client-goods-receipts-group,
+body.brand-body.app-shell-body .client-goods-receipt-card {
     padding: 1.15rem 1.2rem;
     border-radius: 8px;
     border: 1px solid rgba(24, 37, 50, 0.12);
@@ -4320,6 +4322,32 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     gap: 0.5rem;
 }
 
+.client-receipt-email-list {
+    display: grid;
+    gap: 0.6rem;
+    margin: 1rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.client-receipt-email-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid rgba(24, 37, 50, 0.12);
+    border-radius: 8px;
+    background: #f5f8fb;
+}
+
+.client-receipt-email-item span {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
 @media (max-width: 1180px) {
     .goods-receipt-compact-grid .auth-field,
     .goods-receipt-readonly-field {
@@ -5234,7 +5262,8 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     padding: 1.15rem 1.2rem;
 }
 
-.dashboard-calendar-card {
+.dashboard-calendar-card,
+.dashboard-mis-albaranes-card {
     gap: 1.15rem;
     padding: 1.2rem;
 }

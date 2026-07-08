@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\ClientReceiptEmailRecipient;
 use App\Models\GoodsReceipt;
 use App\Models\Role;
 use App\Models\Supplier;
@@ -12,6 +13,7 @@ use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -330,6 +332,116 @@ class ClientGoodsReceiptDocumentTest extends TestCase
             ->assertRedirect();
 
         Notification::assertSentTo($clienteUser, ClientGoodsReceiptDocumentAvailableNotification::class);
+    }
+
+    public function test_entrada_edelvives_con_documento_notifica_usuarios_y_emails_adicionales_edelvives(): void
+    {
+        Notification::fake();
+        [$edelvives] = $this->seedClients();
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $clienteUser = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+        ClientReceiptEmailRecipient::factory()->create([
+            'client_id' => $edelvives->id,
+            'email' => 'administracion@edelvives-externo.com',
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.store'), $this->storePayload($edelvives, 'SAICA'))
+            ->assertRedirect();
+
+        Notification::assertSentTo($clienteUser, ClientGoodsReceiptDocumentAvailableNotification::class);
+        Notification::assertSentOnDemand(
+            ClientGoodsReceiptDocumentAvailableNotification::class,
+            fn ($notification, array $channels, $notifiable): bool => $notifiable->routeNotificationFor('mail', $notification) === 'administracion@edelvives-externo.com'
+        );
+    }
+
+    public function test_emails_adicionales_de_friesland_no_reciben_aviso_de_entrada_edelvives(): void
+    {
+        Notification::fake();
+        [$edelvives, $friesland] = $this->seedClients();
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        ClientReceiptEmailRecipient::factory()->create([
+            'client_id' => $friesland->id,
+            'email' => 'administracion@friesland-externo.com',
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.store'), $this->storePayload($edelvives, 'SAICA'))
+            ->assertRedirect();
+
+        Notification::assertSentToTimes(new AnonymousNotifiable, ClientGoodsReceiptDocumentAvailableNotification::class, 0);
+    }
+
+    public function test_email_adicional_que_coincide_con_usuario_cliente_no_duplica_envio(): void
+    {
+        Notification::fake();
+        [$edelvives] = $this->seedClients();
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $clienteUser = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+        ClientReceiptEmailRecipient::factory()->create([
+            'client_id' => $edelvives->id,
+            'email' => mb_strtoupper($clienteUser->email),
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.store'), $this->storePayload($edelvives, 'SAICA'))
+            ->assertRedirect();
+
+        Notification::assertSentToTimes($clienteUser, ClientGoodsReceiptDocumentAvailableNotification::class, 1);
+        Notification::assertSentToTimes(new AnonymousNotifiable, ClientGoodsReceiptDocumentAvailableNotification::class, 0);
+    }
+
+    public function test_sustituir_documento_vuelve_a_notificar_emails_adicionales(): void
+    {
+        Notification::fake();
+        [$edelvives] = $this->seedClients();
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        ClientReceiptEmailRecipient::factory()->create([
+            'client_id' => $edelvives->id,
+            'email' => 'administracion@edelvives-externo.com',
+        ]);
+
+        $receipt = $this->createReceiptWithDocument($edelvives, 'SAICA', '2026-07-17');
+
+        Notification::assertNothingSent();
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.attach-document', $receipt), [
+                'document' => UploadedFile::fake()->create('nuevo.pdf', 50, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        Notification::assertSentOnDemand(
+            ClientGoodsReceiptDocumentAvailableNotification::class,
+            fn ($notification, array $channels, $notifiable): bool => $notifiable->routeNotificationFor('mail', $notification) === 'administracion@edelvives-externo.com'
+        );
+    }
+
+    public function test_crear_entrada_sin_documento_no_envia_aviso_de_albaran(): void
+    {
+        Notification::fake();
+        [$edelvives] = $this->seedClients();
+
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+        ClientReceiptEmailRecipient::factory()->create([
+            'client_id' => $edelvives->id,
+            'email' => 'administracion@edelvives-externo.com',
+        ]);
+
+        $payload = $this->storePayload($edelvives, 'SAICA');
+        unset($payload['document']);
+
+        $this->actingAs($almacen)
+            ->post(route('goods-receipts.store'), $payload)
+            ->assertRedirect();
+
+        Notification::assertNothingSent();
     }
 
     public function test_cliente_sin_client_id_no_ve_documentos_y_recibe_mensaje_claro(): void

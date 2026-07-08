@@ -106,6 +106,44 @@
         </aside>
     </section>
 
+    @if ($isSuperAdmin)
+        <section class="surface-card compact-card audit-card">
+            <div class="ops-index-heading">
+                <strong>Limpieza de archivos antiguos</strong>
+                <span class="ops-status badge-compact">{{ number_format($documentCleanupSummary['count'], 0, ',', '.') }} candidatos</span>
+            </div>
+
+            <p class="audit-card-copy">
+                Elimina documentos adjuntos antiguos de más de 12 meses para liberar espacio. Las entradas y la trazabilidad permanecen, pero el archivo dejará de estar disponible para descarga.
+            </p>
+
+            <div class="audit-preview-warnings">
+                <article class="audit-warning-chip">{{ number_format($documentCleanupSummary['count'], 0, ',', '.') }} archivos candidatos</article>
+                <article class="audit-warning-chip">
+                    Tamaño estimado: {{ \App\Services\Audit\OldDocumentCleanupService::formatBytes($documentCleanupSummary['estimated_size_bytes']) }}
+                </article>
+                <article class="audit-warning-chip">
+                    Fecha límite: anteriores a {{ \Illuminate\Support\Carbon::parse($documentCleanupSummary['cutoff_date'])->format('d/m/Y') }}
+                </article>
+                <article class="audit-warning-chip">Tipos incluidos: documentos de entradas de mercancía (albaranes)</article>
+            </div>
+
+            <form
+                method="POST"
+                action="{{ route('audit.documents-cleanup.execute') }}"
+                class="item-form audit-execute-form"
+                onsubmit="return confirm('Vas a eliminar archivos adjuntos antiguos de más de 12 meses. Las entradas se conservarán, pero los documentos ya no estarán disponibles para descarga. ¿Confirmas?');"
+            >
+                @csrf
+                <div class="item-form-actions action-buttons">
+                    <button type="submit" class="button-secondary compact-button btn-compact" @disabled($documentCleanupSummary['count'] === 0)>
+                        Limpiar archivos de más de 12 meses
+                    </button>
+                </div>
+            </form>
+        </section>
+    @endif
+
     @if ($previewResult)
         <section class="surface-card compact-card audit-preview-card">
             <div class="ops-index-heading">
