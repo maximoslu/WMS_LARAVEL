@@ -1434,3 +1434,58 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Deploy Forge requerido tras push para `wms.maximosl.com`
 - Comandos Forge recomendados tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
 - No hay migraciones nuevas en este hito; `php artisan migrate --force` deberia quedar sin cambios pendientes.
+
+---
+
+## 2026-07-09 - Cliente: ALBARANES dividido en entradas y salidas (18:24:10 +02:00)
+
+**Contexto:** Redisenar el portal cliente `/mis-albaranes` para que todo lo visible use `ALBARANES`, con pantalla mas compacta y dos bloques claros: entrada y salida. Se mantiene la URL existente para no romper enlaces, pero se elimina el naming visible "Mis albaranes".
+
+**Cambios realizados:**
+- `config/wms.php`, `resources/views/dashboard/index.blade.php` y `resources/views/client/goods-receipts/index.blade.php`
+  - menu, dashboard, titulo, topbar y breadcrumbs pasan a `ALBARANES`.
+  - se quitan textos largos de relleno.
+  - dashboard cliente queda con acceso compacto `ALBARANES`.
+- `resources/views/client/goods-receipts/index.blade.php` y `resources/css/app.css`
+  - nueva estructura responsive en dos columnas en escritorio y apilada en tablet/movil.
+  - bloque `ALBARANES DE ENTRADA` para documentos adjuntos de entradas.
+  - bloque `ALBARANES DE SALIDA` para albaranes PDF de salidas ya enviadas/completadas.
+  - filas compactas con fecha, proveedor/destino, nombre visible y boton `Descargar`.
+  - estado vacio corto: `Sin albaranes.`
+  - filtros compactos: `Mes`, `Proveedor`, `Buscar`, `Limpiar`; mes y busqueda aplican tambien a salidas.
+- `app/Http/Controllers/ClientGoodsReceiptDocumentController.php`
+  - mantiene descarga protegida de entradas.
+  - incorpora salidas del mismo `client_id` con estados `sent`/`completed`.
+  - nueva descarga protegida de albaran de salida reutilizando el PDF existente `dispatches.delivery-note-pdf`.
+  - cliente que intenta ver/descargar documento de otro `client_id` recibe `403`.
+- `routes/web.php`
+  - nueva ruta protegida `client-goods-receipts.dispatches.download` bajo `/mis-albaranes/salidas/{goodsDispatch}/descargar`.
+- `app/Support/GoodsReceipts/DocumentDisplayNamer.php`
+  - nombres visibles para salidas tipo `Salida_Edelvives_17`, con desambiguacion si colisionan.
+- `app/Notifications/ClientGoodsReceiptDocumentAvailableNotification.php`
+  - solo copia visible: las notificaciones apuntan a `ALBARANES` en vez de `Mis albaranes`; no se cambia la logica de envio.
+
+**Seguridad y alcance:**
+- No se crea almacenamiento paralelo para salidas; se regenera el PDF existente.
+- No se exponen rutas reales de storage.
+- No se toco `.env`, secretos ni JSON privados.
+- No se uso `migrate:fresh`.
+- No se borraron datos.
+- No se toco Google Calendar, importacion de stock, facturacion ni stock por cliente.
+- `.claude/` sigue sin anadirse.
+- No hay migraciones nuevas.
+
+**Validacion automatizada:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: `Nothing to migrate`
+- `php artisan test tests/Feature/ClientGoodsReceiptDocumentTest.php`: `33 passed` (91 assertions)
+- `php artisan test tests/Feature/GoodsDispatchManagementTest.php`: `33 passed` (163 assertions)
+- `php artisan test`: `462 passed` (2104 assertions)
+- `npm run build`: OK (`vite build`, 55 modules transformed)
+
+**Cierre operativo previsto:**
+- Commit: `feat: split client delivery notes by entries and dispatches`
+- Push: `origin/main`
+- Deploy Forge requerido tras push para `wms.maximosl.com`
+- Comandos Forge tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
+- `php artisan migrate --force` no deberia aplicar cambios pendientes en este hito.

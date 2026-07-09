@@ -1,24 +1,25 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Mis albaranes | MAXIMO WMS')
-@section('topbar_title', 'Mis albaranes')
+@section('title', 'ALBARANES | MAXIMO WMS')
+@section('topbar_title', 'ALBARANES')
 
 @section('content')
     @php
         $breadcrumbs = [
             ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-            ['label' => 'Mis albaranes'],
+            ['label' => 'ALBARANES'],
         ];
-        $totalDocuments = $groups->sum(fn (array $group) => $group['receipts']->count());
+        $totalEntryDocuments = $receiptDocuments->count();
+        $totalDispatchDocuments = $dispatchDocuments->count();
+        $totalDocuments = $totalEntryDocuments + $totalDispatchDocuments;
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
 
-    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card">
+    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card client-delivery-notes-header">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">Albaranes de entrada</h2>
+            <h2 class="ops-page-title page-title-compact">ALBARANES</h2>
             <span class="ops-page-meta">{{ $totalDocuments }} documentos</span>
         </div>
-        <p class="merchandise-request-summary-copy">Consulta y descarga los albaranes asociados a tus entradas de mercancía.</p>
     </section>
 
     @if (session('status'))
@@ -26,10 +27,10 @@
     @endif
 
     @if (! $hasClient)
-        <div class="alert alert-error">Tu usuario no tiene un cliente asignado. Contacta con administración para poder consultar tus albaranes.</div>
+        <div class="alert alert-error">Tu usuario no tiene un cliente asignado.</div>
     @endif
 
-    <section class="surface-card item-filter-card compact-card">
+    <section class="surface-card item-filter-card compact-card client-delivery-notes-filters">
         <form method="GET" action="{{ route('client-goods-receipts.index') }}" class="stock-filters compact-filters filters-compact">
             <label class="auth-field">
                 <span>Mes</span>
@@ -62,70 +63,71 @@
                     name="search"
                     value="{{ $filters['search'] }}"
                     class="auth-input"
-                    placeholder="Albarán, documento o proveedor"
+                    placeholder="Albaran, salida, destino"
                 >
             </label>
 
             <div class="stock-filter-actions action-buttons page-actions-compact">
-                <button type="submit" class="button-primary compact-button btn-compact">Filtrar</button>
+                <button type="submit" class="button-primary compact-button btn-compact">Buscar</button>
                 <a href="{{ route('client-goods-receipts.index') }}" class="button-secondary compact-button btn-compact">Limpiar</a>
             </div>
         </form>
     </section>
 
-    @if ($totalDocuments === 0)
-        <section class="surface-card compact-card">
-            <div class="item-empty-state">No hay albaranes disponibles para este periodo.</div>
-        </section>
-    @else
-        @foreach ($groups as $group)
-            <section class="surface-card compact-card client-goods-receipts-group">
-                <div class="ops-section-heading">
-                    <strong>{{ ucfirst($group['label']) }}</strong>
-                    <span class="ops-status badge-compact">{{ $group['receipts']->count() }}</span>
-                </div>
+    <section class="client-delivery-notes-grid" aria-label="Albaranes de entrada y salida">
+        <article class="surface-card compact-card client-delivery-notes-panel">
+            <div class="ops-section-heading client-delivery-notes-panel-head">
+                <strong>ALBARANES DE ENTRADA</strong>
+                <span class="ops-status badge-compact">{{ $totalEntryDocuments }}</span>
+            </div>
 
-                <div class="data-table-wrap">
-                    <table class="data-table table-compact client-goods-receipts-table" aria-label="Listado de albaranes">
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Proveedor</th>
-                                <th>Entrada</th>
-                                <th>Documento</th>
-                                <th>Estado entrada</th>
-                                <th>Descargar</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($group['receipts'] as $receipt)
-                                <tr>
-                                    <td>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</td>
-                                    <td>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</td>
-                                    <td>{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</td>
-                                    <td>{{ $displayNames[$receipt->id] ?? $receipt->document_original_name }}</td>
-                                    <td><span class="receipt-status-pill receipt-status-pill--{{ $receipt->status }}">{{ $receipt->statusLabel() }}</span></td>
-                                    <td>
-                                        <a href="{{ route('client-goods-receipts.download', $receipt) }}" class="button-secondary compact-button btn-table">Descargar</a>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="client-goods-receipts-mobile" aria-label="Listado móvil de albaranes">
-                    @foreach ($group['receipts'] as $receipt)
-                        <article class="surface-card compact-card client-goods-receipt-card">
-                            <strong>{{ $displayNames[$receipt->id] ?? $receipt->document_original_name }}</strong>
-                            <span class="receipt-status-pill receipt-status-pill--{{ $receipt->status }}">{{ $receipt->statusLabel() }}</span>
-                            <p class="users-table-email">Proveedor: {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</p>
-                            <p class="users-table-email">Fecha: {{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</p>
+            @if ($receiptDocuments->isEmpty())
+                <div class="client-delivery-notes-empty">Sin albaranes.</div>
+            @else
+                <div class="client-delivery-notes-list">
+                    @foreach ($receiptDocuments as $receipt)
+                        <div class="client-delivery-note-row">
+                            <div class="client-delivery-note-main">
+                                <strong>{{ $displayNames[$receipt->id] ?? $receipt->document_original_name }}</strong>
+                                <span>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }} · {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
+                            </div>
                             <a href="{{ route('client-goods-receipts.download', $receipt) }}" class="button-secondary compact-button btn-table">Descargar</a>
-                        </article>
+                        </div>
                     @endforeach
                 </div>
-            </section>
-        @endforeach
-    @endif
+            @endif
+        </article>
+
+        <article class="surface-card compact-card client-delivery-notes-panel">
+            <div class="ops-section-heading client-delivery-notes-panel-head">
+                <strong>ALBARANES DE SALIDA</strong>
+                <span class="ops-status badge-compact">{{ $totalDispatchDocuments }}</span>
+            </div>
+
+            @if ($dispatchDocuments->isEmpty())
+                <div class="client-delivery-notes-empty">Sin albaranes.</div>
+            @else
+                <div class="client-delivery-notes-list">
+                    @foreach ($dispatchDocuments as $dispatch)
+                        @php
+                            $dispatchDate = $dispatch->completed_at ?? $dispatch->sent_at ?? $dispatch->created_at;
+                            $destination = $dispatch->merchandiseRequest?->delivery_reference
+                                ?: $dispatch->merchandiseRequest?->delivery_address
+                                ?: $dispatch->client?->formattedDeliveryAddress();
+                        @endphp
+                        <div class="client-delivery-note-row">
+                            <div class="client-delivery-note-main">
+                                <strong>{{ $dispatchDisplayNames[$dispatch->id] ?? $dispatch->dispatchNumber() }}</strong>
+                                <span>{{ optional($dispatchDate)->format('d/m/Y') ?: 'Pendiente' }} · {{ $dispatch->dispatchNumber() }}</span>
+                                @if (filled($destination))
+                                    <span>{{ $destination }}</span>
+                                @endif
+                            </div>
+                            <a href="{{ route('client-goods-receipts.dispatches.download', $dispatch) }}" class="button-secondary compact-button btn-table">Descargar</a>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </article>
+    </section>
 @endsection

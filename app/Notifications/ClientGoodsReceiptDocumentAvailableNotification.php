@@ -52,8 +52,8 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
 
         if (! $isAnonymous) {
             return $message
-                ->action('Ver Mis albaranes', route('client-goods-receipts.index'))
-                ->line('Puedes consultarlo y descargarlo desde tu panel de cliente en "Mis albaranes".');
+                ->action('Ver ALBARANES', route('client-goods-receipts.index'))
+                ->line('Puedes consultarlo y descargarlo desde tu panel de cliente en "ALBARANES".');
         }
 
         // External recipients are not WMS users, so a login-gated portal link
@@ -82,7 +82,7 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
             'type' => 'goods_receipt_document_available',
             'title' => 'Nuevo albarán disponible',
             'body' => sprintf(
-                'Entrada #%d de %s ya tiene albarán disponible en Mis albaranes.',
+                'Entrada #%d de %s ya tiene albarán disponible en ALBARANES.',
                 $receipt->id,
                 $receipt->supplier?->name ?: 'proveedor sin especificar'
             ),

@@ -2,6 +2,7 @@
 
 namespace App\Support\GoodsReceipts;
 
+use App\Models\GoodsDispatch;
 use App\Models\GoodsReceipt;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -42,10 +43,41 @@ class DocumentDisplayNamer
             ->all();
     }
 
+    public static function dispatchBaseName(GoodsDispatch $dispatch): string
+    {
+        $client = self::normalizeDocumentToken($dispatch->client?->code ?: $dispatch->client?->name, 'SinCliente');
+        $date = $dispatch->completed_at ?? $dispatch->sent_at ?? $dispatch->created_at;
+        $day = $date?->format('d') ?? '00';
+
+        return "Salida_{$client}_{$day}";
+    }
+
+    /**
+     * @param  Collection<int, GoodsDispatch>  $dispatches
+     * @return array<int, string> keyed by dispatch id
+     */
+    public static function assignDispatchNames(Collection $dispatches): array
+    {
+        $baseNames = $dispatches->mapWithKeys(fn (GoodsDispatch $dispatch): array => [
+            $dispatch->id => self::dispatchBaseName($dispatch),
+        ]);
+
+        $counts = $baseNames->countBy(fn (string $name): string => $name);
+
+        return $baseNames
+            ->map(fn (string $base, int $id): string => $counts[$base] > 1 ? "{$base}_Salida{$id}" : $base)
+            ->all();
+    }
+
     private static function normalizeSupplierName(?string $name): string
     {
+        return self::normalizeDocumentToken($name, 'SinProveedor');
+    }
+
+    private static function normalizeDocumentToken(?string $name, string $fallback): string
+    {
         if ($name === null || trim($name) === '') {
-            return 'SinProveedor';
+            return $fallback;
         }
 
         $ascii = Str::ascii($name);
@@ -53,7 +85,7 @@ class DocumentDisplayNamer
         $cleaned = trim((string) preg_replace('/\s+/', ' ', $cleaned));
 
         if ($cleaned === '') {
-            return 'SinProveedor';
+            return $fallback;
         }
 
         return Str::studly(Str::lower($cleaned));

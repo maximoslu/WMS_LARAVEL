@@ -211,6 +211,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/mis-albaranes', [ClientGoodsReceiptDocumentController::class, 'index'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('client-goods-receipts.index');
+    Route::get('/mis-albaranes/salidas/{goodsDispatch}/descargar', [ClientGoodsReceiptDocumentController::class, 'downloadDispatch'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('client-goods-receipts.dispatches.download');
     Route::get('/mis-albaranes/{goodsReceipt}/descargar', [ClientGoodsReceiptDocumentController::class, 'download'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('client-goods-receipts.download');

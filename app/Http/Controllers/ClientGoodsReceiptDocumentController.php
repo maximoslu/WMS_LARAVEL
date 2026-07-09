@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GoodsDispatch;
 use App\Models\GoodsReceipt;
 use App\Models\Role;
+use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Support\GoodsReceipts\DocumentDisplayNamer;
 use App\Support\WmsNavigation;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
@@ -35,7 +38,7 @@ class ClientGoodsReceiptDocumentController extends Controller
         $supplierId = $request->integer('supplier_id');
         $search = trim((string) $request->string('search'));
 
-        $allDocuments = $clientId === null
+        $allReceipts = $clientId === null
             ? collect()
             : GoodsReceipt::query()
                 ->where('client_id', $clientId)
@@ -45,22 +48,37 @@ class ClientGoodsReceiptDocumentController extends Controller
                 ->orderByDesc('id')
                 ->get();
 
-        $availableMonths = $allDocuments
+        $allDispatches = $clientId === null
+            ? collect()
+            : GoodsDispatch::query()
+                ->where('client_id', $clientId)
+                ->whereIn('status', [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED])
+                ->with(['client', 'merchandiseRequest'])
+                ->orderByDesc('completed_at')
+                ->orderByDesc('sent_at')
+                ->orderByDesc('id')
+                ->get();
+
+        $availableMonths = collect($allReceipts
             ->filter(fn (GoodsReceipt $receipt) => $receipt->received_at !== null)
             ->map(fn (GoodsReceipt $receipt) => $receipt->received_at->format('Y-m'))
+            ->all())
+            ->merge($allDispatches
+                ->map(fn (GoodsDispatch $dispatch) => $this->dispatchDocumentDate($dispatch)?->format('Y-m'))
+                ->filter())
             ->unique()
             ->sortDesc()
             ->values()
             ->map(fn (string $key) => ['value' => $key, 'label' => $this->monthLabel($key)]);
 
-        $availableSuppliers = $allDocuments
+        $availableSuppliers = $allReceipts
             ->pluck('supplier')
             ->filter()
             ->unique('id')
             ->sortBy('name')
             ->values();
 
-        $filtered = $allDocuments
+        $filteredReceipts = $allReceipts
             ->when($month !== '', fn ($documents) => $documents->filter(
                 fn (GoodsReceipt $receipt) => $receipt->received_at?->format('Y-m') === $month
             ))
@@ -84,19 +102,42 @@ class ClientGoodsReceiptDocumentController extends Controller
             })
             ->values();
 
-        $displayNames = DocumentDisplayNamer::assignNames($filtered);
+        $filteredDispatches = $allDispatches
+            ->when($month !== '', fn ($documents) => $documents->filter(
+                fn (GoodsDispatch $dispatch) => $this->dispatchDocumentDate($dispatch)?->format('Y-m') === $month
+            ))
+            ->when($search !== '', function ($documents) use ($search) {
+                $needle = mb_strtolower($search);
 
-        $groups = $filtered
-            ->groupBy(fn (GoodsReceipt $receipt) => $receipt->received_at?->format('Y-m') ?? 'sin-fecha')
-            ->sortKeysDesc()
-            ->map(fn ($documents, string $key) => [
-                'label' => $key === 'sin-fecha' ? 'Sin fecha' : $this->monthLabel($key),
-                'receipts' => $documents,
-            ]);
+                return $documents->filter(function (GoodsDispatch $dispatch) use ($needle): bool {
+                    $haystack = mb_strtolower(implode(' ', array_filter([
+                        $dispatch->dispatchNumber(),
+                        $dispatch->statusLabel(),
+                        $dispatch->client?->name,
+                        $dispatch->client?->code,
+                        $dispatch->client?->formattedDeliveryAddress(),
+                        $dispatch->merchandiseRequest?->referenceCode(),
+                        $dispatch->merchandiseRequest?->delivery_reference,
+                        $dispatch->merchandiseRequest?->delivery_address,
+                        DocumentDisplayNamer::dispatchBaseName($dispatch),
+                    ])));
+
+                    return str_contains($haystack, $needle);
+                });
+            })
+            ->values();
+
+        $displayNames = DocumentDisplayNamer::assignNames($filteredReceipts);
+        $dispatchDisplayNames = DocumentDisplayNamer::assignDispatchNames($filteredDispatches);
+
+        $receiptDocuments = $filteredReceipts->sortByDesc(fn (GoodsReceipt $receipt) => $receipt->received_at?->timestamp ?? 0)->values();
+        $dispatchDocuments = $filteredDispatches->sortByDesc(fn (GoodsDispatch $dispatch) => $this->dispatchDocumentDate($dispatch)?->timestamp ?? 0)->values();
 
         return view('client.goods-receipts.index', [
-            'groups' => $groups,
+            'receiptDocuments' => $receiptDocuments,
+            'dispatchDocuments' => $dispatchDocuments,
             'displayNames' => $displayNames,
+            'dispatchDisplayNames' => $dispatchDisplayNames,
             'availableMonths' => $availableMonths,
             'availableSuppliers' => $availableSuppliers,
             'filters' => [
@@ -127,6 +168,25 @@ class ClientGoodsReceiptDocumentController extends Controller
         return Storage::disk($disk)->download($goodsReceipt->document_path, $displayName);
     }
 
+    public function downloadDispatch(
+        Request $request,
+        GoodsDispatch $goodsDispatch,
+        GoodsDispatchWorkflowService $workflowService,
+    ) {
+        $user = $request->user();
+
+        abort_unless($user->hasRole(Role::CLIENTE), 403);
+        abort_unless($user->client_id !== null && (int) $user->client_id === (int) $goodsDispatch->client_id, 403);
+        abort_unless(in_array($goodsDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true), 403);
+
+        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet']);
+        $workflowService->ensureDeliveryNoteCanBeGenerated($goodsDispatch);
+
+        return Pdf::loadView('dispatches.delivery-note-pdf', [
+            'dispatch' => $goodsDispatch,
+        ])->download(DocumentDisplayNamer::dispatchBaseName($goodsDispatch).'.pdf');
+    }
+
     private function monthLabel(string $yearMonth): string
     {
         [$year, $month] = array_pad(explode('-', $yearMonth), 2, null);
@@ -136,5 +196,10 @@ class ClientGoodsReceiptDocumentController extends Controller
         }
 
         return (self::SPANISH_MONTHS[(int) $month] ?? $month).' '.$year;
+    }
+
+    private function dispatchDocumentDate(GoodsDispatch $dispatch)
+    {
+        return $dispatch->completed_at ?? $dispatch->sent_at ?? $dispatch->created_at;
     }
 }

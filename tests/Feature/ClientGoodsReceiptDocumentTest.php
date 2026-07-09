@@ -4,7 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\ClientReceiptEmailRecipient;
+use App\Models\GoodsDispatch;
+use App\Models\GoodsDispatchLine;
 use App\Models\GoodsReceipt;
+use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\Supplier;
 use App\Models\User;
@@ -30,7 +33,8 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('Mis albaranes')
+            ->assertSee('ALBARANES')
+            ->assertDontSee('Mis albaranes')
             ->assertSee(route('client-goods-receipts.index'), false);
     }
 
@@ -42,7 +46,8 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertDontSee('Mis albaranes');
+            ->assertDontSee('Mis albaranes')
+            ->assertDontSee(route('client-goods-receipts.index'), false);
     }
 
     public function test_cliente_accede_a_mis_albaranes(): void
@@ -53,7 +58,10 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         $this->actingAs($user)
             ->get(route('client-goods-receipts.index'))
             ->assertOk()
-            ->assertSee('Albaranes de entrada');
+            ->assertSee('ALBARANES')
+            ->assertSee('ALBARANES DE ENTRADA')
+            ->assertSee('ALBARANES DE SALIDA')
+            ->assertDontSee('Mis albaranes');
     }
 
     public function test_almacen_no_puede_acceder_a_mis_albaranes(): void
@@ -91,7 +99,7 @@ class ClientGoodsReceiptDocumentTest extends TestCase
             ->get(route('client-goods-receipts.index'))
             ->assertOk()
             ->assertDontSee('MONDI')
-            ->assertSee('No hay albaranes disponibles para este periodo.');
+            ->assertSee('Sin albaranes.');
     }
 
     public function test_cliente_no_puede_descargar_documento_de_otro_cliente(): void
@@ -106,6 +114,62 @@ class ClientGoodsReceiptDocumentTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_cliente_ve_albaranes_de_salida_de_su_cliente_si_existen(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $this->createDispatchWithDeliveryNote($edelvives, '2026-07-17', 'SAL-EDELVIVES-001', 'Destino Edelvives');
+
+        $this->actingAs($user)
+            ->get(route('client-goods-receipts.index'))
+            ->assertOk()
+            ->assertSee('ALBARANES DE SALIDA')
+            ->assertSee('Salida_Edelvives_17')
+            ->assertSee('SAL-EDELVIVES-001')
+            ->assertSee('Destino Edelvives');
+    }
+
+    public function test_cliente_no_ve_albaranes_de_salida_de_otro_cliente(): void
+    {
+        [$edelvives, $friesland] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $this->createDispatchWithDeliveryNote($friesland, '2026-07-17', 'SAL-FRIESLAND-001', 'Destino Friesland');
+
+        $this->actingAs($user)
+            ->get(route('client-goods-receipts.index'))
+            ->assertOk()
+            ->assertDontSee('SAL-FRIESLAND-001')
+            ->assertDontSee('Destino Friesland')
+            ->assertSee('Sin albaranes.');
+    }
+
+    public function test_cliente_puede_descargar_albaran_de_su_salida(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $dispatch = $this->createDispatchWithDeliveryNote($edelvives, '2026-07-17');
+
+        $this->actingAs($user)
+            ->get(route('client-goods-receipts.dispatches.download', $dispatch))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_cliente_no_puede_descargar_albaran_de_salida_de_otro_cliente(): void
+    {
+        [$edelvives, $friesland] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $dispatch = $this->createDispatchWithDeliveryNote($friesland, '2026-07-17');
+
+        $this->actingAs($user)
+            ->get(route('client-goods-receipts.dispatches.download', $dispatch))
+            ->assertForbidden();
+    }
+
     public function test_estado_vacio_sin_documentos(): void
     {
         [$edelvives] = $this->seedClients();
@@ -114,7 +178,7 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         $this->actingAs($user)
             ->get(route('client-goods-receipts.index'))
             ->assertOk()
-            ->assertSee('No hay albaranes disponibles para este periodo.');
+            ->assertSee('Sin albaranes.');
     }
 
     public function test_filtra_por_mes(): void
@@ -124,6 +188,8 @@ class ClientGoodsReceiptDocumentTest extends TestCase
 
         $this->createReceiptWithDocument($edelvives, 'SAICA', '2026-07-17');
         $this->createReceiptWithDocument($edelvives, 'LECTA', '2026-06-10');
+        $this->createDispatchWithDeliveryNote($edelvives, '2026-07-18', 'SAL-JULIO-001');
+        $this->createDispatchWithDeliveryNote($edelvives, '2026-06-18', 'SAL-JUNIO-001');
 
         $response = $this->actingAs($user)
             ->get(route('client-goods-receipts.index', ['month' => '2026-07']));
@@ -131,6 +197,8 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         $response->assertOk();
         $response->assertSee('Entrada_Saica_17');
         $response->assertDontSee('Entrada_Lecta_10');
+        $response->assertSee('SAL-JULIO-001');
+        $response->assertDontSee('SAL-JUNIO-001');
     }
 
     public function test_filtra_por_proveedor(): void
@@ -156,6 +224,8 @@ class ClientGoodsReceiptDocumentTest extends TestCase
 
         $this->createReceiptWithDocument($edelvives, 'SAICA', '2026-07-17');
         $this->createReceiptWithDocument($edelvives, 'LECTA', '2026-07-10');
+        $this->createDispatchWithDeliveryNote($edelvives, '2026-07-18', 'SAL-SAICA-001', 'Destino Saica');
+        $this->createDispatchWithDeliveryNote($edelvives, '2026-07-18', 'SAL-LECTA-001', 'Destino Lecta');
 
         $response = $this->actingAs($user)
             ->get(route('client-goods-receipts.index', ['search' => 'saica']));
@@ -163,6 +233,8 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         $response->assertOk();
         $response->assertSee('Entrada_Saica_17');
         $response->assertDontSee('Entrada_Lecta_10');
+        $response->assertSee('SAL-SAICA-001');
+        $response->assertDontSee('SAL-LECTA-001');
     }
 
     public function test_cliente_puede_descargar_documento_de_su_entrada(): void
@@ -530,6 +602,46 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         ]);
 
         return $receipt->fresh();
+    }
+
+    private function createDispatchWithDeliveryNote(
+        Client $client,
+        string $sentAt,
+        ?string $dispatchNumber = null,
+        ?string $deliveryReference = null,
+    ): GoodsDispatch {
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+            'delivery_reference' => $deliveryReference,
+            'delivery_address' => $deliveryReference,
+        ]);
+
+        $dispatch = GoodsDispatch::factory()->create([
+            'dispatch_number' => $dispatchNumber,
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'type' => GoodsDispatch::TYPE_REQUEST,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'created_by' => $almacen->id,
+            'sent_at' => $sentAt,
+        ]);
+
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 2,
+            'requested_peaks' => 0,
+            'loaded_pallets' => 2,
+            'loaded_peaks' => 0,
+            'confirmed_at' => $sentAt,
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        return $dispatch->fresh(['client', 'merchandiseRequest', 'lines']);
     }
 
     /**
