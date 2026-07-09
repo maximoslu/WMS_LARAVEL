@@ -41,6 +41,7 @@ class GoodsDispatch extends Model
         'stock_applied_at',
         'stock_applied_by',
         'notes',
+        'camion_propio',
     ];
 
     protected function casts(): array
@@ -50,6 +51,7 @@ class GoodsDispatch extends Model
             'completed_at' => 'datetime',
             'delivery_note_sent_at' => 'datetime',
             'stock_applied_at' => 'datetime',
+            'camion_propio' => 'boolean',
         ];
     }
 

@@ -184,6 +184,7 @@ class GoodsReceiptController extends Controller
                 'status' => GoodsReceipt::STATUS_DRAFT,
                 'received_at' => $validated['received_at'] ?? today()->toDateString(),
                 'notes' => $validated['notes'] ?? null,
+                'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
                 'created_by' => $request->user()->id,
                 ...($request->file('document') !== null
                     ? $this->documentStorage->store($request->file('document'))
@@ -299,6 +300,7 @@ class GoodsReceiptController extends Controller
                     'external_document_number' => $validated['external_document_number'] ?? null,
                     'received_at' => $validated['received_at'] ?? null,
                     'notes' => $validated['notes'] ?? null,
+                    'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
                 ];
 
                 if ($request->hasFile('document')) {

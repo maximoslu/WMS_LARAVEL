@@ -28,9 +28,11 @@ class DailyOperationTotalsService
     {
         $day->loadMissing('lines');
 
-        $opening = $day->client_id !== null
-            ? $this->stockBaseForClient((int) $day->client_id)
-            : max(0, (int) $openingPallets);
+        $opening = $openingPallets !== null
+            ? max(0, (int) $openingPallets)
+            : ($day->client_id !== null
+                ? $this->stockBaseForClient((int) $day->client_id)
+                : 0);
 
         $breakdown = $this->sectionBreakdown($day);
         $inbound = (int) collect(DailyOperationLine::movementInboundSections())

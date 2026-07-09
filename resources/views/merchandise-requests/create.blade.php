@@ -149,6 +149,15 @@
 
                     <div class="merchandise-request-hidden-inputs" data-request-hidden-inputs></div>
                     <script type="application/json" data-request-selected-items>@json($selectedItems)</script>
+
+                    <label class="auth-field">
+                        <span>
+                            <input type="hidden" name="camion_propio" value="0">
+                            <input type="checkbox" name="camion_propio" value="1" @checked(old('camion_propio'))>
+                            Cami&oacute;n propio
+                        </span>
+                        <small class="helper-text">Marcar si la entrega/salida se realiza con cami&oacute;n propio de MAXIMO.</small>
+                    </label>
                 </section>
 
                 <aside class="surface-card compact-card merchandise-request-summary-card merchandise-request-summary-card--sticky wms-flow-card">

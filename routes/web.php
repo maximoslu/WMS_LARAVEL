@@ -292,6 +292,9 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/salidas/{goodsDispatch}/estado', [GoodsDispatchController::class, 'updateStatus'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.update-status');
+    Route::put('/salidas/{goodsDispatch}/camion-propio', [GoodsDispatchController::class, 'updateOwnTruck'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.own-truck.update');
     Route::get('/salidas/{goodsDispatch}/albaran', [GoodsDispatchController::class, 'deliveryNotePdf'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.delivery-note');

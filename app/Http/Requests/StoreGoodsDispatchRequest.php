@@ -65,6 +65,7 @@ class StoreGoodsDispatchRequest extends FormRequest
         }
 
         $this->merge([
+            'camion_propio' => $this->boolean('camion_propio'),
             'lines' => collect($submittedLines)
                 ->map(function ($payload) {
                     if (! is_array($payload)) {
@@ -88,6 +89,7 @@ class StoreGoodsDispatchRequest extends FormRequest
         return [
             'client_id' => ['required', 'exists:clients,id'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'camion_propio' => ['boolean'],
             'lines' => ['required', 'array'],
             'lines.*.item_id' => ['nullable', 'integer'],
             'lines.*.line_type' => ['required', 'string'],

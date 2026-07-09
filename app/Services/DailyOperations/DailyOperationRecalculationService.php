@@ -46,6 +46,9 @@ class DailyOperationRecalculationService
                 ->delete();
 
             $sortOrder = $manualSortOrder;
+            $inboundPallets = 0;
+            $outboundPallets = 0;
+
             $receipts = GoodsReceipt::query()
                 ->with(['supplier', 'lines'])
                 ->where('client_id', $clientId)
@@ -55,9 +58,8 @@ class DailyOperationRecalculationService
                 ->get();
 
             foreach ($receipts as $receipt) {
-                $receiptPallets = max(0, (int) $receipt->lines->sum(
-                    fn ($line): int => (int) $line->pallet_count + (((int) ($line->pico_units ?? 0) > 0) ? 1 : 0)
-                ));
+                $receiptPallets = $this->receiptLogisticUnits($receipt);
+                $inboundPallets += $receiptPallets;
 
                 if ($receiptPallets > 0) {
                     $this->createAutoLine(
@@ -79,11 +81,25 @@ class DailyOperationRecalculationService
                     DailyOperationLine::SECTION_GESTION_CAMION,
                     (string) ($receipt->supplier?->name ?? 'Entrada confirmada'),
                     1,
-                    'Gestión de camión asociada a la entrada '.$receipt->receipt_number.'.',
+                    'Gestion de camion asociada a la entrada '.$receipt->receipt_number.'.',
                     DailyOperationLine::SOURCE_GOODS_RECEIPT,
                     (int) $receipt->id,
                     $userId,
                 );
+
+                if ($receipt->camion_propio) {
+                    $this->createAutoLine(
+                        $day,
+                        ++$sortOrder,
+                        DailyOperationLine::SECTION_VIAJE_CAMION,
+                        (string) ($receipt->supplier?->name ?? 'Entrada confirmada'),
+                        1,
+                        'Viaje de camion propio asociado a la entrada '.$receipt->receipt_number.'.',
+                        DailyOperationLine::SOURCE_GOODS_RECEIPT,
+                        (int) $receipt->id,
+                        $userId,
+                    );
+                }
             }
 
             $dispatches = GoodsDispatch::query()
@@ -105,11 +121,8 @@ class DailyOperationRecalculationService
                 ->get();
 
             foreach ($dispatches as $dispatch) {
-                $dispatchPallets = max(0, $dispatch->loadedPalletsCount() + $dispatch->loadedPeaksCount());
-
-                if ($dispatchPallets === 0) {
-                    $dispatchPallets = max(0, $dispatch->palletsCount() + $dispatch->peaksCount());
-                }
+                $dispatchPallets = $this->dispatchLogisticUnits($dispatch);
+                $outboundPallets += $dispatchPallets;
 
                 if ($dispatchPallets > 0) {
                     $this->createAutoLine(
@@ -118,7 +131,7 @@ class DailyOperationRecalculationService
                         DailyOperationLine::SECTION_ENVIO,
                         (string) ($dispatch->client?->name ?? 'Salida'),
                         $dispatchPallets,
-                        'Envío '.$dispatch->dispatchNumber().' en estado '.$dispatch->status.'.',
+                        'Envio '.$dispatch->dispatchNumber().' en estado '.$dispatch->status.'.',
                         DailyOperationLine::SOURCE_GOODS_DISPATCH,
                         (int) $dispatch->id,
                         $userId,
@@ -131,43 +144,65 @@ class DailyOperationRecalculationService
                     DailyOperationLine::SECTION_GESTION_CAMION,
                     (string) ($dispatch->client?->name ?? 'Salida'),
                     1,
-                    'Gestión de camión asociada al envío '.$dispatch->dispatchNumber().'.',
+                    'Gestion de camion asociada al envio '.$dispatch->dispatchNumber().'.',
                     DailyOperationLine::SOURCE_GOODS_DISPATCH,
                     (int) $dispatch->id,
                     $userId,
                 );
 
-                $this->createAutoLine(
-                    $day,
-                    ++$sortOrder,
-                    DailyOperationLine::SECTION_VIAJE_CAMION,
-                    (string) ($dispatch->client?->name ?? 'Salida'),
-                    1,
-                    'Viaje de camión asociado al envío '.$dispatch->dispatchNumber().'.',
-                    DailyOperationLine::SOURCE_GOODS_DISPATCH,
-                    (int) $dispatch->id,
-                    $userId,
-                );
+                if ($dispatch->camion_propio) {
+                    $this->createAutoLine(
+                        $day,
+                        ++$sortOrder,
+                        DailyOperationLine::SECTION_VIAJE_CAMION,
+                        (string) ($dispatch->client?->name ?? 'Salida'),
+                        1,
+                        'Viaje de camion propio asociado al envio '.$dispatch->dispatchNumber().'.',
+                        DailyOperationLine::SOURCE_GOODS_DISPATCH,
+                        (int) $dispatch->id,
+                        $userId,
+                    );
+                }
             }
 
-            $stockBase = $this->totalsService->stockBaseForClient($clientId);
+            $currentStock = $this->totalsService->stockBaseForClient($clientId);
+            $openingPallets = max(0, $currentStock + $outboundPallets - $inboundPallets);
+            $billableStoragePallets = $openingPallets + $inboundPallets;
 
-            if ($stockBase > 0) {
+            if ($billableStoragePallets > 0) {
                 $this->createAutoLine(
                     $day,
                     ++$sortOrder,
                     DailyOperationLine::SECTION_ALMACENAJE,
-                    'Stock base del cliente',
-                    $stockBase,
-                    'Base facturable de almacenaje para la fecha '.$date.'.',
+                    'Pallets facturables del dia',
+                    $billableStoragePallets,
+                    'Stock base reconstruido mas entradas descargadas para la fecha '.$date.'.',
                     DailyOperationLine::SOURCE_STOCK_SNAPSHOT,
                     null,
                     $userId,
                 );
             }
 
-            return $this->totalsService->syncDay($day, null, $day->notes, $userId);
+            return $this->totalsService->syncDay($day, $openingPallets, $day->notes, $userId);
         });
+    }
+
+    private function receiptLogisticUnits(GoodsReceipt $receipt): int
+    {
+        return max(0, (int) $receipt->lines->sum(
+            fn ($line): int => (int) $line->pallet_count + (((int) ($line->pico_units ?? 0) > 0) ? 1 : 0)
+        ));
+    }
+
+    private function dispatchLogisticUnits(GoodsDispatch $dispatch): int
+    {
+        $dispatchPallets = max(0, $dispatch->loadedPalletsCount() + $dispatch->loadedPeaksCount());
+
+        if ($dispatchPallets === 0) {
+            $dispatchPallets = max(0, $dispatch->palletsCount() + $dispatch->peaksCount());
+        }
+
+        return $dispatchPallets;
     }
 
     private function createAutoLine(

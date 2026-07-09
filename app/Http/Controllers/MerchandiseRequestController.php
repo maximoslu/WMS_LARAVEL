@@ -130,12 +130,13 @@ class MerchandiseRequestController extends Controller
         $user = $request->user();
         $requestedLines = $request->validatedLines();
 
-        $merchandiseRequest = DB::transaction(function () use ($requestedLines, $user): MerchandiseRequest {
+        $merchandiseRequest = DB::transaction(function () use ($request, $requestedLines, $user): MerchandiseRequest {
             $requestModel = MerchandiseRequest::query()->create([
                 'client_id' => $user->client_id,
                 'requested_by' => $user->id,
                 'status' => MerchandiseRequest::STATUS_PENDING,
                 'requested_date' => now()->toDateString(),
+                'camion_propio' => $request->boolean('camion_propio'),
             ]);
 
             foreach ($requestedLines as $line) {

@@ -62,6 +62,7 @@ class DailyOperationController extends Controller
             'selectedDate' => $selectedDate,
             'sectionOptions' => DailyOperationLine::sectionOptions(),
             'sectionTotals' => $sectionBreakdown,
+            'billingDetails' => $day !== null ? $this->billingDetails($day) : [],
             'canManage' => $request->user()?->canAccessRole(Role::ALMACEN) === true,
             'lineBeingEdited' => $lineBeingEdited,
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
@@ -249,5 +250,51 @@ class DailyOperationController extends Controller
         }
 
         return $clients->first();
+    }
+
+    /**
+     * @return array<int, array{type:string, document:string, pallets:int, management:bool, trip:bool}>
+     */
+    private function billingDetails(DailyOperationDay $day): array
+    {
+        $day->loadMissing('lines');
+        $lines = $day->lines;
+
+        return $lines
+            ->filter(fn (DailyOperationLine $line): bool => in_array($line->section, [
+                DailyOperationLine::SECTION_DESCARGA,
+                DailyOperationLine::SECTION_CARGA,
+                DailyOperationLine::SECTION_ENVIO,
+            ], true))
+            ->map(function (DailyOperationLine $line) use ($lines): array {
+                $sameSource = fn (DailyOperationLine $candidate): bool => $line->source_type !== null
+                    && $line->source_id !== null
+                    && $candidate->source_type === $line->source_type
+                    && (int) $candidate->source_id === (int) $line->source_id;
+
+                $management = $lines->contains(fn (DailyOperationLine $candidate): bool => $sameSource($candidate)
+                    && $candidate->section === DailyOperationLine::SECTION_GESTION_CAMION);
+                $trip = $lines->contains(fn (DailyOperationLine $candidate): bool => $sameSource($candidate)
+                    && $candidate->section === DailyOperationLine::SECTION_VIAJE_CAMION);
+
+                return [
+                    'type' => $line->section === DailyOperationLine::SECTION_DESCARGA ? 'Entrada' : 'Salida',
+                    'document' => $this->billingDocumentLabel($line),
+                    'pallets' => (int) $line->pallets,
+                    'management' => $management || $line->requiresTruckManagement(),
+                    'trip' => $trip,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function billingDocumentLabel(DailyOperationLine $line): string
+    {
+        return match ($line->source_type) {
+            DailyOperationLine::SOURCE_GOODS_RECEIPT => 'Entrada #'.$line->source_id,
+            DailyOperationLine::SOURCE_GOODS_DISPATCH => 'Salida #'.$line->source_id,
+            default => $line->counterparty_name,
+        };
     }
 }

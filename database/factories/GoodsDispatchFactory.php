@@ -25,6 +25,7 @@ class GoodsDispatchFactory extends Factory
             'created_by' => User::factory(),
             'sent_at' => null,
             'notes' => null,
+            'camion_propio' => false,
         ];
     }
 }

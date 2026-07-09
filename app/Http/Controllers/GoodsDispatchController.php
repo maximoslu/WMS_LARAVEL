@@ -67,6 +67,7 @@ class GoodsDispatchController extends Controller
                 'status' => GoodsDispatch::STATUS_DRAFT,
                 'created_by' => $request->user()->id,
                 'notes' => $request->input('notes'),
+                'camion_propio' => $request->boolean('camion_propio'),
             ]);
 
             foreach ($validatedLines as $line) {
@@ -153,6 +154,7 @@ class GoodsDispatchController extends Controller
                 'status' => GoodsDispatch::STATUS_PREPARING,
                 'created_by' => $request->user()->id,
                 'notes' => $merchandiseRequest->notes,
+                'camion_propio' => (bool) $merchandiseRequest->camion_propio,
             ]);
 
             foreach ($merchandiseRequest->lines as $line) {
@@ -251,6 +253,21 @@ class GoodsDispatchController extends Controller
         }
 
         return $response;
+    }
+
+    public function updateOwnTruck(Request $request, GoodsDispatch $goodsDispatch): RedirectResponse
+    {
+        $validated = $request->validate([
+            'camion_propio' => ['boolean'],
+        ]);
+
+        $goodsDispatch->update([
+            'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
+        ]);
+
+        return redirect()
+            ->route('dispatches.show', $goodsDispatch)
+            ->with('status', 'Camion propio actualizado correctamente.');
     }
 
     public function deliveryNotePdf(

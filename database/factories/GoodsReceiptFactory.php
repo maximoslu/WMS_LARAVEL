@@ -25,6 +25,7 @@ class GoodsReceiptFactory extends Factory
             'status' => GoodsReceipt::STATUS_DRAFT,
             'received_at' => fake()->date(),
             'notes' => fake()->optional()->sentence(),
+            'camion_propio' => false,
             'document_path' => null,
             'document_original_name' => null,
             'document_mime' => null,

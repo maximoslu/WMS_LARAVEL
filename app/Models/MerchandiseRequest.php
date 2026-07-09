@@ -30,6 +30,7 @@ class MerchandiseRequest extends Model
         'status',
         'delivery_reference',
         'delivery_address',
+        'camion_propio',
         'requested_date',
         'notes',
         'prepared_by',
@@ -48,6 +49,7 @@ class MerchandiseRequest extends Model
             'shipped_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'camion_propio' => 'boolean',
         ];
     }
 

@@ -141,6 +141,23 @@
                         </div>
                     @endif
                 </div>
+
+                <form method="POST" action="{{ route('dispatches.own-truck.update', $dispatch) }}" class="wms-action-card">
+                    @csrf
+                    @method('PUT')
+                    <strong>Cami&oacute;n propio</strong>
+                    <p>Marca esta salida solo si la entrega se realiza con cami&oacute;n propio de MAXIMO.</p>
+
+                    <label class="auth-field">
+                        <span>
+                            <input type="hidden" name="camion_propio" value="0">
+                            <input type="checkbox" name="camion_propio" value="1" @checked(old('camion_propio', $dispatch->camion_propio))>
+                            Cami&oacute;n propio
+                        </span>
+                    </label>
+
+                    <button type="submit" class="button-secondary compact-button btn-compact">Guardar cami&oacute;n</button>
+                </form>
             </div>
         </article>
     </section>

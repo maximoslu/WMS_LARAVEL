@@ -24,6 +24,7 @@ class MerchandiseRequestFactory extends Factory
             'status' => MerchandiseRequest::STATUS_PENDING,
             'delivery_reference' => null,
             'delivery_address' => null,
+            'camion_propio' => false,
             'requested_date' => now()->toDateString(),
             'notes' => null,
             'prepared_by' => null,

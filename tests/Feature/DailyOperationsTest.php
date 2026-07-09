@@ -135,7 +135,7 @@ class DailyOperationsTest extends TestCase
             ->assertOk()
             ->assertSee('Cliente Sur')
             ->assertSee('57')
-            ->assertSee('STOCK BASE CLIENTE')
+            ->assertSee('PALLETS FACTURABLES DEL DIA')
             ->assertSee('50');
     }
 
@@ -462,10 +462,63 @@ class DailyOperationsTest extends TestCase
         $this->assertDatabaseHas('daily_operation_lines', [
             'day_id' => $day->id,
             'section' => DailyOperationLine::SECTION_ALMACENAJE,
-            'counterparty_name' => 'Stock base del cliente',
+            'counterparty_name' => 'Pallets facturables del dia',
             'pallets' => 1044,
             'is_auto_generated' => true,
         ]);
+    }
+
+    public function test_recalculate_reconstructs_opening_stock_when_same_day_dispatch_already_reduced_current_stock(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'EDELVIVES']);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 100,
+        ]);
+
+        $this->createStockPallet($client, 1035, StockPallet::STATUS_AVAILABLE, $item);
+
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => '2026-07-09 09:00:00',
+            'created_by' => $user->id,
+            'camion_propio' => false,
+        ]);
+
+        GoodsDispatchLine::query()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'sku' => 'EDELVIVES-OUT',
+            'description' => 'Salida EDELVIVES',
+            'units_per_pallet' => 100,
+            'pallets' => 9,
+            'requested_units' => 900,
+            'requested_pallets' => 9,
+            'loaded_pallets' => 9,
+            'is_extra_line' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-09',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-09', 'client_id' => $client->id]));
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-09')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(1044, $day->opening_pallets);
+        $this->assertSame(1044, $day->stored_pallets_today);
+        $this->assertSame(9, $day->moved_pallets_today);
+        $this->assertSame(1035, $day->expected_pallets_tomorrow);
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+        $this->assertSame(0, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
     }
 
     public function test_recalculate_uses_logistic_units_for_storage_movements_and_tomorrow_base(): void
@@ -482,7 +535,7 @@ class DailyOperationsTest extends TestCase
             'units_per_pallet' => 100,
         ]);
 
-        $this->createStockPallet($client, 990, StockPallet::STATUS_AVAILABLE, $item);
+        $this->createStockPallet($client, 1000, StockPallet::STATUS_AVAILABLE, $item);
 
         foreach (range(1, 10) as $_) {
             $this->createStockPalletWithPeaks($client, 0, 1, StockPallet::STATUS_AVAILABLE, $item);
@@ -571,7 +624,75 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(30, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
         $this->assertSame(20, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
         $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
-        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+        $this->assertSame(0, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+    }
+
+    public function test_recalculate_counts_trips_only_for_receipts_and_dispatches_marked_as_own_truck(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create();
+        $supplier = Supplier::factory()->create(['client_id' => $client->id]);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 100]);
+
+        $this->createStockPallet($client, 10, StockPallet::STATUS_AVAILABLE, $item);
+
+        foreach ([true, false] as $ownTruck) {
+            $receipt = GoodsReceipt::factory()->create([
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'status' => GoodsReceipt::STATUS_CONFIRMED,
+                'received_at' => '2026-07-10',
+                'camion_propio' => $ownTruck,
+                'created_by' => $user->id,
+            ]);
+
+            GoodsReceiptLine::query()->create([
+                'goods_receipt_id' => $receipt->id,
+                'item_id' => $item->id,
+                'sku' => $ownTruck ? 'IN-OWN' : 'IN-EXT',
+                'description' => 'Entrada test',
+                'quantity_units' => 100,
+                'units_per_pallet' => 100,
+                'pallet_count' => 1,
+            ]);
+
+            $dispatch = GoodsDispatch::factory()->create([
+                'client_id' => $client->id,
+                'status' => GoodsDispatch::STATUS_SENT,
+                'sent_at' => '2026-07-10 10:00:00',
+                'camion_propio' => $ownTruck,
+                'created_by' => $user->id,
+            ]);
+
+            GoodsDispatchLine::query()->create([
+                'goods_dispatch_id' => $dispatch->id,
+                'item_id' => $item->id,
+                'sku' => $ownTruck ? 'OUT-OWN' : 'OUT-EXT',
+                'description' => 'Salida test',
+                'units_per_pallet' => 100,
+                'pallets' => 1,
+                'requested_units' => 100,
+                'requested_pallets' => 1,
+                'loaded_pallets' => 1,
+                'is_extra_line' => false,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-10',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect();
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-10')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(4, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+        $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
     }
 
     public function test_recalculate_builds_automatic_lines_and_preserves_manual_lines_without_duplicates(): void
@@ -631,6 +752,7 @@ class DailyOperationsTest extends TestCase
             'status' => GoodsDispatch::STATUS_SENT,
             'sent_at' => '2026-07-02 09:30:00',
             'created_by' => $user->id,
+            'camion_propio' => true,
         ]);
 
         GoodsDispatchLine::query()->create([
@@ -646,8 +768,8 @@ class DailyOperationsTest extends TestCase
             'is_extra_line' => false,
         ]);
 
-        $this->createStockPallet($client, 1, StockPallet::STATUS_AVAILABLE, $item);
-        $this->createStockPallet($client, 1, StockPallet::STATUS_BLOCKED, $item);
+        $this->createStockPallet($client, 2, StockPallet::STATUS_AVAILABLE, $item);
+        $this->createStockPallet($client, 2, StockPallet::STATUS_BLOCKED, $item);
 
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
@@ -699,8 +821,8 @@ class DailyOperationsTest extends TestCase
         $this->assertDatabaseHas('daily_operation_lines', [
             'day_id' => $day->id,
             'section' => DailyOperationLine::SECTION_ALMACENAJE,
-            'counterparty_name' => 'Stock base del cliente',
-            'pallets' => 2,
+            'counterparty_name' => 'Pallets facturables del dia',
+            'pallets' => 7,
             'is_auto_generated' => true,
         ]);
 
@@ -725,7 +847,7 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(6, DailyOperationLine::query()->where('day_id', $day->id)->where('is_auto_generated', true)->count());
     }
 
-    public function test_view_shows_labels_with_accents_and_refined_layout_classes(): void
+    public function test_view_shows_simplified_billing_layout_without_noisy_sections(): void
     {
         $this->seed(RoleSeeder::class);
         $user = $this->makeUserWithRole(Role::ADMINISTRACION);
@@ -734,17 +856,15 @@ class DailyOperationsTest extends TestCase
         $this->actingAs($user)
             ->get(route('daily-operations.index', ['date' => '2026-07-05', 'client_id' => $client->id]))
             ->assertOk()
-            ->assertSee('Gestión de camión')
-            ->assertSee('Viaje de camión')
-            ->assertSee('Envío')
-            ->assertSee('Horas operario')
-            ->assertSee('STOCK BASE CLIENTE')
-            ->assertSee('Pallets completos + picos actualmente almacenados.')
-            ->assertSee('Stock base logístico + descargas del día.')
-            ->assertSee('Descargas + salidas/envíos del día, incluyendo picos.')
-            ->assertSee('Stock base + descargas - salidas/envíos.')
+            ->assertSee('PALLETS FACTURABLES DEL DIA')
+            ->assertSee('PALLETS MOVIDOS DEL DIA')
+            ->assertSee('GESTIONES DE CAMION')
+            ->assertSee('VIAJES')
+            ->assertDontSee('Reglas actuales')
+            ->assertDontSee('Nueva línea operativa')
+            ->assertDontSee('Movimiento diario')
             ->assertSee('daily-ops-toolbar', false)
-            ->assertSee('daily-ops-summary-form', false);
+            ->assertDontSee('daily-ops-total-chip', false);
     }
 
     private function assertManualOperationAssociations(string $section, int $pallets, bool $expectsManagement, bool $expectsTrip): void

@@ -96,6 +96,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             'receipt_number' => $this->normalizeNullableUpper($this->input('receipt_number')),
             'external_document_number' => $this->normalizeNullableUpper($this->input('external_document_number')),
             'notes' => $this->normalizeNullableText($this->input('notes')),
+            'camion_propio' => $this->boolean('camion_propio'),
             'lines' => $lines,
         ]);
     }
@@ -110,6 +111,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             'external_document_number' => ['nullable', 'string', 'max:150'],
             'received_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
+            'camion_propio' => ['boolean'],
             'document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
             'lines' => $this->expectsAiCreationFlow()
                 ? ['present', 'array']

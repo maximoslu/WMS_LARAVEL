@@ -128,6 +128,7 @@ class GoodsDispatchManagementTest extends TestCase
             ->post(route('dispatches.store'), [
                 'client_id' => $client->id,
                 'notes' => 'Salida urgente',
+                'camion_propio' => '1',
                 'quantities' => [
                     $item->id => 4,
                 ],
@@ -138,6 +139,7 @@ class GoodsDispatchManagementTest extends TestCase
 
         $this->assertSame(GoodsDispatch::STATUS_DRAFT, $dispatch->status);
         $this->assertSame(GoodsDispatch::TYPE_MANUAL, $dispatch->type);
+        $this->assertTrue($dispatch->camion_propio);
         $this->assertDatabaseHas('goods_dispatch_lines', [
             'goods_dispatch_id' => $dispatch->id,
             'item_id' => $item->id,
@@ -145,6 +147,33 @@ class GoodsDispatchManagementTest extends TestCase
             'pallets' => 4,
             'requested_units' => 2800,
         ]);
+    }
+
+    public function test_internal_user_can_update_own_truck_flag_on_existing_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'camion_propio' => false,
+            'created_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->put(route('dispatches.own-truck.update', $dispatch), [
+                'camion_propio' => '1',
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertTrue($dispatch->fresh()->camion_propio);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.show', $dispatch))
+            ->assertOk()
+            ->assertSee('Cami&oacute;n propio', false);
     }
 
     public function test_dispatch_from_request_copies_lines_and_prevents_duplicates(): void
@@ -162,6 +191,7 @@ class GoodsDispatchManagementTest extends TestCase
             'client_id' => $client->id,
             'requested_by' => $cliente->id,
             'status' => MerchandiseRequest::STATUS_PENDING,
+            'camion_propio' => true,
         ]);
         $merchandiseRequest->lines()->create([
             'item_id' => $item->id,
@@ -178,6 +208,7 @@ class GoodsDispatchManagementTest extends TestCase
         $dispatch = GoodsDispatch::query()->firstOrFail();
 
         $this->assertSame($merchandiseRequest->id, $dispatch->merchandise_request_id);
+        $this->assertTrue($dispatch->camion_propio);
         $this->assertDatabaseHas('goods_dispatch_lines', [
             'goods_dispatch_id' => $dispatch->id,
             'item_id' => $item->id,

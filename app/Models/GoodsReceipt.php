@@ -40,6 +40,7 @@ class GoodsReceipt extends Model
         'status',
         'received_at',
         'notes',
+        'camion_propio',
         'document_path',
         'document_original_name',
         'document_mime',
@@ -62,6 +63,7 @@ class GoodsReceipt extends Model
             'confirmed_at' => 'datetime',
             'stock_applied_at' => 'datetime',
             'ai_extracted_data' => 'array',
+            'camion_propio' => 'boolean',
         ];
     }
 

@@ -65,6 +65,7 @@ class GoodsReceiptManagementTest extends TestCase
                 'receipt_number' => 'ALB-HIST-001',
                 'external_document_number' => 'DOC-HIST-001',
                 'received_at' => '2026-06-29',
+                'camion_propio' => '1',
                 'lines' => [
                     [
                         'item_id' => '',
@@ -80,6 +81,8 @@ class GoodsReceiptManagementTest extends TestCase
                 ],
             ])
             ->assertRedirect();
+
+        $this->assertTrue(GoodsReceipt::query()->firstOrFail()->camion_propio);
 
         $this->actingAs($user)
             ->get(route('goods-receipts.index'))
@@ -178,6 +181,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('Linea')
             ->assertSee('SKU, lote, cantidades y ubicacion.')
             ->assertSee('Crear borrador e interpretar con IA')
+            ->assertSee('Cami&oacute;n propio', false)
             ->assertSee('Si vas a interpretar un albaran con IA, puedes dejar las lineas vacias.');
     }
 
