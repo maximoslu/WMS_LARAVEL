@@ -602,6 +602,35 @@ const setupStockFilters = () => {
     form.dataset.stockFiltersBound = 'true';
 };
 
+const setupStockExportModal = () => {
+    const trigger = document.querySelector('[data-stock-export-trigger]');
+    const dialog = document.querySelector('[data-stock-export-dialog]');
+
+    if (!trigger || !dialog || trigger.dataset.exportBound === 'true') {
+        return;
+    }
+
+    trigger.addEventListener('click', () => {
+        if (typeof dialog.showModal === 'function') {
+            dialog.showModal();
+        }
+    });
+
+    dialog.addEventListener('click', (event) => {
+        const rect = dialog.getBoundingClientRect();
+        const clickedOutside = event.clientX < rect.left
+            || event.clientX > rect.right
+            || event.clientY < rect.top
+            || event.clientY > rect.bottom;
+
+        if (clickedOutside) {
+            dialog.close();
+        }
+    });
+
+    trigger.dataset.exportBound = 'true';
+};
+
 const setupStockDetailToggles = () => {
     const toggles = document.querySelectorAll('[data-stock-detail-toggle]');
 
@@ -1790,6 +1819,7 @@ const setupDispatchLoadingEditor = () => {
 const boot = () => {
     setupAppDrawer();
     setupStockFilters();
+    setupStockExportModal();
     setupStockDetailToggles();
     setupGoodsReceiptLines();
     setupSupplierPicker();

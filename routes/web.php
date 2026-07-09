@@ -102,6 +102,10 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/stock', [StockController::class, 'index'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('stock.index');
+    Route::get('/stock/exportar/{format}', [StockController::class, 'export'])
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('stock.export');
     Route::get('/stock/partidas/{stockPallet}/editar', [StockController::class, 'edit'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('stock.batches.edit');

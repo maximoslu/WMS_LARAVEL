@@ -1459,6 +1459,55 @@ body.auth-page .auth-input:focus {
     font-weight: 800;
 }
 
+.stock-summary-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.stock-summary-toolbar .stock-summary {
+    flex: 1 1 auto;
+}
+
+.stock-export-modal {
+    border: none;
+    border-radius: var(--brand-radius);
+    box-shadow: var(--brand-shadow);
+    padding: 1.3rem 1.4rem;
+    max-width: 22rem;
+    width: 90vw;
+}
+
+.stock-export-modal::backdrop {
+    background: rgba(15, 23, 32, 0.45);
+}
+
+.stock-export-modal-title {
+    margin: 0 0 0.3rem;
+    font-size: 1.1rem;
+    color: var(--brand-slate-dark);
+}
+
+.stock-export-modal-copy {
+    margin: 0 0 1rem;
+    color: var(--brand-soft);
+    font-size: 0.92rem;
+}
+
+.stock-export-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.stock-export-modal-actions a,
+.stock-export-modal-actions button {
+    flex: 1 1 8rem;
+    text-align: center;
+}
+
 .stock-summary {
     display: grid;
     gap: 0.85rem;

@@ -44,6 +44,50 @@ class StockOverviewBuilder
     }
 
     /**
+     * Aggregated rows for client-facing exports (Excel/CSV/PDF): one row per
+     * SKU + lot combination, summing quantity across locations/pallets, using
+     * the same visibility criteria (active, non-zero, all batch statuses) as
+     * the main stock listing's default view.
+     *
+     * @return Collection<int, array{sku: string, description: string, lot: string, quantity: int}>
+     */
+    public function exportRows(int $clientId): Collection
+    {
+        $filters = [
+            'client_id' => $clientId,
+            'item_id' => null,
+            'search' => '',
+            'lot' => '',
+            'location' => '',
+            'location_id' => null,
+            'batch_status' => 'all',
+            'only_peaks' => false,
+        ];
+
+        return $this->stockQuery($filters)
+            ->get()
+            ->groupBy(fn (StockPallet $pallet): string => $pallet->item_id.'|'.($pallet->lot ?? ''))
+            ->map(function (Collection $group): array {
+                $first = $group->first();
+                $item = $first->item;
+
+                return [
+                    'sku' => $item?->sku ?? 'Sin SKU',
+                    'description' => $item?->description ?? 'Sin descripcion',
+                    'lot' => $first->lot ?: 'SIN LOTE',
+                    'quantity' => (int) $group->sum('quantity_units'),
+                ];
+            })
+            ->sortBy([['sku', 'asc'], ['lot', 'asc']])
+            ->values();
+    }
+
+    public function resolveExportClientId(User $user, mixed $requestedClientId): ?int
+    {
+        return $this->resolveClientId($user, $requestedClientId);
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      */
     private function stockQuery(array $filters): Builder

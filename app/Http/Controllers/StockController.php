@@ -6,17 +6,20 @@ use App\Models\Client;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
+use App\Services\Stock\StockExportService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use App\Support\Stock\StockOverviewBuilder;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use App\Http\Requests\UpdateStockPalletRequest;
+use Symfony\Component\HttpFoundation\Response;
 
 class StockController extends Controller
 {
     public function __construct(
         private readonly StockOverviewBuilder $overviewBuilder,
+        private readonly StockExportService $exportService,
     ) {}
 
     public function index(Request $request): View
@@ -39,6 +42,7 @@ class StockController extends Controller
         ]));
         $isClient = $user?->hasRole(Role::CLIENTE) === true;
         $canFilterClients = $user?->canAccessRole(Role::ALMACEN) === true;
+        $exportClientId = $overview['filters']['client_id'];
 
         return view('stock.index', [
             'rows' => $overview['rows'],
@@ -50,6 +54,8 @@ class StockController extends Controller
                 : collect(),
             'isClient' => $isClient,
             'canFilterClients' => $canFilterClients,
+            'canExportStock' => $exportClientId !== null,
+            'exportClientId' => $exportClientId,
             'pageTitle' => $isClient ? 'Mi inventario' : 'Stock actual',
             'pageSubtitle' => $isClient
                 ? 'Consulta tus existencias, lotes, pallets y picos disponibles.'
@@ -59,6 +65,31 @@ class StockController extends Controller
             'locationSearchEndpoint' => route('ajax.locations'),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
+    }
+
+    public function export(Request $request, string $format): Response
+    {
+        $user = $request->user();
+
+        abort_if($user?->hasRole(Role::CLIENTE) && $user->client_id === null, 403);
+        abort_unless(in_array($format, ['xlsx', 'csv', 'pdf'], true), 404);
+
+        $clientId = $this->overviewBuilder->resolveExportClientId($user, $request->query('client_id'));
+
+        if ($clientId === null) {
+            return redirect()
+                ->route('stock.index', $request->query())
+                ->with('status', 'Selecciona un cliente para poder exportar su stock.');
+        }
+
+        $client = Client::query()->findOrFail($clientId);
+        $rows = $this->exportService->rows($clientId);
+
+        return match ($format) {
+            'xlsx' => $this->exportService->toXlsxResponse($client, $rows),
+            'csv' => $this->exportService->toCsvResponse($client, $rows),
+            default => $this->exportService->toPdfResponse($client, $rows),
+        };
     }
 
     public function edit(Request $request, StockPallet $stockPallet): View

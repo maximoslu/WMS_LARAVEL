@@ -1550,3 +1550,66 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Deploy Forge requerido tras push para `wms.maximosl.com`
 - Comandos Forge tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
 - No hay migraciones nuevas; `php artisan migrate --force` deberia quedar sin cambios pendientes.
+
+---
+
+## 2026-07-09 - Descarga de stock por cliente (Excel/PDF/CSV) desde STOCK
+
+**Contexto:** Con EDELVIVES ya en pruebas reales, se pidio que cada cliente pudiera descargar su propio stock desde la pantalla STOCK en Excel, PDF o CSV, con solo las columnas SKU/DESCRIPCION/LOTE/CANTIDAD, agregando por SKU+lote (sumando cantidades de varias ubicaciones), sin exponer pallets, picos, ubicaciones ni datos tecnicos.
+
+**Commit previo de partida:** `3913628e fix: repair client order form layout`
+
+**Dependencias reutilizadas (no se añadio ninguna libreria nueva):**
+- Excel/CSV: `openspout/openspout` 4.28, ya instalado y usado en el proyecto solo para *lectura* de importaciones de stock (`StockExcelImportService`). Esta es la primera vez que se usa su API de *escritura* (`OpenSpout\Writer\XLSX\Writer` / `OpenSpout\Writer\CSV\Writer`) en el proyecto.
+- PDF: `barryvdh/laravel-dompdf`, ya usado para los albaranes de salida (`dispatches/delivery-note-pdf.blade.php`) y la hoja de preparacion de pedidos; se siguio exactamente el mismo patron (vista Blade simple + `Pdf::loadView(...)->download(...)`).
+
+**Backend:**
+- `app/Support/Stock/StockOverviewBuilder.php`
+  - nuevo metodo publico `exportRows(int $clientId): Collection`: reutiliza el mismo `stockQuery()` privado que ya alimenta el listado visible (mismo criterio de `active=true`, exclusion de stock a cero, todos los estados de partida incluidos bloqueados/obsoletos, igual que la vista por defecto), y agrupa los resultados en PHP por `item_id + lot`, sumando `quantity_units`; lote vacio se etiqueta `SIN LOTE`
+  - nuevo metodo publico `resolveExportClientId()`: delega en el `resolveClientId()` privado ya existente (mismo criterio de aislamiento por cliente que usa el listado: para rol `cliente` siempre fuerza su propio `client_id` ignorando cualquier valor recibido; para roles internos exige un `client_id` positivo explicito)
+- `app/Services/Stock/StockExportService.php` (nuevo)
+  - `rows(int $clientId)`: delega en `StockOverviewBuilder::exportRows()`
+  - `toXlsxResponse()`: escribe a un fichero temporal con `OpenSpout\Writer\XLSX\Writer` (hoja renombrada `STOCK`, cabecera en negrita, anchos de columna fijos ya que openspout no soporta autosize real), y lo sirve con `response()->download(...)->deleteFileAfterSend(true)`
+  - `toCsvResponse()`: mismo patron con `OpenSpout\Writer\CSV\Writer`, delimitador `;` (formato es-ES, tal y como pide el enunciado), con BOM UTF-8 (por defecto de la libreria, compatible con Excel)
+  - `toPdfResponse()`: `Pdf::loadView('stock.export-pdf', ...)->download(...)`
+  - nombre de fichero: `stock_{codigo_cliente_en_minusculas}_{fecha}.{extension}` (p. ej. `stock_edelvives_2026-07-09.xlsx`)
+- `resources/views/stock/export-pdf.blade.php` (nueva) - plantilla HTML simple (misma familia tipografica y estilo de tabla que `delivery-note-pdf.blade.php`), titulo `STOCK {CLIENTE}`, fecha de generacion, tabla con solo las 4 columnas pedidas
+- `app/Http/Controllers/StockController.php`
+  - `index()`: ahora tambien calcula `canExportStock` (hay un `client_id` resuelto: siempre para `cliente`, solo si hay cliente seleccionado en el filtro para roles internos) y lo pasa a la vista junto al `exportClientId` ya resuelto
+  - nueva accion `export(Request $request, string $format)`: repite la misma comprobacion de "cliente sin client_id asignado" que ya usa `index()` (403), valida el `format` contra la lista blanca `xlsx|csv|pdf` (404 si no coincide), resuelve el `client_id` real via `resolveExportClientId()` (nunca confia en el `client_id` del request para el rol cliente), y si no hay cliente resuelto (rol interno sin cliente seleccionado) redirige de vuelta al listado con un aviso en vez de romper
+- `routes/web.php`: `GET /stock/exportar/{format}` -> `stock.export`, con `whereIn('format', [...])` y el mismo middleware `minimum.role:cliente` que ya protege `stock.index` (cualquier rol que hoy puede ver stock puede exportarlo, igual que antes con la pantalla)
+
+**Decision de alcance sobre filtros (documentada segun lo pedido):** el export respeta el `client_id` actualmente seleccionado (obligatorio para poder exportar: fuerza el propio para `cliente`, y exige seleccion explicita para roles internos, ocultando el boton si no hay cliente resuelto), pero **no** aplica el resto de filtros de pantalla (busqueda, lote, ubicacion, estado, "solo picos"): el export siempre es el stock completo agregado del cliente resuelto. Se opto por la ruta mas simple indicada como alternativa valida en el propio enunciado ("si complica, exportar stock completo del cliente seleccionado"), evitando la complejidad de trasladar filtros de partida individual a una vista ya agregada por SKU+lote.
+
+**UI:**
+- `resources/views/stock/index.blade.php`: la seccion `Pallets totales` se envuelve en un nuevo `.stock-summary-toolbar` (flex, sin tocar la clase `.stock-summary` compartida con otras 3 pantallas) con el boton "Descargar" a la derecha (solo si `canExportStock`) y un `<dialog>` nativo con el modal pedido: titulo "Descargar stock", texto "Elige formato", botones Excel/PDF/CSV (enlaces directos a la exportacion) y Cancelar (`method="dialog"`, cierra sin JS)
+- `resources/css/app.css`: estilos nuevos `.stock-summary-toolbar` / `.stock-export-modal` (incluye `::backdrop`) / `.stock-export-modal-actions`, minimalistas, sin tocar ningun estilo compartido existente
+- `resources/js/app.js`: nueva `setupStockExportModal()` (abre el dialog con `showModal()`, cierra al hacer click fuera), siguiendo el mismo patron `setup*()` + `boot()` que el resto del fichero
+
+**Cobertura y validacion real:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: `Nothing to migrate` (sin migraciones nuevas en este hito)
+- `php artisan test tests/Feature/StockOverviewTest.php`: `30 passed` (no existe `StockManagementTest.php` en el repo; este es el fichero real de tests de la pantalla STOCK)
+- `php artisan test tests/Feature/StockImportTest.php`: `29 passed`
+- `php artisan test`: `481 passed` (2176 aserciones)
+- `npm run build`: OK
+- Test nuevo: `tests/Feature/StockExportTest.php` (16 tests): boton visible para cliente, modal con los tres formatos y Cancelar, descarga Excel/PDF/CSV del propio stock, Excel y CSV contienen exactamente las 4 columnas pedidas (verificado leyendo el fichero xlsx generado con el lector de openspout y el contenido crudo del csv), la vista PDF tampoco menciona pallet/pico/ubicacion, agregacion por SKU+lote sumando cantidades de dos ubicaciones distintas en una sola fila, lote vacio se muestra como "SIN LOTE", EDELVIVES no puede descargar stock de FRIESLAND ni viceversa (aunque se fuerce `client_id` en la URL), usuario cliente sin `client_id` asignado recibe 403, superadmin puede exportar el cliente seleccionado, superadmin sin cliente seleccionado es redirigido al listado en vez de romper, y el stock a cero no aparece en el export (mismo criterio que el listado visible)
+
+**Verificacion visual real en navegador embebido (usuario cliente EDELVIVES real, `codex.cliente.local@example.com`, contrasena temporal generada y despues invalidada solo para esta verificacion):**
+- En `/stock` aparece el boton "Descargar" junto a "Pallets totales"; al pulsarlo se abre el modal "Descargar stock" / "Elige formato" con Excel, PDF, CSV y Cancelar
+- Descarga real de los tres formatos contra datos reales de EDELVIVES en local (178 partidas de stock existentes): Excel y PDF con `Content-Disposition: attachment; filename=stock_edelvives_2026-07-09.xlsx/.pdf` y content-type correctos; CSV con cabecera exacta `SKU;DESCRIPCIÓN;LOTE;CANTIDAD` y filas agregadas (p. ej. una sola linea para "100x127 135 - MATT COATED" con la cantidad total, sin duplicados por ubicacion)
+- Se probo pasar `?client_id=999999` (id inexistente/ajeno) en la URL de descarga estando logueado como cliente EDELVIVES: la respuesta siguio siendo el stock de EDELVIVES (`stock_edelvives_...`), confirmando que el backend ignora cualquier `client_id` recibido del cliente y nunca confia en el valor del request
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- No hubo migraciones nuevas
+- No se uso `force push`
+- No se anadio ninguna dependencia nueva a `composer.json`/`package.json` (se reutilizo `openspout/openspout` y `barryvdh/laravel-dompdf`, ya instalados)
+- No se borraron datos; la unica accion sobre datos reales en local fue temporal y reversible (contrasena de prueba del usuario cliente local, invalidada de nuevo al terminar la verificacion)
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now` (el proyecto despliega automaticamente desde `origin/main`)
+- `php artisan migrate --force` no aplica en este hito (no hay migraciones nuevas)
+- `php artisan optimize:clear`
+- `npm run build` ya esta contemplado en el propio proceso de deploy de Forge (assets compilados incluidos en el commit no aplica; Forge compila en el propio deploy segun el script existente del proyecto)

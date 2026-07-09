@@ -39,13 +39,39 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="stock-summary" aria-label="Resumen de stock">
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            <strong>Pallets totales</strong>
-            <span>{{ number_format($summary['total_logistic_units'], 0, ',', '.') }}</span>
-            <small>Total operativo visible para preparacion y expedicion.</small>
-        </article>
-    </section>
+    <div class="stock-summary-toolbar">
+        <section class="stock-summary" aria-label="Resumen de stock">
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Pallets totales</strong>
+                <span>{{ number_format($summary['total_logistic_units'], 0, ',', '.') }}</span>
+                <small>Total operativo visible para preparacion y expedicion.</small>
+            </article>
+        </section>
+
+        @if ($canExportStock)
+            <button
+                type="button"
+                class="button-secondary compact-button btn-compact wms-action-secondary"
+                data-stock-export-trigger
+            >
+                Descargar
+            </button>
+
+            <dialog class="stock-export-modal" data-stock-export-dialog>
+                <form method="dialog" class="stock-export-modal-form">
+                    <h3 class="stock-export-modal-title">Descargar stock</h3>
+                    <p class="stock-export-modal-copy">Elige formato</p>
+
+                    <div class="stock-export-modal-actions">
+                        <a href="{{ route('stock.export', ['format' => 'xlsx'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">Excel</a>
+                        <a href="{{ route('stock.export', ['format' => 'pdf'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">PDF</a>
+                        <a href="{{ route('stock.export', ['format' => 'csv'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">CSV</a>
+                        <button type="submit" class="button-secondary compact-button btn-compact">Cancelar</button>
+                    </div>
+                </form>
+            </dialog>
+        @endif
+    </div>
 
     <section class="surface-card stock-filter-card compact-card wms-filter-card">
         <form method="GET" action="{{ route('stock.index') }}" class="stock-filters compact-filters filters-compact">
