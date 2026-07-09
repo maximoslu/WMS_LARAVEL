@@ -711,33 +711,35 @@ const setupMerchandiseRequestBuilder = () => {
         submitButton.disabled = selected.length === 0;
         syncHiddenInputs();
 
-        summaryRows.innerHTML = selected.map((line) => `
-            <article class="wms-line-editor-card">
-                <div class="wms-line-card-head">
-                    <div class="merchandise-request-summary-main">
-                        <strong>${escapeHtml(line.sku)}</strong>
-                        <span>${escapeHtml(line.description)}</span>
-                    </div>
-                    <span class="wms-line-type-pill wms-line-type-pill--${escapeHtml(line.line_type)}">${escapeHtml(lineTypeLabel(line.line_type))}</span>
+        summaryRows.innerHTML = selected.map((line, index) => {
+            const key = escapeHtml(line.variant_key ?? line.id);
+            const maxAttribute = line.quantity_max ? `max="${escapeHtml(line.quantity_max)}"` : '';
+            const palletValue = line.line_type === 'pallet' ? line.selected_quantity : 0;
+            const peakValue = line.line_type === 'peak' ? line.selected_quantity : 0;
+            const location = line.location_text ? ` · Ubicación ${line.location_text}` : '';
+
+            return `
+            <article class="merchandise-request-line-row">
+                <span class="merchandise-request-line-number">Línea ${index + 1}</span>
+                <div class="merchandise-request-line-ref">
+                    <strong>${escapeHtml(line.sku)}</strong>
+                    <span>${escapeHtml(line.description)}</span>
+                    <small>${escapeHtml(formatVariantUnits(line))} · ${escapeHtml(line.lot ? `Lote ${line.lot}` : 'Sin lote')}${escapeHtml(location)}</small>
                 </div>
-                <div class="wms-line-card-meta">
-                    <span>${escapeHtml(formatVariantUnits(line))}</span>
-                    <span>${escapeHtml(line.lot ? `Lote ${line.lot}` : 'Sin lote')}</span>
-                    ${line.location_text ? `<span>Ubicación ${escapeHtml(line.location_text)}</span>` : ''}
-                    ${line.available_pallets ? `<span>${formatNumber.format(line.available_pallets)} pallets visibles</span>` : ''}
-                    ${line.available_peaks ? `<span>${formatNumber.format(line.available_peaks)} picos visibles</span>` : ''}
-                </div>
-                <div class="wms-line-editor-actions">
-                    <label class="auth-field merchandise-request-summary-field">
-                        <span>${escapeHtml(quantityFieldLabel(line.line_type))}</span>
-                        <input type="number" min="1" step="1" ${line.quantity_max ? `max="${escapeHtml(line.quantity_max)}"` : ''} value="${escapeHtml(line.selected_quantity)}" class="auth-input merchandise-request-summary-input" data-request-summary-quantity data-line-key="${escapeHtml(line.variant_key ?? line.id)}">
-                    </label>
-                    <button type="button" class="button-secondary compact-button btn-compact" data-request-summary-remove data-line-key="${escapeHtml(line.variant_key ?? line.id)}">
-                        Quitar
-                    </button>
-                </div>
+                <label class="auth-field merchandise-request-line-quantity">
+                    <span>Pallets</span>
+                    <input type="number" min="1" step="1" ${line.line_type === 'pallet' ? maxAttribute : 'disabled'} value="${escapeHtml(palletValue)}" class="auth-input merchandise-request-summary-input" ${line.line_type === 'pallet' ? `data-request-summary-quantity data-line-key="${key}"` : ''}>
+                </label>
+                <label class="auth-field merchandise-request-line-quantity">
+                    <span>Picos</span>
+                    <input type="number" min="1" step="1" ${line.line_type === 'peak' ? maxAttribute : 'disabled'} value="${escapeHtml(peakValue)}" class="auth-input merchandise-request-summary-input" ${line.line_type === 'peak' ? `data-request-summary-quantity data-line-key="${key}"` : ''}>
+                </label>
+                <button type="button" class="button-secondary compact-button btn-compact" data-request-summary-remove data-line-key="${key}">
+                    Quitar
+                </button>
             </article>
-        `).join('');
+        `;
+        }).join('');
     };
 
     const autocomplete = createAutocomplete(form.querySelector('[data-request-item-picker]'), {
@@ -752,17 +754,17 @@ const setupMerchandiseRequestBuilder = () => {
             selectedItemKey = String(item.variant_key ?? item.id);
             cache.set(selectedItemKey, item);
             updatePickerForItem(item);
-            setFeedback(`${item.sku} lista para añadir al pedido como ${lineTypeLabel(item.line_type).toLowerCase()}.`, 'success');
+            setFeedback(`${item.sku} lista.`, 'success');
         },
         onInputChange: () => {
             selectedItemKey = '';
             updatePickerForItem(null);
-            setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
+            setFeedback('Busca una referencia.');
         },
         onClear: () => {
             selectedItemKey = '';
             updatePickerForItem(null);
-            setFeedback('Escribe al menos 2 caracteres para buscar en tu catálogo activo.');
+            setFeedback('Busca una referencia.');
         },
     });
 
@@ -771,7 +773,7 @@ const setupMerchandiseRequestBuilder = () => {
         const item = cache.get(selectedItemKey);
 
         if (!item || !Number.isFinite(quantity) || quantity <= 0) {
-            setFeedback('Selecciona una mercancía y una cantidad entera mayor que cero.', 'error');
+            setFeedback('Selecciona una referencia y una cantidad mayor que cero.', 'error');
             return;
         }
 
@@ -793,7 +795,7 @@ const setupMerchandiseRequestBuilder = () => {
             selected_quantity: nextQuantity,
         });
         renderSummary();
-        setFeedback(`${item.sku} se ha añadido al pedido como ${formatRequestedQuantity(item, nextQuantity)}.`, 'success');
+        setFeedback(`${item.sku} añadida.`, 'success');
         quantityInput.value = '1';
         autocomplete?.clear();
     });

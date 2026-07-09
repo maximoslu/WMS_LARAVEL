@@ -1,7 +1,7 @@
 ﻿@extends('layouts.dashboard')
 
-@section('title', 'Solicitudes de mercancía | MAXIMO WMS')
-@section('topbar_title', 'Solicitudes de mercancía')
+@section('title', 'PEDIDOS | MAXIMO WMS')
+@section('topbar_title', 'PEDIDOS')
 
 @section('content')
     @php
@@ -10,7 +10,7 @@
 
         ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
         ['label' => 'Operaciones'],
-        ['label' => 'Solicitudes de mercancia'],
+        ['label' => 'PEDIDOS'],
         ];
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
@@ -18,7 +18,7 @@
     <section class="surface-card ops-page-header page-header-compact compact-card">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">
-                {{ $isClient ? 'Mis solicitudes de mercancía' : 'Solicitudes de mercancía recibidas' }}
+                {{ $isClient ? 'PEDIDOS' : 'PEDIDOS RECIBIDOS' }}
             </h2>
             <span class="ops-page-meta">{{ $requests->total() }} registros</span>
         </div>
@@ -26,7 +26,7 @@
         @if ($canCreate)
             <div class="ops-page-actions page-actions-compact action-buttons">
                 <a href="{{ route('merchandise-requests.create') }}" class="button-primary compact-button btn-compact">
-                    Solicitar mercancía
+                    NUEVO PEDIDO
                 </a>
             </div>
         @endif
@@ -65,13 +65,13 @@
             </label>
 
             <label class="auth-field">
-                <span>Codigo, SKU o descripcion</span>
+                <span>Pedido, SKU o descripcion</span>
                 <input
                     type="text"
                     name="search"
                     value="{{ $filters['search'] }}"
                     class="auth-input"
-                    placeholder="Buscar solicitud"
+                    placeholder="Buscar pedido"
                 >
             </label>
 
@@ -84,17 +84,12 @@
 
     @if ($requests->isEmpty())
         <article class="surface-card item-empty-state compact-card">
-            <span class="status-chip small-badge badge-compact">Sin solicitudes</span>
-            <h3>{{ $isClient ? 'Todavía no has enviado pedidos' : 'No hay solicitudes con estos filtros' }}</h3>
-            <p>
-                {{ $isClient
-                    ? 'Cuando selecciones pallets y envíes tu pedido, aparecerá aquí para que puedas consultarlo.'
-                    : 'Ajusta los filtros para localizar solicitudes pendientes o historicas.' }}
-            </p>
+            <span class="status-chip small-badge badge-compact">Sin pedidos</span>
+            <h3>{{ $isClient ? 'Sin pedidos.' : 'Sin pedidos con estos filtros.' }}</h3>
             @if ($canCreate)
                 <div class="item-filter-actions action-buttons page-actions-compact">
                     <a href="{{ route('merchandise-requests.create') }}" class="button-primary compact-button btn-compact">
-                        Crear solicitud
+                        NUEVO PEDIDO
                     </a>
                 </div>
             @endif
@@ -102,10 +97,10 @@
     @else
         <section class="surface-card stock-table-shell compact-card">
             <div class="data-table-wrap">
-                <table class="data-table table-compact merchandise-requests-table" aria-label="Listado de solicitudes de mercancía">
+                <table class="data-table table-compact merchandise-requests-table" aria-label="Listado de pedidos">
                     <thead>
                         <tr>
-                            <th>Codigo</th>
+                            <th>Pedido</th>
                             @unless ($isClient)
                                 <th>Cliente</th>
                                 <th>Solicitante</th>
@@ -164,7 +159,7 @@
                                 <td>
                                     <div class="inline-actions action-buttons">
                                         <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
-                                            Ver detalle
+                                            Ver
                                         </a>
                                         @unless ($isClient)
                                             <a href="{{ route('dispatches.requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
@@ -187,7 +182,6 @@
         </div>
     @endif
 @endsection
-
 
 
 

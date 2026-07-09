@@ -36,8 +36,15 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->get(route('merchandise-requests.create'))
             ->assertOk()
-            ->assertSee('Solicitar mercancía')
-            ->assertSee('Buscar por SKU, referencia o descripción...')
+            ->assertSee('NUEVO PEDIDO')
+            ->assertSee('Referencia / SKU')
+            ->assertSee('Pallets')
+            ->assertSee('Picos')
+            ->assertSee('Añadir línea')
+            ->assertSee('ENVIAR PEDIDO')
+            ->assertSee('Sin líneas.')
+            ->assertDontSee('Solicitar mercancía con selección clara')
+            ->assertDontSee('Pensado para usuarios')
             ->assertDontSee('CAJA000X');
     }
 
@@ -58,6 +65,7 @@ class MerchandiseRequestManagementTest extends TestCase
                 'active' => true,
             ]);
         }
+
         Item::factory()->create([
             'client_id' => $otherClient->id,
             'sku' => 'CAJA9999',
@@ -277,15 +285,6 @@ class MerchandiseRequestManagementTest extends TestCase
             'full_pallets' => 2,
             'peaks_count' => 1,
             'peak_1' => 120,
-            'peak_2' => 0,
-            'peak_3' => 0,
-            'peak_4' => 0,
-            'peak_5' => 0,
-            'peak_6' => 0,
-            'peak_7' => 0,
-            'peak_8' => 0,
-            'peak_9' => 0,
-            'peak_10' => 0,
             'quantity_units' => 1520,
             'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
@@ -321,6 +320,104 @@ class MerchandiseRequestManagementTest extends TestCase
         ]);
     }
 
+    public function test_cliente_can_create_request_with_multiple_line_payload(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $firstItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'LINEA001',
+            'units_per_pallet' => 100,
+        ]);
+        $secondItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'LINEA002',
+            'units_per_pallet' => 80,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $firstItem->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 2,
+                    ],
+                    'line_2' => [
+                        'item_id' => $secondItem->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 3,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertSame(2, $request->lines()->count());
+        $this->assertSame(5, $request->requestedPalletsCount());
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $firstItem->id,
+            'requested_pallets' => 2,
+            'requested_units' => 200,
+        ]);
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $secondItem->id,
+            'requested_pallets' => 3,
+            'requested_units' => 240,
+        ]);
+    }
+
+    public function test_cliente_request_does_not_decrement_stock_until_dispatch(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'STOCK001',
+            'units_per_pallet' => 50,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 50,
+            'full_pallets' => 6,
+            'peaks_count' => 1,
+            'peak_1' => 25,
+            'quantity_units' => 325,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'active' => true,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'pallet_variant' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'stock_pallet_id' => $stock->id,
+                        'quantity' => 2,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $stock->refresh();
+
+        $this->assertSame(6, $stock->full_pallets);
+        $this->assertSame(1, $stock->peaks_count);
+        $this->assertSame(25, $stock->peak_1);
+        $this->assertSame(325, $stock->quantity_units);
+    }
+
     public function test_cliente_can_create_a_second_request_after_submitting_the_first_one(): void
     {
         $this->seedBaseData();
@@ -351,7 +448,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->get(route('merchandise-requests.create'))
             ->assertOk()
-            ->assertSee('Buscar mercancía')
+            ->assertSee('Referencia / SKU')
             ->assertDontSee('data-request-hidden-quantity', false);
 
         $this->actingAs($cliente)
@@ -392,6 +489,31 @@ class MerchandiseRequestManagementTest extends TestCase
             ])
             ->assertRedirect(route('merchandise-requests.create'))
             ->assertSessionHasErrors('quantities');
+    }
+
+    public function test_cliente_cannot_create_empty_request_with_line_payload(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.create'))
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 0,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.create'))
+            ->assertSessionHasErrors('lines');
     }
 
     public function test_cliente_cannot_create_request_with_negative_or_decimal_pallets(): void
@@ -632,7 +754,7 @@ class MerchandiseRequestManagementTest extends TestCase
             ->get(route('merchandise-requests.index'))
             ->assertOk()
             ->assertSee($request->referenceCode())
-            ->assertSee('135') // total units (120 + 15)
+            ->assertSee('135')
             ->assertSee($dispatch->dispatchNumber());
     }
 

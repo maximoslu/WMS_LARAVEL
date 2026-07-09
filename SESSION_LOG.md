@@ -1489,3 +1489,64 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Deploy Forge requerido tras push para `wms.maximosl.com`
 - Comandos Forge tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
 - `php artisan migrate --force` no deberia aplicar cambios pendientes en este hito.
+
+---
+
+## 2026-07-09 - PEDIDOS cliente simplificado a formato lineas (18:49:53 +02:00)
+
+**Contexto:** El formulario cliente de `PEDIDOS / NUEVO PEDIDO` seguia teniendo textos didacticos y estructura tipo asistente. Producto pidio una pantalla mas directa, como si el cliente construyera el albaran que quiere recibir: referencia, pallets, picos, lineas y enviar.
+
+**Cambios realizados:**
+- `resources/views/merchandise-requests/create.blade.php`
+  - Titulo/topbar/breadcrumbs pasan a `NUEVO PEDIDO` y `PEDIDOS`.
+  - Se eliminan hero, pasos, copy explicativo largo y textos tipo tutorial.
+  - Nuevo layout compacto con selector `Referencia / SKU`, cantidad, boton `Añadir línea`, tabla de lineas y boton `ENVIAR PEDIDO`.
+  - Mantiene `Camión propio`, aviso de ventana contractual y flujo POST existente.
+- `resources/js/app.js`
+  - El resumen del pedido deja de renderizar tarjetas grandes y pasa a filas numeradas: `Línea`, `Referencia`, `Pallets`, `Picos`, `Quitar`.
+  - Mensajes de feedback acortados.
+  - Se mantiene el payload `lines[...]` existente y la distincion entre pallet y pico.
+- `resources/css/app.css`
+  - Estilos responsive para el nuevo bloque de lineas, totales compactos y tabla adaptable a movil.
+- `resources/views/merchandise-requests/index.blade.php`
+  - Naming visible simplificado a `PEDIDOS`, CTA `NUEVO PEDIDO`, tabla/listado mas directo.
+- `resources/views/merchandise-requests/show.blade.php`
+  - Detalle reducido a datos, seguimiento, acciones y lineas; se quitan textos de relleno.
+- `tests/Feature/MerchandiseRequestManagementTest.php`
+  - Archivo normalizado en UTF-8.
+  - Tests actualizados para la nueva UI minimalista.
+  - Nuevas regresiones: payload con varias lineas, pedido vacio con `lines`, y confirmacion de que crear un pedido no descuenta stock hasta generar/enviar salida.
+
+**Reglas de negocio preservadas:**
+- Cliente solo puede buscar referencias activas de su propio cliente.
+- Crear pedido no descuenta stock.
+- El descuento sigue ocurriendo en el flujo de salida/despacho.
+- Se mantiene soporte de pallets y picos.
+- Se mantienen notificaciones, emails y flujo interno de gestion/salida.
+
+**Validacion local:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: `Nothing to migrate`
+- `tests/Feature/ClientMerchandiseRequestTest.php`: no existe en el repo; se ejecuto el equivalente real.
+- `php artisan test tests/Feature/MerchandiseRequestManagementTest.php`: `23 passed` (106 assertions)
+- `php artisan test tests/Feature/GoodsDispatchManagementTest.php`: `33 passed` (163 assertions)
+- `php artisan test`: `465 passed` (2125 assertions)
+- `npm run build`: OK (`vite build`, 55 modules transformed)
+
+**Control de alcance:**
+- No se toco `.env`
+- No se tocaron secretos
+- No se uso `migrate:fresh`
+- No se borraron datos
+- No se toco Google Calendar
+- No se toco importacion de stock Friesland/Edelvives
+- No se toco facturacion
+- No se cambio stock por cliente
+- `.claude/` sigue sin anadirse al commit
+
+**Cierre operativo previsto:**
+- Commit: `style: simplify client order request workflow`
+- Push: `origin/main`
+- Deploy Forge requerido tras push para `wms.maximosl.com`
+- Comandos Forge tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
+- No hay migraciones nuevas; `php artisan migrate --force` deberia quedar sin cambios pendientes.

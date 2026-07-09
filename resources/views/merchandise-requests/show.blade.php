@@ -1,13 +1,13 @@
 @extends('layouts.dashboard')
 
-@section('title', 'Detalle de solicitud | MAXIMO WMS')
-@section('topbar_title', 'Detalle de solicitud')
+@section('title', 'Pedido '.$merchandiseRequest->referenceCode().' | MAXIMO WMS')
+@section('topbar_title', 'PEDIDO')
 
 @section('content')
     @php
         $breadcrumbs = [
             ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-            ['label' => 'Solicitudes de mercancia', 'href' => route('merchandise-requests.index')],
+            ['label' => 'PEDIDOS', 'href' => route('merchandise-requests.index')],
             ['label' => $merchandiseRequest->referenceCode()],
         ];
         $requestedPallets = $merchandiseRequest->requestedPalletsCount();
@@ -17,22 +17,22 @@
             [
                 'label' => 'Registrado',
                 'date' => $merchandiseRequest->submittedAt(),
-                'description' => 'La solicitud entró en el sistema.',
+                'description' => '',
             ],
             [
                 'label' => 'Preparación',
                 'date' => $merchandiseRequest->prepared_at,
-                'description' => 'El equipo interno puede preparar la salida.',
+                'description' => '',
             ],
             [
                 'label' => 'Enviado',
                 'date' => $merchandiseRequest->shipped_at,
-                'description' => 'La mercancía salió hacia destino.',
+                'description' => '',
             ],
             [
                 'label' => 'Completado',
                 'date' => $merchandiseRequest->completed_at,
-                'description' => 'El flujo queda cerrado.',
+                'description' => '',
             ],
         ];
     @endphp
@@ -55,7 +55,6 @@
         <div class="wms-flow-hero-copy">
             <span class="status-chip">Pedido {{ $isClient ? 'cliente' : 'interno' }}</span>
             <h2 class="ops-page-title page-title-compact">{{ $merchandiseRequest->referenceCode() }}</h2>
-            <p>{{ $isClient ? 'Tu solicitud registrada en el sistema.' : 'Solicitud recibida y lista para gestión operativa.' }}</p>
         </div>
         <div class="wms-flow-hero-side">
             <span class="status-badge merchandise-request-status merchandise-request-status--{{ $merchandiseRequest->status }}">
@@ -68,8 +67,7 @@
         <article class="surface-card compact-card wms-flow-card">
             <div class="wms-section-head">
                 <div>
-                    <strong>Resumen rápido</strong>
-                    <p class="merchandise-request-summary-copy">Los datos clave están arriba para que la pantalla se entienda de un vistazo.</p>
+                    <strong>Datos</strong>
                 </div>
             </div>
 
@@ -115,7 +113,9 @@
                         <span class="wms-timeline-dot" aria-hidden="true"></span>
                         <div>
                             <strong>{{ $step['label'] }}</strong>
-                            <p>{{ $step['description'] }}</p>
+                            @if ($step['description'])
+                                <p>{{ $step['description'] }}</p>
+                            @endif
                         </div>
                         <span>{{ $step['date']?->format('d/m/Y H:i') ?: 'Pendiente' }}</span>
                     </article>
@@ -128,8 +128,7 @@
         <section class="surface-card compact-card wms-flow-card">
             <div class="wms-section-head">
                 <div>
-                    <strong>Gestión operativa</strong>
-                    <p class="merchandise-request-summary-copy">Cambio de estado, impresión y siguiente acción principal bien agrupados.</p>
+                    <strong>Acciones</strong>
                 </div>
             </div>
 
@@ -139,7 +138,6 @@
                     @method('PATCH')
 
                     <strong>Cambiar estado</strong>
-                    <p>Actualiza la fase del pedido sin perder contexto.</p>
 
                     <label class="auth-field">
                         <span>Nuevo estado</span>
@@ -155,7 +153,6 @@
 
                 <div class="wms-action-card">
                     <strong>Documentos y salida</strong>
-                    <p>Imprime preparación o avanza a la salida según la situación real.</p>
 
                     <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact wms-button-with-icon" target="_blank" rel="noopener noreferrer">
                         <span class="wms-button-icon" aria-hidden="true"><x-module-icon name="printer" /></span>
@@ -187,8 +184,7 @@
     <section class="surface-card compact-card wms-flow-card">
         <div class="wms-section-head">
             <div>
-                <strong>Líneas del pedido</strong>
-                <p class="merchandise-request-summary-copy">Cada línea deja claro si se pidió un pallet completo o un pico concreto.</p>
+                <strong>Líneas</strong>
             </div>
             <span class="ops-page-meta">{{ $merchandiseRequest->lines->count() }} líneas</span>
         </div>
@@ -234,7 +230,6 @@
             <div class="wms-section-head">
                 <div>
                     <strong>Carga real adicional</strong>
-                    <p class="merchandise-request-summary-copy">Sustituciones, referencias extra o picos añadidos durante la carga.</p>
                 </div>
                 <span class="ops-page-meta">{{ $merchandiseRequest->dispatch->lines->where('is_extra_line', true)->count() }} líneas</span>
             </div>
