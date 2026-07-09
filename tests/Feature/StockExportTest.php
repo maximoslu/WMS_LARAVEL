@@ -30,6 +30,37 @@ class StockExportTest extends TestCase
             ->assertSee('data-stock-export-trigger', false);
     }
 
+    public function test_stock_cliente_no_muestra_cabecera_mi_inventario_ni_textos_explicativos(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertDontSee('Mi inventario')
+            ->assertDontSee('Consulta tus existencias')
+            ->assertDontSee('Usa el buscador para localizar');
+    }
+
+    public function test_stock_cliente_muestra_pallets_totales_con_boton_descargar_integrado(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $response = $this->actingAs($user)->get(route('stock.index'));
+        $response->assertOk();
+        $response->assertSee('Pallets totales');
+
+        $content = $response->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Pallets totales.*?data-stock-export-trigger.*?<\/article>/s',
+            $content
+        );
+        $this->assertStringNotContainsString('stock-summary-toolbar', $content);
+    }
+
     public function test_modal_de_descarga_muestra_los_tres_formatos_y_cancelar(): void
     {
         [$edelvives] = $this->seedClients();

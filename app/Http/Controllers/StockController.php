@@ -56,7 +56,7 @@ class StockController extends Controller
             'canFilterClients' => $canFilterClients,
             'canExportStock' => $exportClientId !== null,
             'exportClientId' => $exportClientId,
-            'pageTitle' => $isClient ? 'Mi inventario' : 'Stock actual',
+            'pageTitle' => $isClient ? 'STOCK' : 'Stock actual',
             'pageSubtitle' => $isClient
                 ? 'Consulta tus existencias, lotes, pallets y picos disponibles.'
                 : 'Consulta existencias, lotes, pallets y picos operativos.',

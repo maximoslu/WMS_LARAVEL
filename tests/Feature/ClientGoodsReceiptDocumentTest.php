@@ -38,6 +38,50 @@ class ClientGoodsReceiptDocumentTest extends TestCase
             ->assertSee(route('client-goods-receipts.index'), false);
     }
 
+    public function test_dashboard_cliente_muestra_albaranes_una_sola_vez_en_el_contenido_principal(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
+
+        // Scoped to <main>...</main>: the persistent sidebar drawer (outside
+        // <main>) also lists ALBARANES as a normal nav link and is not part
+        // of this duplication check.
+        $mainContent = preg_match('/<main.*?<\/main>/s', $response->getContent(), $matches) === 1
+            ? $matches[0]
+            : '';
+
+        $this->assertNotSame('', $mainContent);
+        $this->assertSame(1, substr_count($mainContent, 'ALBARANES'));
+    }
+
+    public function test_dashboard_cliente_mantiene_acceso_a_albaranes_dentro_de_operaciones(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Operaciones')
+            ->assertSee('ALBARANES')
+            ->assertSee(route('client-goods-receipts.index'), false);
+    }
+
+    public function test_dashboard_cliente_no_muestra_bloque_duplicado_independiente_de_albaranes(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('dashboard-mis-albaranes-card', false);
+    }
+
     public function test_almacen_no_ve_enlace_mis_albaranes_en_dashboard(): void
     {
         $this->seed(RoleSeeder::class);

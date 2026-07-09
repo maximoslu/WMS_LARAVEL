@@ -1,6 +1,6 @@
 ﻿@extends('layouts.dashboard')
 
-@section('title', $isClient ? 'Mi inventario | MAXIMO WMS' : 'Stock | MAXIMO WMS')
+@section('title', $isClient ? 'STOCK | MAXIMO WMS' : 'Stock | MAXIMO WMS')
 @section('topbar_title', $pageTitle)
 
 @section('content')
@@ -15,16 +15,13 @@
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
 
-    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card wms-page-hero">
-        <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">{{ $pageTitle }}</h2>
-            <span class="ops-page-meta">{{ $pageSubtitle }}</span>
-            @if ($isClient)
-                <p class="stock-intro-helper">Usa el buscador para localizar por SKU, descripcion o lote.</p>
-            @endif
-        </div>
+    @unless ($isClient)
+        <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card wms-page-hero">
+            <div class="ops-page-headline">
+                <h2 class="ops-page-title page-title-compact">{{ $pageTitle }}</h2>
+                <span class="ops-page-meta">{{ $pageSubtitle }}</span>
+            </div>
 
-        @unless ($isClient)
             <div class="ops-page-actions page-actions-compact action-buttons ops-toolbar-links">
                 <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Articulos</a>
                 <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Ubicaciones</a>
@@ -32,46 +29,48 @@
                     <a href="{{ route('stock.import') }}" class="button-primary compact-button btn-compact wms-action-primary">Importar stock</a>
                 @endif
             </div>
-        @endunless
-    </section>
+        </section>
+    @endunless
 
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <div class="stock-summary-toolbar">
-        <section class="stock-summary" aria-label="Resumen de stock">
-            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+    <section class="stock-summary stock-summary--single" aria-label="Resumen de stock">
+        <article class="surface-card stock-summary-card kpi-card kpi-compact{{ $canExportStock ? ' stock-summary-card--with-action' : '' }}">
+            <div class="stock-summary-card-main">
                 <strong>Pallets totales</strong>
                 <span>{{ number_format($summary['total_logistic_units'], 0, ',', '.') }}</span>
-                <small>Total operativo visible para preparacion y expedicion.</small>
-            </article>
-        </section>
+                <small>Total visible</small>
+            </div>
 
-        @if ($canExportStock)
-            <button
-                type="button"
-                class="button-secondary compact-button btn-compact wms-action-secondary"
-                data-stock-export-trigger
-            >
-                Descargar
-            </button>
+            @if ($canExportStock)
+                <button
+                    type="button"
+                    class="button-secondary compact-button btn-compact wms-action-secondary"
+                    data-stock-export-trigger
+                >
+                    Descargar
+                </button>
+            @endif
+        </article>
+    </section>
 
-            <dialog class="stock-export-modal" data-stock-export-dialog>
-                <form method="dialog" class="stock-export-modal-form">
-                    <h3 class="stock-export-modal-title">Descargar stock</h3>
-                    <p class="stock-export-modal-copy">Elige formato</p>
+    @if ($canExportStock)
+        <dialog class="stock-export-modal" data-stock-export-dialog>
+            <form method="dialog" class="stock-export-modal-form">
+                <h3 class="stock-export-modal-title">Descargar stock</h3>
+                <p class="stock-export-modal-copy">Elige formato</p>
 
-                    <div class="stock-export-modal-actions">
-                        <a href="{{ route('stock.export', ['format' => 'xlsx'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">Excel</a>
-                        <a href="{{ route('stock.export', ['format' => 'pdf'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">PDF</a>
-                        <a href="{{ route('stock.export', ['format' => 'csv'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">CSV</a>
-                        <button type="submit" class="button-secondary compact-button btn-compact">Cancelar</button>
-                    </div>
-                </form>
-            </dialog>
-        @endif
-    </div>
+                <div class="stock-export-modal-actions">
+                    <a href="{{ route('stock.export', ['format' => 'xlsx'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">Excel</a>
+                    <a href="{{ route('stock.export', ['format' => 'pdf'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">PDF</a>
+                    <a href="{{ route('stock.export', ['format' => 'csv'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">CSV</a>
+                    <button type="submit" class="button-secondary compact-button btn-compact">Cancelar</button>
+                </div>
+            </form>
+        </dialog>
+    @endif
 
     <section class="surface-card stock-filter-card compact-card wms-filter-card">
         <form method="GET" action="{{ route('stock.index') }}" class="stock-filters compact-filters filters-compact">

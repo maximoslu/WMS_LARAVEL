@@ -1459,16 +1459,28 @@ body.auth-page .auth-input:focus {
     font-weight: 800;
 }
 
-.stock-summary-toolbar {
+.stock-summary-card.stock-summary-card--with-action {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
     flex-wrap: wrap;
 }
 
-.stock-summary-toolbar .stock-summary {
-    flex: 1 1 auto;
+.stock-summary-card-main {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .stock-summary-card--with-action {
+        align-items: stretch;
+    }
+
+    .stock-summary-card--with-action [data-stock-export-trigger] {
+        width: 100%;
+    }
 }
 
 .stock-export-modal {
@@ -1513,9 +1525,13 @@ body.auth-page .auth-input:focus {
     gap: 0.85rem;
 }
 
-.stock-summary--single {
-    grid-template-columns: minmax(13rem, 18rem);
+.stock-summary.stock-summary--single {
+    grid-template-columns: minmax(16rem, 28rem);
     justify-content: start;
+}
+
+body.brand-body.app-shell-body .stock-summary.stock-summary--single {
+    grid-template-columns: minmax(16rem, 28rem);
 }
 
 .stock-summary-card {
@@ -5551,8 +5567,7 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     padding: 1.15rem 1.2rem;
 }
 
-.dashboard-calendar-card,
-.dashboard-mis-albaranes-card {
+.dashboard-calendar-card {
     gap: 1.15rem;
     padding: 1.2rem;
 }

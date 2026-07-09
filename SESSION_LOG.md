@@ -1613,3 +1613,60 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan migrate --force` no aplica en este hito (no hay migraciones nuevas)
 - `php artisan optimize:clear`
 - `npm run build` ya esta contemplado en el propio proceso de deploy de Forge (assets compilados incluidos en el commit no aplica; Forge compila en el propio deploy segun el script existente del proyecto)
+
+---
+
+## 2026-07-09 - Limpieza dashboard cliente y pantalla STOCK cliente (minimalismo)
+
+**Contexto:** Con EDELVIVES ya en pruebas reales, se pidio quitar relleno visual en dos pantallas: el dashboard cliente mostraba "ALBARANES" duplicado (una vez dentro del bloque Operaciones y otra vez en una tarjeta independiente debajo), y la pantalla STOCK cliente tenia una cabecera grande "Mi inventario" con dos textos explicativos largos, ademas del boton "Descargar" (anadido en el hito anterior) separado y flotando fuera de la tarjeta de "Pallets totales".
+
+**Commit previo de partida:** `da5f6e55 feat: add client stock export downloads`
+
+**Tarea 1 - Duplicado de ALBARANES en el dashboard cliente:**
+- `resources/views/dashboard/index.blade.php`: se elimino el bloque `<section class="... dashboard-mis-albaranes-card">` independiente (titulo "ALBARANES" + boton "Entrar") que aparecia debajo de las secciones operativas. El acceso a ALBARANES ya existe y se mantiene intacto como parte del bucle `@foreach ($navigationSections as $section)`, dentro de la seccion "Operaciones" (config `mis-albaranes` en `config/wms.php`, sin tocar). No se toco la ruta `client-goods-receipts.index` ni el controlador; solo se quito el bloque visual duplicado.
+- `resources/css/app.css`: se quito `.dashboard-mis-albaranes-card` de la lista de selectores compartida con `.dashboard-calendar-card` (regla ahora huerfana tras el paso anterior, limpieza directa).
+- Nota de verificacion: el menu lateral (drawer, `layouts/dashboard.blade.php`) tambien lista "ALBARANES" como enlace de navegacion normal — eso es el menu global de toda la app (presente en cualquier pantalla), no la duplicacion que reportaba el usuario, y no se ha tocado.
+
+**Tarea 2 y 3 - Simplificacion de STOCK cliente e integracion del boton DESCARGAR:**
+- `app/Http/Controllers/StockController.php`: `pageTitle` para el rol `cliente` pasa de `'Mi inventario'` a `'STOCK'` (usado en el topbar compacto y en el `<title>` de la pestana, coherente con el breadcrumb que ya decia "STOCK").
+- `resources/views/stock/index.blade.php`:
+  - la cabecera grande (`ops-page-header stock-intro-card`, con titulo, subtitulo largo y el parrafo "Usa el buscador para localizar por SKU, descripcion o lote.") ahora esta envuelta en `@unless ($isClient)`: para el rol cliente no se renderiza en absoluto; para roles internos (almacen/administracion/superadmin) se mantiene exactamente igual que antes (titulo, subtitulo y accesos a Articulos/Ubicaciones/Importar stock), ya que el enunciado solo pedia simplificar la pantalla del cliente.
+  - el bloque "Pallets totales" y el boton "Descargar" (que en el hito anterior vivian en un `<div class="stock-summary-toolbar">` como hermanos, con el boton flotando a la derecha fuera de la tarjeta) se fusionaron en una unica tarjeta: el boton y el `<dialog>` de formatos ahora estan dentro del mismo `<article class="stock-summary-card ... stock-summary-card--with-action">`, con el numero/etiqueta a la izquierda y el boton a la derecha en la misma franja.
+  - el texto de ayuda de la tarjeta se acorto de "Total operativo visible para preparacion y expedicion." a "Total visible", igual para cliente y roles internos (es el mismo componente compartido).
+- `resources/css/app.css`:
+  - se elimino `.stock-summary-toolbar` (ya no se usa) y se anadieron `.stock-summary-card--with-action` (flex, numero a la izquierda / boton a la derecha, con `flex-wrap` para que el boton baje de linea en movil) y `.stock-summary-card-main` (agrupa titulo/numero/texto de ayuda dentro de la tarjeta).
+  - se amplio `.stock-summary--single` (clase ya existente pero sin uso previo) de `minmax(13rem, 18rem)` a `minmax(16rem, 28rem)` para dar sitio al boton dentro de la tarjeta, y se reforzo con selectores compuestos (`.stock-summary.stock-summary--single` y `body.brand-body.app-shell-body .stock-summary.stock-summary--single`) para ganar en especificidad CSS a las reglas de `grid-template-columns` ya existentes para `.stock-summary` en los breakpoints de 768px/1024px y en el bloque `body.brand-body.app-shell-body` — sin este ajuste el ancho fijo se habria sobreescrito silenciosamente en pantallas anchas por reglas mas especificas ya presentes en el fichero.
+- No se toco el export en si (`StockExportService`, `StockOverviewBuilder::exportRows`, rutas, columnas SKU/DESCRIPCION/LOTE/CANTIDAD): solo su punto de entrada visual.
+
+**Cobertura y validacion real:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: `Nothing to migrate`
+- `php artisan test tests/Feature/ClientGoodsReceiptDocumentTest.php`: `33 passed`
+- `php artisan test tests/Feature/StockOverviewTest.php`: `30 passed` (no existe `StockManagementTest.php` en el repo, es el fichero real de tests de STOCK)
+- `php artisan test`: `486 passed` (2193 aserciones)
+- `npm run build`: OK
+- Tests ajustados/nuevos:
+  - `tests/Feature/StockOverviewTest.php`: `test_cliente_can_view_only_own_stock_inventory` actualizado para esperar la NO presencia de "Mi inventario" y de los dos textos explicativos (antes esperaba lo contrario, por diseno del hito anterior)
+  - `tests/Feature/ClientGoodsReceiptDocumentTest.php` (+3 tests): dashboard cliente muestra "ALBARANES" una sola vez dentro de `<main>` (excluyendo el menu lateral global, que tambien lo lista como navegacion normal y no cuenta como duplicado); dashboard cliente mantiene el acceso a ALBARANES dentro de "Operaciones"; dashboard cliente ya no muestra el bloque `dashboard-mis-albaranes-card`
+  - `tests/Feature/StockExportTest.php` (+2 tests): STOCK cliente no muestra "Mi inventario" ni los textos explicativos largos; el boton "Descargar" esta estructuralmente dentro del mismo `<article>` que "Pallets totales" (verificado con una expresion regular sobre el HTML) y ya no existe el contenedor `stock-summary-toolbar` del hito anterior
+
+**Verificacion visual real en navegador embebido (usuario cliente EDELVIVES real, `codex.cliente.local@example.com`, contrasena temporal generada y despues invalidada solo para esta verificacion):**
+- Dashboard: "ALBARANES" aparece una unica vez, dentro de "Operaciones" junto a BOOKING y PEDIDOS; no hay tarjeta independiente debajo; se mantienen STOCK, Operaciones y "Agenda de BOOKING"
+- STOCK: ya no aparece "Mi inventario" ni los textos explicativos; se entra directamente en la tarjeta "PALLETS TOTALES" con el boton "Descargar" integrado
+- A 1440px de ancho (escritorio), el numero de pallets y el boton "Descargar" quedan en la misma franja horizontal dentro de la tarjeta (altura de una sola fila, ~69px); en movil el boton queda debajo pero dentro del mismo bloque
+- El boton "Descargar" sigue abriendo el modal "Descargar stock" / "Elige formato" con Excel, PDF, CSV y Cancelar; se descargo CSV real contra los datos de EDELVIVES y siguio devolviendo `stock_edelvives_2026-07-09.csv` con las columnas `SKU;DESCRIPCIÓN;LOTE;CANTIDAD` correctas
+
+**Incidencia de herramienta (no de la aplicacion):** durante la verificacion visual, el clic automatizado del navegador embebido sobre el boton "Descargar" dejaba de disparar el listener tras una recarga de pagina (problema del propio entorno de automatizacion/herramienta de preview, con referencias a nodos obsoletas), mientras que el mismo flujo disparado con `element.click()` directamente sobre el DOM si activaba el modal correctamente. Se dejó constancia porque no es un bug de la aplicacion: el test automatizado (`tests/Feature/StockExportTest.php`) confirma el HTML/estructura, y la comprobacion manual con `click()` directo confirmo que el listener y `showModal()` funcionan correctamente.
+
+**Control de alcance:**
+- No se toco `.env`
+- No se anadio `.claude/`
+- No hubo migraciones nuevas
+- No se uso `force push`
+- No se toco el export (formatos, columnas, agregacion, permisos) salvo su punto de entrada visual
+- No se borraron datos; la unica accion sobre datos reales en local fue temporal y reversible (contrasena de prueba del usuario cliente local, invalidada de nuevo al terminar la verificacion)
+
+**Forge cuando toque desplegar este hito:**
+- `Deploy Now` (el proyecto despliega automaticamente desde `origin/main`)
+- `php artisan migrate --force` no aplica en este hito (no hay migraciones nuevas)
+- `php artisan optimize:clear`

@@ -122,9 +122,9 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSee('Mi inventario')
-            ->assertSee('Consulta tus existencias, lotes, pallets y picos disponibles.')
-            ->assertSee('Usa el buscador para localizar por SKU, descripcion o lote.')
+            ->assertDontSee('Mi inventario')
+            ->assertDontSee('Consulta tus existencias, lotes, pallets y picos disponibles.')
+            ->assertDontSee('Usa el buscador para localizar por SKU, descripcion o lote.')
             ->assertSee('SKU-FR-ONLY')
             ->assertDontSee('SKU-ED-HIDE')
             ->assertDontSee('name="client_id"', false);
