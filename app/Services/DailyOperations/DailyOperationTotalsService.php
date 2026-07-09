@@ -6,6 +6,7 @@ use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\Item;
 use App\Models\StockPallet;
+use Illuminate\Support\Facades\DB;
 
 class DailyOperationTotalsService
 {
@@ -62,6 +63,6 @@ class DailyOperationTotalsService
                     ->orWhere('full_pallets', '>', 0)
                     ->orWhere('peaks_count', '>', 0);
             })
-            ->sum('full_pallets');
+            ->sum(DB::raw('COALESCE(full_pallets, 0) + COALESCE(peaks_count, 0)'));
     }
 }

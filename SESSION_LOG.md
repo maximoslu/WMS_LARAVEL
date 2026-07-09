@@ -1384,3 +1384,53 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Aislamiento por cliente validado desde superadmin filtrando FRIESLAND:
   - `/stock?client_id=1&search=110x89%20135&stock_state=with_stock` devolvio `SIN RESULTADOS`.
 - No se valido login como usuario cliente EDELVIVES/FRIESLAND en esta sesion porque no se disponia de credenciales de cliente; se valido el filtrado servidor/UI desde superadmin.
+
+---
+
+## 2026-07-09 - Fix stock facturable con picos en Operaciones Diarias (11:35:03 +02:00)
+
+**Contexto:** En Operaciones Diarias, EDELVIVES recalculaba el stock base con `948` en vez de incluir los picos. Para facturacion operativa, el stock base y el almacenaje deben usar unidades logisticas facturables: pallets completos + picos.
+
+**Diagnostico:**
+- `DailyOperationTotalsService::stockBaseForClient()` filtraba correctamente stock con `peaks_count > 0`, pero sumaba solo `full_pallets`.
+- El recalculo automatico de entradas usaba solo `pallet_count` y no sumaba un pico cuando `pico_units > 0`.
+- El recalculo automatico de salidas usaba solo pallets cargados/solicitados y no sumaba `loaded_peaks`/`requested_peaks`.
+- En la sesion productiva anterior se documento que el Excel realmente importado en produccion tenia `948` pallets completos y `97` picos (`1.045` unidades logisticas). La regresion pedida para negocio cubre explicitamente el caso `948 + 96 = 1.044`; en produccion el valor correcto debe ser el que exista en stock real: pallets completos + picos.
+
+**Cambio aplicado:**
+- `app/Services/DailyOperations/DailyOperationTotalsService.php`
+  - El stock base del cliente ahora suma `COALESCE(full_pallets, 0) + COALESCE(peaks_count, 0)`.
+  - Mantiene filtros existentes: cliente, `active`, no obsoleto, item no obsoleto y stock operativo mayor que cero.
+- `app/Services/DailyOperations/DailyOperationRecalculationService.php`
+  - Entradas confirmadas: `pallet_count + 1` si la linea trae `pico_units > 0`.
+  - Salidas enviadas/completadas: `loadedPalletsCount() + loadedPeaksCount()`, con fallback a `palletsCount() + peaksCount()`.
+  - Gestion de camion y viajes mantienen la logica actual; se facturan aparte y no alteran stock.
+- `resources/views/daily-operations/index.blade.php`
+  - Textos de ayuda actualizados para explicar que los calculos usan pallets completos + picos facturables.
+- `tests/Feature/DailyOperationsTest.php`
+  - Nueva regresion EDELVIVES: `948` pallets + `96` picos = `1.044` stock base, almacenaje y base prevista sin movimientos.
+  - Nueva regresion de formula completa: stock base `1.000`, descarga `30`, salida/envio `20` => almacenaje `1.030`, movidos `50`, base manana `1.010`.
+
+**Validacion local:**
+- `php artisan optimize:clear`: OK
+- `php artisan migrate`: `Nothing to migrate`
+- `php artisan test tests/Feature/DailyOperationsTest.php`: `18 passed` (120 assertions)
+- `php artisan test tests/Feature/StockImportTest.php`: `29 passed` (302 assertions)
+- `php artisan test`: `455 passed` (2064 assertions)
+- `npm run build`: OK (`vite build`, 55 modules transformed)
+
+**Control de alcance:**
+- No se toco `.env`
+- No se tocaron secretos
+- No se uso `migrate:fresh`
+- No se borraron datos
+- No se toco Google Calendar
+- No se toco facturacion ni importacion de stock salvo tests de no regresion
+- `.claude/` sigue sin anadirse al commit
+
+**Cierre operativo previsto:**
+- Commit: `fix: include picos in daily operations billing stock`
+- Push: `origin/main`
+- Deploy Forge requerido tras push para `wms.maximosl.com`
+- Comandos Forge recomendados tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`
+- No hay migraciones nuevas en este hito; `php artisan migrate --force` deberia quedar sin cambios pendientes.

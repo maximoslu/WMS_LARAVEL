@@ -55,7 +55,9 @@ class DailyOperationRecalculationService
                 ->get();
 
             foreach ($receipts as $receipt) {
-                $receiptPallets = max(0, (int) $receipt->lines->sum('pallet_count'));
+                $receiptPallets = max(0, (int) $receipt->lines->sum(
+                    fn ($line): int => (int) $line->pallet_count + (((int) ($line->pico_units ?? 0) > 0) ? 1 : 0)
+                ));
 
                 if ($receiptPallets > 0) {
                     $this->createAutoLine(
@@ -103,10 +105,10 @@ class DailyOperationRecalculationService
                 ->get();
 
             foreach ($dispatches as $dispatch) {
-                $dispatchPallets = max(0, $dispatch->loadedPalletsCount());
+                $dispatchPallets = max(0, $dispatch->loadedPalletsCount() + $dispatch->loadedPeaksCount());
 
                 if ($dispatchPallets === 0) {
-                    $dispatchPallets = max(0, $dispatch->palletsCount());
+                    $dispatchPallets = max(0, $dispatch->palletsCount() + $dispatch->peaksCount());
                 }
 
                 if ($dispatchPallets > 0) {

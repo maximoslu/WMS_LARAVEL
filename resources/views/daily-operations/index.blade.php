@@ -78,22 +78,22 @@
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
                 <strong>STOCK BASE CLIENTE</strong>
                 <span>{{ number_format($day?->opening_pallets ?? 0, 0, ',', '.') }}</span>
-                <small>Stock base calculado desde inventario actual del cliente.</small>
+                <small>Pallets completos + picos actualmente almacenados.</small>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
                 <strong>ALMACENAJE FACTURABLE</strong>
                 <span>{{ number_format($day?->stored_pallets_today ?? 0, 0, ',', '.') }}</span>
-                <small>Stock base cliente mas descargas del dia.</small>
+                <small>Stock base logístico + descargas del día.</small>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
                 <strong>PALLETS MOVIDOS HOY</strong>
                 <span>{{ number_format($day?->moved_pallets_today ?? 0, 0, ',', '.') }}</span>
-                <small>Descargas mas cargas y envios del dia.</small>
+                <small>Descargas + salidas/envíos del día, incluyendo picos.</small>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact daily-ops-metric-card">
                 <strong>BASE PREVISTA MANANA</strong>
                 <span>{{ number_format($day?->expected_pallets_tomorrow ?? 0, 0, ',', '.') }}</span>
-                <small>Stock base mas descargas menos cargas y envios.</small>
+                <small>Stock base + descargas - salidas/envíos.</small>
             </article>
         </section>
 
@@ -127,10 +127,10 @@
 
                 <ul class="audit-note-list daily-ops-note-list">
                     <li>Cada descarga, carga, envío y viaje de camión genera gestión de camión asociada.</li>
-                    <li>Los pallets movidos solo cuentan en descarga, carga y envío.</li>
+                    <li>Los pallets movidos cuentan descargas, cargas y envíos como unidades logísticas: pallets completos + picos.</li>
                     <li>La gestión de camión y el viaje de camión se facturan aparte y no alteran stock.</li>
-                    <li>El stock base sale del inventario actual del cliente, incluyendo bloqueados y excluyendo obsoletos o stock cero.</li>
-                    <li>El almacenaje facturable del día es stock base cliente más descargas del día.</li>
+                    <li>El stock base sale del inventario actual del cliente como pallets completos + picos, incluyendo bloqueados y excluyendo obsoletos o stock cero.</li>
+                    <li>El almacenaje facturable del día es stock base logístico más descargas del día.</li>
                     <li>Las horas operario quedan preparadas como línea operativa específica.</li>
                 </ul>
 
@@ -170,7 +170,7 @@
                             </article>
                         </div>
 
-                        <p class="helper-text">Stock base calculado desde inventario actual del cliente. El ajuste manual queda reservado para una fase posterior.</p>
+                        <p class="helper-text">Stock base calculado desde inventario actual del cliente como pallets completos + picos facturables. El ajuste manual queda reservado para una fase posterior.</p>
 
                         <label class="auth-field item-form-field--full">
                             <span>Notas operativas</span>

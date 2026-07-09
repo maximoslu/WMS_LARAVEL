@@ -14,6 +14,7 @@ use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Support\WmsLineType;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -424,6 +425,155 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
     }
 
+    public function test_stock_base_counts_full_pallets_and_picos_for_edelvives_billing(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'EDELVIVES']);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'EDELVIVES-LOGISTIC-UNITS',
+            'units_per_pallet' => 100,
+        ]);
+
+        $this->createStockPallet($client, 948, StockPallet::STATUS_AVAILABLE);
+
+        foreach (range(1, 96) as $_) {
+            $this->createStockPalletWithPeaks($client, 0, 1, StockPallet::STATUS_AVAILABLE, $item);
+        }
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-09',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-09', 'client_id' => $client->id]));
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-09')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(1044, $day->opening_pallets);
+        $this->assertSame(1044, $day->stored_pallets_today);
+        $this->assertSame(0, $day->moved_pallets_today);
+        $this->assertSame(1044, $day->expected_pallets_tomorrow);
+
+        $this->assertDatabaseHas('daily_operation_lines', [
+            'day_id' => $day->id,
+            'section' => DailyOperationLine::SECTION_ALMACENAJE,
+            'counterparty_name' => 'Stock base del cliente',
+            'pallets' => 1044,
+            'is_auto_generated' => true,
+        ]);
+    }
+
+    public function test_recalculate_uses_logistic_units_for_storage_movements_and_tomorrow_base(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'EDELVIVES']);
+        $supplier = Supplier::factory()->create([
+            'client_id' => $client->id,
+            'name' => 'MONDI',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 100,
+        ]);
+
+        $this->createStockPallet($client, 990, StockPallet::STATUS_AVAILABLE, $item);
+
+        foreach (range(1, 10) as $_) {
+            $this->createStockPalletWithPeaks($client, 0, 1, StockPallet::STATUS_AVAILABLE, $item);
+        }
+
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'RCPT-LOG-001',
+            'status' => GoodsReceipt::STATUS_CONFIRMED,
+            'received_at' => '2026-07-09',
+            'created_by' => $user->id,
+            'confirmed_by' => $user->id,
+            'confirmed_at' => now(),
+        ]);
+
+        GoodsReceiptLine::query()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => 'SKU-IN',
+            'description' => 'Entrada con pico',
+            'lot' => 'LOT-IN',
+            'quantity_units' => 2950,
+            'units_per_pallet' => 100,
+            'pallet_count' => 29,
+            'pico_units' => 50,
+        ]);
+
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => '2026-07-09 10:00:00',
+            'created_by' => $user->id,
+        ]);
+
+        GoodsDispatchLine::query()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'line_type' => WmsLineType::PALLET,
+            'sku' => 'SKU-OUT-PALLET',
+            'description' => 'Salida pallets',
+            'units_per_pallet' => 100,
+            'pallets' => 19,
+            'requested_units' => 1900,
+            'requested_pallets' => 19,
+            'requested_peaks' => 0,
+            'loaded_pallets' => 19,
+            'loaded_peaks' => 0,
+            'is_extra_line' => false,
+        ]);
+
+        GoodsDispatchLine::query()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'line_type' => WmsLineType::PEAK,
+            'sku' => 'SKU-OUT-PEAK',
+            'description' => 'Salida pico',
+            'units_per_pallet' => 100,
+            'units_per_peak' => 30,
+            'pallets' => 0,
+            'requested_units' => 30,
+            'requested_pallets' => 0,
+            'requested_peaks' => 1,
+            'loaded_pallets' => 0,
+            'loaded_peaks' => 1,
+            'is_extra_line' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-09',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-09', 'client_id' => $client->id]));
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-09')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(1000, $day->opening_pallets);
+        $this->assertSame(1030, $day->stored_pallets_today);
+        $this->assertSame(50, $day->moved_pallets_today);
+        $this->assertSame(1010, $day->expected_pallets_tomorrow);
+
+        $this->assertSame(30, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
+        $this->assertSame(20, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
+        $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+    }
+
     public function test_recalculate_builds_automatic_lines_and_preserves_manual_lines_without_duplicates(): void
     {
         $this->seed(RoleSeeder::class);
@@ -589,7 +739,10 @@ class DailyOperationsTest extends TestCase
             ->assertSee('Envío')
             ->assertSee('Horas operario')
             ->assertSee('STOCK BASE CLIENTE')
-            ->assertSee('Stock base calculado desde inventario actual del cliente.')
+            ->assertSee('Pallets completos + picos actualmente almacenados.')
+            ->assertSee('Stock base logístico + descargas del día.')
+            ->assertSee('Descargas + salidas/envíos del día, incluyendo picos.')
+            ->assertSee('Stock base + descargas - salidas/envíos.')
             ->assertSee('daily-ops-toolbar', false)
             ->assertSee('daily-ops-summary-form', false);
     }
@@ -671,6 +824,31 @@ class DailyOperationsTest extends TestCase
             'peak_1' => 0,
             'active' => true,
         ]);
+    }
+
+    private function createStockPalletWithPeaks(Client $client, int $fullPallets, int $peaksCount, string $status, ?Item $item = null): void
+    {
+        $item ??= Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 100,
+        ]);
+
+        $peakColumns = [];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $peakColumns['peak_'.$peakNumber] = $peakNumber <= $peaksCount ? 1 : 0;
+        }
+
+        StockPallet::factory()->create(array_merge([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'status' => $status,
+            'quantity_units' => ($fullPallets * 100) + $peaksCount,
+            'units_per_pallet' => 100,
+            'full_pallets' => max(0, $fullPallets),
+            'peaks_count' => max(0, $peaksCount),
+            'active' => true,
+        ], $peakColumns));
     }
 
     private function makeUserWithRole(string $roleSlug): User
