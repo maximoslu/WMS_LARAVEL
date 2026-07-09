@@ -5109,6 +5109,7 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     min-width: 0;
 }
 
+.merchandise-request-new-shell,
 .merchandise-request-builder--lines {
     gap: 0.85rem;
 }
@@ -5119,8 +5120,7 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
 
 .merchandise-request-header-strip,
 .merchandise-request-lines-head,
-.merchandise-request-totals-inline,
-.merchandise-request-truck-toggle {
+.merchandise-request-totals-inline {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -5153,14 +5153,6 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     color: var(--brand-slate-dark);
 }
 
-.merchandise-request-truck-toggle {
-    min-height: 2.35rem;
-    padding: 0.45rem 0.75rem;
-    border: 1px solid rgba(24, 37, 50, 0.1);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.72);
-}
-
 .merchandise-request-picker--compact {
     align-items: stretch;
     margin-top: 0;
@@ -5168,8 +5160,19 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     border-radius: 18px;
 }
 
+.merchandise-request-entry-row {
+    display: grid;
+    grid-template-columns: minmax(20rem, 1fr) minmax(8rem, 10rem) auto;
+    gap: 0.75rem;
+    align-items: end;
+    padding: 0.85rem;
+    border: 1px solid rgba(24, 37, 50, 0.08);
+    border-radius: 18px;
+    background: rgba(247, 249, 251, 0.82);
+}
+
 .merchandise-request-reference-field {
-    min-width: min(100%, 25rem);
+    min-width: 0;
 }
 
 .merchandise-request-preview-compact {
@@ -5182,6 +5185,16 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
 
 .merchandise-request-add-actions {
     align-items: end;
+}
+
+.merchandise-request-entry-add {
+    min-height: 2.75rem;
+    white-space: nowrap;
+}
+
+.merchandise-request-entry-row .helper-text {
+    grid-column: 1 / -1;
+    margin: -0.25rem 0 0;
 }
 
 .merchandise-request-totals-inline {
@@ -6782,6 +6795,15 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
         grid-template-columns: 1fr 1fr;
     }
 
+    .merchandise-request-entry-row {
+        grid-template-columns: minmax(0, 1fr) minmax(7rem, 9rem);
+    }
+
+    .merchandise-request-entry-add,
+    .merchandise-request-entry-row .helper-text {
+        grid-column: 1 / -1;
+    }
+
     .merchandise-request-line-number,
     .merchandise-request-line-ref {
         grid-column: 1 / -1;
@@ -6821,10 +6843,13 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
         flex-direction: column;
     }
 
-    .merchandise-request-truck-toggle,
     .merchandise-request-submit--inline .button-primary,
     .merchandise-request-submit--inline .button-secondary {
         width: 100%;
+    }
+
+    .merchandise-request-entry-row {
+        grid-template-columns: 1fr;
     }
 
     .merchandise-request-line-row {

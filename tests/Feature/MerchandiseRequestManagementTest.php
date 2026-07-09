@@ -43,6 +43,8 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertSee('Añadir línea')
             ->assertSee('ENVIAR PEDIDO')
             ->assertSee('Sin líneas.')
+            ->assertDontSee('Camión propio')
+            ->assertDontSee('Selecciona una referencia para ver el detalle')
             ->assertDontSee('Solicitar mercancía con selección clara')
             ->assertDontSee('Pensado para usuarios')
             ->assertDontSee('CAJA000X');

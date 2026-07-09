@@ -48,21 +48,17 @@
         >
             @csrf
 
-            <section class="surface-card compact-card wms-flow-card merchandise-request-builder merchandise-request-builder--lines">
+            <section class="surface-card compact-card wms-flow-card merchandise-request-new-shell">
+                <input type="hidden" name="camion_propio" value="0">
+
                 <div class="merchandise-request-header-strip">
                     <div>
                         <span>Cliente</span>
                         <strong>{{ $client?->name ?? 'Cliente no asignado' }}</strong>
                     </div>
-
-                    <label class="merchandise-request-truck-toggle">
-                        <input type="hidden" name="camion_propio" value="0">
-                        <input type="checkbox" name="camion_propio" value="1" @checked(old('camion_propio'))>
-                        <span>Camión propio</span>
-                    </label>
                 </div>
 
-                <section class="merchandise-request-picker merchandise-request-picker--compact" aria-label="Nueva línea de pedido">
+                <section class="merchandise-request-entry-row" aria-label="Nueva línea de pedido">
                     <label class="auth-field merchandise-request-reference-field">
                         <span>Referencia / SKU</span>
                         <div
@@ -93,21 +89,16 @@
                         </div>
                     </label>
 
-                    <article class="wms-variant-preview merchandise-request-preview-compact" data-request-selection-preview>
-                        <strong>Sin referencia seleccionada</strong>
-                        <p>Selecciona una referencia.</p>
-                    </article>
+                    <div hidden data-request-selection-preview></div>
 
-                    <div class="wms-variant-actions merchandise-request-add-actions">
-                        <label class="auth-field wms-quantity-field">
-                            <span data-request-picker-label>Cantidad</span>
-                            <input type="number" min="1" step="1" value="1" class="auth-input" data-request-picker-quantity>
-                        </label>
+                    <label class="auth-field wms-quantity-field merchandise-request-entry-quantity">
+                        <span data-request-picker-label>Cantidad</span>
+                        <input type="number" min="1" step="1" value="1" class="auth-input" data-request-picker-quantity>
+                    </label>
 
-                        <button type="button" class="button-primary compact-button btn-compact" data-request-add-selected>
-                            Añadir línea
-                        </button>
-                    </div>
+                    <button type="button" class="button-primary compact-button btn-compact merchandise-request-entry-add" data-request-add-selected>
+                        Añadir línea
+                    </button>
 
                     <p class="helper-text" data-request-search-feedback>Busca una referencia.</p>
                 </section>
