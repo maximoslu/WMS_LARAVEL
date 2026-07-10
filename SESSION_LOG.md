@@ -1721,7 +1721,10 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - No se tocaron `.env`, secretos, IA, Google Calendar, importacion, facturacion ni operaciones diarias.
 - `.claude/` permanece sin trackear y no se incluira en el commit.
 
-**Publicacion prevista:**
-- Commit funcional: `style: simplify client and warehouse order workflow`.
-- Push a `origin/main` y Deploy Now en Forge.
-- Tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`.
+**Publicacion realizada:**
+- Commit funcional: `ed3d747c14193d143377417a474ed38bcac9df37 style: simplify client and warehouse order workflow`.
+- Push confirmado a `origin/main` (`3f2d5a18..ed3d747c`).
+- Forge deployment `73090669`: `Deployed` en 57 segundos.
+- Log Forge: `Nothing to migrate`, build Vite OK (55 modulos), release activada y `php artisan queue:restart` completado (`Broadcasting queue restart signal`).
+- El lanzador independiente de Commands de Forge no acepto la tecla de ejecucion automatizada para `php artisan optimize:clear`; el comando no se marca falsamente como ejecutado y queda pendiente de lanzamiento manual en Forge.
+- Produccion responde en `https://wms.maximosl.com`, pero la sesion del navegador de validacion termino en `/login`, por lo que la validacion visual autenticada se realizo en local.
