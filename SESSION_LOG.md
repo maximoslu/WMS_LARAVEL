@@ -1614,8 +1614,6 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan optimize:clear`
 - `npm run build` ya esta contemplado en el propio proceso de deploy de Forge (assets compilados incluidos en el commit no aplica; Forge compila en el propio deploy segun el script existente del proyecto)
 
----
-
 ## 2026-07-09 - Limpieza dashboard cliente y pantalla STOCK cliente (minimalismo)
 
 **Contexto:** Con EDELVIVES ya en pruebas reales, se pidio quitar relleno visual en dos pantallas: el dashboard cliente mostraba "ALBARANES" duplicado (una vez dentro del bloque Operaciones y otra vez en una tarjeta independiente debajo), y la pantalla STOCK cliente tenia una cabecera grande "Mi inventario" con dos textos explicativos largos, ademas del boton "Descargar" (anadido en el hito anterior) separado y flotando fuera de la tarjeta de "Pallets totales".
@@ -1670,3 +1668,60 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `Deploy Now` (el proyecto despliega automaticamente desde `origin/main`)
 - `php artisan migrate --force` no aplica en este hito (no hay migraciones nuevas)
 - `php artisan optimize:clear`
+
+---
+
+## 2026-07-10 - Pedidos pendientes cliente y gestion interna compacta (12:10 +02:00)
+
+**Contexto:** Se simplifico el flujo de PEDIDOS para pruebas reales con EDELVIVES. El criterio principal fue que la gestion interna no volviera a presentar `SOL-xxxxx` como protagonista ni enterrara las lineas/carga real bajo resumenes y textos pedagogicos.
+
+**Punto de partida:** `3f2d5a18 style: simplify client dashboard and stock export layout` en `main`, con `.claude/` sin trackear.
+
+**Cliente - NUEVO PEDIDO:**
+- Se anadio `PEDIDOS PENDIENTES` inmediatamente debajo del formulario.
+- La consulta fuerza el `client_id` del usuario autenticado y solo incluye estados `pending` y `preparing`.
+- Pedidos enviados, completados, cancelados y pedidos de otros clientes no aparecen.
+- La tabla compacta muestra numero, fecha, estado, lineas/pallets y accion `Ver`; el vacio muestra `Sin pedidos pendientes.`
+
+**Interno - gestion de pedido:**
+- Se elimino la cabecera grande, los bloques `Resumen de operativa`, `Siguiente accion` y el selector manual `Cambiar estado` de este flujo.
+- `SOL-xxxxx` queda como referencia secundaria pequena (`Pedido SOL-xxxxx`).
+- La cabecera es una unica franja con cliente, estado, fecha, pallets, picos, `GENERAR SALIDA`/`Ver salida`, imprimir preparacion y volver.
+- La tabla `LINEAS DEL PEDIDO Y CARGA REAL` aparece inmediatamente despues de la cabecera y muestra SKU, descripcion, lote, ubicacion, solicitado/cargado en pallets y picos, diferencia y observacion.
+- Cuando ya existe una salida en preparacion, pallets/picos cargados y observacion se editan en la misma fila y se guardan con un unico boton `GUARDAR PREPARACION`.
+- Generar salida y guardar preparacion vuelven a la misma pantalla interna para mantener el flujo continuo.
+- El seguimiento queda reducido a una linea compacta al final.
+- No se cambio la logica de stock: guardar preparacion no aplica stock; el descuento sigue ocurriendo al enviar/completar mediante el servicio existente.
+
+**Cobertura anadida:**
+- Cliente ve pendientes propios y no ve enviados/completados/cancelados ni pedidos de otro cliente.
+- Estado vacio y enlace `Ver` protegido.
+- Interno ve acciones y lineas antes del seguimiento; no aparecen los textos eliminados ni `Cambiar estado`.
+- El numero de pedido no se renderiza como titulo protagonista.
+- Con salida asociada aparece `Ver salida` y el editor compacto.
+- La carga puede guardarse desde la pantalla del pedido sin enviar la salida ni descontar stock.
+
+**Validacion ejecutada:**
+- `php artisan optimize:clear`: OK.
+- `php artisan migrate`: `Nothing to migrate`.
+- `php artisan test tests/Feature/MerchandiseRequestManagementTest.php`: `26 passed` (123 assertions).
+- `php artisan test tests/Feature/GoodsDispatchManagementTest.php`: `36 passed` (191 assertions).
+- `php artisan test`: `492 passed` (2236 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `git diff --check`: OK.
+
+**Validacion visual local:**
+- Gestion interna pendiente: cabecera de 86,9 px, referencia `SOL-000003` a 11,5 px, tabla inmediatamente debajo y sin overflow horizontal de pagina.
+- Tras generar una salida QA: tabla, campos de carga y `GUARDAR PREPARACION` permanecen visibles en el primer viewport de 720 px.
+- Cliente EDELVIVES: `PEDIDOS PENDIENTES` aparece justo debajo de `NUEVO PEDIDO`, con 33,6 px de separacion, mostrando solo el pedido abierto propio.
+- Se crearon exclusivamente en la base local cuentas/registros `codex-orders-*@local.test` y un pedido QA EDELVIVES para esta comprobacion; no se envio/completo la salida y no se aplico stock.
+
+**Control de alcance:**
+- Sin migraciones nuevas, sin `migrate:fresh`, sin borrado de datos y sin force push.
+- No se tocaron `.env`, secretos, IA, Google Calendar, importacion, facturacion ni operaciones diarias.
+- `.claude/` permanece sin trackear y no se incluira en el commit.
+
+**Publicacion prevista:**
+- Commit funcional: `style: simplify client and warehouse order workflow`.
+- Push a `origin/main` y Deploy Now en Forge.
+- Tras deploy: `php artisan optimize:clear` y `php artisan queue:restart`.

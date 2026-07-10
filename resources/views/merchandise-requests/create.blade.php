@@ -138,4 +138,49 @@
             </section>
         </form>
     @endif
+
+    <section class="surface-card compact-card client-pending-orders">
+        <div class="client-pending-orders-head">
+            <strong>PEDIDOS PENDIENTES</strong>
+            <span>{{ $pendingRequests->count() }}</span>
+        </div>
+
+        @if ($pendingRequests->isEmpty())
+            <div class="client-pending-orders-empty">Sin pedidos pendientes.</div>
+        @else
+            <div class="client-pending-orders-table-wrap">
+                <table class="data-table table-compact client-pending-orders-table" aria-label="Pedidos pendientes">
+                    <thead>
+                        <tr>
+                            <th>Nº pedido</th>
+                            <th>Fecha</th>
+                            <th>Estado</th>
+                            <th>Líneas / pallets</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($pendingRequests as $pendingRequest)
+                            <tr>
+                                <td><strong>{{ $pendingRequest->referenceCode() }}</strong></td>
+                                <td>{{ $pendingRequest->submittedAt()?->format('d/m/Y') }}</td>
+                                <td>
+                                    <span class="status-badge merchandise-request-status merchandise-request-status--{{ $pendingRequest->status }}">
+                                        {{ $pendingRequest->statusLabel() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {{ $pendingRequest->lines->count() }} {{ $pendingRequest->lines->count() === 1 ? 'línea' : 'líneas' }} /
+                                    {{ number_format($pendingRequest->requestedPalletsCount(), 0, ',', '.') }} pallets
+                                </td>
+                                <td class="table-actions-cell">
+                                    <a href="{{ route('merchandise-requests.show', $pendingRequest) }}" class="button-secondary compact-button btn-table">Ver</a>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+    </section>
 @endsection

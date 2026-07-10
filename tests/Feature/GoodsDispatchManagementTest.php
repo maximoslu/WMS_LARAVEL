@@ -226,6 +226,152 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(1, GoodsDispatch::query()->count());
     }
 
+    public function test_internal_request_page_prioritizes_actions_and_lines_over_reference_and_tracking(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'LINEA-PRIORITARIA',
+            'description' => 'Mercancía para preparar',
+            'units_per_pallet' => 100,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 3,
+            'requested_peaks' => 0,
+            'requested_units' => 300,
+        ]);
+
+        $response = $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSee($client->name)
+            ->assertSee('Pendiente')
+            ->assertSee('Pallets')
+            ->assertSee('Picos')
+            ->assertSee('GENERAR SALIDA')
+            ->assertSee('Imprimir preparación')
+            ->assertSee('LÍNEAS DEL PEDIDO Y CARGA REAL')
+            ->assertSee('LINEA-PRIORITARIA')
+            ->assertDontSee('Cambiar estado')
+            ->assertDontSee('Nuevo estado')
+            ->assertDontSee('El almacén ve enseguida')
+            ->assertDontSee('Zona de decisión rápida')
+            ->assertDontSee('Cada línea refleja claramente');
+
+        $html = $response->getContent();
+
+        $this->assertStringNotContainsString('<h2 class="ops-page-title page-title-compact">'.$merchandiseRequest->referenceCode(), $html);
+        $this->assertLessThan(
+            strpos($html, 'Seguimiento del pedido'),
+            strpos($html, 'data-request-lines-section'),
+            'Las líneas deben aparecer antes que el seguimiento.'
+        );
+    }
+
+    public function test_internal_request_page_shows_view_dispatch_and_compact_loading_editor_when_dispatch_exists(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'sku' => 'CARGA-001']);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 2,
+            'requested_units' => 200,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatchLine = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'source_request_line_id' => $requestLine->id,
+            'sku' => $item->sku,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 2,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSee('Ver salida')
+            ->assertDontSee('GENERAR SALIDA')
+            ->assertSee('GUARDAR PREPARACIÓN')
+            ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_quantity]"', false)
+            ->assertSee('name="lines[line_'.$dispatchLine->id.'][loading_notes]"', false);
+    }
+
+    public function test_loading_can_be_saved_from_internal_request_page_without_dispatching_stock(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 3,
+            'loaded_pallets' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'loaded_quantity' => 2,
+                        'loading_notes' => 'Falta un pallet.',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $line->refresh();
+        $dispatch->refresh();
+
+        $this->assertSame(2, $line->loadedPallets());
+        $this->assertSame('Falta un pallet.', $line->loading_notes);
+        $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->status);
+        $this->assertNull($dispatch->stock_applied_at);
+    }
+
     public function test_dispatch_from_request_preserves_peak_lines(): void
     {
         $this->seedBaseData();

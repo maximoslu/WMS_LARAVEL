@@ -91,6 +91,16 @@ class MerchandiseRequestController extends Controller
 
         abort_unless($user->hasRole(Role::CLIENTE) && $user->client_id !== null, 403);
 
+        $pendingRequests = MerchandiseRequest::query()
+            ->with(['lines', 'dispatch'])
+            ->where('client_id', $user->client_id)
+            ->whereIn('status', [
+                MerchandiseRequest::STATUS_PENDING,
+                MerchandiseRequest::STATUS_PREPARING,
+            ])
+            ->latest('id')
+            ->get();
+
         return view('merchandise-requests.create', [
             'hasActiveItems' => Item::query()
                 ->where('client_id', $user->client_id)
@@ -100,6 +110,7 @@ class MerchandiseRequestController extends Controller
             'client' => $user->client,
             'searchEndpoint' => route('merchandise-requests.items.search'),
             'contractualWindowWarning' => $scheduleService->preSubmissionWarning(),
+            'pendingRequests' => $pendingRequests,
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }

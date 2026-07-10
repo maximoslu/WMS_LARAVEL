@@ -50,6 +50,102 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertDontSee('CAJA000X');
     }
 
+    public function test_cliente_sees_only_own_open_requests_below_new_order(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $otherUser = $this->makeUserWithRole(Role::CLIENTE, $otherClient);
+        $item = Item::factory()->create(['client_id' => $client->id]);
+
+        $pending = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $preparing = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $sent = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+        ]);
+        $completed = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_COMPLETED,
+        ]);
+        $cancelled = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_CANCELLED,
+        ]);
+        $foreign = MerchandiseRequest::factory()->create([
+            'client_id' => $otherClient->id,
+            'requested_by' => $otherUser->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $pending->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 2,
+        ]);
+
+        $response = $this->actingAs($cliente)
+            ->get(route('merchandise-requests.create'))
+            ->assertOk()
+            ->assertSeeInOrder(['NUEVO PEDIDO', 'ENVIAR PEDIDO', 'PEDIDOS PENDIENTES'])
+            ->assertSee($pending->referenceCode())
+            ->assertSee($preparing->referenceCode())
+            ->assertDontSee($sent->referenceCode())
+            ->assertDontSee($completed->referenceCode())
+            ->assertDontSee($cancelled->referenceCode())
+            ->assertDontSee($foreign->referenceCode())
+            ->assertSee('1 línea /')
+            ->assertSee('2 pallets');
+
+        $response->assertSee(route('merchandise-requests.show', $pending), false);
+    }
+
+    public function test_cliente_sees_empty_pending_orders_state(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        Item::factory()->create(['client_id' => $client->id]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.create'))
+            ->assertOk()
+            ->assertSee('PEDIDOS PENDIENTES')
+            ->assertSee('Sin pedidos pendientes.');
+    }
+
+    public function test_cliente_cannot_open_another_clients_request_from_pending_orders(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $otherUser = $this->makeUserWithRole(Role::CLIENTE, $otherClient);
+        $foreign = MerchandiseRequest::factory()->create([
+            'client_id' => $otherClient->id,
+            'requested_by' => $otherUser->id,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $foreign))
+            ->assertForbidden();
+    }
+
     public function test_ajax_search_limits_results_and_hides_other_clients_items(): void
     {
         $this->seedBaseData();

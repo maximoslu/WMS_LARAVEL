@@ -141,6 +141,12 @@ class GoodsDispatchController extends Controller
         $merchandiseRequest->load(['lines.item', 'lines.stockPallet', 'dispatch']);
 
         if ($merchandiseRequest->dispatch !== null) {
+            if ($request->boolean('return_to_request')) {
+                return redirect()
+                    ->route('dispatches.requests.show', $merchandiseRequest)
+                    ->with('status', 'El pedido ya tiene una salida asociada.');
+            }
+
             return redirect()
                 ->route('dispatches.show', $merchandiseRequest->dispatch)
                 ->with('status', 'La solicitud ya tiene una salida asociada.');
@@ -188,6 +194,12 @@ class GoodsDispatchController extends Controller
 
         $notificationService->notifyStatusChanged($merchandiseRequest, MerchandiseRequest::STATUS_PENDING);
 
+        if ($request->boolean('return_to_request')) {
+            return redirect()
+                ->route('dispatches.requests.show', $merchandiseRequest)
+                ->with('status', 'Salida preparada. Confirma ahora la carga real.');
+        }
+
         return redirect()
             ->route('dispatches.show', $dispatch)
             ->with('status', 'Salida generada desde la solicitud correctamente.');
@@ -219,6 +231,12 @@ class GoodsDispatchController extends Controller
         GoodsDispatchWorkflowService $workflowService,
     ): RedirectResponse {
         $workflowService->confirmLoading($goodsDispatch, $request->validatedLines(), $request->user());
+
+        if ($request->boolean('return_to_request') && $goodsDispatch->merchandise_request_id !== null) {
+                return redirect()
+                    ->route('dispatches.requests.show', $goodsDispatch->merchandiseRequest)
+                    ->with('status', 'Preparación guardada correctamente.');
+        }
 
         return redirect()
             ->route('dispatches.show', $goodsDispatch)
