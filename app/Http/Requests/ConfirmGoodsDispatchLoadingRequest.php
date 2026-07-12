@@ -28,6 +28,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
      *     units_per_peak:int|null,
      *     loaded_pallets:int,
      *     loaded_peaks:int,
+     *     loaded_partial_units:int,
      *     loading_notes:string|null,
      *     remove:bool
      * }> | null
@@ -59,6 +60,8 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                     'stock_pallet_id' => $payload['stock_pallet_id'] ?? null,
                     'stock_peak_index' => $payload['stock_peak_index'] ?? null,
                     'loaded_quantity' => $payload['loaded_quantity'] ?? $payload['loaded_pallets'] ?? null,
+                    'loaded_pallets' => $payload['loaded_pallets'] ?? null,
+                    'loaded_partial_units' => $payload['loaded_partial_units'] ?? $payload['loaded_units_partial'] ?? null,
                     'loading_notes' => $payload['loading_notes'] ?? null,
                     'remove' => $payload['remove'] ?? null,
                 ];
@@ -79,7 +82,9 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             'lines.*.line_type' => ['nullable', 'string'],
             'lines.*.stock_pallet_id' => ['nullable', 'integer'],
             'lines.*.stock_peak_index' => ['nullable', 'integer', 'min:1'],
-            'lines.*.loaded_quantity' => ['required', 'integer', 'min:0'],
+            'lines.*.loaded_quantity' => ['nullable', 'integer', 'min:0'],
+            'lines.*.loaded_pallets' => ['nullable', 'integer', 'min:0'],
+            'lines.*.loaded_partial_units' => ['nullable', 'integer', 'min:0'],
             'lines.*.loading_notes' => ['nullable', 'string', 'max:1000'],
             'lines.*.remove' => ['nullable', 'boolean'],
         ];
@@ -121,6 +126,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
      *     units_per_peak:int|null,
      *     loaded_pallets:int,
      *     loaded_peaks:int,
+     *     loaded_partial_units:int,
      *     loading_notes:string|null,
      *     remove:bool
      * }>
@@ -175,6 +181,8 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
         $stockPallets = StockPallet::query()
             ->where('client_id', $dispatch->client_id)
+            ->where('active', true)
+            ->where('status', StockPallet::STATUS_AVAILABLE)
             ->whereIn('id', $extraStockPalletIds)
             ->get()
             ->keyBy('id');
@@ -185,6 +193,12 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             $remove = filter_var($payload['remove'] ?? false, FILTER_VALIDATE_BOOL);
             $loadedQuantity = is_numeric((string) ($payload['loaded_quantity'] ?? null))
                 ? (int) $payload['loaded_quantity']
+                : 0;
+            $submittedLoadedPallets = is_numeric((string) ($payload['loaded_pallets'] ?? null))
+                ? (int) $payload['loaded_pallets']
+                : null;
+            $loadedPartialUnits = is_numeric((string) ($payload['loaded_partial_units'] ?? null))
+                ? (int) $payload['loaded_partial_units']
                 : 0;
             $lineId = is_numeric((string) ($payload['line_id'] ?? null))
                 ? (int) $payload['line_id']
@@ -201,26 +215,69 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                     continue;
                 }
 
-                if ($line->isPeakLine() && $loadedQuantity > 1) {
+                $stockPalletId = is_numeric((string) ($payload['stock_pallet_id'] ?? null))
+                    ? (int) $payload['stock_pallet_id']
+                    : $line->stock_pallet_id;
+                $stockPeakIndex = is_numeric((string) ($payload['stock_peak_index'] ?? null))
+                    ? (int) $payload['stock_peak_index']
+                    : $line->stock_peak_index;
+                $stockPallet = $stockPalletId !== null
+                    ? StockPallet::query()
+                        ->where('client_id', $dispatch->client_id)
+                        ->where('item_id', $line->item_id)
+                        ->where('active', true)
+                        ->where('status', StockPallet::STATUS_AVAILABLE)
+                        ->whereKey($stockPalletId)
+                        ->first()
+                    : null;
+
+                if ($stockPalletId !== null && ! $stockPallet instanceof StockPallet) {
+                    $errors["lines.$rowKey.stock_pallet_id"] = 'La partida seleccionada no coincide con la referencia elegida.';
+                    continue;
+                }
+
+                $loadedPallets = $line->isPalletLine()
+                    ? max(0, $submittedLoadedPallets ?? $loadedQuantity)
+                    : 0;
+                $loadedPeaks = $line->isPeakLine() && ($loadedPartialUnits > 0 || $loadedQuantity > 0)
+                    ? 1
+                    : 0;
+
+                if ($line->isPeakLine() && $loadedPartialUnits === 0 && $loadedQuantity > 0) {
+                    $loadedPartialUnits = max(0, (int) ($line->units_per_peak ?? 0)) * min(1, $loadedQuantity);
+                }
+
+                if ($line->isPeakLine() && $loadedQuantity > 1 && $loadedPartialUnits === 0) {
                     $errors["lines.$rowKey.loaded_quantity"] = 'Una linea de pico solo puede cargarse como 0 o 1.';
                     continue;
                 }
 
-                if (! $remove && $loadedQuantity > 0) {
+                if (! $this->loadingFitsRequested($line, $loadedPallets, $loadedPartialUnits)) {
+                    $errors["lines.$rowKey.loaded_partial_units"] = 'La carga real no puede superar las unidades solicitadas.';
+                    continue;
+                }
+
+                if (! $this->loadingFitsStock($stockPallet, $loadedPallets, $loadedPartialUnits, $stockPeakIndex)) {
+                    $errors["lines.$rowKey.stock_pallet_id"] = 'La carga real supera el stock disponible en la partida seleccionada.';
+                    continue;
+                }
+
+                if (! $remove && (($loadedPallets + $loadedPartialUnits) > 0)) {
                     $hasPositiveLoadedLine = true;
                 }
 
                 $resolvedLines[] = [
                     'line_id' => $lineId,
                     'item_id' => $line->item_id,
-                    'stock_pallet_id' => $line->stock_pallet_id,
+                    'stock_pallet_id' => $stockPalletId,
                     'line_type' => $line->lineType(),
-                    'stock_peak_index' => $line->stock_peak_index,
-                    'lot' => $line->lot,
+                    'stock_peak_index' => $stockPeakIndex,
+                    'lot' => $stockPallet instanceof StockPallet && filled($stockPallet->lot) ? trim((string) $stockPallet->lot) : $line->lot,
                     'units_per_pallet' => $line->units_per_pallet,
                     'units_per_peak' => $line->units_per_peak,
-                    'loaded_pallets' => $line->isPalletLine() ? $loadedQuantity : 0,
-                    'loaded_peaks' => $line->isPeakLine() ? $loadedQuantity : 0,
+                    'loaded_pallets' => $loadedPallets,
+                    'loaded_peaks' => $loadedPeaks,
+                    'loaded_partial_units' => $loadedPartialUnits,
                     'loading_notes' => $loadingNotes,
                     'remove' => $remove,
                 ];
@@ -282,7 +339,16 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                     continue;
                 }
 
-                if ($loadedQuantity > 0) {
+                if ($loadedPartialUnits === 0 && $loadedQuantity > 0) {
+                    $loadedPartialUnits = $unitsPerPeak;
+                }
+
+                if ($loadedPartialUnits > $unitsPerPeak) {
+                    $errors["lines.$rowKey.loaded_partial_units"] = 'La carga parcial supera las unidades disponibles en el pico seleccionado.';
+                    continue;
+                }
+
+                if ($loadedQuantity > 0 || $loadedPartialUnits > 0) {
                     $hasPositiveLoadedLine = true;
                 }
 
@@ -299,7 +365,8 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                     'units_per_pallet' => (int) $item->units_per_pallet,
                     'units_per_peak' => $unitsPerPeak,
                     'loaded_pallets' => 0,
-                    'loaded_peaks' => $loadedQuantity,
+                    'loaded_peaks' => $loadedPartialUnits > 0 ? 1 : 0,
+                    'loaded_partial_units' => $loadedPartialUnits,
                     'loading_notes' => $loadingNotes,
                     'remove' => false,
                 ];
@@ -307,7 +374,23 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                 continue;
             }
 
-            if ($loadedQuantity > 0) {
+            $loadedPallets = max(0, $submittedLoadedPallets ?? $loadedQuantity);
+
+            if ($loadedPallets > 0) {
+                $hasPositiveLoadedLine = true;
+            }
+
+            if ($loadedPartialUnits > 0) {
+                if (! $stockPallet instanceof StockPallet) {
+                    $errors["lines.$rowKey.stock_pallet_id"] = 'Selecciona una partida concreta para cargar unidades parciales.';
+                    continue;
+                }
+
+                if (! $this->loadingFitsStock($stockPallet, $loadedPallets, $loadedPartialUnits, null)) {
+                    $errors["lines.$rowKey.stock_pallet_id"] = 'La carga real supera el stock disponible en la partida seleccionada.';
+                    continue;
+                }
+
                 $hasPositiveLoadedLine = true;
             }
 
@@ -323,8 +406,9 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                 'location_text' => filled($stockPallet?->location_text) ? trim((string) $stockPallet?->location_text) : null,
                 'units_per_pallet' => (int) $item->units_per_pallet,
                 'units_per_peak' => null,
-                'loaded_pallets' => $loadedQuantity,
+                'loaded_pallets' => $loadedPallets,
                 'loaded_peaks' => 0,
+                'loaded_partial_units' => $loadedPartialUnits,
                 'loading_notes' => $loadingNotes,
                 'remove' => false,
             ];
@@ -352,6 +436,62 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
         $this->validatedLines();
 
         return $this->resolvedErrors ?? [];
+    }
+
+    private function loadingFitsRequested(GoodsDispatchLine $line, int $loadedPallets, int $loadedPartialUnits): bool
+    {
+        if ($line->is_extra_line) {
+            return true;
+        }
+
+        $requestedUnits = $line->requestedUnitsTotal();
+
+        if ($requestedUnits <= 0) {
+            return true;
+        }
+
+        $loadedUnits = ($loadedPallets * max(0, (int) ($line->units_per_pallet ?? 0))) + $loadedPartialUnits;
+
+        return $loadedUnits <= $requestedUnits;
+    }
+
+    private function loadingFitsStock(?StockPallet $stockPallet, int $loadedPallets, int $loadedPartialUnits, ?int $preferredPeakIndex): bool
+    {
+        if ($loadedPallets <= 0 && $loadedPartialUnits <= 0) {
+            return true;
+        }
+
+        if (! $stockPallet instanceof StockPallet) {
+            return $loadedPartialUnits <= 0;
+        }
+
+        $availablePallets = max(0, (int) $stockPallet->full_pallets);
+
+        if ($loadedPallets > $availablePallets) {
+            return false;
+        }
+
+        $remainingFullPallets = $availablePallets - $loadedPallets;
+        $availablePeakUnits = $this->availablePeakUnits($stockPallet, $preferredPeakIndex);
+        $unitsPerPallet = max(0, (int) $stockPallet->units_per_pallet);
+        $availablePartialUnits = $availablePeakUnits + ($remainingFullPallets * $unitsPerPallet);
+
+        return $loadedPartialUnits <= $availablePartialUnits;
+    }
+
+    private function availablePeakUnits(StockPallet $stockPallet, ?int $preferredPeakIndex = null): int
+    {
+        if ($preferredPeakIndex !== null) {
+            return max(0, (int) ($stockPallet->{'peak_'.$preferredPeakIndex} ?? 0));
+        }
+
+        $total = 0;
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakIndex) {
+            $total += max(0, (int) ($stockPallet->{'peak_'.$peakIndex} ?? 0));
+        }
+
+        return $total;
     }
 
     private function dispatch(): GoodsDispatch|null

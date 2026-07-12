@@ -2055,6 +2055,52 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 
 ---
 
+## 2026-07-12 - Salidas: carga real con pallets completos y pico parcial por partida
+
+**Equipo:** PC de casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Commit:** `feat: registrar carga real parcial en salidas`.
+**Contexto:** en `Salidas > Pedidos pendientes > SOL-...`, almacen necesita registrar la carga real exacta cuando se cargan pallets completos mas unidades sueltas de pico, escogiendo la partida/lote/ubicacion real. Antes el formulario solo admitia `loaded_quantity` y las lineas de pico quedaban limitadas a 0/1, sin poder expresar "0 pallets + 300 uds".
+
+### Cambios funcionales
+- `resources/views/dispatches/request.blade.php`: la tabla "LINEAS DEL PEDIDO Y CARGA REAL" ahora muestra lote/ubicacion, solicitado, stock disponible, selector de partida, inputs separados `loaded_pallets` y `loaded_partial_units`, total cargado en unidades, estado OK/Parcial/Exceso y observacion. Se mantiene `loaded_quantity` oculto por compatibilidad.
+- `app/Http/Controllers/GoodsDispatchController.php`: la pantalla interna recibe partidas disponibles agrupadas por articulo del cliente, solo stock activo y disponible.
+- `app/Http/Requests/ConfirmGoodsDispatchLoadingRequest.php`: valida pallets y unidades parciales, impide superar lo solicitado en una linea normal, impide superar el stock disponible de la partida seleccionada, bloquea partidas de otro cliente/articulo o no disponibles y conserva compatibilidad con el payload anterior.
+- `app/Services/GoodsDispatches/GoodsDispatchWorkflowService.php`: guarda `stock_pallet_id`, `stock_peak_index`, lote y `loaded_partial_units` al confirmar preparacion, manteniendo trazabilidad de usuario/fecha ya existente.
+- `app/Services/GoodsDispatches/StockDispatchAllocationService.php`: al enviar/completar descuenta pallets completos y unidades parciales de la partida real. Las unidades parciales consumen picos abiertos primero y, si hace falta, abren un pallet completo dejando el remanente como pico.
+- `app/Models/GoodsDispatchLine.php` y `app/Models/GoodsDispatch.php`: helpers para calcular solicitado/cargado en unidades, detectar diferencias y mostrar etiquetas de carga real mixta.
+- `resources/css/app.css`: ajustes compactos para la tabla de preparacion, selector de stock, campos numericos y fila de guardado.
+
+### Migracion
+- `database/migrations/2026_07_12_000002_add_loaded_partial_units_to_goods_dispatch_lines.php`: se anade `goods_dispatch_lines.loaded_partial_units` nullable.
+- Justificacion: `loaded_peaks` ya representa contador de picos/lineas, no unidades reales. Reutilizarlo para "300 uds" romperia semantica existente, albaranes, contadores y compatibilidad con lineas de pico antiguas. La columna nueva es la forma minima de registrar carga real exacta sin reinterpretar datos historicos.
+
+### Tests
+- `tests/Feature/GoodsDispatchManagementTest.php`: nuevos casos para:
+  - guardar 1 pallet + 300 uds desde una partida concreta sin descontar stock todavia;
+  - rechazar carga por encima de lo solicitado;
+  - rechazar carga por encima del stock de la partida seleccionada;
+  - descontar al enviar de la partida elegida, dejando remanente de pallet como pico;
+  - comprobar que la pantalla interna muestra selector de partida e inputs separados.
+- Se ajusta el test antiguo que confirmaba mas pallets que los solicitados en una linea normal, porque la nueva regla exige no superar lo pedido salvo lineas extra.
+
+### Validacion
+- `php artisan test tests/Feature/GoodsDispatchManagementTest.php`: **40 passed** (219 assertions).
+- `php artisan test`: **529 passed** (2490 assertions).
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- Lint PHP de archivos tocados: OK.
+- `git status`: cambios pendientes listos para commit antes de cerrar la sesion.
+
+### Control de alcance
+- No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh`. No se borraron datos.
+- Cambios acotados a preparacion/envio de salidas, pantalla interna de pedido pendiente, CSS asociado, migracion minima y tests.
+- Push previsto a `origin/main` tras commit si el diff revisado coincide con este alcance. El push puede disparar Forge; despliegue en produccion no verificado desde esta sesion.
+
+---
+
 ## 2026-07-12 - Detalle de pedido/solicitud del cliente: pantalla compacta tipo gestion
 
 **Contexto:** Tras registrar un pedido, la pantalla de detalle (`merchandise-requests/show`) era demasiado voluminosa: hero enorme con el codigo, tarjeta "Datos" grande y poco util, "Seguimiento" como tarjeta alta, "Lineas" con filas gigantes y el aviso de fuera de horario como una linea amarilla/marron poco visual. Se pidio compactarla manteniendo estetica corporativa, sin tocar logica de negocio ni estados.

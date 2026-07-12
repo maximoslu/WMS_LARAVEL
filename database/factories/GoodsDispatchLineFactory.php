@@ -35,6 +35,7 @@ class GoodsDispatchLineFactory extends Factory
             'requested_peaks' => 0,
             'loaded_pallets' => null,
             'loaded_peaks' => null,
+            'loaded_partial_units' => null,
             'loading_notes' => null,
             'confirmed_by' => null,
             'confirmed_at' => null,

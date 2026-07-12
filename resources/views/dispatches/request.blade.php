@@ -30,6 +30,7 @@
         ];
         $statusOrder = array_keys($statusSteps);
         $currentStatusIndex = array_search($merchandiseRequest->status, $statusOrder, true);
+        $stockOptionsByItem = $stockOptionsByItem ?? [];
     @endphp
 
     <x-breadcrumbs :items="$breadcrumbs" />
@@ -108,17 +109,18 @@
         @endif
 
         <div class="warehouse-request-table-wrap">
-            <table class="data-table table-compact warehouse-request-table" aria-label="Líneas del pedido y carga real">
+            <table class="data-table table-compact warehouse-request-table" aria-label="Lineas del pedido y carga real">
                 <thead>
                     <tr>
                         <th>SKU</th>
                         <th>Descripción</th>
-                        <th>Lote</th>
-                        <th>Ubicación</th>
-                        <th>Sol. pallets</th>
-                        <th>Sol. picos</th>
-                        <th>Carg. pallets</th>
-                        <th>Carg. picos</th>
+                        <th>Lote / ubicación</th>
+                        <th>Solicitado</th>
+                        <th>Stock disponible</th>
+                        <th>Cargar desde</th>
+                        <th>Pallets</th>
+                        <th>Pico uds</th>
+                        <th>Total cargado</th>
                         <th>Estado</th>
                         <th>Observación</th>
                     </tr>
@@ -133,69 +135,126 @@
                                     && (string) $candidate->line_type === (string) $line->line_type
                                     && (int) ($candidate->stock_peak_index ?? 0) === (int) ($line->stock_peak_index ?? 0)
                             );
+                            $lineKey = $dispatchLine ? 'line_'.$dispatchLine->id : null;
+                            $requestedUnits = $dispatchLine?->requestedUnitsTotal() ?? (int) ($line->requested_units ?? 0);
+                            $loadedPallets = $dispatchLine?->loadedPallets() ?? 0;
+                            $loadedPartialUnits = $dispatchLine?->loadedPartialUnits() ?? 0;
+                            $loadedUnits = $dispatchLine?->loadedUnitsTotal() ?? 0;
+                            $selectedStockPalletId = $dispatchLine
+                                ? old('lines.'.$lineKey.'.stock_pallet_id', $dispatchLine->stock_pallet_id ?? $line->stock_pallet_id)
+                                : null;
+                            $lineStockOptions = collect($stockOptionsByItem[$line->item_id] ?? []);
+                            $selectedStockPallet = $lineStockOptions->firstWhere('id', (int) $selectedStockPalletId)
+                                ?? $dispatchLine?->stockPallet
+                                ?? $line->stockPallet;
+                            $selectedStockUnits = $selectedStockPallet ? (int) $selectedStockPallet->quantity_units : 0;
+                            $selectedStockPeaks = $selectedStockPallet
+                                ? collect(range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS))
+                                    ->map(fn ($peakIndex) => (int) ($selectedStockPallet->{'peak_'.$peakIndex} ?? 0))
+                                    ->filter(fn ($peakUnits) => $peakUnits > 0)
+                                    ->values()
+                                : collect();
                             $isConfirmed = $dispatchLine?->confirmed_at !== null;
                             $hasDifference = $isConfirmed && $dispatchLine->hasLoadingDifference();
+                            $isOverLoaded = $requestedUnits > 0 && $loadedUnits > $requestedUnits;
                         @endphp
                         <tr>
                             <td>
                                 <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
                                 <span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span>
                                 @if ($dispatchLine)
-                                    <input type="hidden" name="lines[line_{{ $dispatchLine->id }}][line_id]" value="{{ $dispatchLine->id }}">
-                                    <input type="hidden" name="lines[line_{{ $dispatchLine->id }}][item_id]" value="{{ $dispatchLine->item_id }}">
-                                    <input type="hidden" name="lines[line_{{ $dispatchLine->id }}][line_type]" value="{{ $dispatchLine->lineType() }}">
-                                    <input type="hidden" name="lines[line_{{ $dispatchLine->id }}][stock_pallet_id]" value="{{ $dispatchLine->stock_pallet_id }}">
-                                    <input type="hidden" name="lines[line_{{ $dispatchLine->id }}][stock_peak_index]" value="{{ $dispatchLine->stock_peak_index }}">
-                                    <input type="hidden" name="lines[line_{{ $dispatchLine->id }}][remove]" value="0">
+                                    <input type="hidden" name="lines[{{ $lineKey }}][line_id]" value="{{ $dispatchLine->id }}">
+                                    <input type="hidden" name="lines[{{ $lineKey }}][item_id]" value="{{ $dispatchLine->item_id }}">
+                                    <input type="hidden" name="lines[{{ $lineKey }}][line_type]" value="{{ $dispatchLine->lineType() }}">
+                                    <input type="hidden" name="lines[{{ $lineKey }}][stock_peak_index]" value="{{ $dispatchLine->stock_peak_index }}">
+                                    <input type="hidden" name="lines[{{ $lineKey }}][loaded_quantity]" value="{{ $dispatchLine->loadedQuantity() }}">
+                                    <input type="hidden" name="lines[{{ $lineKey }}][remove]" value="0">
                                 @endif
                             </td>
                             <td>{{ $line->item?->description ?? 'Sin descripción' }}</td>
-                            <td>{{ $line->lot ?: '—' }}</td>
-                            <td>{{ $line->stockPallet?->location_text ?: '—' }}</td>
-                            <td>{{ number_format($line->requestedPalletsCount(), 0, ',', '.') }}</td>
-                            <td>{{ number_format($line->requestedPeaksCount(), 0, ',', '.') }}</td>
-                            <td class="warehouse-request-quantity-cell">
-                                @if ($dispatchLine?->isPalletLine())
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        name="lines[line_{{ $dispatchLine->id }}][loaded_quantity]"
-                                        value="{{ old('lines.line_'.$dispatchLine->id.'.loaded_quantity', $dispatchLine->loadedQuantity()) }}"
-                                        class="auth-input warehouse-request-quantity-input"
-                                        aria-label="Pallets cargados para {{ $dispatchLine->sku }}"
-                                        @disabled(! $canEditLoading)
-                                        required
-                                    >
+                            <td>
+                                <span class="warehouse-request-stock-meta">{{ $selectedStockPallet?->lot ?: $line->lot ?: '-' }}</span>
+                                <small>{{ $selectedStockPallet?->location_text ?: $line->stockPallet?->location_text ?: 'Sin ubicación' }}</small>
+                            </td>
+                            <td>
+                                <span>{{ number_format($line->requestedPalletsCount(), 0, ',', '.') }} pallets</span>
+                                <small>{{ number_format($line->requestedPeaksCount(), 0, ',', '.') }} picos · {{ number_format($requestedUnits, 0, ',', '.') }} uds</small>
+                            </td>
+                            <td>
+                                @if ($selectedStockPallet)
+                                    <span>{{ number_format((int) $selectedStockPallet->full_pallets, 0, ',', '.') }} pallets · {{ number_format($selectedStockUnits, 0, ',', '.') }} uds</span>
+                                    <small>{{ $selectedStockPeaks->isNotEmpty() ? 'Picos: '.$selectedStockPeaks->map(fn ($peakUnits) => number_format($peakUnits, 0, ',', '.'))->implode(', ') : 'Sin picos abiertos' }}</small>
                                 @else
-                                    —
+                                    <span>Sin stock asignado</span>
+                                    <small>Selecciona una partida para picos</small>
+                                @endif
+                            </td>
+                            <td>
+                                @if ($dispatchLine)
+                                    <select
+                                        name="lines[{{ $lineKey }}][stock_pallet_id]"
+                                        class="auth-input warehouse-request-stock-select"
+                                        aria-label="Partida de stock para {{ $dispatchLine->sku }}"
+                                        @disabled(! $canEditLoading)
+                                    >
+                                        @if (! $selectedStockPalletId)
+                                            <option value="">Stock FIFO</option>
+                                        @endif
+                                        @foreach ($lineStockOptions as $stockOption)
+                                            <option value="{{ $stockOption->id }}" @selected((int) $selectedStockPalletId === (int) $stockOption->id)>
+                                                {{ $stockOption->lot ?: 'Sin lote' }} · {{ $stockOption->location_text ?: 'Sin ubicación' }} · {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pal. · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                @else
+                                    -
                                 @endif
                             </td>
                             <td class="warehouse-request-quantity-cell">
-                                @if ($dispatchLine?->isPeakLine())
+                                @if ($dispatchLine)
                                     <input
                                         type="number"
                                         min="0"
-                                        max="1"
                                         step="1"
-                                        name="lines[line_{{ $dispatchLine->id }}][loaded_quantity]"
-                                        value="{{ old('lines.line_'.$dispatchLine->id.'.loaded_quantity', $dispatchLine->loadedQuantity()) }}"
+                                        name="lines[{{ $lineKey }}][loaded_pallets]"
+                                        value="{{ old('lines.'.$lineKey.'.loaded_pallets', $loadedPallets) }}"
                                         class="auth-input warehouse-request-quantity-input"
-                                        aria-label="Picos cargados para {{ $dispatchLine->sku }}"
+                                        aria-label="Pallets cargados para {{ $dispatchLine->sku }}"
                                         @disabled(! $canEditLoading)
-                                        required
                                     >
                                 @else
-                                    —
+                                    -
                                 @endif
+                            </td>
+                            <td class="warehouse-request-quantity-cell">
+                                @if ($dispatchLine)
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        name="lines[{{ $lineKey }}][loaded_partial_units]"
+                                        value="{{ old('lines.'.$lineKey.'.loaded_partial_units', $loadedPartialUnits) }}"
+                                        class="auth-input warehouse-request-quantity-input"
+                                        aria-label="Unidades de pico cargadas para {{ $dispatchLine->sku }}"
+                                        @disabled(! $canEditLoading)
+                                    >
+                                @else
+                                    -
+                                @endif
+                            </td>
+                            <td>
+                                <span>{{ number_format($loadedUnits, 0, ',', '.') }} uds</span>
+                                <small>{{ $dispatchLine?->loadedQuantityLabel() ?? 'Sin salida' }}</small>
                             </td>
                             <td>
                                 @if (! $dispatchLine)
                                     <span class="warehouse-load-state warehouse-load-state--pending">Sin salida</span>
                                 @elseif (! $isConfirmed)
                                     <span class="warehouse-load-state warehouse-load-state--pending">Sin confirmar</span>
+                                @elseif ($isOverLoaded)
+                                    <span class="warehouse-load-state warehouse-load-state--difference">Exceso</span>
                                 @elseif ($hasDifference)
-                                    <span class="warehouse-load-state warehouse-load-state--difference">Diferencia</span>
+                                    <span class="warehouse-load-state warehouse-load-state--difference">Parcial</span>
                                 @else
                                     <span class="warehouse-load-state warehouse-load-state--ok">OK</span>
                                 @endif
@@ -205,15 +264,15 @@
                                     <input
                                         type="text"
                                         maxlength="250"
-                                        name="lines[line_{{ $dispatchLine->id }}][loading_notes]"
-                                        value="{{ old('lines.line_'.$dispatchLine->id.'.loading_notes', $dispatchLine->loading_notes) }}"
+                                        name="lines[{{ $lineKey }}][loading_notes]"
+                                        value="{{ old('lines.'.$lineKey.'.loading_notes', $dispatchLine->loading_notes) }}"
                                         class="auth-input warehouse-request-notes-input"
                                         placeholder="Opcional"
                                         aria-label="Observación de carga para {{ $dispatchLine->sku }}"
                                         @disabled(! $canEditLoading)
                                     >
                                 @else
-                                    —
+                                    -
                                 @endif
                             </td>
                         </tr>
@@ -221,37 +280,54 @@
 
                     @foreach ($dispatch?->lines?->where('is_extra_line', true) ?? collect() as $extraLine)
                         @php
+                            $lineKey = 'line_'.$extraLine->id;
                             $isConfirmed = $extraLine->confirmed_at !== null;
+                            $lineStockOptions = collect($stockOptionsByItem[$extraLine->item_id] ?? []);
+                            $selectedStockPalletId = old('lines.'.$lineKey.'.stock_pallet_id', $extraLine->stock_pallet_id);
+                            $selectedStockPallet = $lineStockOptions->firstWhere('id', (int) $selectedStockPalletId) ?? $extraLine->stockPallet;
                         @endphp
                         <tr class="warehouse-request-extra-line">
                             <td>
                                 <strong>{{ $extraLine->sku }}</strong>
                                 <span class="wms-line-type-pill wms-line-type-pill--{{ $extraLine->lineType() }}">Extra</span>
-                                <input type="hidden" name="lines[line_{{ $extraLine->id }}][line_id]" value="{{ $extraLine->id }}">
-                                <input type="hidden" name="lines[line_{{ $extraLine->id }}][item_id]" value="{{ $extraLine->item_id }}">
-                                <input type="hidden" name="lines[line_{{ $extraLine->id }}][line_type]" value="{{ $extraLine->lineType() }}">
-                                <input type="hidden" name="lines[line_{{ $extraLine->id }}][stock_pallet_id]" value="{{ $extraLine->stock_pallet_id }}">
-                                <input type="hidden" name="lines[line_{{ $extraLine->id }}][stock_peak_index]" value="{{ $extraLine->stock_peak_index }}">
-                                <input type="hidden" name="lines[line_{{ $extraLine->id }}][remove]" value="0">
+                                <input type="hidden" name="lines[{{ $lineKey }}][line_id]" value="{{ $extraLine->id }}">
+                                <input type="hidden" name="lines[{{ $lineKey }}][item_id]" value="{{ $extraLine->item_id }}">
+                                <input type="hidden" name="lines[{{ $lineKey }}][line_type]" value="{{ $extraLine->lineType() }}">
+                                <input type="hidden" name="lines[{{ $lineKey }}][stock_peak_index]" value="{{ $extraLine->stock_peak_index }}">
+                                <input type="hidden" name="lines[{{ $lineKey }}][loaded_quantity]" value="{{ $extraLine->loadedQuantity() }}">
+                                <input type="hidden" name="lines[{{ $lineKey }}][remove]" value="0">
                             </td>
                             <td>{{ $extraLine->description }}</td>
-                            <td>{{ $extraLine->lot ?: '—' }}</td>
-                            <td>{{ $extraLine->stockPallet?->location_text ?: '—' }}</td>
-                            <td>0</td>
-                            <td>0</td>
-                            <td class="warehouse-request-quantity-cell">
-                                @if ($extraLine->isPalletLine())
-                                    <input type="number" min="0" step="1" name="lines[line_{{ $extraLine->id }}][loaded_quantity]" value="{{ old('lines.line_'.$extraLine->id.'.loaded_quantity', $extraLine->loadedQuantity()) }}" class="auth-input warehouse-request-quantity-input" @disabled(! $canEditLoading) required>
+                            <td>
+                                <span class="warehouse-request-stock-meta">{{ $selectedStockPallet?->lot ?: $extraLine->lot ?: '-' }}</span>
+                                <small>{{ $selectedStockPallet?->location_text ?: $extraLine->location_text ?: 'Sin ubicación' }}</small>
+                            </td>
+                            <td><span>Extra</span><small>0 uds solicitadas</small></td>
+                            <td>
+                                @if ($selectedStockPallet)
+                                    <span>{{ number_format((int) $selectedStockPallet->full_pallets, 0, ',', '.') }} pallets · {{ number_format((int) $selectedStockPallet->quantity_units, 0, ',', '.') }} uds</span>
                                 @else
-                                    —
+                                    <span>Sin stock asignado</span>
                                 @endif
                             </td>
+                            <td>
+                                <select name="lines[{{ $lineKey }}][stock_pallet_id]" class="auth-input warehouse-request-stock-select" @disabled(! $canEditLoading)>
+                                    @foreach ($lineStockOptions as $stockOption)
+                                        <option value="{{ $stockOption->id }}" @selected((int) $selectedStockPalletId === (int) $stockOption->id)>
+                                            {{ $stockOption->lot ?: 'Sin lote' }} · {{ $stockOption->location_text ?: 'Sin ubicación' }} · {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pal. · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </td>
                             <td class="warehouse-request-quantity-cell">
-                                @if ($extraLine->isPeakLine())
-                                    <input type="number" min="0" max="1" step="1" name="lines[line_{{ $extraLine->id }}][loaded_quantity]" value="{{ old('lines.line_'.$extraLine->id.'.loaded_quantity', $extraLine->loadedQuantity()) }}" class="auth-input warehouse-request-quantity-input" @disabled(! $canEditLoading) required>
-                                @else
-                                    —
-                                @endif
+                                <input type="number" min="0" step="1" name="lines[{{ $lineKey }}][loaded_pallets]" value="{{ old('lines.'.$lineKey.'.loaded_pallets', $extraLine->loadedPallets()) }}" class="auth-input warehouse-request-quantity-input" @disabled(! $canEditLoading)>
+                            </td>
+                            <td class="warehouse-request-quantity-cell">
+                                <input type="number" min="0" step="1" name="lines[{{ $lineKey }}][loaded_partial_units]" value="{{ old('lines.'.$lineKey.'.loaded_partial_units', $extraLine->loadedPartialUnits()) }}" class="auth-input warehouse-request-quantity-input" @disabled(! $canEditLoading)>
+                            </td>
+                            <td>
+                                <span>{{ number_format($extraLine->loadedUnitsTotal(), 0, ',', '.') }} uds</span>
+                                <small>{{ $extraLine->loadedQuantityLabel() }}</small>
                             </td>
                             <td>
                                 <span class="warehouse-load-state warehouse-load-state--{{ $isConfirmed ? 'ok' : 'pending' }}">
@@ -259,7 +335,7 @@
                                 </span>
                             </td>
                             <td>
-                                <input type="text" maxlength="250" name="lines[line_{{ $extraLine->id }}][loading_notes]" value="{{ old('lines.line_'.$extraLine->id.'.loading_notes', $extraLine->loading_notes) }}" class="auth-input warehouse-request-notes-input" placeholder="Opcional" @disabled(! $canEditLoading)>
+                                <input type="text" maxlength="250" name="lines[{{ $lineKey }}][loading_notes]" value="{{ old('lines.'.$lineKey.'.loading_notes', $extraLine->loading_notes) }}" class="auth-input warehouse-request-notes-input" placeholder="Opcional" @disabled(! $canEditLoading)>
                             </td>
                         </tr>
                     @endforeach

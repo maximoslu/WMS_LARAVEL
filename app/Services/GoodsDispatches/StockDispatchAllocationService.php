@@ -19,25 +19,26 @@ class StockDispatchAllocationService
         $lines = $dispatch->lines()->get();
 
         foreach ($lines as $line) {
-            $quantity = $line->loadedQuantity();
+            $loadedPallets = $line->loadedPallets();
+            $loadedPartialUnits = $line->loadedPartialUnits();
 
-            if ($quantity <= 0) {
+            if ($loadedPallets <= 0 && $loadedPartialUnits <= 0) {
                 continue;
             }
 
-            if ($line->isPeakLine()) {
-                $this->applyPeakLine($dispatch, $line);
-
-                continue;
+            if ($loadedPallets > 0) {
+                $this->applyPalletLine($dispatch, $line);
             }
 
-            $this->applyPalletLine($dispatch, $line);
+            if ($loadedPartialUnits > 0) {
+                $this->applyPartialUnits($dispatch, $line, $loadedPartialUnits);
+            }
         }
     }
 
-    private function applyPeakLine(GoodsDispatch $dispatch, GoodsDispatchLine $line): void
+    private function applyPartialUnits(GoodsDispatch $dispatch, GoodsDispatchLine $line, int $units): void
     {
-        if ($line->stock_pallet_id === null || $line->stock_peak_index === null) {
+        if ($line->stock_pallet_id === null) {
             throw $this->unresolvedStockError($line);
         }
 
@@ -52,15 +53,50 @@ class StockDispatchAllocationService
 
         $this->guardSameClient($dispatch, $stockPallet);
 
-        $peakField = 'peak_'.$line->stock_peak_index;
-        $availableUnits = max(0, (int) $stockPallet->{$peakField});
+        $remaining = max(0, $units);
+        $peakOrder = $this->peakConsumptionOrder($line);
 
-        if ($availableUnits <= 0) {
-            throw $this->insufficientStockError($line);
+        foreach ($peakOrder as $peakIndex) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $peakField = 'peak_'.$peakIndex;
+            $availableUnits = max(0, (int) $stockPallet->{$peakField});
+
+            if ($availableUnits <= 0) {
+                continue;
+            }
+
+            $take = min($remaining, $availableUnits);
+            $stockPallet->{$peakField} = $availableUnits - $take;
+            $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - $take);
+            $remaining -= $take;
         }
 
-        $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - $availableUnits);
-        $stockPallet->{$peakField} = 0;
+        $breakableFullPallets = max(0, (int) $stockPallet->full_pallets);
+
+        while ($remaining > 0) {
+            if ($breakableFullPallets <= 0) {
+                throw $this->insufficientStockError($line);
+            }
+
+            $unitsPerPallet = max(0, (int) ($stockPallet->units_per_pallet ?: $line->units_per_pallet));
+
+            if ($unitsPerPallet <= 0) {
+                throw $this->insufficientStockError($line);
+            }
+
+            $take = min($remaining, $unitsPerPallet);
+            $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - $take);
+            $remaining -= $take;
+            $breakableFullPallets--;
+
+            if ($take < $unitsPerPallet) {
+                $this->storeBrokenPalletRemainder($stockPallet, $line, $unitsPerPallet - $take);
+            }
+        }
+
         $stockPallet->save();
     }
 
@@ -160,5 +196,40 @@ class StockDispatchAllocationService
         $description = $line->description ?: $line->item?->description;
 
         return trim(collect([$sku, $description])->filter()->implode(' - ')) ?: 'la referencia solicitada';
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function peakConsumptionOrder(GoodsDispatchLine $line): array
+    {
+        $indexes = range(1, StockPallet::MAX_PEAK_COLUMNS);
+
+        if ($line->stock_peak_index === null) {
+            return $indexes;
+        }
+
+        return array_values(array_unique([(int) $line->stock_peak_index, ...$indexes]));
+    }
+
+    private function storeBrokenPalletRemainder(StockPallet $stockPallet, GoodsDispatchLine $line, int $remainingUnits): void
+    {
+        if ($remainingUnits <= 0) {
+            return;
+        }
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakIndex) {
+            $field = 'peak_'.$peakIndex;
+
+            if ((int) ($stockPallet->{$field} ?? 0) > 0) {
+                continue;
+            }
+
+            $stockPallet->{$field} = $remainingUnits;
+
+            return;
+        }
+
+        throw $this->insufficientStockError($line);
     }
 }

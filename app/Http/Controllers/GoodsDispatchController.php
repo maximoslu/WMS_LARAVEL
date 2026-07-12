@@ -7,6 +7,7 @@ use App\Http\Requests\StoreGoodsDispatchRequest;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
+use App\Models\StockPallet;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Support\Stock\StockVariantCatalog;
@@ -129,6 +130,7 @@ class GoodsDispatchController extends Controller
 
         return view('dispatches.request', [
             'merchandiseRequest' => $merchandiseRequest,
+            'stockOptionsByItem' => $this->stockOptionsByItem($merchandiseRequest),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -305,5 +307,43 @@ class GoodsDispatchController extends Controller
         return Pdf::loadView('dispatches.delivery-note-pdf', [
             'dispatch' => $goodsDispatch,
         ])->stream($goodsDispatch->dispatchNumber().'.pdf');
+    }
+
+    /**
+     * @return array<int, \Illuminate\Support\Collection<int, StockPallet>>
+     */
+    private function stockOptionsByItem(MerchandiseRequest $merchandiseRequest): array
+    {
+        $itemIds = $merchandiseRequest->lines
+            ->pluck('item_id')
+            ->filter()
+            ->map(fn ($itemId) => (int) $itemId)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($itemIds === []) {
+            return [];
+        }
+
+        return StockPallet::query()
+            ->with('location')
+            ->where('client_id', $merchandiseRequest->client_id)
+            ->whereIn('item_id', $itemIds)
+            ->where('active', true)
+            ->where('status', StockPallet::STATUS_AVAILABLE)
+            ->where(function ($query): void {
+                $query
+                    ->where('quantity_units', '>', 0)
+                    ->orWhere('full_pallets', '>', 0)
+                    ->orWhere('peaks_count', '>', 0)
+                    ->orWhere('warehouse_pallets', '>', 0);
+            })
+            ->orderBy('received_at')
+            ->orderBy('lot')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('item_id')
+            ->all();
     }
 }

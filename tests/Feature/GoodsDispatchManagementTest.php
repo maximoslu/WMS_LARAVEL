@@ -319,8 +319,11 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Ver salida')
             ->assertDontSee('GENERAR SALIDA')
+            ->assertSee('Cargar desde')
             ->assertSee('GUARDAR PREPARACIÓN')
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_quantity]"', false)
+            ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_pallets]"', false)
+            ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_partial_units]"', false)
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loading_notes]"', false);
     }
 
@@ -370,6 +373,176 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame('Falta un pallet.', $line->loading_notes);
         $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->status);
         $this->assertNull($dispatch->stock_applied_at);
+    }
+
+    public function test_internal_request_page_saves_full_pallets_and_partial_peak_units_for_selected_batch(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'MIXTO-LOAD',
+            'units_per_pallet' => 1000,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOTE-MIXTO',
+            'location_text' => 'A-01',
+            'units_per_pallet' => 1000,
+            'quantity_units' => 5000,
+            'peak_1' => 0,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 1000,
+            'requested_pallets' => 2,
+            'requested_peaks' => 0,
+            'requested_units' => 2000,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'source_request_line_id' => $requestLine->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 1000,
+            'requested_pallets' => 2,
+            'requested_units' => 2000,
+            'loaded_pallets' => null,
+            'loaded_partial_units' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 300,
+                        'loading_notes' => 'Un pallet completo y pico real.',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $line->refresh();
+
+        $this->assertSame($stock->id, $line->stock_pallet_id);
+        $this->assertSame(1, $line->loadedPallets());
+        $this->assertSame(300, $line->loadedPartialUnits());
+        $this->assertSame(1300, $line->loadedUnitsTotal());
+        $this->assertSame('Un pallet completo y pico real.', $line->loading_notes);
+        $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->fresh()->status);
+        $this->assertNull($dispatch->fresh()->stock_applied_at);
+    }
+
+    public function test_internal_loading_rejects_partial_units_above_requested_quantity(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 1000]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 1000,
+            'quantity_units' => 5000,
+            'peak_1' => 0,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 1000,
+            'requested_pallets' => 1,
+            'requested_units' => 1000,
+            'loaded_pallets' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.show', $dispatch))
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasErrors('lines.line_'.$line->id.'.loaded_partial_units');
+
+        $this->assertNull($line->fresh()->confirmed_at);
+    }
+
+    public function test_internal_loading_rejects_partial_units_above_selected_batch_stock(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 1000]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 1000,
+            'quantity_units' => 100,
+            'peak_1' => 100,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 1000,
+            'requested_pallets' => 1,
+            'requested_units' => 1000,
+            'loaded_pallets' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.show', $dispatch))
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 0,
+                        'loaded_partial_units' => 101,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasErrors('lines.line_'.$line->id.'.stock_pallet_id');
+
+        $this->assertSame(100, $stock->fresh()->quantity_units);
     }
 
     public function test_dispatch_from_request_preserves_peak_lines(): void
@@ -663,8 +836,8 @@ class GoodsDispatchManagementTest extends TestCase
             ->patch(route('dispatches.confirm-loading', $dispatch), [
                 'lines' => [
                     $line->id => [
-                        'loaded_pallets' => 5,
-                        'loading_notes' => 'Se carga un pallet extra por operativa.',
+                        'loaded_pallets' => 3,
+                        'loading_notes' => 'Se confirma la carga completa.',
                     ],
                 ],
             ])
@@ -672,10 +845,10 @@ class GoodsDispatchManagementTest extends TestCase
 
         $line->refresh();
 
-        $this->assertSame(5, $line->loadedPallets());
+        $this->assertSame(3, $line->loadedPallets());
         $this->assertSame($almacen->id, $line->confirmed_by);
         $this->assertNotNull($line->confirmed_at);
-        $this->assertSame('Se carga un pallet extra por operativa.', $line->loading_notes);
+        $this->assertSame('Se confirma la carga completa.', $line->loading_notes);
         Bus::assertDispatchedAfterResponse(
             ProcessGoodsDispatchLoadingConfirmedNotificationsJob::class,
             fn (ProcessGoodsDispatchLoadingConfirmedNotificationsJob $job): bool => $job->goodsDispatchId === $dispatch->id
@@ -1047,6 +1220,61 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(0, $freshStock->peak_1);
         $this->assertSame(600, $freshStock->quantity_units);
         $this->assertSame(1, $freshStock->full_pallets, 'Full pallets must stay untouched when only a peak is shipped.');
+    }
+
+    public function test_enviar_salida_descuenta_pallets_y_pico_parcial_de_la_partida_elegida(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 1000]);
+        $selectedStock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOTE-ELEGIDO',
+            'units_per_pallet' => 1000,
+            'quantity_units' => 5000,
+            'peak_1' => 0,
+        ]);
+        $untouchedStock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOTE-NO-ELEGIDO',
+            'units_per_pallet' => 1000,
+            'quantity_units' => 5000,
+            'peak_1' => 0,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $selectedStock->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 1000,
+            'requested_pallets' => 2,
+            'requested_units' => 2000,
+            'loaded_pallets' => 1,
+            'loaded_partial_units' => 300,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch), [
+                'status' => GoodsDispatch::STATUS_SENT,
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $freshSelectedStock = $selectedStock->fresh();
+        $this->assertSame(3700, $freshSelectedStock->quantity_units);
+        $this->assertSame(3, $freshSelectedStock->full_pallets);
+        $this->assertSame(700, $freshSelectedStock->peak_1);
+        $this->assertSame(5000, $untouchedStock->fresh()->quantity_units);
     }
 
     public function test_salida_enviada_no_descuenta_dos_veces(): void

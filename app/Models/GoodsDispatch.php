@@ -145,6 +145,24 @@ class GoodsDispatch extends Model
             : (int) $this->lines()->sum('loaded_peaks');
     }
 
+    public function requestedUnitsCount(): int
+    {
+        if (! $this->relationLoaded('lines')) {
+            $this->load('lines');
+        }
+
+        return (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->requestedUnitsTotal());
+    }
+
+    public function loadedUnitsCount(): int
+    {
+        if (! $this->relationLoaded('lines')) {
+            $this->load('lines');
+        }
+
+        return (int) $this->lines->sum(fn (GoodsDispatchLine $line) => $line->loadedUnitsTotal());
+    }
+
     public function hasLoadingDifferences(): bool
     {
         if (! $this->relationLoaded('lines')) {

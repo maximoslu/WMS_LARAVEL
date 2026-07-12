@@ -30,6 +30,7 @@ class GoodsDispatchLine extends Model
         'requested_peaks',
         'loaded_pallets',
         'loaded_peaks',
+        'loaded_partial_units',
         'loading_notes',
         'confirmed_by',
         'confirmed_at',
@@ -51,6 +52,7 @@ class GoodsDispatchLine extends Model
             'requested_peaks' => 'integer',
             'loaded_pallets' => 'integer',
             'loaded_peaks' => 'integer',
+            'loaded_partial_units' => 'integer',
             'confirmed_at' => 'datetime',
             'is_extra_line' => 'boolean',
         ];
@@ -126,6 +128,19 @@ class GoodsDispatchLine extends Model
             : 0;
     }
 
+    public function loadedPartialUnits(): int
+    {
+        if ($this->loaded_partial_units !== null) {
+            return max(0, (int) $this->loaded_partial_units);
+        }
+
+        if ($this->isPeakLine() && $this->loadedPeaks() > 0) {
+            return max(0, (int) ($this->units_per_peak ?? 0)) * $this->loadedPeaks();
+        }
+
+        return 0;
+    }
+
     public function requestedQuantity(): int
     {
         return $this->isPeakLine()
@@ -133,11 +148,30 @@ class GoodsDispatchLine extends Model
             : $this->requestedPallets();
     }
 
+    public function requestedUnitsTotal(): int
+    {
+        if ($this->isPeakLine()) {
+            $unitsFromPeaks = $this->requestedPeaks() * max(0, (int) ($this->units_per_peak ?? 0));
+
+            return $unitsFromPeaks > 0 ? $unitsFromPeaks : max(0, (int) $this->requested_units);
+        }
+
+        $unitsFromPallets = $this->requestedPallets() * max(0, (int) ($this->units_per_pallet ?? 0));
+
+        return $unitsFromPallets > 0 ? $unitsFromPallets : max(0, (int) $this->requested_units);
+    }
+
     public function loadedQuantity(): int
     {
         return $this->isPeakLine()
             ? $this->loadedPeaks()
             : $this->loadedPallets();
+    }
+
+    public function loadedUnitsTotal(): int
+    {
+        return ($this->loadedPallets() * max(0, (int) ($this->units_per_pallet ?? 0)))
+            + $this->loadedPartialUnits();
     }
 
     public function requestedQuantityLabel(): string
@@ -149,6 +183,18 @@ class GoodsDispatchLine extends Model
 
     public function loadedQuantityLabel(): string
     {
+        if ($this->loadedPartialUnits() > 0) {
+            $parts = [];
+
+            if ($this->loadedPallets() > 0) {
+                $parts[] = number_format($this->loadedPallets(), 0, ',', '.').' '.WmsLineType::quantityLabel(WmsLineType::PALLET, $this->loadedPallets());
+            }
+
+            $parts[] = 'Pico: '.number_format($this->loadedPartialUnits(), 0, ',', '.').' uds';
+
+            return implode(' + ', $parts);
+        }
+
         $quantity = $this->loadedQuantity();
 
         return number_format($quantity, 0, ',', '.').' '.WmsLineType::quantityLabel($this->lineType(), $quantity);
@@ -156,12 +202,12 @@ class GoodsDispatchLine extends Model
 
     public function hasLoadingDifference(): bool
     {
-        return $this->requestedQuantity() !== $this->loadedQuantity();
+        return $this->requestedUnitsTotal() !== $this->loadedUnitsTotal();
     }
 
     public function hasDeliveredQuantity(): bool
     {
-        return $this->loadedQuantity() > 0;
+        return $this->loadedUnitsTotal() > 0;
     }
 
     public function lineOriginLabel(): string

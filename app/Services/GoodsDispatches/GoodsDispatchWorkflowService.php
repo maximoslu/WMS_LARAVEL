@@ -30,6 +30,7 @@ class GoodsDispatchWorkflowService
      *     units_per_peak?:int|string|null,
      *     loaded_pallets:int|string,
      *     loaded_peaks?:int|string|null,
+     *     loaded_partial_units?:int|string|null,
      *     loading_notes?:?string,
      *     remove?:mixed
      * }>  $linePayload
@@ -48,6 +49,7 @@ class GoodsDispatchWorkflowService
                     : null;
                 $loadedPallets = (int) $payload['loaded_pallets'];
                 $loadedPeaks = (int) ($payload['loaded_peaks'] ?? 0);
+                $loadedPartialUnits = (int) ($payload['loaded_partial_units'] ?? 0);
                 $loadingNotes = filled($payload['loading_notes'] ?? null)
                     ? trim((string) $payload['loading_notes'])
                     : null;
@@ -63,8 +65,12 @@ class GoodsDispatchWorkflowService
                     }
 
                     $line->update([
+                        'stock_pallet_id' => $payload['stock_pallet_id'] ?? $line->stock_pallet_id,
+                        'stock_peak_index' => $payload['stock_peak_index'] ?? $line->stock_peak_index,
+                        'lot' => $payload['lot'] ?? $line->lot,
                         'loaded_pallets' => $loadedPallets,
                         'loaded_peaks' => $loadedPeaks,
+                        'loaded_partial_units' => $loadedPartialUnits,
                         'loading_notes' => $loadingNotes,
                         'confirmed_by' => $user->id,
                         'confirmed_at' => $confirmedAt,
@@ -93,6 +99,7 @@ class GoodsDispatchWorkflowService
                     'requested_peaks' => 0,
                     'loaded_pallets' => $loadedPallets,
                     'loaded_peaks' => $loadedPeaks,
+                    'loaded_partial_units' => $loadedPartialUnits,
                     'loading_notes' => $loadingNotes,
                     'confirmed_by' => $user->id,
                     'confirmed_at' => $confirmedAt,
