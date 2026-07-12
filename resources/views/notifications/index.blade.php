@@ -24,7 +24,7 @@
         </div>
 
         @if (auth()->user()?->isSuperAdmin())
-            <div class="ops-page-actions page-actions-compact action-buttons">
+            <div class="ops-page-actions page-actions-compact action-buttons notification-admin-actions">
                 <form
                     method="POST"
                     action="{{ route('notifications.read-all') }}"
@@ -37,6 +37,38 @@
                         aria-label="Marcar todas las notificaciones de todos los usuarios como leidas"
                     >
                         Marcar todas como leidas
+                    </button>
+                </form>
+
+                <form
+                    method="POST"
+                    action="{{ route('notifications.destroy-unread') }}"
+                    onsubmit="return confirm('Esto eliminara todas las notificaciones no leidas de todos los usuarios. Continuar?');"
+                >
+                    @csrf
+                    @method('DELETE')
+                    <button
+                        type="submit"
+                        class="button-secondary compact-button btn-compact notification-danger-btn"
+                        aria-label="Eliminar todas las notificaciones no leidas de todos los usuarios"
+                    >
+                        Eliminar no leidas
+                    </button>
+                </form>
+
+                <form
+                    method="POST"
+                    action="{{ route('notifications.destroy-all') }}"
+                    onsubmit="return confirm('Esto eliminara TODAS las notificaciones de TODOS los usuarios. Esta accion no se puede deshacer. Continuar?');"
+                >
+                    @csrf
+                    @method('DELETE')
+                    <button
+                        type="submit"
+                        class="button-secondary compact-button btn-compact notification-danger-btn"
+                        aria-label="Eliminar todas las notificaciones de todos los usuarios"
+                    >
+                        Eliminar todas
                     </button>
                 </form>
             </div>
@@ -58,7 +90,7 @@
             <strong>Mostrando {{ $notifications->firstItem() }}-{{ $notifications->lastItem() }} de {{ $notifications->total() }} notificaciones</strong>
         </section>
 
-        <section class="notification-list">
+        <section class="surface-card compact-card notification-inbox" aria-label="Bandeja de notificaciones">
             @foreach ($notifications as $notification)
                 @include('notifications._card', ['notification' => $notification])
             @endforeach

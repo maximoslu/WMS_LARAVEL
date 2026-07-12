@@ -2009,3 +2009,46 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se cambiaron las reglas de importacion (PROBLEMA 1 estaba en percepcion/etiqueta, no en la query).
 - Notificaciones: solo se marcan como leidas, nunca se borran ni se ocultan; accion inaccesible a clientes.
 - `.claude/` fuera del commit.
+
+---
+
+## 2026-07-12 - Bandeja de notificaciones compacta (tipo email) + borrado global (superadmin)
+
+**Contexto:** El panel de notificaciones era demasiado grande y torpe (cada aviso una tarjeta enorme, casi media pantalla). Se pide rediseñarlo como bandeja tipo email (compacta, escaneable) y añadir botones de administracion para eliminar notificaciones (solo superadmin).
+
+### Rediseño del panel (UX)
+- `resources/views/notifications/_card.blade.php`: cada notificacion pasa de una tarjeta `surface-card` apilada (badges + titulo + parrafo + meta en bloques) a una **fila compacta** tipo inbox: punto de estado, titulo (una linea con ellipsis), resumen corto (una linea con ellipsis), fecha, badge de tipo, badge "Nueva" en no leidas y acciones rapidas (Abrir / Marcar leida).
+- `resources/views/notifications/index.blade.php`: la lista pasa a un contenedor unico `surface-card ... notification-inbox` con filas separadas por borde (aspecto bandeja), en vez de N tarjetas sueltas.
+- `resources/css/app.css`: reescrito el bloque de notificaciones a filas flex compactas; se elimino el padding grande (incluido el override del shell oscuro `body.brand-body.app-shell-body .notification-card` que volvia a inflar la fila) y se ajusto el bloque responsive.
+- **Verificacion visual** con el CSS compilado real (markup identico al Blade): altura de fila **~56px** (objetivo 56-76px), `display:flex`, padding 0.5rem 0.9rem, titulos truncados con ellipsis; no leidas con gradiente suave + borde/punto teal + titulo en negrita, leidas en blanco neutro; botones de borrado en rojo.
+- Estado leido/no leido, tipo (BOOKING/PEDIDO/SALIDA/STOCK/SISTEMA/ERROR) y colores corporativos se mantienen.
+
+### Botones de borrado global (solo superadmin)
+- `routes/web.php`: `DELETE /notificaciones/no-leidas` (`notifications.destroy-unread`) y `DELETE /notificaciones/todas` (`notifications.destroy-all`), ambas con `minimum.role:superadmin`.
+- `app/Http/Controllers/NotificationController.php`: `destroyAllUnread()` y `destroyAll()`, cada una con `abort_unless(isSuperAdmin(), 403)`. Borran solo registros de la tabla `notifications` (no usuarios ni datos relacionados). Flash con recuento: "Se han eliminado X notificaciones no leidas." / "Se han eliminado X notificaciones." / "No habia notificaciones para eliminar.".
+- Vista: botones "Eliminar no leidas" y "Eliminar todas" (junto a "Marcar todas como leidas"), visibles solo para superadmin, via DELETE con `@method('DELETE')` + `@csrf`, con confirmacion JS explicita ("...todas las notificaciones no leidas de todos los usuarios..." / "...TODAS las notificaciones de TODOS los usuarios. Esta accion no se puede deshacer...").
+- No se anadio borrado individual por fila para no ampliar el alcance (las acciones por fila siguen siendo Abrir / Marcar leida).
+
+### Permisos
+- Superadmin: marcar todas como leidas, eliminar no leidas, eliminar todas.
+- Cliente, almacen y administracion: no ven los botones globales y reciben 403 en las rutas globales.
+
+### Tests (NotificationCenterTest, todos los obligatorios)
+- Superadmin ve "Eliminar no leidas" y "Eliminar todas"; cliente/almacen/administracion no los ven.
+- Superadmin elimina todas las no leidas de todos (las leidas se conservan) y elimina todas (no queda ninguna), con recuento correcto en el flash.
+- Cliente, almacen y administracion reciben 403 en ambas rutas globales y no se borra nada.
+- Sin notificaciones, el flash informa "No habia notificaciones para eliminar.".
+- La bandeja usa filas compactas (`notification-inbox`, `notification-card-title`, `notification-card-body`).
+
+### Validacion
+- `php artisan test`: **524 passed** (2457 assertions).
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- Cambios acotados al modulo de notificaciones (controlador, rutas, vistas, CSS de notificaciones) + sus tests.
+
+### Control de alcance
+- No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
+- Sin migraciones. Sin `migrate:fresh`. No se borran usuarios ni datos de otros modulos; solo registros de notificaciones al usar los botones.
+- Otros roles no pueden ejecutar las rutas globales.
+- `.claude/` fuera del commit.
+- Pendiente de despliegue en Forge (no verificado en produccion en esta sesion).

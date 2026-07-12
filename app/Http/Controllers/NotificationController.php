@@ -58,4 +58,40 @@ class NotificationController extends Controller
 
         return back()->with('status', $message);
     }
+
+    /**
+     * Elimina TODAS las notificaciones no leidas de TODOS los usuarios.
+     * Accion reservada a superadmin. No borra usuarios ni datos relacionados.
+     */
+    public function destroyAllUnread(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $count = DB::table('notifications')
+            ->whereNull('read_at')
+            ->delete();
+
+        $message = $count > 0
+            ? 'Se han eliminado '.$count.' notificaciones no leidas.'
+            : 'No habia notificaciones para eliminar.';
+
+        return back()->with('status', $message);
+    }
+
+    /**
+     * Elimina TODAS las notificaciones de TODOS los usuarios.
+     * Accion reservada a superadmin. No borra usuarios ni datos relacionados.
+     */
+    public function destroyAll(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $count = DB::table('notifications')->delete();
+
+        $message = $count > 0
+            ? 'Se han eliminado '.$count.' notificaciones.'
+            : 'No habia notificaciones para eliminar.';
+
+        return back()->with('status', $message);
+    }
 }

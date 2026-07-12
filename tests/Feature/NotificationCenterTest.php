@@ -283,6 +283,149 @@ class NotificationCenterTest extends TestCase
             ->assertDontSee(route('notifications.read-all'), false);
     }
 
+    public function test_superadmin_ve_botones_de_eliminacion_global(): void
+    {
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($superadmin)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee('Eliminar no leidas')
+            ->assertSee('Eliminar todas')
+            ->assertSee(route('notifications.destroy-unread'), false)
+            ->assertSee(route('notifications.destroy-all'), false);
+    }
+
+    public function test_otros_roles_no_ven_botones_de_eliminacion_global(): void
+    {
+        foreach ([Role::CLIENTE, Role::ALMACEN, Role::ADMINISTRACION] as $roleSlug) {
+            $user = $this->makeUserWithRole($roleSlug);
+
+            $this->actingAs($user)
+                ->get(route('notifications.index'))
+                ->assertOk()
+                ->assertDontSee('Eliminar no leidas')
+                ->assertDontSee('Eliminar todas')
+                ->assertDontSee(route('notifications.destroy-unread'), false)
+                ->assertDontSee(route('notifications.destroy-all'), false);
+        }
+    }
+
+    public function test_superadmin_elimina_no_leidas_de_todos_conservando_las_leidas(): void
+    {
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->createNotifications($cliente, 3);
+        $this->createReadNotification($almacen);
+        $this->createReadNotification($almacen);
+
+        $this->assertSame(3, DB::table('notifications')->whereNull('read_at')->count());
+        $this->assertSame(2, DB::table('notifications')->whereNotNull('read_at')->count());
+
+        $this->actingAs($superadmin)
+            ->delete(route('notifications.destroy-unread'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Se han eliminado 3 notificaciones no leidas.');
+
+        // No quedan no leidas; las leidas se conservan.
+        $this->assertSame(0, DB::table('notifications')->whereNull('read_at')->count());
+        $this->assertSame(2, DB::table('notifications')->count());
+        $this->assertSame(2, DB::table('notifications')->whereNotNull('read_at')->count());
+    }
+
+    public function test_superadmin_elimina_todas_las_notificaciones_de_todos_los_usuarios(): void
+    {
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->createNotifications($cliente, 3);
+        $this->createReadNotification($cliente);
+
+        $this->assertSame(4, DB::table('notifications')->count());
+
+        $this->actingAs($superadmin)
+            ->delete(route('notifications.destroy-all'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Se han eliminado 4 notificaciones.');
+
+        $this->assertSame(0, DB::table('notifications')->count());
+    }
+
+    public function test_eliminar_sin_notificaciones_informa_que_no_habia(): void
+    {
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($superadmin)
+            ->delete(route('notifications.destroy-all'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'No habia notificaciones para eliminar.');
+
+        $this->actingAs($superadmin)
+            ->delete(route('notifications.destroy-unread'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'No habia notificaciones para eliminar.');
+    }
+
+    public function test_roles_no_superadmin_no_pueden_ejecutar_rutas_de_eliminacion_global(): void
+    {
+        foreach ([Role::CLIENTE, Role::ALMACEN, Role::ADMINISTRACION] as $roleSlug) {
+            $user = $this->makeUserWithRole($roleSlug);
+            $otro = $this->makeUserWithRole(Role::CLIENTE);
+            $this->createNotifications($otro, 2);
+
+            $this->actingAs($user)
+                ->delete(route('notifications.destroy-unread'))
+                ->assertForbidden();
+
+            $this->actingAs($user)
+                ->delete(route('notifications.destroy-all'))
+                ->assertForbidden();
+
+            // No se ha borrado nada.
+            $this->assertSame(2, DB::table('notifications')->count());
+
+            DB::table('notifications')->delete();
+        }
+    }
+
+    public function test_bandeja_notificaciones_usa_filas_compactas_tipo_inbox(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->createTypedNotification($user, [
+            'type' => 'test',
+            'title' => 'Aviso compacto',
+            'body' => 'Resumen breve en una linea.',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee('notification-inbox', false)
+            ->assertSee('notification-card-title', false)
+            ->assertSee('notification-card-body', false)
+            ->assertSee('Aviso compacto');
+    }
+
+    private function createReadNotification(User $user): void
+    {
+        DB::table('notifications')->insert([
+            'id' => (string) Str::uuid(),
+            'type' => 'test',
+            'notifiable_type' => User::class,
+            'notifiable_id' => $user->id,
+            'data' => json_encode([
+                'title' => 'Aviso leido',
+                'body' => 'Ya leido.',
+            ], JSON_THROW_ON_ERROR),
+            'read_at' => '2026-07-04 10:00:00',
+            'created_at' => '2026-07-03 10:00:00',
+            'updated_at' => '2026-07-03 10:00:00',
+        ]);
+    }
+
     private function createNotifications(User $user, int $count): void
     {
         $rows = [];
