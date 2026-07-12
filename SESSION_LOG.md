@@ -1787,5 +1787,6 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 **Commit / push / despliegue:**
 - Commit funcional: `feat: allow internal users to create client orders` (el hash exacto queda en el propio historial de Git tras el commit).
-- Push pendiente al momento de escribir esta linea; si se pushea a `origin/main`, puede disparar Forge automaticamente.
+- Push confirmado a `origin/main` con commit funcional `5c87185` (`023cb75..5c87185`).
+- Este push puede disparar Forge automaticamente.
 - No se da por desplegado en produccion sin verificacion real posterior.
