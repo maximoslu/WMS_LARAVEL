@@ -2052,3 +2052,42 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Otros roles no pueden ejecutar las rutas globales.
 - `.claude/` fuera del commit.
 - Pendiente de despliegue en Forge (no verificado en produccion en esta sesion).
+
+---
+
+## 2026-07-12 - Detalle de pedido/solicitud del cliente: pantalla compacta tipo gestion
+
+**Contexto:** Tras registrar un pedido, la pantalla de detalle (`merchandise-requests/show`) era demasiado voluminosa: hero enorme con el codigo, tarjeta "Datos" grande y poco util, "Seguimiento" como tarjeta alta, "Lineas" con filas gigantes y el aviso de fuera de horario como una linea amarilla/marron poco visual. Se pidio compactarla manteniendo estetica corporativa, sin tocar logica de negocio ni estados.
+
+**Alcance controlado:** las clases `wms-*` (hero, timeline, line-card, kpi-tile) estan compartidas con dispatches (crear/ver salida) y crear pedido, asi que NO se tocaron. El rediseno usa clases nuevas propias (`order-*`) y CSS nuevo scopeado, sin afectar a otras pantallas.
+
+**Rediseno (`resources/views/merchandise-requests/show.blade.php` + `resources/css/app.css`):**
+- **Cabecera compacta** (`order-header`, ~102px): una banda con chip de tipo (Pedido cliente/interno), codigo del pedido (1.2rem, no un titulo enorme) y badge de estado, mas una fila de metadatos (Cliente, Solicitante, Fecha, Pallets, Picos, Unidades) en formato `dl` compacto. Se elimina la tarjeta grande "Datos": esos datos pasan a la banda de metadatos.
+- **Seguimiento** (`order-track` + `order-steps`, ~74px): stepper horizontal en una sola linea Registrado -> Preparacion -> Enviado -> Completado, con conector, puntos y estados: completado en verde, actual en color corporativo (teal) con halo, pendiente en gris.
+- **Lineas** (`order-table`, filas ~42px): tabla de gestion compacta con columnas SKU, Descripcion, Lote, Cantidad, Uds/pallet, Tipo (pill). Para internos se anade columna "Cargado". La seccion de carga real adicional se convierte a la misma tabla compacta.
+- **Aviso fuera de horario** (`order-alert order-alert--warning`, ~60px): alerta clara con icono de triangulo, fondo ambar suave solido, borde izquierdo naranja y texto legible; titulo "Pedido fuera de horario operativo" y cuerpo corto. Se distingue del aviso generico de cambio de estado mediante un flag de sesion `scheduleWarning` (el `session('warning')` original se conserva intacto). Otros `session('warning')` (cambios de estado) siguen mostrandose como alerta ambar generica.
+- **Mensaje de exito** (`order-alert order-alert--success`, ~39px): compacto y consistente con el resto de alertas, con icono.
+- Toda la pantalla (exito + aviso + cabecera + seguimiento + tabla de 4 lineas) cabe en ~571px, frente al scroll largo anterior.
+- Prioridad escritorio; se conservan ajustes responsive minimos para movil.
+
+**Controlador (`MerchandiseRequestController@store`):** al registrar fuera de la ventana operativa, ademas del `->with('warning', ...)` existente (intacto, sigue cumpliendo los tests de `assertSessionHas('warning')`), se anade `->with('scheduleWarning', true)` para que la vista muestre el aviso estructurado con titulo fijo. No se cambio logica de negocio, estados, notificaciones ni el texto del servicio de horario.
+
+**Archivos tocados:**
+- `resources/views/merchandise-requests/show.blade.php` (rediseno completo con clases `order-*`).
+- `resources/css/app.css` (bloque nuevo `order-*`, sin tocar `wms-*` compartidas).
+- `app/Http/Controllers/MerchandiseRequestController.php` (flag `scheduleWarning`).
+- `tests/Feature/MerchandiseRequestManagementTest.php` (test nuevo).
+
+**Validacion:**
+- Verificacion visual con el CSS compilado real (markup identico al Blade): cabecera ~102px, seguimiento ~74px, filas de lineas ~42px, aviso ~60px; puntos del stepper en verde (completado) y teal (actual); aviso ambar con borde naranja e icono.
+- Tests de render de la vista siguen pasando (estado en espanol, badges de tipo Pallet completo/Pico, sin mojibake, permisos cliente/interno). Test nuevo: tras un pedido fuera de horario, la vista muestra el aviso estructurado ("Pedido fuera de horario operativo"), el mensaje de exito y las lineas en tabla (`order-table`).
+- `php artisan test`: **525 passed** (2462 assertions).
+- `npm run build`: OK.
+- `git diff --check`: OK.
+
+**Control de alcance:**
+- No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
+- Sin migraciones. Sin `migrate:fresh`. Sin cambios de logica/estados del pedido ni de notificaciones/correos.
+- No se tocaron clases CSS compartidas ni otras pantallas (dispatches, crear pedido).
+- `.claude/` fuera del commit.
+- Pendiente de despliegue en Forge (no verificado en produccion en esta sesion).

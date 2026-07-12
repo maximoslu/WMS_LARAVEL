@@ -213,7 +213,9 @@ class MerchandiseRequestController extends Controller
         $outsideWindowWarning = $scheduleService->postSubmissionWarning($merchandiseRequest->submittedAt());
 
         if ($outsideWindowWarning !== null) {
-            $response->with('warning', $outsideWindowWarning);
+            $response
+                ->with('warning', $outsideWindowWarning)
+                ->with('scheduleWarning', true);
         }
 
         return $response;

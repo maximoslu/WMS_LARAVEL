@@ -505,6 +505,37 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->travelBack();
     }
 
+    public function test_show_muestra_aviso_estructurado_fuera_de_horario_y_lineas_en_tabla(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'CAJA0030',
+            'units_per_pallet' => 700,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->travelTo(Carbon::parse('2026-01-03 10:00:00', config('app.timezone')));
+
+        $this->actingAs($cliente)
+            ->followingRedirects()
+            ->post(route('merchandise-requests.store'), [
+                'quantities' => [
+                    $item->id => 2,
+                ],
+            ])
+            ->assertOk()
+            ->assertSee('Solicitud registrada y notificada correctamente.')
+            ->assertSee('Pedido fuera de horario operativo')
+            ->assertSee('order-table', false)
+            ->assertSee('CAJA0030');
+
+        $this->travelBack();
+    }
+
     public function test_pedido_fuera_de_horario_se_registra_igualmente(): void
     {
         Bus::fake();
