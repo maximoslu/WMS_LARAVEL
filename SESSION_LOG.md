@@ -1855,6 +1855,7 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 **Commit / push / despliegue:**
 - Commit funcional: `81e3359 feat: adapt Friesland stock import categories`.
-- Push: pendiente en este punto del log; se realizara tras commitear esta actualizacion documental.
+- Commit documental inicial: `d98c0f3 docs: record Friesland stock import update`.
+- Push confirmado a `origin/main` (`cd247ba..d98c0f3`).
 - Este push a `origin/main` puede disparar Forge automaticamente.
 - No se da por desplegado en produccion sin verificacion real posterior.
