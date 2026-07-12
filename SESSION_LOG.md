@@ -2138,3 +2138,66 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron clases CSS compartidas ni otras pantallas (dispatches, crear pedido).
 - `.claude/` fuera del commit.
 - Pendiente de despliegue en Forge (no verificado en produccion en esta sesion).
+
+---
+
+## 2026-07-12 - Preparacion de salidas con multiples asignaciones reales por linea
+
+**Equipo:** PC de casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Commit funcional:** `f6bc888 feat: preparar salidas con asignaciones reales multiples`.
+**Push funcional:** OK a `origin/main` (`a937b82..f6bc888 main -> main`). Puede disparar Forge.
+**Despliegue en produccion:** no verificado desde esta sesion.
+
+### Contexto
+- La pantalla `Salidas > Pedidos pendientes > SOL-...` ya permitia guardar pallets completos y unidades parciales, pero seguia siendo insuficiente para preparar una carga real como `CAJA0031`: pedido de 3 pallets, carga real de 1 pallet completo + picos existentes de 500 y 390 uds.
+- El modelo anterior de `goods_dispatch_lines` solo podia guardar una partida/lote por linea, por lo que no podia auditar varias partidas, ubicaciones o picos seleccionados dentro de la misma linea.
+
+### Alcance funcional
+- Se sustituyo la tabla ancha de preparacion por tarjetas compactas por linea, sin scroll horizontal, con resumen de solicitado/cargado/diferencia en unidades.
+- Cada linea admite varias asignaciones de stock:
+  - selector de partida/lote/ubicacion;
+  - pallets completos;
+  - picos existentes seleccionables como chips;
+  - unidades manuales de pico;
+  - total de asignacion y total de linea recalculados en JS.
+- El backend valida que:
+  - la partida sea del mismo cliente/articulo y este activa/disponible;
+  - no se supere lo solicitado salvo lineas extra;
+  - no se supere el stock de la partida;
+  - no se use el mismo pico dos veces;
+  - los picos seleccionados existan y tengan unidades.
+- Al enviar/completar una salida, el descuento de stock usa las asignaciones reales guardadas y consume primero los picos seleccionados exactos.
+- Se mantiene compatibilidad con payloads anteriores (`loaded_quantity`, `stock_pallet_id`, `loaded_partial_units`) y campos resumen en `goods_dispatch_lines`.
+
+### Migracion
+- `database/migrations/2026_07_12_000003_create_goods_dispatch_line_allocations_table.php`.
+- Justificacion: era necesaria porque una linea de salida puede cargarse desde varias partidas/lotes/ubicaciones y con varios picos concretos. Reutilizar solo `goods_dispatch_lines.stock_pallet_id` habria perdido trazabilidad de la carga real. La migracion es aditiva, no destructiva, y mantiene los campos existentes como resumen/compatibilidad.
+
+### Archivos principales
+- `app/Models/GoodsDispatchLineAllocation.php`: nuevo modelo para asignaciones reales.
+- `app/Models/GoodsDispatchLine.php`: relacion `allocations` y calculos de cargado desde asignaciones cuando existen.
+- `app/Http/Requests/ConfirmGoodsDispatchLoadingRequest.php`: validacion y resolucion de asignaciones multiples.
+- `app/Services/GoodsDispatches/GoodsDispatchWorkflowService.php`: sincronizacion de asignaciones al confirmar preparacion.
+- `app/Services/GoodsDispatches/StockDispatchAllocationService.php`: descuento por asignaciones reales al enviar/completar.
+- `resources/views/dispatches/request.blade.php`, `resources/css/app.css`, `resources/js/app.js`: nuevo editor de preparacion por tarjetas y recalculo de unidades.
+- `tests/Feature/GoodsDispatchManagementTest.php`: cobertura de asignaciones multiples, CAJA0031, duplicado de pico, stock real y compatibilidad.
+
+### Validacion
+- `php artisan test tests\Feature\GoodsDispatchManagementTest.php`: **44 passed** (250 assertions).
+- `php artisan test`: **533 passed** (2521 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `git diff --check`: OK.
+- Lint PHP de archivos tocados: OK.
+- Verificacion visual local con fixture temporal y assets compilados:
+  - escritorio: `scrollWidth=1280`, `viewportWidth=1280`, sin scroll horizontal;
+  - interaccion CAJA0031: 1 pallet + picos 500/390 => total asignacion `1590`, parcial oculto `890`, diferencia `510`, estado `Parcial`;
+  - movil 390px: layout en una columna, `scrollWidth=375`, sin scroll horizontal.
+
+### Control de alcance
+- No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh`.
+- No se borraron datos. La verificacion visual uso una SQLite temporal y una fixture temporal en `public/`, ambas eliminadas antes del cierre.
+- Cambios acotados al flujo de preparacion/envio de salidas y sus tests.
+- Pendiente: verificar realmente despliegue en Forge/produccion si Forge ejecuta el deploy tras el push.
