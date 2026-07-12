@@ -187,6 +187,99 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('VARIOS');
     }
 
+    public function test_cliente_friesland_ve_en_uso_bloqueado_obsoleto_y_oculta_internos(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        // Visibles para el cliente: EN USO, BLOQUEADO y OBSOLETO (no son internos).
+        $this->makeItemWithStock($friesland, 'CAJA0030', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'CRYOVAC6', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'CAJA0077', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
+        $this->makeItemWithStock($friesland, 'ET0336', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
+        // Ocultos para el cliente: categoria VARIOS y referencias que empiezan por "_".
+        $this->makeItemWithStock($friesland, '_CAJA057', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+        // Caso fuga: SKU con "_" pero mal categorizado como EN USO. Debe ocultarse igualmente.
+        $this->makeItemWithStock($friesland, '_FILM0519', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        // Stock de otro cliente: nunca visible.
+        $this->makeItemWithStock($edelvives, 'ED-OTHER-CLIENT', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('CAJA0030')
+            ->assertSee('CRYOVAC6')
+            ->assertSee('CAJA0077')
+            ->assertSee('ET0336')
+            ->assertDontSee('_CAJA057')
+            ->assertDontSee('_FILM0519')
+            ->assertDontSee('ED-OTHER-CLIENT')
+            ->assertDontSee('VARIOS');
+    }
+
+    public function test_superadmin_ve_internos_varios_y_columnas_logisticas(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $this->makeItemWithStock($friesland, 'CAJA0030', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, '_CAJA057', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, '_FILM0519', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', ['client_id' => $friesland->id]))
+            ->assertOk()
+            ->assertSee('CAJA0030')
+            ->assertSee('_CAJA057')
+            ->assertSee('_FILM0519')
+            ->assertSee('VARIOS')
+            ->assertSeeText('Pallets almacen');
+    }
+
+    public function test_cliente_no_ve_columnas_logisticas_pero_superadmin_si(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $this->makeItemWithStock($friesland, 'CAJA0030', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $friesland))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('CAJA0030')
+            ->assertDontSeeText('Pallets almacen')
+            ->assertDontSeeText('Uds/pallet')
+            ->assertDontSeeText('Picos total');
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->get(route('stock.index', ['client_id' => $friesland->id]))
+            ->assertOk()
+            ->assertSeeText('Pallets almacen');
+    }
+
+    public function test_export_cliente_usa_misma_visibilidad_que_la_tabla(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $this->makeItemWithStock($friesland, 'CAJA0030', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'CAJA0077', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
+        $this->makeItemWithStock($friesland, 'ET0336', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
+        $this->makeItemWithStock($friesland, '_CAJA057', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, '_FILM0519', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+
+        $rows = app(\App\Services\Stock\StockExportService::class)->rows($friesland->id);
+        $skus = $rows->pluck('sku')->all();
+
+        // El export incluye lo mismo que ve el cliente en la tabla: EN USO, BLOQUEADO y OBSOLETO.
+        $this->assertContains('CAJA0030', $skus);
+        $this->assertContains('CAJA0077', $skus);
+        $this->assertContains('ET0336', $skus);
+        // Y excluye lo interno: VARIOS y referencias "_" (aunque esten mal categorizadas).
+        $this->assertNotContains('_CAJA057', $skus);
+        $this->assertNotContains('_FILM0519', $skus);
+    }
+
     public function test_cliente_cannot_force_other_client_with_query_string(): void
     {
         [$friesland, $edelvives] = $this->seedBaseData();
@@ -1102,6 +1195,37 @@ class StockOverviewTest extends TestCase
             'role_id' => $role->id,
             'client_id' => $roleSlug === Role::CLIENTE ? $client?->id : null,
         ]);
+    }
+
+    private function makeItemWithStock(
+        Client $client,
+        string $sku,
+        string $itemStatus,
+        string $category,
+        string $batchStatus,
+    ): Item {
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => $sku,
+            'description' => 'Desc '.$sku,
+            'status' => $itemStatus,
+            'stock_category' => $category,
+            'active' => $itemStatus === Item::STATUS_ACTIVE,
+            'units_per_pallet' => 100,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-'.$sku,
+            'quantity_units' => 100,
+            'units_per_pallet' => 100,
+            'full_pallets' => 1,
+            'status' => $batchStatus,
+            'stock_category' => $category,
+        ]);
+
+        return $item;
     }
 
     private function assertInternalRoleSeesMultipleClients(string $roleSlug): void

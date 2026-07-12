@@ -133,11 +133,35 @@ class StockOverviewBuilder
             })
             ->when($filters['batch_status'] !== 'all', fn (Builder $query) => $query->where('status', $filters['batch_status']))
             ->when(($filters['stock_category'] ?? 'all') !== 'all', fn (Builder $query) => $query->where('stock_category', $filters['stock_category']))
-            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $query->where('stock_category', '!=', StockPallet::CATEGORY_MISC))
+            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $this->hideInternalStock($query))
             ->when($filters['only_peaks'], fn (Builder $query) => $query->where('peaks_count', '>', 0))
             ->orderBy('received_at')
             ->orderBy('lot')
             ->orderBy('id');
+    }
+
+    /**
+     * Regla unica de "stock interno" que el cliente no debe ver: categoria VARIOS (misc)
+     * o referencias cuyo SKU empieza por "_". Los estados BLOQUEADO y OBSOLETO NO son
+     * internos y deben seguir siendo visibles para el cliente. Se aplica sobre la partida
+     * de stock (stock_pallets) y su articulo relacionado (items.sku).
+     */
+    private function hideInternalStock(Builder $query): Builder
+    {
+        return $query
+            ->where('stock_category', '!=', StockPallet::CATEGORY_MISC)
+            ->whereHas('item', fn (Builder $itemQuery) => $itemQuery->whereRaw("SUBSTR(sku, 1, 1) <> '_'"));
+    }
+
+    /**
+     * Misma regla de "stock interno" aplicada directamente sobre el maestro de articulos
+     * (items), usada por el listado de referencias sin stock.
+     */
+    private function hideInternalItems(Builder $query): Builder
+    {
+        return $query
+            ->where('stock_category', '!=', Item::CATEGORY_MISC)
+            ->whereRaw("SUBSTR(sku, 1, 1) <> '_'");
     }
 
     /**
@@ -149,7 +173,7 @@ class StockOverviewBuilder
             ->with(['client', 'defaultLocation.warehouse'])
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
             ->when(($filters['stock_category'] ?? 'all') !== 'all', fn (Builder $query) => $query->where('stock_category', $filters['stock_category']))
-            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $query->where('stock_category', '!=', StockPallet::CATEGORY_MISC))
+            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $this->hideInternalItems($query))
             ->when($filters['search'] !== '', function (Builder $query) use ($filters): void {
                 $query->where(function (Builder $query) use ($filters): void {
                     $query

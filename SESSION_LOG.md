@@ -1911,3 +1911,51 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - No se confirmo ninguna importacion real de Friesland.
 - No se toco Google Calendar, facturacion ni el aislamiento de stock por cliente.
 - `.claude/` fuera del commit.
+
+---
+
+## 2026-07-12 - Vista de stock del CLIENTE: ocultar referencias internas "_" ademas de VARIOS
+
+**Contexto:** El superadmin ve bien el stock de FRIESLAND (2339 palets almacen, 160 registros, columnas logisticas). El usuario cliente veia una lista distinta y se sospechaba que ocultaba de mas (EN USO / BLOQUEADO / OBSOLETO). Sesion de inspeccion primero, reproduciendo superadmin vs cliente contra la base real antes de tocar codigo. No se toco importacion, ni `.env`, ni datos (el experimento se hizo dentro de una transaccion con rollback).
+
+**Reproduccion (builder real, DB real, ambos roles, en transaccion con rollback):**
+Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEADO), ET0336 (OBSOLETO), _CAJA057 (VARIOS/misc), _FILM0519 (VARIOS/misc) y _LEAK_INUSE (SKU "_" pero mal categorizado como EN USO):
+- Superadmin veia los 7.
+- Cliente veia 5: CAJA0030, CRYOVAC6, CAJA0077, ET0336 y **_LEAK_INUSE**.
+- Ocultos correctamente: _CAJA057, _FILM0519 (misc).
+
+**Causa raiz:** la visibilidad del cliente solo excluia `stock_category = 'misc'` (VARIOS). No excluia las referencias cuyo SKU empieza por `_`. Si una referencia interna `_` quedaba mal categorizada (no como misc), se **filtraba al cliente**. Ademas la regla estaba duplicada en dos queries (partidas y referencias sin stock) sin un unico punto de verdad. Confirmado ademas: BLOQUEADO y OBSOLETO NO se ocultan al cliente (correcto); la columna `stock_category` es NOT NULL con default `in_use`, asi que no hay partidas con categoria nula que se pierdan.
+
+**Correccion (`app/Support/Stock/StockOverviewBuilder.php`):**
+- Regla unica reutilizable de "stock interno" (regla de oro): interno = `stock_category = 'misc'` **o** SKU que empieza por `_`. Se aplica de forma identica en:
+  - `stockQuery` (listado + tarjeta resumen + export cliente) via `hideInternalStock()`.
+  - `withoutStockQuery` (referencias sin stock) via `hideInternalItems()`.
+- El filtro de `_` usa `SUBSTR(sku, 1, 1) <> '_'` (portable MySQL/SQLite; se descarto `LIKE '\_%'` porque el escape de backslash no era fiable entre conexiones).
+- BLOQUEADO y OBSOLETO siguen visibles para el cliente. El cliente sigue sin ver columnas logisticas (pallets, picos, uds/pallet, totales) por la vista Blade (`@unless($isClient)`), sin cambios.
+- El export de stock del cliente usa la misma base (`stockQuery` con `hide_internal`), por lo que aplica la misma visibilidad que la tabla.
+
+**Resultado tras la correccion (mismo experimento):**
+- Superadmin ve 7 (incluye `_` y VARIOS).
+- Cliente ve 4: CAJA0030, CRYOVAC6, CAJA0077, ET0336.
+- Ocultos al cliente: _CAJA057, _FILM0519 y _LEAK_INUSE (las 3 internas por `_`/VARIOS). Sin fugas, sin ocultar ningun EN USO/BLOQUEADO/OBSOLETO.
+- El total del cliente = total del superadmin del cliente menos unicamente las partidas internas (VARIOS/`_`).
+
+**Pruebas automaticas anadidas (`tests/Feature/StockOverviewTest.php`):**
+- Cliente FRIESLAND ve EN USO, BLOQUEADO y OBSOLETO; no ve VARIOS ni SKU `_` (incluida la referencia `_` mal categorizada); no ve stock de otro cliente.
+- Superadmin ve internos (`_`), VARIOS y columnas logisticas.
+- Cliente no ve columnas logisticas; superadmin si.
+- Export cliente usa la misma visibilidad que la tabla (incluye BLOQUEADO/OBSOLETO, excluye VARIOS y `_`).
+
+**Validacion:**
+- `php artisan test tests/Feature/StockOverviewTest.php`: 36 passed.
+- `php artisan test`: **510 passed** (2383 assertions).
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- Reproduccion superadmin vs cliente ejecutada contra la base real (rollback), listando los registros ocultados y confirmando que son solo VARIOS / `_`.
+
+**Control de alcance:**
+- No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh` ni se borraron datos.
+- No se tocaron las reglas de importacion (el bug estaba en la query de la vista).
+- Solo se modificaron el builder de stock y sus tests.
+- `.claude/` fuera del commit.
