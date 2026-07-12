@@ -76,7 +76,7 @@ class MerchandiseRequestController extends Controller
                 'client_id' => $clientId > 0 ? $clientId : null,
             ],
             'isClient' => $isClient,
-            'canCreate' => $user->hasRole(Role::CLIENTE) && $user->client_id !== null,
+            'canCreate' => ($user->hasRole(Role::CLIENTE) && $user->client_id !== null) || $user->canAccessRole(Role::ALMACEN),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
@@ -89,11 +89,27 @@ class MerchandiseRequestController extends Controller
     {
         $user = $request->user();
 
-        abort_unless($user->hasRole(Role::CLIENTE) && $user->client_id !== null, 403);
+        abort_unless(
+            ($user->hasRole(Role::CLIENTE) && $user->client_id !== null) || $user->canAccessRole(Role::ALMACEN),
+            403
+        );
+
+        $canChooseClient = ! $user->hasRole(Role::CLIENTE) && $user->canAccessRole(Role::ALMACEN);
+        $selectedClientId = $user->hasRole(Role::CLIENTE)
+            ? (int) $user->client_id
+            : $request->integer('client_id');
+        $selectedClient = $selectedClientId > 0
+            ? Client::query()->where('active', true)->find($selectedClientId)
+            : null;
+
+        if ($selectedClientId > 0 && ! $selectedClient instanceof Client) {
+            abort(404);
+        }
 
         $pendingRequests = MerchandiseRequest::query()
             ->with(['lines', 'dispatch'])
-            ->where('client_id', $user->client_id)
+            ->when($selectedClient instanceof Client, fn (Builder $query) => $query->where('client_id', $selectedClient->id))
+            ->when(! ($selectedClient instanceof Client), fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->whereIn('status', [
                 MerchandiseRequest::STATUS_PENDING,
                 MerchandiseRequest::STATUS_PREPARING,
@@ -103,11 +119,17 @@ class MerchandiseRequestController extends Controller
 
         return view('merchandise-requests.create', [
             'hasActiveItems' => Item::query()
-                ->where('client_id', $user->client_id)
+                ->when($selectedClient instanceof Client, fn (Builder $query) => $query->where('client_id', $selectedClient->id))
+                ->when(! ($selectedClient instanceof Client), fn (Builder $query) => $query->whereRaw('1 = 0'))
                 ->where('active', true)
                 ->exists(),
-            'selectedItems' => $variantCatalog->hydrateSelections(old('lines', old('quantities', [])), (int) $user->client_id),
-            'client' => $user->client,
+            'selectedItems' => $selectedClient instanceof Client
+                ? $variantCatalog->hydrateSelections(old('lines', old('quantities', [])), (int) $selectedClient->id)
+                : [],
+            'client' => $selectedClient,
+            'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
+            'canChooseClient' => $canChooseClient,
+            'selectedClientId' => $selectedClient?->id,
             'searchEndpoint' => route('merchandise-requests.items.search'),
             'contractualWindowWarning' => $scheduleService->preSubmissionWarning(),
             'pendingRequests' => $pendingRequests,
@@ -118,7 +140,20 @@ class MerchandiseRequestController extends Controller
     public function searchItems(Request $request, StockVariantCatalog $variantCatalog): JsonResponse
     {
         $user = $request->user();
-        abort_unless($user->hasRole(Role::CLIENTE) && $user->client_id !== null, 403);
+        abort_unless(
+            ($user->hasRole(Role::CLIENTE) && $user->client_id !== null) || $user->canAccessRole(Role::ALMACEN),
+            403
+        );
+
+        $clientId = $user->hasRole(Role::CLIENTE)
+            ? (int) $user->client_id
+            : $request->integer('client_id');
+
+        if ($clientId <= 0 || ! Client::query()->whereKey($clientId)->where('active', true)->exists()) {
+            return response()->json([
+                'data' => [],
+            ]);
+        }
 
         $search = trim((string) ($request->string('search')->value() ?: $request->string('q')->value()));
 
@@ -129,7 +164,7 @@ class MerchandiseRequestController extends Controller
         }
 
         return response()->json([
-            'data' => $variantCatalog->search($search, (int) $user->client_id, 15, true),
+            'data' => $variantCatalog->search($search, $clientId, 15, true),
         ]);
     }
 
@@ -140,10 +175,11 @@ class MerchandiseRequestController extends Controller
     ): RedirectResponse {
         $user = $request->user();
         $requestedLines = $request->validatedLines();
+        $clientId = $request->effectiveClientId();
 
-        $merchandiseRequest = DB::transaction(function () use ($request, $requestedLines, $user): MerchandiseRequest {
+        $merchandiseRequest = DB::transaction(function () use ($request, $requestedLines, $user, $clientId): MerchandiseRequest {
             $requestModel = MerchandiseRequest::query()->create([
-                'client_id' => $user->client_id,
+                'client_id' => $clientId,
                 'requested_by' => $user->id,
                 'status' => MerchandiseRequest::STATUS_PENDING,
                 'requested_date' => now()->toDateString(),

@@ -21,6 +21,24 @@
         </div>
     </section>
 
+    @if ($canChooseClient)
+        <section class="surface-card compact-card wms-flow-card">
+            <form method="GET" action="{{ route('merchandise-requests.create') }}" class="item-filter-form">
+                <label class="auth-field">
+                    <span>Cliente del pedido</span>
+                    <select name="client_id" class="auth-input" onchange="this.form.submit()">
+                        <option value="">Selecciona un cliente</option>
+                        @foreach ($clients as $availableClient)
+                            <option value="{{ $availableClient->id }}" @selected((int) $selectedClientId === (int) $availableClient->id)>
+                                {{ $availableClient->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </label>
+            </form>
+        </section>
+    @endif
+
     @if ($errors->any())
         <div class="alert alert-error">
             {{ $errors->first('lines') ?: 'Revisa las líneas del pedido antes de enviarlo.' }}
@@ -33,7 +51,12 @@
         </div>
     @endif
 
-    @if (! $hasActiveItems)
+    @if ($client === null)
+        <article class="surface-card compact-card wms-empty-state">
+            <h3>Selecciona un cliente</h3>
+            <p>El pedido se registrara a nombre del cliente elegido.</p>
+        </article>
+    @elseif (! $hasActiveItems)
         <article class="surface-card compact-card wms-empty-state">
             <h3>Sin referencias activas</h3>
             <p>No hay artículos disponibles para crear pedidos.</p>
@@ -47,6 +70,9 @@
             data-client-id="{{ $client?->id }}"
         >
             @csrf
+            @if ($canChooseClient)
+                <input type="hidden" name="client_id" value="{{ $client->id }}">
+            @endif
 
             <section class="surface-card compact-card wms-flow-card merchandise-request-new-shell">
                 <input type="hidden" name="camion_propio" value="0">

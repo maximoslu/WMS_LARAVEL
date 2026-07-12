@@ -184,6 +184,68 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->assertFalse(collect($data)->contains(fn (array $item): bool => $item['sku'] === 'CAJA9999'));
     }
 
+    public function test_internal_ajax_search_uses_selected_client(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SEARCH-FRIES-001',
+            'active' => true,
+        ]);
+        Item::factory()->create([
+            'client_id' => $otherClient->id,
+            'sku' => 'SEARCH-EDEL-001',
+            'active' => true,
+        ]);
+
+        $response = $this->actingAs($almacen)
+            ->getJson(route('merchandise-requests.items.search', [
+                'client_id' => $otherClient->id,
+                'search' => 'SEARCH',
+            ]))
+            ->assertOk();
+
+        $skus = collect($response->json('data'))->pluck('sku')->all();
+
+        $this->assertContains('SEARCH-EDEL-001', $skus);
+        $this->assertNotContains('SEARCH-FRIES-001', $skus);
+    }
+
+    public function test_cliente_ajax_search_ignores_foreign_client_id(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SEARCH-FRIES-002',
+            'active' => true,
+        ]);
+        Item::factory()->create([
+            'client_id' => $otherClient->id,
+            'sku' => 'SEARCH-EDEL-002',
+            'active' => true,
+        ]);
+
+        $response = $this->actingAs($cliente)
+            ->getJson(route('merchandise-requests.items.search', [
+                'client_id' => $otherClient->id,
+                'search' => 'SEARCH',
+            ]))
+            ->assertOk();
+
+        $skus = collect($response->json('data'))->pluck('sku')->all();
+
+        $this->assertContains('SEARCH-FRIES-002', $skus);
+        $this->assertNotContains('SEARCH-EDEL-002', $skus);
+    }
+
     public function test_cliente_can_create_request_with_lines(): void
     {
         Bus::fake();
@@ -221,6 +283,117 @@ class MerchandiseRequestManagementTest extends TestCase
             ProcessMerchandiseRequestSubmittedNotificationsJob::class,
             fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $request->id
         );
+    }
+
+    public function test_cliente_crea_pedido_solo_para_si_mismo_aunque_envie_client_id(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'OWN-ORDER-001',
+            'units_per_pallet' => 100,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'client_id' => $otherClient->id,
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 2,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertSame($client->id, $request->client_id);
+        $this->assertSame($cliente->id, $request->requested_by);
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 2,
+        ]);
+    }
+
+    public function test_cliente_no_puede_crear_pedido_para_otro_cliente_manipulando_referencia(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $otherItem = Item::factory()->create([
+            'client_id' => $otherClient->id,
+            'sku' => 'FOREIGN-ORDER-001',
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.create'))
+            ->post(route('merchandise-requests.store'), [
+                'client_id' => $otherClient->id,
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $otherItem->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.create'))
+            ->assertSessionHasErrors('lines');
+
+        $this->assertDatabaseCount('merchandise_requests', 0);
+    }
+
+    public function test_almacen_puede_crear_pedido_para_cualquier_cliente(): void
+    {
+        $this->assertInternalRoleCanCreateRequestForClient(Role::ALMACEN);
+    }
+
+    public function test_administracion_puede_crear_pedido_para_cualquier_cliente(): void
+    {
+        $this->assertInternalRoleCanCreateRequestForClient(Role::ADMINISTRACION);
+    }
+
+    public function test_superadmin_puede_crear_pedido_para_cualquier_cliente(): void
+    {
+        $this->assertInternalRoleCanCreateRequestForClient(Role::SUPERADMIN);
+    }
+
+    public function test_usuario_no_autorizado_no_puede_crear_pedido_en_nombre_de_cliente(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $clienteSinClienteAsignado = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($clienteSinClienteAsignado)
+            ->get(route('merchandise-requests.create', ['client_id' => $client->id]))
+            ->assertForbidden();
+
+        $this->actingAs($clienteSinClienteAsignado)
+            ->post(route('merchandise-requests.store'), [
+                'client_id' => $client->id,
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('merchandise_requests', 0);
     }
 
     public function test_pedido_cliente_dentro_de_horario_no_muestra_aviso_fuera_ventana(): void
@@ -937,6 +1110,51 @@ class MerchandiseRequestManagementTest extends TestCase
         return User::factory()->create([
             'role_id' => $role->id,
             'client_id' => $client?->id,
+        ]);
+    }
+
+    private function assertInternalRoleCanCreateRequestForClient(string $roleSlug): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => strtoupper($roleSlug).'-ORDER-001',
+            'units_per_pallet' => 125,
+        ]);
+        $internalUser = $this->makeUserWithRole($roleSlug);
+
+        $this->actingAs($internalUser)
+            ->get(route('merchandise-requests.create', ['client_id' => $client->id]))
+            ->assertOk()
+            ->assertSee('Cliente del pedido')
+            ->assertSee($client->name);
+
+        $this->actingAs($internalUser)
+            ->post(route('merchandise-requests.store'), [
+                'client_id' => $client->id,
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 3,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertSame($client->id, $request->client_id);
+        $this->assertSame($internalUser->id, $request->requested_by);
+        $this->assertSame(3, $request->requestedPalletsCount());
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 3,
+            'requested_units' => 375,
         ]);
     }
 }

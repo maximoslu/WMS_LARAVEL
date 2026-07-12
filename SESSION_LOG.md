@@ -1728,3 +1728,64 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Log Forge: `Nothing to migrate`, build Vite OK (55 modulos), release activada y `php artisan queue:restart` completado (`Broadcasting queue restart signal`).
 - El lanzador independiente de Commands de Forge no acepto la tecla de ejecucion automatizada para `php artisan optimize:clear`; el comando no se marca falsamente como ejecutado y queda pendiente de lanzamiento manual en Forge.
 - Produccion responde en `https://wms.maximosl.com`, pero la sesion del navegador de validacion termino en `/login`, por lo que la validacion visual autenticada se realizo en local.
+
+---
+
+## 2026-07-12 - Pedidos creados por usuarios internos en nombre de cliente
+
+**Contexto:** Se pidio permitir que usuarios internos con rol `almacen`, `administracion` y `superadmin` creen pedidos de mercancia seleccionando cualquier cliente, manteniendo que los usuarios `cliente` solo puedan pedir para su propio cliente aunque manipulen el formulario.
+
+**Comprobaciones iniciales obligatorias:**
+- `SESSION_LOG.md` leido completo por bloques.
+- `git status --short`: limpio.
+- `git branch --show-current`: `main`.
+- `git remote -v`: `origin https://github.com/maximoslu/WMS_LARAVEL.git`.
+- `git log -5 --oneline`: `023cb75`, `ed3d747`, `3f2d5a1`, `da5f6e5`, `3913628`.
+- `git pull --ff-only origin main`: `Already up to date`.
+
+**Cambios realizados:**
+- `app/Http/Controllers/MerchandiseRequestController.php`
+  - `create`, `searchItems` y `store` aceptan usuarios internos autorizados (`almacen` o superior).
+  - Para rol `cliente`, el cliente efectivo sigue siendo siempre `user.client_id`, ignorando cualquier `client_id` recibido.
+  - Para roles internos, el cliente efectivo sale del `client_id` seleccionado y debe estar activo.
+  - El listado muestra CTA de crear pedido tambien a internos.
+  - La busqueda AJAX de referencias queda acotada al cliente seleccionado para internos.
+- `app/Http/Requests/StoreMerchandiseRequestRequest.php`
+  - Autorizacion ampliada a internos.
+  - Validacion de `client_id` obligatorio solo para internos y existente/activo.
+  - El resolvedor de lineas valida referencias contra el cliente efectivo, no contra datos manipulables del formulario.
+- `resources/views/merchandise-requests/create.blade.php`
+  - Selector `Cliente del pedido` solo visible para internos.
+  - Sin cliente seleccionado, la pantalla pide seleccionar cliente y no muestra buscador de referencias.
+  - El formulario POST interno incluye el `client_id` seleccionado.
+- `tests/Feature/MerchandiseRequestManagementTest.php`
+  - Cobertura nueva para cliente propio, manipulacion de `client_id`, manipulacion de referencia ajena, `almacen`, `administracion`, `superadmin`, rol no autorizado y busqueda AJAX multi-cliente.
+
+**Reglas de negocio verificadas:**
+- Cliente normal crea pedidos solo para su propio `client_id`.
+- Cliente normal no puede crear pedido para otro cliente ni usando `client_id` ajeno ni usando referencias de otro cliente.
+- `almacen`, `administracion` y `superadmin` pueden seleccionar cliente y crear pedido para ese cliente.
+- `requested_by` conserva la trazabilidad del usuario real que crea el pedido, incluido usuario interno.
+- `client_id` guarda el cliente real del pedido.
+- No se crearon migraciones: ya existian `client_id` y `requested_by` en `merchandise_requests`.
+
+**Validacion ejecutada:**
+- `php artisan test tests/Feature/MerchandiseRequestManagementTest.php`: `34 passed` (165 assertions).
+- `php artisan test`: `500 passed` (2278 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php -l` en controlador y FormRequest modificados: OK.
+- `git diff --check`: OK.
+- `git diff --stat`: 5 archivos modificados tras actualizar este log.
+
+**Control de alcance:**
+- No se toco `.env`.
+- No se tocaron secretos, `vendor/` ni `node_modules/`.
+- No hubo migraciones nuevas.
+- No se uso `migrate:fresh`.
+- No se borraron datos.
+- No se toco Google Calendar, importacion de stock, facturacion ni otros modulos salvo integracion necesaria del flujo de pedidos.
+
+**Commit / push / despliegue:**
+- Commit funcional: `feat: allow internal users to create client orders` (el hash exacto queda en el propio historial de Git tras el commit).
+- Push pendiente al momento de escribir esta linea; si se pushea a `origin/main`, puede disparar Forge automaticamente.
+- No se da por desplegado en produccion sin verificacion real posterior.

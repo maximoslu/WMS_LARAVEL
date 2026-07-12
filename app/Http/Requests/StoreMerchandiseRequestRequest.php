@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Support\Stock\StockLinePayloadResolver;
 use App\Support\WmsLineType;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class StoreMerchandiseRequestRequest extends FormRequest
@@ -41,7 +42,17 @@ class StoreMerchandiseRequestRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return $this->user()?->hasRole(Role::CLIENTE) && $this->user()?->client_id !== null;
+        $user = $this->user();
+
+        if ($user === null) {
+            return false;
+        }
+
+        if ($user->hasRole(Role::CLIENTE)) {
+            return $user->client_id !== null;
+        }
+
+        return $user->canAccessRole(Role::ALMACEN);
     }
 
     protected function prepareForValidation(): void
@@ -65,6 +76,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
 
         $this->merge([
             'camion_propio' => $this->boolean('camion_propio'),
+            'client_id' => $this->input('client_id') === '' ? null : $this->input('client_id'),
             'lines' => collect($submittedLines)
                 ->map(function ($payload) {
                     if (! is_array($payload)) {
@@ -86,6 +98,12 @@ class StoreMerchandiseRequestRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'client_id' => [
+                Rule::requiredIf(fn (): bool => (bool) $this->user()?->canAccessRole(Role::ALMACEN) && ! $this->user()?->hasRole(Role::CLIENTE)),
+                'nullable',
+                'integer',
+                Rule::exists('clients', 'id')->where('active', true),
+            ],
             'lines' => ['required', 'array'],
             'camion_propio' => ['boolean'],
             'lines.*.item_id' => ['nullable', 'integer'],
@@ -142,12 +160,23 @@ class StoreMerchandiseRequestRequest extends FormRequest
 
         /** @var StockLinePayloadResolver $resolver */
         $resolver = app(StockLinePayloadResolver::class);
-        $resolved = $resolver->resolve((int) $this->user()->client_id, $this->input('lines', []), true);
+        $resolved = $resolver->resolve($this->effectiveClientId(), $this->input('lines', []), true);
 
         $this->resolvedLines = $resolved['lines'];
         $this->resolvedErrors = $resolved['errors'];
 
         return $this->resolvedLines;
+    }
+
+    public function effectiveClientId(): int
+    {
+        $user = $this->user();
+
+        if ($user?->hasRole(Role::CLIENTE)) {
+            return (int) $user->client_id;
+        }
+
+        return (int) $this->input('client_id');
     }
 
     /**
