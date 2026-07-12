@@ -19,6 +19,14 @@ class Item extends Model
 
     public const STATUS_OBSOLETE = 'obsolete';
 
+    public const CATEGORY_IN_USE = 'in_use';
+
+    public const CATEGORY_BLOCKED = 'blocked';
+
+    public const CATEGORY_OBSOLETE = 'obsolete';
+
+    public const CATEGORY_MISC = 'misc';
+
     protected $fillable = [
         'client_id',
         'sku',
@@ -28,6 +36,7 @@ class Item extends Model
         'units_per_pallet',
         'active',
         'status',
+        'stock_category',
         'default_location_id',
     ];
 
@@ -52,6 +61,9 @@ class Item extends Model
             $item->status = in_array($status, self::statuses(), true)
                 ? $status
                 : self::STATUS_ACTIVE;
+            $item->stock_category = in_array((string) $item->stock_category, self::stockCategories(), true)
+                ? $item->stock_category
+                : self::CATEGORY_IN_USE;
             $item->active = $item->status === self::STATUS_ACTIVE;
         });
     }
@@ -110,9 +122,45 @@ class Item extends Model
         return self::statusOptions()[$status ?? ''] ?? 'Activo';
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function stockCategories(): array
+    {
+        return [
+            self::CATEGORY_IN_USE,
+            self::CATEGORY_BLOCKED,
+            self::CATEGORY_OBSOLETE,
+            self::CATEGORY_MISC,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function stockCategoryOptions(): array
+    {
+        return [
+            self::CATEGORY_IN_USE => 'EN USO',
+            self::CATEGORY_BLOCKED => 'BLOQUEADO',
+            self::CATEGORY_OBSOLETE => 'OBSOLETO',
+            self::CATEGORY_MISC => 'VARIOS',
+        ];
+    }
+
+    public static function stockCategoryLabelFor(?string $stockCategory): string
+    {
+        return self::stockCategoryOptions()[$stockCategory ?? ''] ?? 'EN USO';
+    }
+
     public function statusLabel(): string
     {
         return self::statusLabelFor($this->status);
+    }
+
+    public function stockCategoryLabel(): string
+    {
+        return self::stockCategoryLabelFor($this->stock_category);
     }
 
     public function isOperational(): bool

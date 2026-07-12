@@ -14,6 +14,7 @@ use DateTimeInterface;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -33,17 +34,40 @@ class StockExcelImportService
      * @var array<string, string>
      */
     private const IMPORTABLE_SHEETS = [
-        'STOCK' => StockPallet::STATUS_AVAILABLE,
-        'BOBINAS' => StockPallet::STATUS_AVAILABLE,
-        'BLOQUEADO' => StockPallet::STATUS_BLOCKED,
+        'GENERAL' => [
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+        ],
+        'STOCK' => [
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+        ],
+        'BOBINAS' => [
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+        ],
+        'ETIQUETAS' => [
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+        ],
+        'BLOQUEADO' => [
+            'status' => StockPallet::STATUS_BLOCKED,
+            'stock_category' => StockPallet::CATEGORY_BLOCKED,
+        ],
+        'OBSOLETO' => [
+            'status' => StockPallet::STATUS_OBSOLETE,
+            'stock_category' => StockPallet::CATEGORY_OBSOLETE,
+        ],
+        'VARIOS' => [
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ],
     ];
 
     /**
      * @var list<string>
      */
-    private const IGNORED_SHEETS = [
-        'ETIQUETAS',
-    ];
+    private const IGNORED_SHEETS = [];
 
     /**
      * @var array<string, list<string>>
@@ -210,6 +234,7 @@ class StockExcelImportService
                 $item = $existingItems[$skuKey] ?? null;
 
                 if ($item === null) {
+                    $itemStatus = $this->itemStatusForStockCategory($catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE);
                     $item = Item::query()->create([
                         'client_id' => $lockedImport->client_id,
                         'sku' => $catalogItem['sku'],
@@ -217,8 +242,9 @@ class StockExcelImportService
                         'lot' => null,
                         'lot_key' => '',
                         'units_per_pallet' => $catalogItem['units_per_pallet'] ?? 1,
-                        'active' => true,
-                        'status' => Item::STATUS_ACTIVE,
+                        'active' => $itemStatus === Item::STATUS_ACTIVE,
+                        'status' => $itemStatus,
+                        'stock_category' => $catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
                     ]);
 
                     $existingItems[$skuKey] = $item;
@@ -226,6 +252,8 @@ class StockExcelImportService
                 } else {
                     $changes = [
                         'description' => $catalogItem['description'],
+                        'status' => $this->itemStatusForStockCategory($catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE),
+                        'stock_category' => $catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
                     ];
 
                     if (($catalogItem['units_per_pallet'] ?? 0) > 0) {
@@ -262,9 +290,11 @@ class StockExcelImportService
                     'units_per_pallet' => $row['units_per_pallet'],
                     'full_pallets' => $row['full_pallets'],
                     'peaks_count' => $row['peaks_count'],
+                    'warehouse_pallets' => $row['warehouse_pallets'] ?? null,
                     'received_at' => $row['received_at'],
                     'imported_at' => now(),
                     'status' => $row['status'],
+                    'stock_category' => $row['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
                     'blocked_reason' => $row['blocked_reason'],
                     'source_sheet' => $row['source_sheet'],
                     'notes' => 'Importado desde Excel: '.$lockedImport->original_filename,
@@ -376,16 +406,27 @@ class StockExcelImportService
             'total_full_pallets' => 0,
             'total_peaks_count' => 0,
             'total_logistic_units' => 0,
+            'total_warehouse_pallets' => 0.0,
             'total_peak_units' => 0,
             'excluded_rows' => 0,
+            'summary_rows_ignored' => 0,
+            'internal_rows' => 0,
+            'internal_warehouse_pallets' => 0.0,
             'empty_rows_ignored' => 0,
             'missing_sku_rows' => 0,
             'real_errors' => 0,
             'invalid_rows_ignored' => 0,
+            'valid_rows' => 0,
             'catalog_items_detected' => 0,
             'catalog_items_created' => 0,
             'catalog_items_updated' => 0,
             'catalog_items_without_stock' => 0,
+            'current_rows' => 0,
+            'current_warehouse_pallets' => 0.0,
+            'difference_rows' => 0,
+            'difference_warehouse_pallets' => 0.0,
+            'category_rows' => array_fill_keys(StockPallet::stockCategories(), 0),
+            'category_warehouse_pallets' => array_fill_keys(StockPallet::stockCategories(), 0.0),
         ];
 
         try {
@@ -441,11 +482,13 @@ class StockExcelImportService
 
                     $totals['total_rows']++;
 
+                    $sheetConfig = self::IMPORTABLE_SHEETS[$canonicalName];
                     $parsedRow = $this->parseDataRow(
                         $row,
                         $headerMap,
                         $sheetName,
-                        self::IMPORTABLE_SHEETS[$canonicalName],
+                        $sheetConfig['status'],
+                        $sheetConfig['stock_category'],
                         $existingItems,
                         $lineNumber,
                     );
@@ -471,6 +514,7 @@ class StockExcelImportService
                     }
 
                     if ($parsedRow['catalog_item'] !== null) {
+                        $totals['valid_rows']++;
                         $catalogKey = Str::upper($parsedRow['catalog_item']['sku']);
                         $alreadySeen = array_key_exists($catalogKey, $catalogItems);
 
@@ -532,7 +576,16 @@ class StockExcelImportService
                     $totals['total_full_pallets'] += $parsedRow['row']['full_pallets'];
                     $totals['total_peaks_count'] += $parsedRow['row']['peaks_count'];
                     $totals['total_logistic_units'] += $parsedRow['row']['full_pallets'] + $parsedRow['row']['peaks_count'];
+                    $totals['total_warehouse_pallets'] += (float) ($parsedRow['row']['warehouse_pallets'] ?? 0);
                     $totals['total_peak_units'] += $this->sumPeakUnits($parsedRow['row']);
+                    $category = $parsedRow['row']['stock_category'] ?? StockPallet::CATEGORY_IN_USE;
+                    $totals['category_rows'][$category] = ($totals['category_rows'][$category] ?? 0) + 1;
+                    $totals['category_warehouse_pallets'][$category] = ($totals['category_warehouse_pallets'][$category] ?? 0) + (float) ($parsedRow['row']['warehouse_pallets'] ?? 0);
+
+                    if ($category === StockPallet::CATEGORY_MISC) {
+                        $totals['internal_rows']++;
+                        $totals['internal_warehouse_pallets'] += (float) ($parsedRow['row']['warehouse_pallets'] ?? 0);
+                    }
 
                     if ($parsedRow['row']['status'] === StockPallet::STATUS_BLOCKED) {
                         $totals['blocked_rows']++;
@@ -550,12 +603,24 @@ class StockExcelImportService
         }
 
         if ($detectedSheets['processed'] === []) {
-            $fatalErrors[] = 'No se han encontrado hojas importables. Usa STOCK, BOBINAS o BLOQUEADO.';
+            $fatalErrors[] = 'No se han encontrado hojas importables. Usa GENERAL, BOBINAS, ETIQUETAS, BLOQUEADO, OBSOLETO o VARIOS.';
         }
 
         if ($totals['excluded_rows'] > 0) {
-            $warnings[] = 'Se han ignorado referencias internas que empiezan por * o _.';
+            $warnings[] = 'Se han ignorado filas de resumen que empiezan por *.';
         }
+
+        $currentStockQuery = StockPallet::query()
+            ->where('client_id', $client->id)
+            ->where('active', true);
+        $totals['current_rows'] = (clone $currentStockQuery)->count();
+        $totals['current_warehouse_pallets'] = (float) (clone $currentStockQuery)
+            ->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'));
+        $totals['difference_rows'] = count($rows) - $totals['current_rows'];
+        $totals['difference_warehouse_pallets'] = round(
+            (float) $totals['total_warehouse_pallets'] - (float) $totals['current_warehouse_pallets'],
+            2,
+        );
 
         $compiledWarnings = array_values(array_unique(array_merge($warnings, $this->compileGroupedMessages($warningGroups))));
         $compiledRowErrors = array_values(array_unique(array_merge($rowErrors, $this->compileGroupedMessages($errorGroups))));
@@ -825,6 +890,7 @@ class StockExcelImportService
         array $headerMap,
         string $sheetName,
         string $status,
+        string $stockCategory,
         $existingItems,
         int $lineNumber,
     ): array {
@@ -871,12 +937,17 @@ class StockExcelImportService
                 'warning' => null,
                 'warning_group' => [
                     'key' => 'excluded_sku_'.$sheetName,
-                    'summary' => 'Se han ignorado :count referencias internas o excluidas en '.$sheetName.'.',
+                    'summary' => 'Se han ignorado :count filas de resumen o excluidas en '.$sheetName.'.',
                     'detail' => null,
                 ],
                 'error' => null,
                 'error_group' => null,
             ];
+        }
+
+        if (str_starts_with($sku, '_')) {
+            $stockCategory = StockPallet::CATEGORY_MISC;
+            $status = StockPallet::STATUS_AVAILABLE;
         }
 
         $existingItem = $existingItems->get(Str::upper($sku));
@@ -889,6 +960,10 @@ class StockExcelImportService
             $blockedReason = 'Importado desde pestana BLOQUEADO';
         }
 
+        if ($status === StockPallet::STATUS_OBSOLETE && $blockedReason === null) {
+            $blockedReason = 'Importado desde pestana OBSOLETO';
+        }
+
         $unitsPerPallet = $this->integerValue($values[$headerMap['units_per_pallet'] ?? -1] ?? null)
             ?? (int) ($existingItem?->units_per_pallet ?? 0);
 
@@ -896,10 +971,12 @@ class StockExcelImportService
             'sku' => $sku,
             'description' => $description,
             'units_per_pallet' => $unitsPerPallet > 0 ? $unitsPerPallet : null,
+            'stock_category' => $stockCategory,
             'source_sheet' => $sheetName,
         ];
 
         $fullPalletsFromFile = $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null);
+        $warehousePeaksFromFile = $this->decimalValue($values[$headerMap['peaks_count'] ?? -1] ?? null);
         $peaks = [];
 
         foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
@@ -928,7 +1005,7 @@ class StockExcelImportService
         }
 
         if ($unitsPerPallet <= 0) {
-            if ($isBobinasSheet && ($quantityFromFile ?? 0) > 0) {
+            if ($isBobinasSheet && (($quantityFromFile ?? 0) > 0 || ($fullPalletsFromFile ?? 0) > 0 || ($warehousePeaksFromFile ?? 0) > 0)) {
                 $rowData = [
                     'sku' => $sku,
                     'description' => $description,
@@ -937,10 +1014,12 @@ class StockExcelImportService
                     'location_text' => $locationText,
                     'quantity_units' => (int) $quantityFromFile,
                     'units_per_pallet' => 0,
-                    'full_pallets' => 0,
+                    'full_pallets' => max(0, (int) ($fullPalletsFromFile ?? 0)),
                     'peaks_count' => 0,
+                    'warehouse_pallets' => max(0, (float) ($fullPalletsFromFile ?? 0) + (float) ($warehousePeaksFromFile ?? 0)),
                     'received_at' => $this->dateValue($values[$headerMap['received_at'] ?? -1] ?? null),
                     'status' => $status,
+                    'stock_category' => $stockCategory,
                     'blocked_reason' => $blockedReason,
                     'source_sheet' => $sheetName,
                 ];
@@ -1040,6 +1119,7 @@ class StockExcelImportService
         }
 
         $receivedAt = $this->dateValue($values[$headerMap['received_at'] ?? -1] ?? null);
+        $warehousePallets = max(0, (float) $fullPallets + (float) ($warehousePeaksFromFile ?? count(array_filter($peaks, fn (int $value): bool => $value > 0))));
         $rowData = [
             'sku' => $sku,
             'description' => $description,
@@ -1050,8 +1130,10 @@ class StockExcelImportService
             'units_per_pallet' => $unitsPerPallet,
             'full_pallets' => $fullPallets,
             'peaks_count' => count(array_filter($peaks, fn (int $value): bool => $value > 0)),
+            'warehouse_pallets' => $warehousePallets,
             'received_at' => $receivedAt,
             'status' => $status,
+            'stock_category' => $stockCategory,
             'blocked_reason' => $blockedReason,
             'source_sheet' => $sheetName,
         ];
@@ -1130,6 +1212,7 @@ class StockExcelImportService
             'sku' => $sku,
             'description' => $description,
             'units_per_pallet' => $unitsPerPallet > 0 ? $unitsPerPallet : null,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
             'source_sheet' => $sheetName,
         ];
 
@@ -1230,8 +1313,12 @@ class StockExcelImportService
             'units_per_pallet' => $unitsPerPallet,
             'full_pallets' => $fullPalletsFromFile,
             'peaks_count' => $computedPeaksCount,
+            'warehouse_pallets' => $reportedTotalPallets > 0
+                ? $reportedTotalPallets
+                : $fullPalletsFromFile + $computedPeaksCount,
             'received_at' => null,
             'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
             'blocked_reason' => null,
             'source_sheet' => $sheetName,
         ];
@@ -1479,6 +1566,51 @@ class StockExcelImportService
             : null;
     }
 
+    private function decimalValue(mixed $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        $normalized = trim(str_replace(["\xc2\xa0", ' '], '', (string) $value));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        if (preg_match('/^-?\d{1,3}([.,]\d{3})+[.,]\d+$/', $normalized) === 1) {
+            $lastDot = strrpos($normalized, '.');
+            $lastComma = strrpos($normalized, ',');
+            $decimalPosition = max($lastDot === false ? -1 : $lastDot, $lastComma === false ? -1 : $lastComma);
+            $wholePart = str_replace([',', '.'], '', substr($normalized, 0, $decimalPosition));
+            $fractionPart = substr($normalized, $decimalPosition + 1);
+
+            return (float) ($wholePart.'.'.$fractionPart);
+        }
+
+        if (preg_match('/^-?\d{1,3}([.,]\d{3})+$/', $normalized) === 1) {
+            return (float) str_replace([',', '.'], '', $normalized);
+        }
+
+        if (preg_match('/^-?\d+[.,]\d+$/', $normalized) === 1) {
+            return (float) str_replace(',', '.', $normalized);
+        }
+
+        if (preg_match('/^-?\d+$/', $normalized) === 1) {
+            return (float) $normalized;
+        }
+
+        $sanitized = preg_replace('/[^0-9,\.\-]/', '', $normalized);
+
+        return $sanitized !== null && $sanitized !== ''
+            ? (float) str_replace(',', '.', $sanitized)
+            : null;
+    }
+
     private function normalizeIntegerString(string $value): ?string
     {
         $normalized = trim(str_replace(["\xc2\xa0", ' '], '', $value));
@@ -1588,8 +1720,7 @@ class StockExcelImportService
         $trimmedSku = trim($sku);
 
         return $trimmedSku === ''
-            || Str::startsWith($trimmedSku, '*')
-            || Str::startsWith($trimmedSku, '_');
+            || Str::startsWith($trimmedSku, '*');
     }
 
     private function dateValue(mixed $value): ?string
@@ -1720,6 +1851,10 @@ class StockExcelImportService
             'units_per_pallet' => ($incoming['units_per_pallet'] ?? 0) > 0
                 ? $incoming['units_per_pallet']
                 : $existing['units_per_pallet'],
+            'stock_category' => $this->preferStockCategory(
+                $existing['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
+                $incoming['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
+            ),
             'source_sheet' => $existing['source_sheet'],
         ];
     }
@@ -1731,6 +1866,7 @@ class StockExcelImportService
     {
         if (str_starts_with($key, 'excluded_sku_')) {
             $totals['excluded_rows']++;
+            $totals['summary_rows_ignored']++;
             return;
         }
 
@@ -1742,6 +1878,29 @@ class StockExcelImportService
         if (str_starts_with($key, 'missing_sku_')) {
             $totals['missing_sku_rows']++;
         }
+    }
+
+    private function preferStockCategory(string $existing, string $incoming): string
+    {
+        $priority = [
+            StockPallet::CATEGORY_IN_USE => 0,
+            StockPallet::CATEGORY_MISC => 1,
+            StockPallet::CATEGORY_BLOCKED => 2,
+            StockPallet::CATEGORY_OBSOLETE => 3,
+        ];
+
+        return ($priority[$incoming] ?? 0) > ($priority[$existing] ?? 0)
+            ? $incoming
+            : $existing;
+    }
+
+    private function itemStatusForStockCategory(string $stockCategory): string
+    {
+        return match ($stockCategory) {
+            StockPallet::CATEGORY_BLOCKED => Item::STATUS_BLOCKED,
+            StockPallet::CATEGORY_OBSOLETE => Item::STATUS_OBSOLETE,
+            default => Item::STATUS_ACTIVE,
+        };
     }
 
     private function usesEdelvivesProfile(Client $client): bool

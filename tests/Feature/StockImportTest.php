@@ -40,14 +40,14 @@ class StockImportTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_preview_detects_supported_sheets_and_ignores_etiquetas(): void
+    public function test_preview_detects_friesland_supported_sheets_including_etiquetas(): void
     {
         [$friesland] = $this->seedBaseData();
         Storage::fake('local');
 
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
-            'STOCK' => [
+            'GENERAL' => [
                 ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Pico 1'],
                 ['FR-AGG', 'Producto agregado', 'LOT-A', 70000, 1080, 64, 880],
             ],
@@ -60,8 +60,12 @@ class StockImportTest extends TestCase
                 ['FR-BLK', 'Bloqueado', 'LOT-C', 600, 600, 1],
             ],
             'ETIQUETAS' => [
-                ['Texto'],
-                ['Ignorar'],
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-ETQ', 'Etiqueta', 'LOT-D', 1000, 500, 2],
+            ],
+            'OBSOLETO' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-OBS', 'Obsoleto', 'LOT-E', 300, 300, 1],
             ],
         ]);
 
@@ -71,16 +75,17 @@ class StockImportTest extends TestCase
                 'file' => $file,
             ])
             ->assertOk()
-            ->assertSee('STOCK')
+            ->assertSee('GENERAL')
             ->assertSee('BOBINAS')
             ->assertSee('BLOQUEADO')
             ->assertSee('ETIQUETAS')
-            ->assertSee('Hoja ignorada: ETIQUETAS.');
+            ->assertSee('OBSOLETO');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
 
-        $this->assertSame(['STOCK', 'BOBINAS', 'BLOQUEADO'], $stockImport->detected_sheets_json['processed']);
-        $this->assertSame(['ETIQUETAS'], $stockImport->detected_sheets_json['ignored']);
+        $this->assertSame(['GENERAL', 'BOBINAS', 'BLOQUEADO', 'ETIQUETAS', 'OBSOLETO'], $stockImport->detected_sheets_json['processed']);
+        $this->assertSame([], $stockImport->detected_sheets_json['ignored']);
+        $this->assertSame(5, $stockImport->summary_json['catalog_items_detected']);
         $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->status);
     }
 
@@ -143,18 +148,18 @@ class StockImportTest extends TestCase
         $this->assertSame(StockPallet::STATUS_BLOCKED, $stockWithUds->status);
     }
 
-    public function test_preview_ignores_internal_references_starting_with_asterisk_or_underscore_without_errors(): void
+    public function test_preview_ignores_summary_rows_and_imports_underscore_references_as_internal_misc(): void
     {
         [$friesland] = $this->seedBaseData();
         Storage::fake('local');
 
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
-            'STOCK' => [
-                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+            'GENERAL' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos'],
                 ['***BLOQUEADO***', 'Interna', 'LOT-X', 200, null, 0],
-                ['_BANDEJA23', 'Interna 2', 'LOT-Y', 100, null, 0],
-                ['FR-VALID', 'Valida', 'LOT-Z', 1000, 1000, 1],
+                ['_BANDEJA23', 'Interna 2', 'LOT-Y', 100, 100, 1, 0.5],
+                ['FR-VALID', 'Valida', 'LOT-Z', 1000, 1000, 1, 0],
             ],
         ]);
 
@@ -165,13 +170,16 @@ class StockImportTest extends TestCase
             ]);
 
         $response->assertOk()
-            ->assertSee('Se han ignorado referencias internas que empiezan por * o _.')
+            ->assertSee('Se han ignorado filas de resumen que empiezan por *.')
             ->assertDontSee('no se importara por no tener unidades por pallet validas para SKU ***BLOQUEADO***')
             ->assertDontSee('no se importara por no tener unidades por pallet validas para SKU _BANDEJA23');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
 
-        $this->assertSame(2, $stockImport->summary_json['excluded_rows']);
+        $this->assertSame(1, $stockImport->summary_json['excluded_rows']);
+        $this->assertSame(1, $stockImport->summary_json['summary_rows_ignored']);
+        $this->assertSame(1, $stockImport->summary_json['internal_rows']);
+        $this->assertSame(1.5, (float) $stockImport->summary_json['internal_warehouse_pallets']);
         $this->assertSame(0, $stockImport->summary_json['real_errors']);
 
         $this->actingAs($user)
@@ -185,9 +193,10 @@ class StockImportTest extends TestCase
             'sku' => '***BLOQUEADO***',
         ]);
 
-        $this->assertDatabaseMissing('items', [
+        $this->assertDatabaseHas('items', [
             'client_id' => $friesland->id,
             'sku' => '_BANDEJA23',
+            'stock_category' => StockPallet::CATEGORY_MISC,
         ]);
 
         $this->assertDatabaseMissing('stock_pallets', [
@@ -195,15 +204,131 @@ class StockImportTest extends TestCase
             'lot' => 'LOT-X',
         ]);
 
-        $this->assertDatabaseMissing('stock_pallets', [
+        $this->assertDatabaseHas('stock_pallets', [
             'client_id' => $friesland->id,
             'lot' => 'LOT-Y',
+            'stock_category' => StockPallet::CATEGORY_MISC,
         ]);
 
         $this->assertDatabaseHas('items', [
             'client_id' => $friesland->id,
             'sku' => 'FR-VALID',
         ]);
+    }
+
+    public function test_friesland_import_classifies_all_supported_sheets_and_uses_picos_as_warehouse_pallets(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'GENERAL' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1'],
+                ['FR-GEN', 'General', 'LOT-G', 2050, 1000, 2, 0.5, 50],
+                ['***TOTAL***', 'Resumen', null, 0, null, 0, 0],
+            ],
+            'BOBINAS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos'],
+                ['FR-BOB-CAT', 'Bobina', 'LOT-B', 1200, 600, 2, 0],
+            ],
+            'ETIQUETAS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos'],
+                ['FR-ETQ-CAT', 'Etiqueta', 'LOT-E', 1000, 500, 2, 0],
+            ],
+            'BLOQUEADO' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos'],
+                ['FR-BLK-CAT', 'Bloqueado', 'LOT-L', 600, 600, 1, 0],
+            ],
+            'OBSOLETO' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos'],
+                ['FR-OBS-CAT', 'Obsoleto', 'LOT-O', 300, 300, 1, 0],
+            ],
+            'VARIOS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos'],
+                ['_FR-MISC-CAT', 'Interno', 'LOT-V', 100, 100, 1, 0.33],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertSee('Totales por categoria')
+            ->assertSee('VARIOS');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(6, $stockImport->summary_json['catalog_items_detected']);
+        $this->assertSame(1, $stockImport->summary_json['summary_rows_ignored']);
+        $this->assertSame(1, $stockImport->summary_json['internal_rows']);
+        $this->assertSame(9.83, (float) $stockImport->summary_json['total_warehouse_pallets']);
+        $this->assertSame(1.33, (float) $stockImport->summary_json['internal_warehouse_pallets']);
+        $this->assertSame(3, $stockImport->summary_json['category_rows'][StockPallet::CATEGORY_IN_USE]);
+        $this->assertSame(1, $stockImport->summary_json['category_rows'][StockPallet::CATEGORY_BLOCKED]);
+        $this->assertSame(1, $stockImport->summary_json['category_rows'][StockPallet::CATEGORY_OBSOLETE]);
+        $this->assertSame(1, $stockImport->summary_json['category_rows'][StockPallet::CATEGORY_MISC]);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect(route('stock.index', ['client_id' => $friesland->id]));
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'LOT-L',
+            'status' => StockPallet::STATUS_BLOCKED,
+            'stock_category' => StockPallet::CATEGORY_BLOCKED,
+        ]);
+        $this->assertDatabaseHas('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'LOT-O',
+            'status' => StockPallet::STATUS_OBSOLETE,
+            'stock_category' => StockPallet::CATEGORY_OBSOLETE,
+        ]);
+        $this->assertDatabaseHas('stock_pallets', [
+            'client_id' => $friesland->id,
+            'lot' => 'LOT-V',
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+
+        $miscStock = StockPallet::query()->where('client_id', $friesland->id)->where('lot', 'LOT-V')->firstOrFail();
+        $this->assertSame(1.33, (float) $miscStock->warehouse_pallets);
+    }
+
+    public function test_bobinas_with_zero_units_but_declared_pallets_preserves_logistic_stock(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'BOBINAS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos'],
+                ['FILM-ZERO-UNITS', 'Film sin unidades', 'LOT-FILM', '=', 0, 2, 0.5],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ])->assertOk()
+            ->assertSee('2,50');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(1, $stockImport->summary_json['valid_rows']);
+        $this->assertSame(2.5, (float) $stockImport->summary_json['total_warehouse_pallets']);
+        $this->assertSame(0, $stockImport->summary_json['real_errors']);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect(route('stock.index', ['client_id' => $friesland->id]));
+
+        $stock = StockPallet::query()->where('client_id', $friesland->id)->where('lot', 'LOT-FILM')->firstOrFail();
+        $this->assertSame(0, $stock->quantity_units);
+        $this->assertSame(0, $stock->units_per_pallet);
+        $this->assertSame(2, $stock->full_pallets);
+        $this->assertSame(2.5, (float) $stock->warehouse_pallets);
     }
 
     public function test_quantity_zero_is_ignored_without_units_per_pallet_error(): void

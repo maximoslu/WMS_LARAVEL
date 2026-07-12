@@ -38,6 +38,7 @@ class StockOverviewBuilder
                 'total_full_pallets' => (int) (clone $summaryQuery)->sum('full_pallets'),
                 'total_peaks' => (int) (clone $summaryQuery)->sum('peaks_count'),
                 'total_logistic_units' => (int) ((clone $summaryQuery)->sum(DB::raw('full_pallets + peaks_count'))),
+                'total_warehouse_pallets' => (float) ((clone $summaryQuery)->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'))),
                 'batches_with_peaks' => (clone $summaryQuery)->where('peaks_count', '>', 0)->count(),
             ],
         ];
@@ -61,6 +62,8 @@ class StockOverviewBuilder
             'location' => '',
             'location_id' => null,
             'batch_status' => 'all',
+            'stock_category' => 'all',
+            'hide_internal' => true,
             'only_peaks' => false,
         ];
 
@@ -105,7 +108,8 @@ class StockOverviewBuilder
                 $query
                     ->where('quantity_units', '>', 0)
                     ->orWhere('full_pallets', '>', 0)
-                    ->orWhere('peaks_count', '>', 0);
+                    ->orWhere('peaks_count', '>', 0)
+                    ->orWhere('warehouse_pallets', '>', 0);
             })
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
             ->when($filters['item_id'] !== null, fn (Builder $query) => $query->where('item_id', $filters['item_id']))
@@ -128,6 +132,8 @@ class StockOverviewBuilder
                 });
             })
             ->when($filters['batch_status'] !== 'all', fn (Builder $query) => $query->where('status', $filters['batch_status']))
+            ->when(($filters['stock_category'] ?? 'all') !== 'all', fn (Builder $query) => $query->where('stock_category', $filters['stock_category']))
+            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $query->where('stock_category', '!=', StockPallet::CATEGORY_MISC))
             ->when($filters['only_peaks'], fn (Builder $query) => $query->where('peaks_count', '>', 0))
             ->orderBy('received_at')
             ->orderBy('lot')
@@ -142,6 +148,8 @@ class StockOverviewBuilder
         return Item::query()
             ->with(['client', 'defaultLocation.warehouse'])
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
+            ->when(($filters['stock_category'] ?? 'all') !== 'all', fn (Builder $query) => $query->where('stock_category', $filters['stock_category']))
+            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $query->where('stock_category', '!=', StockPallet::CATEGORY_MISC))
             ->when($filters['search'] !== '', function (Builder $query) use ($filters): void {
                 $query->where(function (Builder $query) use ($filters): void {
                     $query
@@ -156,7 +164,8 @@ class StockOverviewBuilder
                         $query
                             ->where('quantity_units', '>', 0)
                             ->orWhere('full_pallets', '>', 0)
-                            ->orWhere('peaks_count', '>', 0);
+                            ->orWhere('peaks_count', '>', 0)
+                            ->orWhere('warehouse_pallets', '>', 0);
                     });
             })
             ->orderBy('client_id')
@@ -192,10 +201,16 @@ class StockOverviewBuilder
             'batch_status' => in_array((string) ($filters['batch_status'] ?? 'all'), ['all', ...StockPallet::statuses()], true)
                 ? (string) ($filters['batch_status'] ?? 'all')
                 : 'all',
+            'stock_category' => $isClient
+                ? 'all'
+                : (in_array((string) ($filters['stock_category'] ?? 'all'), ['all', ...StockPallet::stockCategories()], true)
+                    ? (string) ($filters['stock_category'] ?? 'all')
+                    : 'all'),
             'stock_state' => in_array($stockState, ['with_stock', 'without_stock', 'all'], true)
                 ? $stockState
                 : 'with_stock',
             'is_client' => $isClient,
+            'hide_internal' => $isClient || filter_var($filters['hide_internal'] ?? false, FILTER_VALIDATE_BOOL),
         ];
     }
 
@@ -211,6 +226,7 @@ class StockOverviewBuilder
             'per_page' => $filters['per_page'],
             'stock_state' => $filters['stock_state'],
             'batch_status' => $filters['batch_status'],
+            'stock_category' => $filters['stock_category'],
         ];
 
         if (! $filters['is_client']) {
@@ -251,6 +267,8 @@ class StockOverviewBuilder
             'item_status_label' => $item?->statusLabel() ?? Item::statusLabelFor(Item::STATUS_ACTIVE),
             'batch_status' => $pallet->status,
             'batch_status_label' => $pallet->statusLabel(),
+            'stock_category' => $pallet->stock_category ?? StockPallet::CATEGORY_IN_USE,
+            'stock_category_label' => $pallet->stockCategoryLabel(),
             'blocked_reason' => $pallet->blocked_reason,
             'location_label' => $this->locationLabel($pallet) ?: 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($defaultLocation),
@@ -265,6 +283,7 @@ class StockOverviewBuilder
             ),
             'full_pallets' => (int) $pallet->full_pallets,
             'peaks_count' => (int) $pallet->peaks_count,
+            'warehouse_pallets' => (float) ($pallet->warehouse_pallets ?? ((int) $pallet->full_pallets + (int) $pallet->peaks_count)),
             'peak_1' => (int) $pallet->peak_1,
             'peak_2' => (int) $pallet->peak_2,
             'peak_3' => (int) $pallet->peak_3,
@@ -275,7 +294,7 @@ class StockOverviewBuilder
             'peak_8' => (int) $pallet->peak_8,
             'peak_9' => (int) $pallet->peak_9,
             'peak_10' => (int) $pallet->peak_10,
-            'row_visual_state' => $this->rowVisualState($item?->status, $pallet->status),
+            'row_visual_state' => $this->rowVisualState($item?->status, $pallet->status, $pallet->stock_category),
             'has_stock' => true,
         ];
     }
@@ -302,6 +321,8 @@ class StockOverviewBuilder
             'item_status_label' => $item->statusLabel(),
             'batch_status' => null,
             'batch_status_label' => 'Sin stock',
+            'stock_category' => $item->stock_category ?? Item::CATEGORY_IN_USE,
+            'stock_category_label' => $item->stockCategoryLabel(),
             'blocked_reason' => null,
             'location_label' => 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($item->defaultLocation),
@@ -310,6 +331,7 @@ class StockOverviewBuilder
             'units_per_pallet_label' => $this->unitsPerPalletLabel((int) $item->units_per_pallet),
             'full_pallets' => 0,
             'peaks_count' => 0,
+            'warehouse_pallets' => 0.0,
             'peak_1' => 0,
             'peak_2' => 0,
             'peak_3' => 0,
@@ -320,7 +342,7 @@ class StockOverviewBuilder
             'peak_8' => 0,
             'peak_9' => 0,
             'peak_10' => 0,
-            'row_visual_state' => $this->rowVisualState($item->status, null),
+            'row_visual_state' => $this->rowVisualState($item->status, null, $item->stock_category),
             'has_stock' => false,
         ];
     }
@@ -354,8 +376,12 @@ class StockOverviewBuilder
             : 'Sin dato';
     }
 
-    private function rowVisualState(?string $itemStatus, ?string $batchStatus): string
+    private function rowVisualState(?string $itemStatus, ?string $batchStatus, ?string $stockCategory): string
     {
+        if ($stockCategory === StockPallet::CATEGORY_MISC) {
+            return 'misc';
+        }
+
         if ($batchStatus === StockPallet::STATUS_BLOCKED) {
             return 'blocked';
         }

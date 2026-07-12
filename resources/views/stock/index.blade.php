@@ -38,11 +38,19 @@
 
     <section class="stock-summary stock-summary--single" aria-label="Resumen de stock">
         <article class="surface-card stock-summary-card kpi-card kpi-compact{{ $canExportStock ? ' stock-summary-card--with-action' : '' }}">
-            <div class="stock-summary-card-main">
-                <strong>Pallets totales</strong>
-                <span>{{ number_format($summary['total_logistic_units'], 0, ',', '.') }}</span>
-                <small>Total visible</small>
-            </div>
+            @if ($isClient)
+                <div class="stock-summary-card-main">
+                    <strong>Stock disponible</strong>
+                    <span>{{ number_format($summary['references_with_stock'], 0, ',', '.') }}</span>
+                    <small>Referencias visibles</small>
+                </div>
+            @else
+                <div class="stock-summary-card-main">
+                    <strong>Pallets almacen</strong>
+                    <span>{{ number_format($summary['total_warehouse_pallets'] ?? $summary['total_logistic_units'], 2, ',', '.') }}</span>
+                    <small>Total visible</small>
+                </div>
+            @endif
 
             @if ($canExportStock)
                 <button
@@ -197,6 +205,16 @@
             </label>
 
             @unless ($isClient)
+                <label class="auth-field">
+                    <span>Categoria</span>
+                    <select name="stock_category" class="auth-input">
+                        <option value="all" @selected(($filters['stock_category'] ?? 'all') === 'all')>Todas</option>
+                        @foreach (\App\Models\StockPallet::stockCategoryOptions() as $category => $label)
+                            <option value="{{ $category }}" @selected(($filters['stock_category'] ?? 'all') === $category)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </label>
+
                 <div class="auth-field">
                     <span>Ubicacion</span>
                     <div
@@ -231,13 +249,15 @@
                 </div>
             @endunless
 
-            <label class="auth-field">
-                <span>Picos</span>
-                <select name="only_peaks" class="auth-input">
-                    <option value="0" @selected(! $filters['only_peaks'])>Todos</option>
-                    <option value="1" @selected($filters['only_peaks'])>Solo con picos</option>
-                </select>
-            </label>
+            @unless ($isClient)
+                <label class="auth-field">
+                    <span>Picos</span>
+                    <select name="only_peaks" class="auth-input">
+                        <option value="0" @selected(! $filters['only_peaks'])>Todos</option>
+                        <option value="1" @selected($filters['only_peaks'])>Solo con picos</option>
+                    </select>
+                </label>
+            @endunless
 
             <label class="auth-field">
                 <span>Por pagina</span>
@@ -280,8 +300,10 @@
                             <th>Descripcion</th>
                             <th>Lote</th>
                             <th class="stock-table-number">Cantidad</th>
-                            <th class="stock-table-center">Pallets</th>
-                            <th class="stock-table-center">Picos</th>
+                            @unless ($isClient)
+                                <th class="stock-table-center">Pallets almacen</th>
+                                <th class="stock-table-center">Picos</th>
+                            @endunless
                             <th>Estado</th>
                             <th class="stock-table-center">{{ $isClient ? 'Detalle' : 'Accion' }}</th>
                         </tr>
@@ -306,14 +328,16 @@
                                 </td>
                                 <td>{{ $row['lot_label'] }}</td>
                                 <td class="stock-total stock-table-number">{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
-                                <td class="stock-table-center">{{ number_format($row['full_pallets'], 0, ',', '.') }}</td>
-                                <td class="stock-table-center">
-                                    @if ($row['peaks_count'] > 0)
-                                        <span class="stock-peak-badge">{{ number_format($row['peaks_count'], 0, ',', '.') }} {{ $row['peaks_count'] === 1 ? 'pico' : 'picos' }}</span>
-                                    @else
-                                        <span class="stock-empty-badge">Sin picos</span>
-                                    @endif
-                                </td>
+                                @unless ($isClient)
+                                    <td class="stock-table-center">{{ number_format($row['warehouse_pallets'], 2, ',', '.') }}</td>
+                                    <td class="stock-table-center">
+                                        @if ($row['peaks_count'] > 0)
+                                            <span class="stock-peak-badge">{{ number_format($row['peaks_count'], 0, ',', '.') }} {{ $row['peaks_count'] === 1 ? 'pico' : 'picos' }}</span>
+                                        @else
+                                            <span class="stock-empty-badge">Sin picos</span>
+                                        @endif
+                                    </td>
+                                @endunless
                                 <td>
                                     <div class="stock-status-stack">
                                         <span class="status-badge item-status-badge item-status-badge--{{ $row['item_status'] }}">
@@ -322,6 +346,11 @@
                                         <span class="status-badge batch-status-badge{{ $row['batch_status'] ? ' batch-status-badge--'.$row['batch_status'] : '' }}">
                                             {{ $row['batch_status_label'] }}
                                         </span>
+                                        @unless ($isClient)
+                                            <span class="status-badge batch-status-badge batch-status-badge--{{ $row['stock_category'] }}">
+                                                {{ $row['stock_category_label'] }}
+                                            </span>
+                                        @endunless
                                     </div>
                                 </td>
                                 <td class="stock-table-center">
@@ -338,7 +367,7 @@
                                 </td>
                             </tr>
                             <tr id="{{ $detailId }}" class="stock-detail-row" data-stock-detail-row hidden>
-                                <td colspan="8">
+                                <td colspan="{{ $isClient ? 6 : 8 }}">
                                     <div class="stock-detail-panel">
                                         <div class="stock-detail-grid">
                                             <article class="stock-detail-card">
@@ -348,10 +377,12 @@
                                                     <div><dt>Descripcion</dt><dd>{{ $row['description'] }}</dd></div>
                                                     <div><dt>Lote</dt><dd>{{ $row['lot_label'] }}</dd></div>
                                                     <div><dt>Fecha entrada</dt><dd>{{ $row['received_at'] ?? '-' }}</dd></div>
-                                                    <div><dt>Uds/pallet</dt><dd>{{ $row['units_per_pallet_label'] }}</dd></div>
                                                     <div><dt>Cantidad total</dt><dd>{{ number_format($row['quantity_units'], 0, ',', '.') }}</dd></div>
-                                                    <div><dt>Pallets</dt><dd>{{ number_format($row['full_pallets'], 0, ',', '.') }}</dd></div>
-                                                    <div><dt>Picos total</dt><dd>{{ number_format($row['peaks_count'], 0, ',', '.') }}</dd></div>
+                                                    @unless ($isClient)
+                                                        <div><dt>Uds/pallet</dt><dd>{{ $row['units_per_pallet_label'] }}</dd></div>
+                                                        <div><dt>Pallets almacen</dt><dd>{{ number_format($row['warehouse_pallets'], 2, ',', '.') }}</dd></div>
+                                                        <div><dt>Picos total</dt><dd>{{ number_format($row['peaks_count'], 0, ',', '.') }}</dd></div>
+                                                    @endunless
                                                     <div><dt>Ubicacion</dt><dd>{{ $row['location_label'] }}</dd></div>
                                                     <div><dt>Ubicacion por defecto</dt><dd>{{ $row['default_location_label'] }}</dd></div>
                                                 </dl>
@@ -366,6 +397,11 @@
                                                     <span class="status-badge batch-status-badge{{ $row['batch_status'] ? ' batch-status-badge--'.$row['batch_status'] : '' }}">
                                                         {{ $row['batch_status_label'] }}
                                                     </span>
+                                                    @unless ($isClient)
+                                                        <span class="status-badge batch-status-badge batch-status-badge--{{ $row['stock_category'] }}">
+                                                            {{ $row['stock_category_label'] }}
+                                                        </span>
+                                                    @endunless
                                                 </div>
                                                 @if ($row['blocked_reason'])
                                                     <p class="stock-detail-note">Motivo bloqueo: {{ $row['blocked_reason'] }}</p>
@@ -378,17 +414,19 @@
                                             </article>
                                         </div>
 
-                                        <article class="stock-detail-card stock-detail-card--peaks">
-                                            <strong>Distribucion de picos</strong>
-                                            <div class="stock-peak-grid">
-                                                @foreach ($peakValues as $peak)
-                                                    <div class="stock-peak-card{{ $peak['value'] > 0 ? ' is-active' : '' }}">
-                                                        <span>{{ $peak['label'] }}</span>
-                                                        <strong>{{ number_format($peak['value'], 0, ',', '.') }}</strong>
-                                                    </div>
-                                                @endforeach
-                                            </div>
-                                        </article>
+                                        @unless ($isClient)
+                                            <article class="stock-detail-card stock-detail-card--peaks">
+                                                <strong>Distribucion de picos</strong>
+                                                <div class="stock-peak-grid">
+                                                    @foreach ($peakValues as $peak)
+                                                        <div class="stock-peak-card{{ $peak['value'] > 0 ? ' is-active' : '' }}">
+                                                            <span>{{ $peak['label'] }}</span>
+                                                            <strong>{{ number_format($peak['value'], 0, ',', '.') }}</strong>
+                                                        </div>
+                                                    @endforeach
+                                                </div>
+                                            </article>
+                                        @endunless
                                     </div>
                                 </td>
                             </tr>
@@ -425,6 +463,11 @@
                         <span class="status-badge batch-status-badge{{ $row['batch_status'] ? ' batch-status-badge--'.$row['batch_status'] : '' }}">
                             {{ $row['batch_status_label'] }}
                         </span>
+                        @unless ($isClient)
+                            <span class="status-badge batch-status-badge batch-status-badge--{{ $row['stock_category'] }}">
+                                {{ $row['stock_category_label'] }}
+                            </span>
+                        @endunless
                     </div>
 
                     <div class="stock-mobile-metrics">
@@ -436,28 +479,32 @@
                             <span>Ubicacion</span>
                             <strong>{{ $row['location_label'] }}</strong>
                         </div>
-                        <div>
-                            <span>Uds/pallet</span>
-                            <strong>{{ $row['units_per_pallet_label'] }}</strong>
-                        </div>
-                        <div>
-                            <span>Pallets</span>
-                            <strong>{{ number_format($row['full_pallets'], 0, ',', '.') }}</strong>
-                        </div>
-                        <div>
-                            <span>Picos total</span>
-                            <strong>{{ number_format($row['peaks_count'], 0, ',', '.') }}</strong>
-                        </div>
+                        @unless ($isClient)
+                            <div>
+                                <span>Uds/pallet</span>
+                                <strong>{{ $row['units_per_pallet_label'] }}</strong>
+                            </div>
+                            <div>
+                                <span>Pallets almacen</span>
+                                <strong>{{ number_format($row['warehouse_pallets'], 2, ',', '.') }}</strong>
+                            </div>
+                            <div>
+                                <span>Picos total</span>
+                                <strong>{{ number_format($row['peaks_count'], 0, ',', '.') }}</strong>
+                            </div>
+                        @endunless
                     </div>
 
-                    <div class="stock-peak-grid">
-                        @foreach ($peakValues as $peak)
-                            <div class="stock-peak-card{{ $peak['value'] > 0 ? ' is-active' : '' }}">
-                                <span>{{ $peak['label'] }}</span>
-                                <strong>{{ number_format($peak['value'], 0, ',', '.') }}</strong>
-                            </div>
-                        @endforeach
-                    </div>
+                    @unless ($isClient)
+                        <div class="stock-peak-grid">
+                            @foreach ($peakValues as $peak)
+                                <div class="stock-peak-card{{ $peak['value'] > 0 ? ' is-active' : '' }}">
+                                    <span>{{ $peak['label'] }}</span>
+                                    <strong>{{ number_format($peak['value'], 0, ',', '.') }}</strong>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endunless
 
                     @if ($row['blocked_reason'])
                         <p class="users-table-email">Bloqueo: {{ $row['blocked_reason'] }}</p>
@@ -479,8 +526,3 @@
         </section>
     @endif
 @endsection
-
-
-
-
-

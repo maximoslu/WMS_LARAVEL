@@ -76,6 +76,12 @@
                 <strong>Filas leidas</strong>
                 <span>{{ number_format($preview['totals']['total_rows'], 0, ',', '.') }}</span>
             </article>
+            @if (array_key_exists('valid_rows', $preview['totals']))
+                <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                    <strong>Filas validas</strong>
+                    <span>{{ number_format($preview['totals']['valid_rows'], 0, ',', '.') }}</span>
+                </article>
+            @endif
             @if (($preview['profile'] ?? null) === 'edelvives_single_sheet')
                 <article class="surface-card stock-summary-card kpi-card kpi-compact">
                     <strong>Ubicaciones usadas</strong>
@@ -99,6 +105,14 @@
                 <span>{{ number_format($preview['rows'] ? count($preview['rows']) : 0, 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Filas resumen ***</strong>
+                <span>{{ number_format($preview['totals']['summary_rows_ignored'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Refs internas _</strong>
+                <span>{{ number_format($preview['totals']['internal_rows'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
                 <strong>Total unidades</strong>
                 <span>{{ number_format($preview['totals']['total_units'] ?? 0, 0, ',', '.') }}</span>
             </article>
@@ -111,8 +125,20 @@
                 <span>{{ number_format($preview['totals']['total_peaks_count'] ?? 0, 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Unidades logisticas</strong>
-                <span>{{ number_format($preview['totals']['total_logistic_units'] ?? 0, 0, ',', '.') }}</span>
+                <strong>Pallets almacen</strong>
+                <span>{{ number_format($preview['totals']['total_warehouse_pallets'] ?? $preview['totals']['total_logistic_units'] ?? 0, 2, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Pallets internos</strong>
+                <span>{{ number_format($preview['totals']['internal_warehouse_pallets'] ?? 0, 2, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Diferencia partidas</strong>
+                <span>{{ number_format($preview['totals']['difference_rows'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Diferencia pallets</strong>
+                <span>{{ number_format($preview['totals']['difference_warehouse_pallets'] ?? 0, 2, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
                 <strong>Partidas bloqueadas</strong>
@@ -141,7 +167,7 @@
             <p>Importables: {{ implode(', ', $preview['detected_sheets']['processed']) ?: 'Ninguna' }}</p>
             <p>Ignoradas: {{ implode(', ', $preview['detected_sheets']['ignored']) ?: 'Ninguna' }}</p>
             <p>No soportadas: {{ implode(', ', $preview['detected_sheets']['unsupported']) ?: 'Ninguna' }}</p>
-            <p>Se han ignorado referencias internas que empiezan por * o _.</p>
+            <p>Las filas de resumen que empiezan por *** se ignoran. Las referencias que empiezan por _ se importan como VARIOS solo para uso interno.</p>
             <p>Las referencias con SKU valido se crearan o actualizaran como articulos aunque no tengan stock.</p>
             @if (($preview['profile'] ?? null) === 'edelvives_single_sheet')
                 <p>Se usara el almacen {{ $preview['warehouse_name'] }} y se aseguraran las calles 0-45, A-F, FONDO y SIN UBICACION.</p>
@@ -159,6 +185,32 @@
                         <li>{{ $warning }}</li>
                     @endforeach
                 </ul>
+            </section>
+        @endif
+
+        @if (! empty($preview['totals']['category_rows']))
+            <section class="surface-card compact-card">
+                <h3>Totales por categoria</h3>
+                <div class="data-table-wrap stock-table-wrap">
+                    <table class="data-table stock-table table-compact" aria-label="Totales por categoria">
+                        <thead>
+                            <tr>
+                                <th>Categoria</th>
+                                <th>Filas</th>
+                                <th>Pallets almacen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (\App\Models\StockPallet::stockCategoryOptions() as $category => $label)
+                                <tr>
+                                    <td>{{ $label }}</td>
+                                    <td>{{ number_format($preview['totals']['category_rows'][$category] ?? 0, 0, ',', '.') }}</td>
+                                    <td>{{ number_format($preview['totals']['category_warehouse_pallets'][$category] ?? 0, 2, ',', '.') }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
             </section>
         @endif
 
@@ -196,13 +248,14 @@
                         <thead>
                             <tr>
                                 <th>Hoja</th>
+                                <th>Categoria</th>
                                 <th>SKU</th>
                                 <th>Descripcion</th>
                                 <th>Ubicacion</th>
                                 <th>Lote</th>
                                 <th>Cantidad</th>
                                 <th>Uds/pallet</th>
-                                <th>Pallets</th>
+                                <th>Pallets almacen</th>
                                 <th>Picos</th>
                                 <th>Bloqueo</th>
                             </tr>
@@ -211,13 +264,14 @@
                             @foreach ($preview['sample_rows'] as $row)
                                 <tr>
                                     <td>{{ $row['source_sheet'] }}</td>
+                                    <td>{{ \App\Models\StockPallet::stockCategoryLabelFor($row['stock_category'] ?? null) }}</td>
                                     <td>{{ $row['sku'] }}</td>
                                     <td>{{ $row['description'] }}</td>
                                     <td>{{ $row['location_text'] ?: '-' }}</td>
                                     <td>{{ $row['lot'] ?: '-' }}</td>
                                     <td>{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
                                     <td>{{ number_format($row['units_per_pallet'], 0, ',', '.') }}</td>
-                                    <td>{{ number_format($row['full_pallets'], 0, ',', '.') }}</td>
+                                    <td>{{ number_format($row['warehouse_pallets'] ?? $row['full_pallets'], 2, ',', '.') }}</td>
                                     <td>{{ number_format($row['peaks_count'], 0, ',', '.') }}</td>
                                     <td>{{ $row['blocked_reason'] ?: '-' }}</td>
                                 </tr>
@@ -284,8 +338,6 @@
         </div>
     </section>
 @endsection
-
-
 
 
 

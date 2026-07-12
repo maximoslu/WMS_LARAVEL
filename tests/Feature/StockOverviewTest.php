@@ -52,7 +52,7 @@ class StockOverviewTest extends TestCase
             ->assertSee('SKU-STOCK-01')
             ->assertSee('LOT-001')
             ->assertSee('70.000')
-            ->assertSee('64')
+            ->assertSee('65,00')
             ->assertSee('1 pico')
             ->assertDontSee('Codigo pallet');
     }
@@ -128,6 +128,63 @@ class StockOverviewTest extends TestCase
             ->assertSee('SKU-FR-ONLY')
             ->assertDontSee('SKU-ED-HIDE')
             ->assertDontSee('name="client_id"', false);
+    }
+
+    public function test_cliente_no_ve_referencias_varios_pero_si_bloqueadas_y_obsoletas(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $visibleBlocked = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-BLOCKED-CLIENT',
+            'description' => 'Bloqueado visible',
+            'status' => Item::STATUS_BLOCKED,
+            'stock_category' => StockPallet::CATEGORY_BLOCKED,
+        ]);
+        $visibleObsolete = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-OBSOLETE-CLIENT',
+            'description' => 'Obsoleto visible',
+            'status' => Item::STATUS_OBSOLETE,
+            'stock_category' => StockPallet::CATEGORY_OBSOLETE,
+        ]);
+        $internal = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => '_INTERNAL-CLIENT',
+            'description' => 'Interno oculto',
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $visibleBlocked->id,
+            'quantity_units' => 100,
+            'status' => StockPallet::STATUS_BLOCKED,
+            'stock_category' => StockPallet::CATEGORY_BLOCKED,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $visibleObsolete->id,
+            'quantity_units' => 100,
+            'status' => StockPallet::STATUS_OBSOLETE,
+            'stock_category' => StockPallet::CATEGORY_OBSOLETE,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $internal->id,
+            'quantity_units' => 100,
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('SKU-BLOCKED-CLIENT')
+            ->assertSee('SKU-OBSOLETE-CLIENT')
+            ->assertDontSee('_INTERNAL-CLIENT')
+            ->assertDontSee('VARIOS');
     }
 
     public function test_cliente_cannot_force_other_client_with_query_string(): void
@@ -616,7 +673,7 @@ class StockOverviewTest extends TestCase
         }
     }
 
-    public function test_stock_muestra_pallets_totales_como_kpi_principal(): void
+    public function test_stock_muestra_pallets_almacen_como_kpi_principal(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -640,8 +697,8 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Pallets totales')
-            ->assertSeeText('2')
+            ->assertSeeText('Pallets almacen')
+            ->assertSeeText('2,00')
             ->assertDontSee('<th>Cliente</th>', false);
     }
 
@@ -698,7 +755,7 @@ class StockOverviewTest extends TestCase
             ->assertDontSeeText('Picos totales');
     }
 
-    public function test_valor_pallets_totales_equivale_a_unidades_logisticas(): void
+    public function test_valor_pallets_almacen_equivale_a_total_warehouse_pallets(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -715,6 +772,7 @@ class StockOverviewTest extends TestCase
             'units_per_pallet' => 1000,
             'full_pallets' => 3,
             'peaks_count' => 1,
+            'warehouse_pallets' => 3.5,
             'peak_1' => 500,
         ]);
 
@@ -724,15 +782,54 @@ class StockOverviewTest extends TestCase
         );
 
         $this->assertSame(4, $overview['summary']['total_logistic_units']);
+        $this->assertSame(3.5, $overview['summary']['total_warehouse_pallets']);
 
         $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Pallets totales')
-            ->assertSeeText('4');
+            ->assertSeeText('Pallets almacen')
+            ->assertSeeText('3,50');
     }
 
-    public function test_cliente_ve_pallets_totales(): void
+    public function test_stock_with_only_warehouse_pallets_is_visible_to_internal_users(): void
+    {
+        [$client] = $this->seedBaseData();
+
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-WAREHOUSE-ONLY',
+            'units_per_pallet' => 0,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 0,
+            'units_per_pallet' => 0,
+            'full_pallets' => 0,
+            'peaks_count' => 0,
+            'warehouse_pallets' => 0.5,
+            'status' => StockPallet::STATUS_AVAILABLE,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $overview = app(\App\Support\Stock\StockOverviewBuilder::class)->build($user, [
+            'client_id' => $client->id,
+            'search' => 'SKU-WAREHOUSE-ONLY',
+        ]);
+
+        $this->assertSame(1, $overview['summary']['references_with_stock']);
+        $this->assertSame(0.5, $overview['summary']['total_warehouse_pallets']);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', ['client_id' => $client->id, 'search' => 'SKU-WAREHOUSE-ONLY']))
+            ->assertOk()
+            ->assertSee('SKU-WAREHOUSE-ONLY')
+            ->assertSee('0,50');
+    }
+
+    public function test_cliente_no_ve_totales_ni_detalle_de_pallets(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -754,7 +851,11 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Pallets totales')
+            ->assertSeeText('Stock disponible')
+            ->assertDontSeeText('Pallets totales')
+            ->assertDontSeeText('Pallets almacen')
+            ->assertDontSeeText('Picos total')
+            ->assertDontSeeText('Uds/pallet')
             ->assertDontSeeText('Unidades logisticas');
     }
 
@@ -782,8 +883,8 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Pallets totales')
-            ->assertSeeText('3');
+            ->assertSeeText('Pallets almacen')
+            ->assertSeeText('3,00');
     }
 
     public function test_stock_index_is_paginated_by_default(): void

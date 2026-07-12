@@ -22,6 +22,14 @@ class StockPallet extends Model
 
     public const STATUS_OBSOLETE = 'obsolete';
 
+    public const CATEGORY_IN_USE = Item::CATEGORY_IN_USE;
+
+    public const CATEGORY_BLOCKED = Item::CATEGORY_BLOCKED;
+
+    public const CATEGORY_OBSOLETE = Item::CATEGORY_OBSOLETE;
+
+    public const CATEGORY_MISC = Item::CATEGORY_MISC;
+
     protected $fillable = [
         'client_id',
         'item_id',
@@ -35,6 +43,7 @@ class StockPallet extends Model
         'units_per_pallet',
         'full_pallets',
         'peaks_count',
+        'warehouse_pallets',
         'peak_1',
         'peak_2',
         'peak_3',
@@ -48,6 +57,7 @@ class StockPallet extends Model
         'received_at',
         'imported_at',
         'status',
+        'stock_category',
         'blocked_reason',
         'source_sheet',
         'notes',
@@ -61,6 +71,7 @@ class StockPallet extends Model
             'units_per_pallet' => 'integer',
             'full_pallets' => 'integer',
             'peaks_count' => 'integer',
+            'warehouse_pallets' => 'decimal:2',
             'peak_1' => 'integer',
             'peak_2' => 'integer',
             'peak_3' => 'integer',
@@ -113,8 +124,12 @@ class StockPallet extends Model
             $stockPallet->status = in_array((string) $stockPallet->status, self::statuses(), true)
                 ? $stockPallet->status
                 : self::STATUS_AVAILABLE;
+            $stockPallet->stock_category = in_array((string) $stockPallet->stock_category, self::stockCategories(), true)
+                ? $stockPallet->stock_category
+                : self::CATEGORY_IN_USE;
 
             $explicitPeaks = self::explicitPeaks($stockPallet);
+            $declaredWarehousePallets = $stockPallet->warehouse_pallets;
 
             if ((int) $stockPallet->units_per_pallet > 0 && (int) $stockPallet->quantity_units >= 0) {
                 if ($explicitPeaks !== []) {
@@ -157,6 +172,10 @@ class StockPallet extends Model
                 foreach (range(1, self::MAX_PEAK_COLUMNS) as $peakNumber) {
                     $stockPallet->{'peak_'.$peakNumber} = 0;
                 }
+            }
+
+            if ($declaredWarehousePallets === null || $declaredWarehousePallets === '') {
+                $stockPallet->warehouse_pallets = (int) $stockPallet->full_pallets + (int) $stockPallet->peaks_count;
             }
         });
     }
@@ -215,9 +234,35 @@ class StockPallet extends Model
         return self::statusOptions()[$status ?? ''] ?? 'Disponible';
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function stockCategories(): array
+    {
+        return Item::stockCategories();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function stockCategoryOptions(): array
+    {
+        return Item::stockCategoryOptions();
+    }
+
+    public static function stockCategoryLabelFor(?string $stockCategory): string
+    {
+        return Item::stockCategoryLabelFor($stockCategory);
+    }
+
     public function statusLabel(): string
     {
         return self::statusLabelFor($this->status);
+    }
+
+    public function stockCategoryLabel(): string
+    {
+        return self::stockCategoryLabelFor($this->stock_category);
     }
 
     /**

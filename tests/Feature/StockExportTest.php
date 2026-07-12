@@ -43,19 +43,20 @@ class StockExportTest extends TestCase
             ->assertDontSee('Usa el buscador para localizar');
     }
 
-    public function test_stock_cliente_muestra_pallets_totales_con_boton_descargar_integrado(): void
+    public function test_stock_cliente_muestra_stock_disponible_con_boton_descargar_integrado(): void
     {
         [$edelvives] = $this->seedClients();
         $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
 
         $response = $this->actingAs($user)->get(route('stock.index'));
         $response->assertOk();
-        $response->assertSee('Pallets totales');
+        $response->assertSee('Stock disponible');
+        $response->assertDontSee('Pallets totales');
 
         $content = $response->getContent();
 
         $this->assertMatchesRegularExpression(
-            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Pallets totales.*?data-stock-export-trigger.*?<\/article>/s',
+            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Stock disponible.*?data-stock-export-trigger.*?<\/article>/s',
             $content
         );
         $this->assertStringNotContainsString('stock-summary-toolbar', $content);
@@ -231,6 +232,34 @@ class StockExportTest extends TestCase
         $content = file_get_contents($response->baseResponse->getFile()->getPathname());
 
         $this->assertStringContainsString('SKU-NOLOT;"Sin lote articulo";"SIN LOTE";5', $content);
+    }
+
+    public function test_cliente_no_exporta_referencias_internas_varios(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+        $visible = $this->createStockRow($edelvives, 'SKU-VISIBLE', 'Visible cliente', 'LOTE-V', 10);
+
+        $internalItem = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => '_INTERNAL-EXPORT',
+            'description' => 'Interno export',
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+        StockPallet::factory()->create([
+            'item_id' => $internalItem->id,
+            'client_id' => $edelvives->id,
+            'lot' => 'LOTE-I',
+            'quantity_units' => 5,
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('stock.export', ['format' => 'csv']));
+        $content = file_get_contents($response->baseResponse->getFile()->getPathname());
+
+        $this->assertStringContainsString($visible->item->sku, $content);
+        $this->assertStringNotContainsString('_INTERNAL-EXPORT', $content);
+        $this->assertStringNotContainsString('Interno export', $content);
     }
 
     public function test_cliente_edelvives_no_puede_descargar_stock_friesland(): void
