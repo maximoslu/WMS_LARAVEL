@@ -1790,3 +1790,71 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Push confirmado a `origin/main` con commit funcional `5c87185` (`023cb75..5c87185`).
 - Este push puede disparar Forge automaticamente.
 - No se da por desplegado en produccion sin verificacion real posterior.
+
+---
+
+## 2026-07-12 - Importacion y visibilidad de stock Friesland por categorias
+
+**Contexto:** Se pidio adaptar la importacion del Excel `STOCK_FRIESLAND.xlsx` para clasificar stock por `GENERAL`, `BOBINAS`, `ETIQUETAS`, `BLOQUEADO`, `OBSOLETO` y `VARIOS`, manteniendo referencias internas `_` solo para usuarios internos y ocultando a clientes los palets, picos, totales logisticos y referencias internas.
+
+**Comprobaciones iniciales obligatorias:**
+- `SESSION_LOG.md` leido completo por bloques.
+- `git status --short`: limpio.
+- `git branch --show-current`: `main`.
+- `git remote -v`: `origin https://github.com/maximoslu/WMS_LARAVEL.git`.
+- `git log -5 --oneline`: `cd247ba`, `5c87185`, `023cb75`, `ed3d747`, `3f2d5a1`.
+- `git pull --ff-only origin main`: `Already up to date`.
+
+**Cambios realizados:**
+- Se anadio migracion para `items.stock_category`, `stock_pallets.stock_category` y `stock_pallets.warehouse_pallets`.
+- `StockExcelImportService` ahora procesa `GENERAL`, `BOBINAS`, `ETIQUETAS`, `BLOQUEADO`, `OBSOLETO` y `VARIOS`.
+- Las filas `***` se ignoran como resumen; las referencias `_` se importan como internas/VARIOS.
+- `warehouse_pallets` usa `PALLETS/PALETS + PICOS` directamente y conserva decimales `0,33`, `0,5`, etc.
+- En BOBINAS se conserva stock logistico aunque `UNIDADES x PALLET` sea 0 si hay palets/picos declarados.
+- La confirmacion sigue reemplazando el stock del cliente en transaccion y conserva trazabilidad por `stock_import_id`.
+- Vista de importacion: muestra filas leidas, filas validas, `***` ignoradas, `_` internas, palets almacen, diferencias contra stock actual y totales por categoria.
+- Stock interno: muestra filtro/categoria y KPI `Pallets almacen`.
+- Stock cliente/exportaciones: oculta referencias VARIOS/_ y no muestra palets, picos, uds/pallet ni totales logisticos.
+
+**Contraste con Excel real local:**
+- Archivo localizado: `C:\Users\jorge\Downloads\STOCK_FRIESLAND.xlsx`.
+- Hojas detectadas: `GENERAL`, `BOBINAS`, `ETIQUETAS`, `BLOQUEADO`, `OBSOLETO`, `VARIOS`.
+- Lineas con referencia no resumen: `291`.
+- Filas `***` excluidas: `5`.
+- Referencias `_`: `8`; palets internos `_`: `81`.
+- Total palets almacen por hoja: `GENERAL 1903`, `BOBINAS 279`, `ETIQUETAS 17`, `BLOQUEADO 21`, `OBSOLETO 41`, `VARIOS 78`.
+- Total palets almacen: `2339`; visible cliente tras ocultar `_`: `2258`.
+
+**Cobertura anadida/adaptada:**
+- Importacion de hojas Friesland, ETIQUETAS procesada, BLOQUEADO/OBSOLETO clasificados.
+- `***` ignorado y `_` importado como VARIOS interno.
+- Calculo decimal de `PICOS` como palets almacen.
+- BOBINAS con unidades por pallet 0 y palets/picos declarados.
+- Cliente ve bloqueado/obsoleto pero no VARIOS/_.
+- Cliente no ve palets, picos, uds/pallet ni totales logisticos.
+- Exportaciones cliente no incluyen VARIOS/_.
+- Stock con solo `warehouse_pallets` queda visible para internos.
+
+**Validacion ejecutada:**
+- `php artisan test tests/Feature/StockImportTest.php`: `31 passed` (335 assertions).
+- `php artisan test tests/Feature/StockOverviewTest.php`: `32 passed` (155 assertions).
+- `php artisan test tests/Feature/StockExportTest.php`: `19 passed` (61 assertions).
+- `php artisan test`: `505 passed` (2330 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php -l` en modelos, servicio, builder y migracion modificados: OK.
+- `git diff --check`: OK.
+- Diff completo revisado antes de commitear.
+
+**Control de alcance:**
+- No se toco `.env`.
+- No se tocaron secretos, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh`.
+- No se borraron datos.
+- La migracion nueva se justifica porque se necesitaba persistir categoria funcional y palets almacen decimales sin sobrecargar `peaks_count`.
+- No se tocaron pedidos, bookings, dispatches ni otros modulos salvo export/consulta de stock vinculados a visibilidad cliente.
+
+**Commit / push / despliegue:**
+- Commit funcional: `81e3359 feat: adapt Friesland stock import categories`.
+- Push: pendiente en este punto del log; se realizara tras commitear esta actualizacion documental.
+- Este push a `origin/main` puede disparar Forge automaticamente.
+- No se da por desplegado en produccion sin verificacion real posterior.
