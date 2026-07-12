@@ -2060,7 +2060,7 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 **Equipo:** PC de casa.
 **Ruta:** `D:\dev\WMS_LARAVEL`.
 **Rama:** `main`.
-**Commit:** `feat: registrar carga real parcial en salidas`.
+**Commit funcional:** `1c7f723 feat: registrar carga real parcial en salidas`.
 **Contexto:** en `Salidas > Pedidos pendientes > SOL-...`, almacen necesita registrar la carga real exacta cuando se cargan pallets completos mas unidades sueltas de pico, escogiendo la partida/lote/ubicacion real. Antes el formulario solo admitia `loaded_quantity` y las lineas de pico quedaban limitadas a 0/1, sin poder expresar "0 pallets + 300 uds".
 
 ### Cambios funcionales
@@ -2091,13 +2091,14 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - `npm run build`: OK.
 - `git diff --check`: OK.
 - Lint PHP de archivos tocados: OK.
-- `git status`: cambios pendientes listos para commit antes de cerrar la sesion.
+- `git status`: arbol limpio tras commit funcional.
 
 ### Control de alcance
 - No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
 - No se uso `migrate:fresh`. No se borraron datos.
 - Cambios acotados a preparacion/envio de salidas, pantalla interna de pedido pendiente, CSS asociado, migracion minima y tests.
-- Push previsto a `origin/main` tras commit si el diff revisado coincide con este alcance. El push puede disparar Forge; despliegue en produccion no verificado desde esta sesion.
+- Push funcional a `origin/main`: OK (`c336ffa..1c7f723 main -> main`). Puede disparar Forge.
+- Despliegue en produccion: no verificado desde esta sesion.
 
 ---
 
