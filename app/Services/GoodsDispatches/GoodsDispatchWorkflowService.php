@@ -3,6 +3,7 @@
 namespace App\Services\GoodsDispatches;
 
 use App\Models\GoodsDispatch;
+use App\Models\GoodsDispatchLine;
 use App\Models\MerchandiseRequest;
 use App\Models\User;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
@@ -31,13 +32,21 @@ class GoodsDispatchWorkflowService
      *     loaded_pallets:int|string,
      *     loaded_peaks?:int|string|null,
      *     loaded_partial_units?:int|string|null,
+     *     allocations?:array<int, array{
+     *         stock_pallet_id?:int|null,
+     *         loaded_pallets:int,
+     *         loaded_partial_units:int,
+     *         selected_peaks?:array<int, array{index:int, units:int}>,
+     *         lot?:string|null,
+     *         location_text?:string|null
+     *     }>,
      *     loading_notes?:?string,
      *     remove?:mixed
      * }>  $linePayload
      */
     public function confirmLoading(GoodsDispatch $dispatch, array $linePayload, User $user): void
     {
-        $dispatch->loadMissing(['lines', 'merchandiseRequest']);
+        $dispatch->loadMissing(['lines.allocations', 'merchandiseRequest']);
 
         DB::transaction(function () use ($dispatch, $linePayload, $user): void {
             $confirmedAt = now();
@@ -76,6 +85,8 @@ class GoodsDispatchWorkflowService
                         'confirmed_at' => $confirmedAt,
                     ]);
 
+                    $this->syncAllocations($line, $payload['allocations'] ?? []);
+
                     continue;
                 }
 
@@ -83,7 +94,7 @@ class GoodsDispatchWorkflowService
                     continue;
                 }
 
-                $dispatch->lines()->create([
+                $createdLine = $dispatch->lines()->create([
                     'item_id' => $payload['item_id'],
                     'stock_pallet_id' => $payload['stock_pallet_id'] ?? null,
                     'line_type' => $payload['line_type'],
@@ -105,6 +116,8 @@ class GoodsDispatchWorkflowService
                     'confirmed_at' => $confirmedAt,
                     'is_extra_line' => true,
                 ]);
+
+                $this->syncAllocations($createdLine, $payload['allocations'] ?? []);
             }
 
             if ($dispatch->status === GoodsDispatch::STATUS_DRAFT) {
@@ -129,6 +142,42 @@ class GoodsDispatchWorkflowService
         ]);
 
         $this->notificationService->notifyLoadingConfirmed($freshDispatch, $user);
+    }
+
+    /**
+     * @param  array<int, array{
+     *     stock_pallet_id?:int|null,
+     *     loaded_pallets:int,
+     *     loaded_partial_units:int,
+     *     selected_peaks?:array<int, array{index:int, units:int}>,
+     *     lot?:string|null,
+     *     location_text?:string|null
+     * }>  $allocations
+     */
+    private function syncAllocations(GoodsDispatchLine $line, array $allocations): void
+    {
+        $line->allocations()->delete();
+
+        foreach ($allocations as $allocation) {
+            $stockPalletId = $allocation['stock_pallet_id'] ?? null;
+            $loadedPallets = (int) ($allocation['loaded_pallets'] ?? 0);
+            $loadedPartialUnits = (int) ($allocation['loaded_partial_units'] ?? 0);
+
+            if ($stockPalletId === null || ($loadedPallets <= 0 && $loadedPartialUnits <= 0)) {
+                continue;
+            }
+
+            $line->allocations()->create([
+                'stock_pallet_id' => $stockPalletId,
+                'lot' => $allocation['lot'] ?? null,
+                'location_text' => $allocation['location_text'] ?? null,
+                'loaded_pallets' => $loadedPallets,
+                'loaded_partial_units' => $loadedPartialUnits,
+                'selected_peaks' => $allocation['selected_peaks'] ?? [],
+            ]);
+        }
+
+        $line->unsetRelation('allocations');
     }
 
     public function changeStatus(GoodsDispatch $dispatch, string $newStatus, User $user): ?string

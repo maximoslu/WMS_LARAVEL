@@ -125,6 +125,7 @@ class GoodsDispatchController extends Controller
             'lines.stockPallet',
             'dispatch.lines.item',
             'dispatch.lines.stockPallet',
+            'dispatch.lines.allocations.stockPallet',
             'dispatch.lines.sourceRequestLine',
         ]);
 
@@ -217,6 +218,7 @@ class GoodsDispatchController extends Controller
             'merchandiseRequest',
             'lines.item',
             'lines.stockPallet',
+            'lines.allocations.stockPallet',
             'lines.sourceRequestLine',
         ]);
 
@@ -295,7 +297,7 @@ class GoodsDispatchController extends Controller
         GoodsDispatch $goodsDispatch,
         GoodsDispatchWorkflowService $workflowService,
     ) {
-        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet']);
+        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet', 'lines.allocations.stockPallet']);
 
         abort_unless(
             in_array($goodsDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true),

@@ -1816,6 +1816,157 @@ const setupDispatchLoadingEditor = () => {
     form.dataset.loadingEditorBound = 'true';
 };
 
+const setupWarehouseRequestAllocations = () => {
+    const form = document.querySelector('[data-warehouse-request-allocations]');
+
+    if (!form || form.dataset.allocationsBound === 'true') {
+        return;
+    }
+
+    const parsePositiveInteger = (value) => {
+        const parsed = Number.parseInt(value, 10);
+
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    };
+
+    const updateVisiblePeakGroup = (assignment) => {
+        const selectedStockId = assignment.querySelector('[data-stock-select]')?.value ?? '';
+
+        assignment.querySelectorAll('[data-peak-group]').forEach((group) => {
+            const shouldShow = selectedStockId !== '' && group.dataset.stockId === selectedStockId;
+            group.hidden = !shouldShow;
+
+            if (!shouldShow) {
+                group.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                    checkbox.checked = false;
+                });
+            }
+        });
+    };
+
+    const updateAssignment = (assignment, line) => {
+        updateVisiblePeakGroup(assignment);
+
+        const unitsPerPallet = parsePositiveInteger(line.dataset.unitsPerPallet);
+        const loadedPallets = parsePositiveInteger(assignment.querySelector('[data-loaded-pallets]')?.value ?? '0');
+        const manualPartialUnits = parsePositiveInteger(assignment.querySelector('[data-loaded-partial-units]')?.value ?? '0');
+        const selectedPeakUnits = Array.from(assignment.querySelectorAll('[data-peak-group]:not([hidden]) input[type="checkbox"]:checked'))
+            .reduce((total, checkbox) => total + parsePositiveInteger(checkbox.dataset.peakUnits ?? '0'), 0);
+        const partialUnits = manualPartialUnits + selectedPeakUnits;
+        const totalUnits = (loadedPallets * unitsPerPallet) + partialUnits;
+        const totalNode = assignment.querySelector('[data-assignment-total]');
+
+        if (totalNode) {
+            totalNode.textContent = formatNumber.format(totalUnits);
+        }
+
+        return {
+            loadedPallets,
+            partialUnits,
+            totalUnits,
+        };
+    };
+
+    const updateLine = (line) => {
+        let totalPallets = 0;
+        let totalPartialUnits = 0;
+        let totalUnits = 0;
+
+        line.querySelectorAll('[data-assignment]').forEach((assignment) => {
+            const totals = updateAssignment(assignment, line);
+            totalPallets += totals.loadedPallets;
+            totalPartialUnits += totals.partialUnits;
+            totalUnits += totals.totalUnits;
+        });
+
+        const requestedUnits = parsePositiveInteger(line.dataset.requestedUnits);
+        const differenceUnits = requestedUnits - totalUnits;
+        const loadedPalletsField = line.querySelector('[data-line-loaded-pallets]');
+        const loadedPartialUnitsField = line.querySelector('[data-line-loaded-partial-units]');
+        const loadedUnitsNode = line.querySelector('[data-loaded-units]');
+        const differenceUnitsNode = line.querySelector('[data-difference-units]');
+        const stateNode = line.querySelector('[data-prep-state]');
+
+        if (loadedPalletsField) {
+            loadedPalletsField.value = String(totalPallets);
+        }
+
+        if (loadedPartialUnitsField) {
+            loadedPartialUnitsField.value = String(totalPartialUnits);
+        }
+
+        if (loadedUnitsNode) {
+            loadedUnitsNode.textContent = formatNumber.format(totalUnits);
+        }
+
+        if (differenceUnitsNode) {
+            differenceUnitsNode.textContent = formatNumber.format(differenceUnits);
+        }
+
+        if (stateNode) {
+            stateNode.classList.remove(
+                'warehouse-load-state--pending',
+                'warehouse-load-state--partial',
+                'warehouse-load-state--difference',
+                'warehouse-load-state--ok',
+            );
+
+            if (totalUnits === 0) {
+                stateNode.textContent = 'Sin preparar';
+                stateNode.classList.add('warehouse-load-state--pending');
+            } else if (totalUnits === requestedUnits) {
+                stateNode.textContent = 'Completo';
+                stateNode.classList.add('warehouse-load-state--ok');
+            } else if (totalUnits > requestedUnits && requestedUnits > 0) {
+                stateNode.textContent = 'Exceso';
+                stateNode.classList.add('warehouse-load-state--difference');
+            } else {
+                stateNode.textContent = 'Parcial';
+                stateNode.classList.add('warehouse-load-state--partial');
+            }
+        }
+    };
+
+    form.querySelectorAll('[data-prep-line]').forEach((line) => {
+        line.addEventListener('input', () => updateLine(line));
+        line.addEventListener('change', () => updateLine(line));
+
+        line.addEventListener('click', (event) => {
+            const removeButton = event.target.closest('[data-remove-assignment]');
+            const addButton = event.target.closest('[data-add-assignment]');
+
+            if (removeButton) {
+                const assignment = removeButton.closest('[data-assignment]');
+                const assignmentList = line.querySelector('[data-assignment-list]');
+
+                if (assignment && assignmentList && assignmentList.querySelectorAll('[data-assignment]').length > 1) {
+                    assignment.remove();
+                    updateLine(line);
+                }
+
+                return;
+            }
+
+            if (addButton) {
+                const template = line.querySelector('[data-assignment-template]');
+                const assignmentList = line.querySelector('[data-assignment-list]');
+
+                if (!template || !assignmentList) {
+                    return;
+                }
+
+                const index = `new_${Date.now()}_${assignmentList.querySelectorAll('[data-assignment]').length}`;
+                addButton.insertAdjacentHTML('beforebegin', template.innerHTML.replaceAll('__INDEX__', index));
+                updateLine(line);
+            }
+        });
+
+        updateLine(line);
+    });
+
+    form.dataset.allocationsBound = 'true';
+};
+
 const boot = () => {
     setupAppDrawer();
     setupStockFilters();
@@ -1826,6 +1977,7 @@ const boot = () => {
     setupMerchandiseRequestBuilder();
     setupGoodsDispatchBuilder();
     setupDispatchLoadingEditor();
+    setupWarehouseRequestAllocations();
 };
 
 if (document.readyState === 'loading') {

@@ -7,6 +7,7 @@ use Database\Factories\GoodsDispatchLineFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GoodsDispatchLine extends Model
 {
@@ -78,6 +79,11 @@ class GoodsDispatchLine extends Model
         return $this->belongsTo(MerchandiseRequestLine::class, 'source_request_line_id');
     }
 
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(GoodsDispatchLineAllocation::class);
+    }
+
     public function lineType(): string
     {
         return in_array((string) $this->line_type, WmsLineType::values(), true)
@@ -116,6 +122,10 @@ class GoodsDispatchLine extends Model
 
     public function loadedPallets(): int
     {
+        if ($this->hasLoadingAllocations()) {
+            return (int) $this->loadingAllocations()->sum(fn (GoodsDispatchLineAllocation $allocation): int => $allocation->loadedPallets());
+        }
+
         return $this->isPalletLine()
             ? (int) ($this->loaded_pallets ?? $this->requestedPallets())
             : 0;
@@ -130,6 +140,10 @@ class GoodsDispatchLine extends Model
 
     public function loadedPartialUnits(): int
     {
+        if ($this->hasLoadingAllocations()) {
+            return (int) $this->loadingAllocations()->sum(fn (GoodsDispatchLineAllocation $allocation): int => $allocation->loadedPartialUnits());
+        }
+
         if ($this->loaded_partial_units !== null) {
             return max(0, (int) $this->loaded_partial_units);
         }
@@ -172,6 +186,31 @@ class GoodsDispatchLine extends Model
     {
         return ($this->loadedPallets() * max(0, (int) ($this->units_per_pallet ?? 0)))
             + $this->loadedPartialUnits();
+    }
+
+    public function hasLoadingAllocations(): bool
+    {
+        if ($this->relationLoaded('allocations')) {
+            return $this->allocations->isNotEmpty();
+        }
+
+        if (! $this->exists) {
+            return false;
+        }
+
+        return $this->allocations()->exists();
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, GoodsDispatchLineAllocation>
+     */
+    public function loadingAllocations()
+    {
+        if (! $this->relationLoaded('allocations')) {
+            $this->load('allocations');
+        }
+
+        return $this->allocations;
     }
 
     public function requestedQuantityLabel(): string
