@@ -7459,3 +7459,59 @@ body.auth-page .app-footer__link {
         padding-inline: 0.9rem;
     }
 }
+
+/* Importacion de stock: mensajes de error/aviso legibles sobre el shell oscuro.
+   Los errores SQL/validacion pueden ser largos, por lo que se fuerza el ajuste
+   de linea y el scroll horizontal en tokens largos, con caja de alto contraste. */
+.import-alert {
+    display: block;
+}
+
+.import-alert-title {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+}
+
+.import-alert-list,
+.import-message-list {
+    margin: 0;
+    padding-left: 1.15rem;
+    list-style: disc;
+}
+
+.import-alert-list li,
+.import-message-list li {
+    margin-bottom: 0.3rem;
+}
+
+.import-error-detail {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+    line-height: 1.5;
+}
+
+body.brand-body.app-shell-body .import-errors-card {
+    border-left: 4px solid #b23b3b;
+}
+
+body.brand-body.app-shell-body .import-errors-card h3 {
+    color: #8f2020;
+}
+
+body.brand-body.app-shell-body .import-errors-card--fatal {
+    border-left-color: #8f2020;
+    background: #fbeaea;
+}
+
+body.brand-body.app-shell-body .import-warnings-card {
+    border-left: 4px solid #d9a441;
+}
+
+body.brand-body.app-shell-body .import-warnings-card h3 {
+    color: #8a5a12;
+}

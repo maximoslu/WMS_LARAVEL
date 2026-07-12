@@ -30,10 +30,11 @@
     </section>
 
     @if ($errors->any())
-        <div class="alert alert-danger">
-            <ul>
+        <div class="alert alert-error import-alert" role="alert">
+            <strong class="import-alert-title">No se ha podido completar la operacion</strong>
+            <ul class="import-alert-list">
                 @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
+                    <li><span class="import-error-detail">{{ $error }}</span></li>
                 @endforeach
             </ul>
         </div>
@@ -109,7 +110,11 @@
                 <span>{{ number_format($preview['totals']['summary_rows_ignored'] ?? 0, 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
-                <strong>Refs internas _</strong>
+                <strong>Refs internas detectadas</strong>
+                <span>{{ number_format($preview['totals']['internal_references_detected'] ?? $preview['totals']['internal_rows'] ?? 0, 0, ',', '.') }}</span>
+            </article>
+            <article class="surface-card stock-summary-card kpi-card kpi-compact">
+                <strong>Refs internas con stock</strong>
                 <span>{{ number_format($preview['totals']['internal_rows'] ?? 0, 0, ',', '.') }}</span>
             </article>
             <article class="surface-card stock-summary-card kpi-card kpi-compact">
@@ -178,11 +183,11 @@
         </section>
 
         @if ($preview['warnings'] !== [])
-            <section class="surface-card compact-card">
+            <section class="surface-card compact-card import-warnings-card">
                 <h3>Avisos</h3>
-                <ul>
+                <ul class="import-message-list">
                     @foreach ($preview['warnings'] as $warning)
-                        <li>{{ $warning }}</li>
+                        <li><span class="import-error-detail">{{ $warning }}</span></li>
                     @endforeach
                 </ul>
             </section>
@@ -215,23 +220,23 @@
         @endif
 
         @if ($preview['fatal_errors'] !== [])
-            <section class="surface-card compact-card">
+            <section class="surface-card compact-card import-errors-card import-errors-card--fatal">
                 <h3>Errores fatales</h3>
-                <ul>
+                <ul class="import-message-list">
                     @foreach ($preview['fatal_errors'] as $error)
-                        <li>{{ $error }}</li>
+                        <li><span class="import-error-detail">{{ $error }}</span></li>
                     @endforeach
                 </ul>
             </section>
         @endif
 
         @if ($preview['row_errors'] !== [])
-            <section class="surface-card compact-card">
+            <section class="surface-card compact-card import-errors-card">
                 <h3>Errores bloqueantes en filas</h3>
                 <p>Estas filas no se importaran, pero no bloquean la importacion mientras existan filas validas.</p>
-                <ul>
+                <ul class="import-message-list">
                     @foreach ($preview['row_errors'] as $error)
-                        <li>{{ $error }}</li>
+                        <li><span class="import-error-detail">{{ $error }}</span></li>
                     @endforeach
                 </ul>
             </section>

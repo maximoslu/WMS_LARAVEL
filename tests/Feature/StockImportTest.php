@@ -1438,6 +1438,105 @@ class StockImportTest extends TestCase
             ->assertDontSee('ED-VISIBLE');
     }
 
+    public function test_friesland_formula_quantity_cells_do_not_break_import_or_create_phantom_rows(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        // La columna CANTIDAD del Excel real de Friesland es una formula (=(F*G)+picos).
+        // OpenSpout devuelve el texto de la formula, no su valor: nunca debe interpretarse como numero.
+        $file = $this->makeWorkbookUpload([
+            'GENERAL' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1'],
+                ['11', 'Fecula de patata', 'NO LOTE', '=(E2*F2)+(H2)', 1000, 0, 0, 0],
+                ['SKU-A', 'Producto A', 'LOT-A', '=(E3*F3)+(H3)', 1000, 5, 0, 0],
+                ['LASTOPP248', 'Media pallet', 'LOT-HALF', '=(E4*F4)', 2000, 0.5, 0, 0],
+            ],
+            'BOBINAS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1', 'Pico 2'],
+                ['CRYOVAC5', 'Film sin uds', 'LOT-CRYO', '=(E2*F2)+(H2)', 0, 0, 0, 55000, 0],
+                ['_FILM0519', 'Interno bobina', 'LOT-INT', '=(E3*F3)', 14400, 0, 3, 4000, 5000],
+            ],
+            'VARIOS' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Picos', 'Pico 1'],
+                ['_CAJA057', 'Caja A', 'LOT-C1', '=(E2*F2)', 60, 1, 0, 0],
+                ['_CAJA057', 'Caja B', 'LOT-C2', '=(E3*F3)', 80, 1, 0, 0],
+                ['_PALLET EUR', 'Sin stock', 'LOT-EUR', '=(E4*F4)', 9, 0, 0, 0],
+            ],
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ]);
+
+        $response->assertOk()
+            ->assertSee('Refs internas detectadas')
+            ->assertSee('Refs internas con stock')
+            ->assertSee('import-error-detail', false)
+            ->assertSee('sin pallets ni picos operativos');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $totals = $stockImport->summary_json;
+
+        // Sin errores bloqueantes: CRYOVAC5 (pico sin pallets/picos operativos) es aviso, no error SQL.
+        $this->assertSame(0, $totals['real_errors']);
+        $this->assertSame(0, $totals['invalid_rows_ignored']);
+
+        // La formula no genera cantidades gigantes. Cantidades del desglose:
+        // SKU-A 5000 + LASTOPP248 2000 + _FILM0519 9000 (picos) + _CAJA057 60 + 80 = 16140.
+        $this->assertSame(16140, $totals['total_units']);
+
+        // Palets almacen = PALLETS + PICOS con decimales: 5 + 0.5 + 3 + 1 + 1 = 10.5.
+        $this->assertSame(10.5, (float) $totals['total_warehouse_pallets']);
+        $this->assertSame(5.5, (float) $totals['category_warehouse_pallets'][StockPallet::CATEGORY_IN_USE]);
+        $this->assertSame(5.0, (float) $totals['category_warehouse_pallets'][StockPallet::CATEGORY_MISC]);
+
+        // 4 lineas internas "_" detectadas (incluida la que no tiene stock y el SKU repetido); 3 con stock.
+        $this->assertSame(4, $totals['internal_references_detected']);
+        $this->assertSame(3, $totals['internal_rows']);
+
+        // La confirmacion no debe lanzar SQLSTATE 22003 (out of range).
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect(route('stock.index', ['client_id' => $friesland->id]));
+
+        // 5 partidas con stock: SKU-A, LASTOPP248, _FILM0519, _CAJA057 x2. CRYOVAC5 y _PALLET EUR quedan fuera.
+        $this->assertSame(5, StockPallet::query()->where('client_id', $friesland->id)->count());
+
+        // El item fantasma "11" se crea como articulo sin stock, pero no como partida.
+        $this->assertDatabaseHas('items', ['client_id' => $friesland->id, 'sku' => '11']);
+        $this->assertDatabaseMissing('stock_pallets', ['client_id' => $friesland->id, 'lot' => 'NO LOTE']);
+
+        // CRYOVAC5: item creado, sin partida logistica.
+        $this->assertDatabaseHas('items', ['client_id' => $friesland->id, 'sku' => 'CRYOVAC5']);
+        $this->assertDatabaseMissing('stock_pallets', ['client_id' => $friesland->id, 'lot' => 'LOT-CRYO']);
+
+        // Media pallet: 0.5 palets de almacen (no redondeado a 1) y cantidad razonable (no gigante).
+        $halfPallet = StockPallet::query()
+            ->where('client_id', $friesland->id)->where('lot', 'LOT-HALF')->firstOrFail();
+        $this->assertSame(0.5, (float) $halfPallet->warehouse_pallets);
+        $this->assertLessThan(1_000_000, $halfPallet->quantity_units);
+
+        // SKU-A: cantidad del desglose, no de la formula.
+        $skuA = StockPallet::query()
+            ->where('client_id', $friesland->id)->where('lot', 'LOT-A')->firstOrFail();
+        $this->assertSame(5000, $skuA->quantity_units);
+        $this->assertSame(5.0, (float) $skuA->warehouse_pallets);
+
+        // Ninguna partida con cantidad 0 y palets almacen 0.
+        $this->assertSame(0, StockPallet::query()
+            ->where('client_id', $friesland->id)
+            ->where('quantity_units', 0)
+            ->where('warehouse_pallets', 0)
+            ->count());
+
+        // El maximo quantity_units cabe con holgura en la columna (nunca fuera de rango).
+        $this->assertLessThan(1_000_000, (int) StockPallet::query()
+            ->where('client_id', $friesland->id)->max('quantity_units'));
+    }
+
     /**
      * @return array{0: Client, 1: Client}
      */

@@ -411,6 +411,7 @@ class StockExcelImportService
             'excluded_rows' => 0,
             'summary_rows_ignored' => 0,
             'internal_rows' => 0,
+            'internal_references_detected' => 0,
             'internal_warehouse_pallets' => 0.0,
             'empty_rows_ignored' => 0,
             'missing_sku_rows' => 0,
@@ -492,6 +493,13 @@ class StockExcelImportService
                         $existingItems,
                         $lineNumber,
                     );
+
+                    // Cuenta cada linea interna (SKU que empieza por "_") detectada, tenga o no stock.
+                    // "internal_rows" solo cuenta las que finalmente se importan como partida con stock.
+                    if ($parsedRow['catalog_item'] !== null
+                        && str_starts_with(ltrim((string) $parsedRow['catalog_item']['sku']), '_')) {
+                        $totals['internal_references_detected']++;
+                    }
 
                     if ($parsedRow['skip']) {
                         $totals['skipped_rows']++;
@@ -976,6 +984,7 @@ class StockExcelImportService
         ];
 
         $fullPalletsFromFile = $this->integerValue($values[$headerMap['full_pallets'] ?? -1] ?? null);
+        $fullPalletsDecimalFromFile = $this->decimalValue($values[$headerMap['full_pallets'] ?? -1] ?? null);
         $warehousePeaksFromFile = $this->decimalValue($values[$headerMap['peaks_count'] ?? -1] ?? null);
         $peaks = [];
 
@@ -1012,11 +1021,11 @@ class StockExcelImportService
                     'lot' => $lot,
                     'location_code' => null,
                     'location_text' => $locationText,
-                    'quantity_units' => (int) $quantityFromFile,
+                    'quantity_units' => (int) ($quantityFromFile ?? $peakUnits),
                     'units_per_pallet' => 0,
                     'full_pallets' => max(0, (int) ($fullPalletsFromFile ?? 0)),
                     'peaks_count' => 0,
-                    'warehouse_pallets' => max(0, (float) ($fullPalletsFromFile ?? 0) + (float) ($warehousePeaksFromFile ?? 0)),
+                    'warehouse_pallets' => max(0.0, (float) ($fullPalletsDecimalFromFile ?? 0) + (float) ($warehousePeaksFromFile ?? 0)),
                     'received_at' => $this->dateValue($values[$headerMap['received_at'] ?? -1] ?? null),
                     'status' => $status,
                     'stock_category' => $stockCategory,
@@ -1038,6 +1047,26 @@ class StockExcelImportService
                         'key' => 'bobinas_missing_units_'.$sheetName,
                         'summary' => 'Se han importado :count filas de '.$sheetName.' sin unidades por pallet validas, conservando solo el stock operativo.',
                         'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' importada sin unidades por pallet validas para SKU '.$sku.'. Se conserva la cantidad total sin desglose de pallets.',
+                    ],
+                    'error' => null,
+                    'error_group' => null,
+                ];
+            }
+
+            if ($isBobinasSheet && $peakUnits > 0) {
+                // Stock declarado solo en columnas PICO 1..10, sin PALLETS ni PICOS operativos
+                // y sin unidades por pallet: no se puede cuantificar como partida logistica.
+                // Se avisa para revision manual, pero no debe bloquear ni romper la insercion.
+                return [
+                    'row' => null,
+                    'catalog_item' => $catalogItem,
+                    'skip' => false,
+                    'message' => null,
+                    'warning' => null,
+                    'warning_group' => [
+                        'key' => 'peak_only_without_logistics_'.$sheetName,
+                        'summary' => 'Se han omitido :count filas de '.$sheetName.' con stock en picos pero sin pallets ni picos operativos ni unidades por pallet. Revisar manualmente.',
+                        'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con stock solo en columnas PICO pero sin PALLETS ni PICOS operativos. No se crea partida logistica.',
                     ],
                     'error' => null,
                     'error_group' => null,
@@ -1119,7 +1148,9 @@ class StockExcelImportService
         }
 
         $receivedAt = $this->dateValue($values[$headerMap['received_at'] ?? -1] ?? null);
-        $warehousePallets = max(0, (float) $fullPallets + (float) ($warehousePeaksFromFile ?? count(array_filter($peaks, fn (int $value): bool => $value > 0))));
+        // Palets almacen = PALLETS (decimal del archivo) + PICOS (columna operativa, puede ser decimal).
+        // No se cuentan las columnas PICO 1..10 y no se redondea el valor decimal de PALLETS.
+        $warehousePallets = max(0.0, (float) ($fullPalletsDecimalFromFile ?? $fullPallets) + (float) ($warehousePeaksFromFile ?? 0));
         $rowData = [
             'sku' => $sku,
             'description' => $description,
@@ -1545,6 +1576,16 @@ class StockExcelImportService
         return $string !== '' ? $string : null;
     }
 
+    /**
+     * OpenSpout devuelve el texto de la formula (p. ej. "=(F2*G2)+(I2+...)") cuando la
+     * celda es una formula sin valor cacheado. Nunca debe interpretarse como numero:
+     * extraer digitos de una formula genera cantidades enormes y errores SQL fuera de rango.
+     */
+    private function isFormulaString(mixed $value): bool
+    {
+        return is_string($value) && str_starts_with(ltrim($value), '=');
+    }
+
     private function integerValue(mixed $value): ?int
     {
         if ($value === null || $value === '') {
@@ -1557,6 +1598,10 @@ class StockExcelImportService
 
         if (is_float($value)) {
             return (int) round($value);
+        }
+
+        if ($this->isFormulaString($value)) {
+            return null;
         }
 
         $normalized = $this->normalizeIntegerString((string) $value);
@@ -1574,6 +1619,10 @@ class StockExcelImportService
 
         if (is_int($value) || is_float($value)) {
             return (float) $value;
+        }
+
+        if ($this->isFormulaString($value)) {
+            return null;
         }
 
         $normalized = trim(str_replace(["\xc2\xa0", ' '], '', (string) $value));

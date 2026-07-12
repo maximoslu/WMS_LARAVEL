@@ -1859,3 +1859,55 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - Push confirmado a `origin/main` (`cd247ba..d98c0f3`).
 - Este push a `origin/main` puede disparar Forge automaticamente.
 - No se da por desplegado en produccion sin verificacion real posterior.
+
+---
+
+## 2026-07-12 - Correccion pantalla importacion FRIESLAND: legibilidad de errores y calculo de palets
+
+**Contexto:** Al probar la importacion real de `STOCK_FRIESLAND.xlsx` la pantalla mostraba dos problemas: (1) los errores/alertas no se leian (texto oscuro sobre el fondo oscuro del shell) y (2) la previsualizacion sumaba 2340 palets almacen en lugar de 2339. Sesion de solo lectura/inspeccion primero, reproduciendo con el parser real contra el fichero del cliente antes de tocar codigo. No se confirmo ninguna importacion real.
+
+**Diagnostico (reproducido con el parser real contra el Excel real):**
+- **Causa raiz comun:** la columna CANTIDAD del Excel Friesland es una formula (`=(F*G)+(picos)`). OpenSpout devuelve el TEXTO de la formula, no su valor. `integerValue()` le extraia los digitos y generaba numeros gigantes (p. ej. `222222222222`), lo que provocaba:
+  - el error `SQLSTATE[22003] Out of range value for column quantity_units` (fila BOBINAS `CRYOVAC5` sin uds/pallet, con stock solo en PICO 1);
+  - partidas fantasma con cantidad 0 y palets 0 (p. ej. GENERAL `SKU 11`), porque la cantidad bogus "positiva" impedia descartar la fila sin stock.
+- **Descuadre +1 (2340 vs 2339):** las filas BOBINAS `LASTOPP248` y `LASTOPP249` tienen `PALLETS = 0,5` (media pallet). `integerValue()` redondeaba `0,5 -> 1`, sumando +0,5 de mas cada una (+1 total). El palet almacen debe usar el valor DECIMAL de PALLETS + PICOS.
+- **CRYOVAC5 (BOBINAS fila 9):** stock solo en columna PICO, sin PALLETS ni PICOS operativos ni uds/pallet. Generaba un error bloqueante ilegible; debe ser un aviso claro y no crear partida logistica.
+- **Etiqueta "Refs internas _":** mostraba solo las internas con stock (6), no las detectadas (8 lineas `_`, 7 SKU distintos con `_CAJA057` repetido).
+
+**Correccion de calculo (`app/Services/Stock/StockExcelImportService.php`):**
+- Nuevo helper `isFormulaString()`: `integerValue()` y `decimalValue()` devuelven `null` ante celdas formula (`=...`). Asi la cantidad se calcula siempre desde el desglose (PALLETS*uds + picos) y nunca desde el texto de la formula.
+- `warehouse_pallets` = `decimal(PALLETS) + decimal(PICOS)`, sin redondear medias pallets y sin contar las columnas PICO 1..10 (se quito el fallback `count()` por la regla operativa).
+- Filas BOBINAS con stock solo en columnas PICO y sin PALLETS/PICOS operativos ni uds/pallet: se omiten con aviso claro ("stock en picos pero sin pallets ni picos operativos"), sin error SQL y sin partida logistica.
+- Nuevo contador `internal_references_detected` (lineas `_` detectadas, con o sin stock); `internal_rows` sigue siendo las internas con stock.
+
+**Correccion visual (`resources/views/stock/import.blade.php` + `resources/css/app.css`):**
+- El bloque de error superior pasa de `alert alert-danger` (sin CSS, invisible sobre el fondo oscuro) a `alert alert-error import-alert` (caja rosa clara `#f5dede`, texto rojo oscuro `#8f2020`, padding, titulo).
+- Mensajes largos (SQL) con `overflow-wrap: anywhere`, `white-space: pre-wrap` y `overflow-x: auto` (`.import-error-detail`), asi no se salen del layout.
+- Tarjetas de "Errores fatales" / "Errores bloqueantes en filas" con borde rojo y encabezado rojo; "Avisos" con borde ambar. Todo scoped a `body.brand-body.app-shell-body`.
+- KPIs: se sustituye "Refs internas _" por "Refs internas detectadas" (8) y "Refs internas con stock" (6).
+- Verificacion visual con el CSS compilado real: las cajas de error son legibles y el SQL largo hace wrap correctamente.
+
+**Totales verificados con el parser real contra `STOCK_FRIESLAND.xlsx` (antes 2340 / despues 2339):**
+- Filas leidas: 572; filas validas: 291; filas resumen `***`: 5.
+- Refs internas detectadas `_`: 8; palets internos: 81; refs internas con stock: 6.
+- Palets almacen total: **2339** (antes 2340).
+- EN USO: 2196; BLOQUEADO: 21; OBSOLETO: 41; VARIOS: 81.
+- Partidas con stock positivo: 160; partidas fantasma (0/0): 0.
+- Errores bloqueantes: 0 (antes 1); `max(quantity_units)` = 2.505.000 (dentro de rango; antes 222.230.149.035).
+- Palets visibles cliente = 2339 - 81 (VARIOS/internos) = 2258 (derivado; la visibilidad cliente ya excluye `_` y VARIOS).
+
+**Base de datos:**
+- Se aplico la migracion pendiente `2026_07_12_000001_add_stock_category_and_warehouse_pallets` (aditiva, idempotente, backfill) que el PC de casa tenia sin ejecutar y que el codigo ya usaba (`stock_category`, `warehouse_pallets`). Sin `migrate:fresh`, sin borrar datos.
+
+**Tests/build:**
+- Nuevo test `test_friesland_formula_quantity_cells_do_not_break_import_or_create_phantom_rows` (formula ignorada, sin out-of-range, sin fantasma, 0,5 pallet = 0,5 almacen, CRYOVAC5 como aviso, refs internas 8/6).
+- `php artisan test`: **506 passed** (2356 assertions).
+- `npm run build`: OK (`vite build`, 55 modules).
+- `git diff --check`: OK.
+
+**Control de alcance:**
+- No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh` ni se borraron datos.
+- No se confirmo ninguna importacion real de Friesland.
+- No se toco Google Calendar, facturacion ni el aislamiento de stock por cliente.
+- `.claude/` fuera del commit.
