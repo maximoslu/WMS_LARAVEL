@@ -18,7 +18,29 @@
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Notificaciones</h2>
             <span class="ops-page-meta">{{ $notifications->total() }} registros</span>
+            @if (auth()->user()?->isSuperAdmin())
+                <span class="ops-page-meta">Como superadmin puedes marcar como leidas las notificaciones de todos los usuarios.</span>
+            @endif
         </div>
+
+        @if (auth()->user()?->isSuperAdmin())
+            <div class="ops-page-actions page-actions-compact action-buttons">
+                <form
+                    method="POST"
+                    action="{{ route('notifications.read-all') }}"
+                    onsubmit="return confirm('Vas a marcar como leidas TODAS las notificaciones de TODOS los usuarios. Esta accion no borra nada. Continuar?');"
+                >
+                    @csrf
+                    <button
+                        type="submit"
+                        class="button-secondary compact-button btn-compact"
+                        aria-label="Marcar todas las notificaciones de todos los usuarios como leidas"
+                    >
+                        Marcar todas como leidas
+                    </button>
+                </form>
+            </div>
+        @endif
     </section>
 
     @if (session('status'))

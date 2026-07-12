@@ -79,6 +79,9 @@ Route::middleware('auth')->group(function (): void {
         ->name('notifications.index');
     Route::patch('/notificaciones/{notification}/leer', [NotificationController::class, 'markAsRead'])
         ->name('notifications.read');
+    Route::post('/notificaciones/marcar-todas-leidas', [NotificationController::class, 'markAllAsRead'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('notifications.read-all');
 
     Route::get('/articulos', [ItemController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

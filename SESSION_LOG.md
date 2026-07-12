@@ -1959,3 +1959,53 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron las reglas de importacion (el bug estaba en la query de la vista).
 - Solo se modificaron el builder de stock y sus tests.
 - `.claude/` fuera del commit.
+
+---
+
+## 2026-07-12 - Verificacion stock cliente FRIESLAND (con datos reales) + boton global de notificaciones
+
+**Contexto:** (1) Se reportaba que el cliente FRIESLAND seguia viendo solo parte del stock; (2) se pide un boton para que superadmin marque como leidas todas las notificaciones de todos los usuarios. Sesion de inspeccion primero: se reprodujo superadmin vs cliente con los datos REALES del Excel del cliente.
+
+### PROBLEMA 1: stock cliente FRIESLAND
+
+**Metodo de comprobacion (no "parece que ya esta"):** se cargo el Excel real `STOCK_FRIESLAND.xlsx` (createPreview + confirm) dentro de una transaccion con rollback (nada persistido) y se compararon los conjuntos COMPLETOS (sin paginar) de superadmin y cliente.
+
+**Resultado exacto (datos reales):**
+- Superadmin FRIESLAND: 160 partidas con stock, 114 referencias distintas, 2339 palets almacen.
+- Cliente FRIESLAND: 155 partidas, 110 referencias distintas, 2261 palets almacen.
+- Partidas que superadmin ve y cliente NO ve: **5, todas internas (categoria misc / SKU "_")**:
+  - `_CAJA057` (lote 827060010), `_CAJA057` (NO LOTE), `_CERQUILLOS`, `_PALLET AMER`, `_SIN_ID`.
+- Registros NO internos ocultos al cliente: **0**. Fugas de internos al cliente: **0**.
+- SKUs de prueba (presencia super / cliente): ET0432 SI/SI, CAJA0030 SI/SI, CRYOVAC6 SI/SI, CAJA0077 SI/SI (in_use), ET0336 SI/SI (obsolete), FILM0519 SI/SI (obsolete), _CAJA057 SI/NO.
+
+**Causa raiz:** no habia bug de sobre-filtrado en la query del cliente. La visibilidad ya era correcta tras el fix de la sesion anterior (`6316c4e`, ocultar misc **o** SKU "_"). El cliente ve exactamente el stock de su cliente menos las internas (VARIOS/`_`), manteniendo EN USO, BLOQUEADO y OBSOLETO. Aclaraciones detectadas:
+- El fichero del cliente se habia actualizado entre sesiones: la referencia interna `_FILM0519` (antes en BOBINAS, misc) ahora es `FILM0519` en la pestana OBSOLETO (obsolete, sin `_`). Por eso ahora es visible a ambos, lo cual es correcto (OBSOLETO es visible al cliente).
+- La tarjeta "110 referencias visibles" es una AGRUPACION (referencias distintas con stock), no un limite de visibilidad: 110 referencias distintas reparten 155 partidas. Confundia al leerse como "solo 110 visibles".
+
+**Correccion aplicada (solo aclaracion de etiqueta; la query no se toca porque ya era correcta):**
+- `resources/views/stock/index.blade.php`: la etiqueta de la tarjeta resumen del cliente pasa de "Referencias visibles" a "Referencias distintas con stock", para no confundir agrupacion con visibilidad. El numero (references_with_stock) y su calculo no cambian.
+- No se toco la query, ni el import, ni scopes: la comprobacion demostro que el cliente ya ve todo lo no interno.
+
+**Tests (stock):** ademas de los 5 escenarios de la sesion anterior (cliente ve EN USO/BLOQUEADO/OBSOLETO; no ve VARIOS ni `_` incl. mal categorizado; no ve otro cliente; superadmin ve internos/VARIOS/columnas; export = misma visibilidad), se anade que la tarjeta/contador del cliente usa la MISMA visibilidad que la tabla (references_with_stock == filas visibles, sin query distinta).
+
+### PROBLEMA 2: boton global "Marcar todas como leidas" (solo superadmin)
+
+**Implementacion:**
+- `routes/web.php`: nueva ruta `POST /notificaciones/marcar-todas-leidas` (name `notifications.read-all`) con `minimum.role:superadmin`.
+- `app/Http/Controllers/NotificationController.php`: `markAllAsRead()` con `abort_unless(isSuperAdmin(), 403)`; actualiza todas las notificaciones no leidas de todos los usuarios fijando `read_at` (no borra ni oculta); flash "Se han marcado X notificaciones como leidas." o "No habia notificaciones pendientes.".
+- `resources/views/notifications/index.blade.php`: boton visible solo para superadmin, POST con `@csrf`, confirmacion explicita ("...TODAS las notificaciones de TODOS los usuarios..."), texto "Marcar todas como leidas" y aria-label aclaratorio. Nota visible de que la accion afecta a todos los usuarios.
+
+**Tests (notificaciones):** superadmin marca como leidas las de todos los usuarios (mensaje con recuento, contador de no leidas a 0 para los afectados, sin borrar registros); sin pendientes informa "No habia..."; cliente, almacen y administracion reciben 403; el boton y la ruta solo aparecen para superadmin.
+
+### Validacion
+- `php artisan test`: **517 passed** (2408 assertions).
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- Reproduccion superadmin-vs-cliente ejecutada contra los datos reales (transaccion con rollback), listando las 5 partidas ocultas y confirmando que son SOLO internas (misc/`_`).
+
+### Control de alcance
+- No se toco `.env`, secretos, `vendor/` ni `node_modules/`.
+- Sin migraciones (no habia cambios de esquema). Sin `migrate:fresh`. Sin borrar datos.
+- No se cambiaron las reglas de importacion (PROBLEMA 1 estaba en percepcion/etiqueta, no en la query).
+- Notificaciones: solo se marcan como leidas, nunca se borran ni se ocultan; accion inaccesible a clientes.
+- `.claude/` fuera del commit.

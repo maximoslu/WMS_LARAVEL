@@ -280,6 +280,32 @@ class StockOverviewTest extends TestCase
         $this->assertNotContains('_FILM0519', $skus);
     }
 
+    public function test_tarjeta_resumen_cliente_usa_la_misma_visibilidad_que_la_tabla(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        // 4 visibles no internas (2 EN USO, 1 BLOQUEADO, 1 OBSOLETO).
+        $this->makeItemWithStock($friesland, 'VIS-INUSE-1', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'VIS-INUSE-2', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'VIS-BLOCK', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
+        $this->makeItemWithStock($friesland, 'VIS-OBS', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
+        // 2 internas ocultas (categoria misc y SKU "_").
+        $this->makeItemWithStock($friesland, '_HIDDEN-MISC', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, '_HIDDEN-USCORE', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+
+        $client = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $overview = app(\App\Support\Stock\StockOverviewBuilder::class)->build($client, []);
+
+        // La tarjeta resumen (references_with_stock) cuenta solo las 4 visibles no internas...
+        $this->assertSame(4, $overview['summary']['references_with_stock']);
+        // ...igual que la tabla (rows): misma visibilidad, ninguna query distinta.
+        $this->assertCount(4, $overview['rows']);
+        $this->assertSame(
+            ['VIS-BLOCK', 'VIS-INUSE-1', 'VIS-INUSE-2', 'VIS-OBS'],
+            collect($overview['rows'])->pluck('sku')->sort()->values()->all(),
+        );
+    }
+
     public function test_cliente_cannot_force_other_client_with_query_string(): void
     {
         [$friesland, $edelvives] = $this->seedBaseData();

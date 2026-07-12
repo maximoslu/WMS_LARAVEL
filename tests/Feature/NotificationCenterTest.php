@@ -190,6 +190,99 @@ class NotificationCenterTest extends TestCase
             ->assertSee('SALIDA');
     }
 
+    public function test_superadmin_marca_todas_las_notificaciones_de_todos_los_usuarios_como_leidas(): void
+    {
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->createNotifications($cliente, 3);
+        $this->createNotifications($almacen, 2);
+        $this->createNotifications($superadmin, 1);
+
+        $this->assertSame(6, DB::table('notifications')->whereNull('read_at')->count());
+
+        $this->actingAs($superadmin)
+            ->post(route('notifications.read-all'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Se han marcado 6 notificaciones como leidas.');
+
+        // Todas quedan marcadas como leidas (de todos los usuarios).
+        $this->assertSame(0, DB::table('notifications')->whereNull('read_at')->count());
+        // No se borra ningun registro: solo se marca read_at.
+        $this->assertSame(6, DB::table('notifications')->count());
+        // El contador de no leidas baja a 0 para los usuarios afectados.
+        $this->assertSame(0, $cliente->fresh()->unreadNotifications()->count());
+        $this->assertSame(0, $almacen->fresh()->unreadNotifications()->count());
+        $this->assertSame(0, $superadmin->fresh()->unreadNotifications()->count());
+    }
+
+    public function test_marcar_todas_sin_pendientes_informa_que_no_habia(): void
+    {
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($superadmin)
+            ->post(route('notifications.read-all'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'No habia notificaciones pendientes.');
+    }
+
+    public function test_cliente_no_puede_marcar_todas_las_notificaciones_como_leidas(): void
+    {
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
+        $this->createNotifications($cliente, 2);
+
+        $this->actingAs($cliente)
+            ->post(route('notifications.read-all'))
+            ->assertForbidden();
+
+        $this->assertSame(2, DB::table('notifications')->whereNull('read_at')->count());
+    }
+
+    public function test_almacen_no_puede_marcar_todas_las_notificaciones_como_leidas(): void
+    {
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $otro = $this->makeUserWithRole(Role::CLIENTE);
+        $this->createNotifications($otro, 2);
+
+        $this->actingAs($almacen)
+            ->post(route('notifications.read-all'))
+            ->assertForbidden();
+
+        $this->assertSame(2, DB::table('notifications')->whereNull('read_at')->count());
+    }
+
+    public function test_administracion_no_puede_marcar_todas_las_notificaciones_como_leidas(): void
+    {
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $otro = $this->makeUserWithRole(Role::CLIENTE);
+        $this->createNotifications($otro, 2);
+
+        $this->actingAs($administracion)
+            ->post(route('notifications.read-all'))
+            ->assertForbidden();
+
+        $this->assertSame(2, DB::table('notifications')->whereNull('read_at')->count());
+    }
+
+    public function test_boton_marcar_todas_solo_visible_para_superadmin(): void
+    {
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($superadmin)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertSee('Marcar todas como leidas')
+            ->assertSee(route('notifications.read-all'), false);
+
+        $this->actingAs($cliente)
+            ->get(route('notifications.index'))
+            ->assertOk()
+            ->assertDontSee('Marcar todas como leidas')
+            ->assertDontSee(route('notifications.read-all'), false);
+    }
+
     private function createNotifications(User $user, int $count): void
     {
         $rows = [];

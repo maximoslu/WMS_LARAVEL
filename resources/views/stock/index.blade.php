@@ -42,7 +42,7 @@
                 <div class="stock-summary-card-main">
                     <strong>Stock disponible</strong>
                     <span>{{ number_format($summary['references_with_stock'], 0, ',', '.') }}</span>
-                    <small>Referencias visibles</small>
+                    <small>Referencias distintas con stock</small>
                 </div>
             @else
                 <div class="stock-summary-card-main">
