@@ -2379,3 +2379,36 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, migraciones, importacion de stock, facturacion ni datos.
 - No se uso `migrate:fresh`, no se borraron datos, no se hizo force push.
 - No se da por desplegado en produccion: falta verificar Forge y la pantalla real tras despliegue.
+
+---
+
+## 2026-07-13 - Cierre directo de carga y albaran desde pedido (16:54 +02:00)
+
+**Equipo:** PC de casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Commit funcional:** `0bfa7708 feat: close request dispatch from loading screen`.
+**Push funcional:** confirmado a `origin/main` (`1f5c86b..0bfa770`).
+**Produccion:** pendiente de despliegue y verificacion real en Forge; no se modifico produccion directamente.
+
+### Cambio funcional
+- La pantalla de preparacion del pedido queda como flujo unico para operar: preparar, elegir transporte y cerrar envio sin obligar a entrar en una pantalla de salida separada.
+- Se elimina de las vistas de pedido/preparacion el enlace visible `Ver salida tecnica`.
+- En la misma pantalla de carga se muestra `Cerrar pedido` con seleccion explicita `Camion externo` / `Camion propio`.
+- El boton secundario `Guardar preparacion` conserva el comportamiento anterior: guarda carga real sin descontar stock ni enviar.
+- El boton principal `Confirmar envio y abrir albaran` guarda carga real, marca la salida y el pedido como `Enviado`, aplica descuento de stock, guarda el tipo de camion y redirige al albaran.
+- Si la salida ya esta enviada o completada, la pantalla muestra acceso directo `Abrir albaran`.
+- El campo `camion_propio` solo se actualiza cuando el formulario lo envia, para no alterar otros flujos de confirmacion de carga.
+
+### Tests y build
+- Targeted: `php artisan test tests\Feature\GoodsDispatchManagementTest.php tests\Feature\MerchandiseRequestManagementTest.php`: `90 passed` (546 assertions).
+- Suite completa: `php artisan test`: `547 passed` (2670 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php -l` en controlador/request: OK.
+- `git diff --check`: OK.
+- Busqueda de textos: no queda `Ver salida tecnica` en vistas; solo queda una asercion negativa en tests.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, migraciones ni datos.
+- No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
+- El push a `main` puede disparar Forge; no se da por desplegado ni validado en produccion sin comprobacion real.
