@@ -2201,3 +2201,65 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se borraron datos. La verificacion visual uso una SQLite temporal y una fixture temporal en `public/`, ambas eliminadas antes del cierre.
 - Cambios acotados al flujo de preparacion/envio de salidas y sus tests.
 - Pendiente: verificar realmente despliegue en Forge/produccion si Forge ejecuta el deploy tras el push.
+
+---
+
+## 2026-07-13 - Carga real superior a solicitado y espaciado de preparacion (13:12 +02:00)
+
+**Equipo:** PC del trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit inicial tras actualizar:** `ab7771e6 docs: registrar preparacion con asignaciones multiples`.
+**Commit funcional final:** `39b49564 fix: allow operational overloading in dispatch preparation`.
+**Push funcional:** confirmado a `origin/main` (`ab7771e6..39b49564`).
+**Despliegue:** pendiente de verificacion en Forge/produccion; no se modifico produccion directamente.
+
+### Actualizacion y entorno local
+- `git pull --ff-only origin main`: fast-forward desde `023cb75d` hasta `ab7771e6`.
+- MySQL/XAMPP disponible y puerto `3306` activo.
+- `composer install`: sin paquetes que instalar; se mantiene el aviso existente de lock desalineado con `composer.json` y deprecaciones de Google API para PHP 8.4.
+- `npm install`: dependencias al dia; npm informa 4 vulnerabilidades existentes (1 low, 1 high, 2 critical). No se ejecuto `npm audit fix` para evitar actualizaciones no controladas.
+- Laravel local arrancado en `http://127.0.0.1:8000`; Vite ya estaba activo en `5173`.
+- Se aplicaron sin borrar datos las tres migraciones pendientes sincronizadas desde `origin/main`:
+  - `2026_07_12_000001_add_stock_category_and_warehouse_pallets`.
+  - `2026_07_12_000002_add_loaded_partial_units_to_goods_dispatch_lines`.
+  - `2026_07_12_000003_create_goods_dispatch_line_allocations_table`.
+- Comprobacion final `php artisan migrate`: `Nothing to migrate`.
+
+### Correccion funcional
+- La preparacion ya permite cargar menos, exactamente o mas unidades/pallets/picos que lo solicitado.
+- Se elimino exclusivamente el techo contra cantidad solicitada; se conservan validaciones por partida, cliente, articulo, estado, cantidades negativas, stock disponible y reutilizacion imposible del mismo pico.
+- Guardar preparacion no descuenta stock. Al enviar/completar, la salida descuenta la carga real mediante las asignaciones guardadas, con bloqueo transaccional y proteccion para no aplicar stock dos veces.
+- Una carga superior se muestra como `Carga superior a lo solicitado` y `Exceso operativo`; es un estado permitido, no un error.
+- Estados de linea cubiertos: `Sin preparar`, `Parcial`, `Completo` y `Superior`.
+- Si la carga supera el stock, el mensaje visible es el motivo real (`La carga real supera el stock disponible...`) y no el aviso generico de linea vacia.
+
+### Correccion visual
+- Panel principal de lineas con padding real de `20px`.
+- Cabecera, tarjetas de linea, resumen y asignaciones con padding minimo de `16px`; separacion entre lineas de `20px`.
+- Timeline con padding `16px 20px`; botones y controles quedan separados de los bordes.
+- Se corrigio un `@hidden(...)` que llegaba literalmente al HTML y mostraba el texto basura `id)>`.
+- Se mantiene `SOL-xxxxx` como referencia secundaria; las lineas y la carga real siguen inmediatamente debajo de la cabecera compacta.
+
+### Validacion manual local
+- Fixture QA local `SOL-000003`, restaurada por completo al terminar; no se envio/completo la salida ni se aplico stock.
+- 2 pallets sobre 3 solicitados: `Parcial`.
+- 3 pallets sobre 3 solicitados: `Completo`.
+- 4 pallets sobre 3 solicitados, con 5 disponibles: `Carga superior a lo solicitado`, permitido.
+- 6 pallets con 5 disponibles: bloqueado con mensaje especifico de stock.
+- Medicion escritorio: `scrollWidth = viewportWidth = 1265`, sin scroll horizontal; panel principal `20px`, lineas/asignaciones `16px`.
+- Cuenta/stock/asignacion/notificaciones QA temporales restaurados o eliminados al cerrar la comprobacion.
+
+### Tests y build
+- `php artisan test tests\Feature\GoodsDispatchManagementTest.php`: `47 passed` (283 assertions).
+- `php artisan test`: `536 passed` (2554 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php artisan optimize:clear`: OK.
+- `git diff --check`: OK.
+- Se hizo determinista un fixture de `StockOverviewTest` fijando `peak_1 = 0`; no cambia codigo funcional de stock.
+
+### Control de alcance
+- No se toco `.env`, secretos, importacion de stock, facturacion, Google Calendar ni datos de produccion.
+- No se crearon migraciones nuevas en este cambio, no se uso `migrate:fresh`, no se hizo force push y no se borraron datos operativos.
+- `.claude/` permanece sin trackear y fuera de los commits.
+- Para Forge, verificar que el deploy de `origin/main` ejecuta `php artisan migrate --force`, y despues ejecutar/verificar `php artisan optimize:clear` y `php artisan queue:restart`.
