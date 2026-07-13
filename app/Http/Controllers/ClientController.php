@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreClientDispatchEmailRecipientRequest;
 use App\Http\Requests\StoreClientReceiptEmailRecipientRequest;
 use App\Http\Requests\StoreClientRequest;
 use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
+use App\Models\ClientDispatchEmailRecipient;
 use App\Models\ClientReceiptEmailRecipient;
 use App\Models\Role;
 use App\Support\WmsNavigation;
@@ -70,6 +72,7 @@ class ClientController extends Controller
         return view('clients.edit', [
             'client' => $client,
             'receiptEmailRecipients' => $client->receiptEmailRecipients()->orderBy('email')->get(),
+            'dispatchEmailRecipients' => $client->dispatchEmailRecipients()->orderBy('email')->get(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -93,6 +96,27 @@ class ClientController extends Controller
         return redirect()
             ->route('clients.edit', $client)
             ->with('status', 'Email para albaranes eliminado correctamente.');
+    }
+
+    public function storeDispatchEmailRecipient(StoreClientDispatchEmailRecipientRequest $request, Client $client): RedirectResponse
+    {
+        $client->dispatchEmailRecipients()->create($request->validated());
+
+        return redirect()
+            ->route('clients.edit', $client)
+            ->with('status', 'Email para albaranes de salida anadido correctamente.');
+    }
+
+    public function destroyDispatchEmailRecipient(Request $request, Client $client, ClientDispatchEmailRecipient $clientDispatchEmailRecipient): RedirectResponse
+    {
+        abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
+        abort_unless((int) $clientDispatchEmailRecipient->client_id === (int) $client->id, 404);
+
+        $clientDispatchEmailRecipient->delete();
+
+        return redirect()
+            ->route('clients.edit', $client)
+            ->with('status', 'Email para albaranes de salida eliminado correctamente.');
     }
 
     public function update(UpdateClientRequest $request, Client $client): RedirectResponse

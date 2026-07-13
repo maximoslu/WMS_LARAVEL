@@ -175,6 +175,7 @@ class GoodsDispatchController extends Controller
                     'sku' => $line->item?->sku ?? 'Articulo',
                     'description' => $line->item?->description ?? 'Sin descripcion',
                     'lot' => $line->lot,
+                    'destination_location' => $line->destination_location,
                     'units_per_pallet' => $line->units_per_pallet,
                     'units_per_peak' => $line->units_per_peak,
                     'pallets' => $line->requestedPalletsCount(),

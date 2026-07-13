@@ -705,6 +705,7 @@ const setupMerchandiseRequestBuilder = () => {
                 `<input type="hidden" name="lines[${key}][stock_pallet_id]" value="${escapeHtml(item.stock_pallet_id ?? '')}">`,
                 `<input type="hidden" name="lines[${key}][stock_peak_index]" value="${escapeHtml(item.stock_peak_index ?? '')}">`,
                 `<input type="hidden" name="lines[${key}][quantity]" value="${escapeHtml(item.selected_quantity)}">`,
+                `<input type="hidden" name="lines[${key}][destination_location]" value="${escapeHtml(item.destination_location ?? '')}">`,
             ].join('');
         }).join('');
     };
@@ -746,6 +747,7 @@ const setupMerchandiseRequestBuilder = () => {
             const palletValue = line.line_type === 'pallet' ? line.selected_quantity : 0;
             const peakValue = line.line_type === 'peak' ? line.selected_quantity : 0;
             const location = line.location_text ? ` · Ubicación ${line.location_text}` : '';
+            const destinationLocation = line.destination_location ?? '';
 
             return `
             <article class="merchandise-request-line-row">
@@ -762,6 +764,10 @@ const setupMerchandiseRequestBuilder = () => {
                 <label class="auth-field merchandise-request-line-quantity">
                     <span>Picos</span>
                     <input type="number" min="1" step="1" ${line.line_type === 'peak' ? maxAttribute : 'disabled'} value="${escapeHtml(peakValue)}" class="auth-input merchandise-request-summary-input" ${line.line_type === 'peak' ? `data-request-summary-quantity data-line-key="${key}"` : ''}>
+                </label>
+                <label class="auth-field merchandise-request-line-destination">
+                    <span>Ubicación destino</span>
+                    <input type="text" maxlength="255" value="${escapeHtml(destinationLocation)}" class="auth-input" placeholder="Opcional" data-request-summary-destination data-line-key="${key}">
                 </label>
                 <button type="button" class="button-secondary compact-button btn-compact" data-request-summary-remove data-line-key="${key}">
                     Quitar
@@ -830,6 +836,23 @@ const setupMerchandiseRequestBuilder = () => {
     });
 
     summaryRows.addEventListener('input', (event) => {
+        const destinationInput = event.target.closest('[data-request-summary-destination]');
+
+        if (destinationInput) {
+            const lineKey = String(destinationInput.dataset.lineKey ?? '');
+            const item = lines.get(lineKey);
+
+            if (item) {
+                lines.set(lineKey, {
+                    ...item,
+                    destination_location: destinationInput.value.trim(),
+                });
+                syncHiddenInputs();
+            }
+
+            return;
+        }
+
         const input = event.target.closest('[data-request-summary-quantity]');
 
         if (!input) {

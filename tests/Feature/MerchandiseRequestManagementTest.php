@@ -285,6 +285,42 @@ class MerchandiseRequestManagementTest extends TestCase
         );
     }
 
+    public function test_cliente_can_add_optional_destination_location_per_request_line(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'DESTINO-001',
+            'units_per_pallet' => 100,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 2,
+                        'destination_location' => 'Pasillo 4 - Hueco B',
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 2,
+            'destination_location' => 'Pasillo 4 - Hueco B',
+        ]);
+    }
+
     public function test_cliente_crea_pedido_solo_para_si_mismo_aunque_envie_client_id(): void
     {
         Bus::fake();

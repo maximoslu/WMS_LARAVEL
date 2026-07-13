@@ -25,6 +25,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
      *     line_type:string,
      *     stock_peak_index:int|null,
      *     lot:string|null,
+     *     destination_location:string|null,
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
@@ -89,6 +90,9 @@ class StoreMerchandiseRequestRequest extends FormRequest
                         'stock_pallet_id' => $payload['stock_pallet_id'] ?? null,
                         'stock_peak_index' => $payload['stock_peak_index'] ?? null,
                         'quantity' => ($payload['quantity'] ?? '') === '' ? null : ($payload['quantity'] ?? null),
+                        'destination_location' => trim((string) ($payload['destination_location'] ?? '')) !== ''
+                            ? trim((string) $payload['destination_location'])
+                            : null,
                     ];
                 })
                 ->all(),
@@ -111,6 +115,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
             'lines.*.stock_pallet_id' => ['nullable', 'integer'],
             'lines.*.stock_peak_index' => ['nullable', 'integer', 'min:1'],
             'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
+            'lines.*.destination_location' => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -144,6 +149,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
      *     line_type:string,
      *     stock_peak_index:int|null,
      *     lot:string|null,
+     *     destination_location:string|null,
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
@@ -162,7 +168,14 @@ class StoreMerchandiseRequestRequest extends FormRequest
         $resolver = app(StockLinePayloadResolver::class);
         $resolved = $resolver->resolve($this->effectiveClientId(), $this->input('lines', []), true);
 
-        $this->resolvedLines = $resolved['lines'];
+        $submittedLines = collect($this->input('lines', []))->values();
+        $this->resolvedLines = collect($resolved['lines'])
+            ->map(function (array $line, int $index) use ($submittedLines): array {
+                $line['destination_location'] = $submittedLines->get($index)['destination_location'] ?? null;
+
+                return $line;
+            })
+            ->all();
         $this->resolvedErrors = $resolved['errors'];
 
         return $this->resolvedLines;

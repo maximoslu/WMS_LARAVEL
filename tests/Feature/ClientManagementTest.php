@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\ClientDispatchEmailRecipient;
 use App\Models\ClientReceiptEmailRecipient;
 use App\Models\Role;
 use App\Models\User;
@@ -121,12 +122,48 @@ class ClientManagementTest extends TestCase
         $this->assertDatabaseMissing('client_receipt_email_recipients', ['id' => $recipient->id]);
     }
 
+    public function test_se_puede_gestionar_emails_de_albaranes_de_salida(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
+            ->get(route('clients.edit', $client))
+            ->assertOk()
+            ->assertSee('Emails para albaranes de salida')
+            ->assertSee('carretillero@cliente.com');
+
+        $this->actingAs($administracion)
+            ->post(route('clients.dispatch-emails.store', $client), [
+                'email' => 'CARRETILLERO@EDELVIVES.COM',
+                'name' => 'Carretillero Edelvives',
+            ])
+            ->assertRedirect(route('clients.edit', $client));
+
+        $this->assertDatabaseHas('client_dispatch_email_recipients', [
+            'client_id' => $client->id,
+            'email' => 'carretillero@edelvives.com',
+            'name' => 'Carretillero Edelvives',
+        ]);
+
+        $recipient = ClientDispatchEmailRecipient::query()->where('client_id', $client->id)->firstOrFail();
+
+        $this->actingAs($administracion)
+            ->delete(route('clients.dispatch-emails.destroy', [$client, $recipient]))
+            ->assertRedirect(route('clients.edit', $client));
+
+        $this->assertDatabaseMissing('client_dispatch_email_recipients', ['id' => $recipient->id]);
+    }
+
     public function test_roles_sin_permiso_no_pueden_gestionar_emails_de_albaranes(): void
     {
         $this->seedBaseData();
 
         $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
         $recipient = ClientReceiptEmailRecipient::factory()->create(['client_id' => $client->id]);
+        $dispatchRecipient = ClientDispatchEmailRecipient::factory()->create(['client_id' => $client->id]);
 
         foreach ([Role::ALMACEN, Role::CLIENTE] as $roleSlug) {
             $user = $this->makeUserWithRole($roleSlug);
@@ -138,10 +175,20 @@ class ClientManagementTest extends TestCase
             $this->actingAs($user)
                 ->delete(route('clients.receipt-emails.destroy', [$client, $recipient]))
                 ->assertForbidden();
+
+            $this->actingAs($user)
+                ->post(route('clients.dispatch-emails.store', $client), ['email' => 'salidas@edelvives.com'])
+                ->assertForbidden();
+
+            $this->actingAs($user)
+                ->delete(route('clients.dispatch-emails.destroy', [$client, $dispatchRecipient]))
+                ->assertForbidden();
         }
 
         $this->assertDatabaseHas('client_receipt_email_recipients', ['id' => $recipient->id]);
+        $this->assertDatabaseHas('client_dispatch_email_recipients', ['id' => $dispatchRecipient->id]);
         $this->assertDatabaseMissing('client_receipt_email_recipients', ['email' => 'nuevo@edelvives.com']);
+        $this->assertDatabaseMissing('client_dispatch_email_recipients', ['email' => 'salidas@edelvives.com']);
     }
 
     private function seedBaseData(): void

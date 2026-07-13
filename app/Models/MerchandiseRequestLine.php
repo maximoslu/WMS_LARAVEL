@@ -18,6 +18,7 @@ class MerchandiseRequestLine extends Model
         'line_type',
         'stock_peak_index',
         'lot',
+        'destination_location',
         'units_per_pallet',
         'units_per_peak',
         'requested_pallets',

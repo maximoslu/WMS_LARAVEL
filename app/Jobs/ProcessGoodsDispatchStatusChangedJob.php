@@ -37,6 +37,7 @@ class ProcessGoodsDispatchStatusChangedJob implements ShouldQueue
                 'merchandiseRequest.requestedBy',
                 'merchandiseRequest.lines.item',
                 'merchandiseRequest.client.users.role',
+                'merchandiseRequest.client.dispatchEmailRecipients',
             ])
             ->find($this->goodsDispatchId);
 

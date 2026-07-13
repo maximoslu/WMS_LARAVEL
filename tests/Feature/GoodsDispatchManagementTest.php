@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\ProcessGoodsDispatchLoadingConfirmedNotificationsJob;
 use App\Jobs\ProcessGoodsDispatchStatusChangedJob;
 use App\Models\Client;
+use App\Models\ClientDispatchEmailRecipient;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\Item;
@@ -1391,6 +1392,56 @@ class GoodsDispatchManagementTest extends TestCase
         );
     }
 
+    public function test_delivery_note_is_sent_to_additional_dispatch_email_recipients(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        ClientDispatchEmailRecipient::factory()->create([
+            'client_id' => $client->id,
+            'email' => 'carretillero@edelvives.test',
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'usuario@edelvives.test']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+            'shipped_at' => now(),
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 1,
+            'loaded_pallets' => 1,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        (new ProcessGoodsDispatchStatusChangedJob(
+            $dispatch->id,
+            $merchandiseRequest->id,
+            MerchandiseRequest::STATUS_PREPARING,
+            GoodsDispatch::STATUS_SENT
+        ))->handle(app(MerchandiseRequestNotificationService::class));
+
+        Notification::assertSentTo($cliente, CustomerDispatchDeliveryNoteNotification::class);
+        Notification::assertSentOnDemand(
+            CustomerDispatchDeliveryNoteNotification::class,
+            function ($notification, array $channels, object $notifiable): bool {
+                return in_array('mail', $channels, true)
+                    && $notifiable->routeNotificationFor('mail') === 'carretillero@edelvives.test';
+            }
+        );
+    }
+
     public function test_sent_dispatch_sends_delivery_note_once_and_stores_delivery_note_sent_at(): void
     {
         Bus::fake();
@@ -1508,6 +1559,7 @@ class GoodsDispatchManagementTest extends TestCase
             'goods_dispatch_id' => $dispatch->id,
             'requested_pallets' => 2,
             'loaded_pallets' => 5,
+            'destination_location' => 'Muelle cliente 2',
             'loading_notes' => 'Se cargan pallets extra.',
             'confirmed_at' => now(),
         ]);
@@ -1517,8 +1569,64 @@ class GoodsDispatchManagementTest extends TestCase
         ])->render();
 
         $this->assertStringContainsString('Pallets entregados', $html);
+        $this->assertStringContainsString('Ubicación destino', $html);
+        $this->assertStringContainsString('Muelle cliente 2', $html);
         $this->assertStringContainsString('Calle Mayor 1', $html);
         $this->assertStringContainsString('5', $html);
+    }
+
+    public function test_dispatch_from_request_copies_destination_location_to_delivery_note(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'UBIC-DEST-001',
+            'units_per_pallet' => 50,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 50,
+            'requested_pallets' => 1,
+            'requested_units' => 50,
+            'destination_location' => 'Zona devoluciones EDE',
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest), [
+                'return_to_request' => '1',
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $dispatch = GoodsDispatch::query()->where('merchandise_request_id', $merchandiseRequest->id)->firstOrFail();
+        $line = $dispatch->lines()->firstOrFail();
+
+        $this->assertSame('Zona devoluciones EDE', $line->destination_location);
+
+        $line->update([
+            'loaded_pallets' => 1,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+        $dispatch->update([
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+
+        $html = view('dispatches.delivery-note-pdf', [
+            'dispatch' => $dispatch->load('client', 'lines'),
+        ])->render();
+
+        $this->assertStringContainsString('Zona devoluciones EDE', $html);
     }
 
     public function test_dispatch_uses_superior_real_loading_and_deducts_it_once(): void

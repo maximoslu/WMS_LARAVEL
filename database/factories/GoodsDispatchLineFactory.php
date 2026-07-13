@@ -27,6 +27,7 @@ class GoodsDispatchLineFactory extends Factory
             'sku' => strtoupper(fake()->bothify('SKU-####')),
             'description' => fake()->sentence(4),
             'lot' => fake()->boolean() ? strtoupper(fake()->bothify('LOT-###')) : null,
+            'destination_location' => null,
             'units_per_pallet' => fake()->numberBetween(1, 1500),
             'units_per_peak' => null,
             'pallets' => fake()->numberBetween(1, 12),

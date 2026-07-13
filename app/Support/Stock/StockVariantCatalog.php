@@ -149,6 +149,9 @@ class StockVariantCatalog
                 }
 
                 $variant['selected_quantity'] = $quantity;
+                $variant['destination_location'] = trim((string) ($payload['destination_location'] ?? '')) !== ''
+                    ? trim((string) $payload['destination_location'])
+                    : null;
 
                 return $variant;
             })

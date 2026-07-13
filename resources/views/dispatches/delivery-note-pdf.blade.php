@@ -74,6 +74,7 @@
                     <th>Tipo</th>
                     <th>Mercancia</th>
                     <th>Lote</th>
+                    <th>Ubicación destino</th>
                     <th>Solicitado</th>
                     <th>Pallets entregados / Picos entregados</th>
                     <th>Detalle</th>
@@ -90,6 +91,7 @@
                             {{ $line->description }}
                         </td>
                         <td>{{ $line->lot ?: 'Sin lote' }}</td>
+                        <td>{{ $line->destination_location ?: '-' }}</td>
                         <td>{{ $line->requestedQuantityLabel() }}</td>
                         <td>{{ $line->loadedQuantityLabel() }}</td>
                         <td>{{ $line->unitsLabel() }}</td>

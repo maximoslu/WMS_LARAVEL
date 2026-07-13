@@ -18,6 +18,7 @@ use App\Notifications\InternalMerchandiseRequestSubmittedNotification;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 class MerchandiseRequestNotificationService
@@ -102,6 +103,7 @@ class MerchandiseRequestNotificationService
             'merchandiseRequest.requestedBy',
             'merchandiseRequest.lines.item',
             'merchandiseRequest.client.users.role',
+            'merchandiseRequest.client.dispatchEmailRecipients',
         ]);
 
         $merchandiseRequest = $dispatch->merchandiseRequest;
@@ -127,6 +129,7 @@ class MerchandiseRequestNotificationService
         $validEmailRecipients = $recipients
             ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
             ->unique(fn (User $recipient) => mb_strtolower((string) $recipient->email));
+        $additionalEmails = $this->dispatchEmailRecipients($merchandiseRequest, $validEmailRecipients);
 
         foreach ($recipients as $recipient) {
             $recipient->notify(new CustomerDispatchDeliveryNoteNotification(
@@ -148,7 +151,17 @@ class MerchandiseRequestNotificationService
             ));
         }
 
-        if ($validEmailRecipients->isEmpty()) {
+        foreach ($additionalEmails as $email) {
+            Notification::route('mail', $email)->notify(new CustomerDispatchDeliveryNoteNotification(
+                $dispatch,
+                $merchandiseRequest,
+                $pdfContent,
+                $currentStatus,
+                ['mail'],
+            ));
+        }
+
+        if ($validEmailRecipients->isEmpty() && $additionalEmails->isEmpty()) {
             Log::warning('No se ha enviado email de albaran porque el cliente no tiene email valido.', [
                 'dispatch_id' => $dispatch->id,
                 'merchandise_request_id' => $merchandiseRequest->id,
@@ -162,6 +175,27 @@ class MerchandiseRequestNotificationService
         ])->saveQuietly();
 
         return null;
+    }
+
+    /**
+     * @param  Collection<int, User>  $userRecipients
+     * @return Collection<int, string>
+     */
+    private function dispatchEmailRecipients(MerchandiseRequest $merchandiseRequest, Collection $userRecipients): Collection
+    {
+        $userEmails = $userRecipients
+            ->pluck('email')
+            ->filter()
+            ->map(fn (string $email) => mb_strtolower($email))
+            ->all();
+
+        return $merchandiseRequest->client?->dispatchEmailRecipients
+            ->pluck('email')
+            ->filter(fn (?string $email) => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)
+            ->map(fn (string $email) => mb_strtolower($email))
+            ->reject(fn (string $email) => in_array($email, $userEmails, true))
+            ->unique()
+            ->values() ?? collect();
     }
 
     /**

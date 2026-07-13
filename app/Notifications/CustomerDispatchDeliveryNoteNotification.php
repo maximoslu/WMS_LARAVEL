@@ -25,7 +25,13 @@ class CustomerDispatchDeliveryNoteNotification extends Notification
     {
         return array_values(array_filter($this->channels, function (string $channel) use ($notifiable): bool {
             if ($channel === 'mail') {
-                return filter_var($notifiable->email ?? null, FILTER_VALIDATE_EMAIL) !== false;
+                $email = $notifiable->email ?? null;
+
+                if (! $email && method_exists($notifiable, 'routeNotificationFor')) {
+                    $email = $notifiable->routeNotificationFor('mail');
+                }
+
+                return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
             }
 
             return $channel === 'database';

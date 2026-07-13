@@ -77,6 +77,7 @@
                     <th>Lote</th>
                     <th>Detalle</th>
                     <th>Solicitado</th>
+                    <th>Ubicación destino</th>
                     <th>Ubicación</th>
                 </tr>
             </thead>
@@ -91,6 +92,7 @@
                         <td>{{ $line->lot ?: 'Sin lote' }}</td>
                         <td>{{ $line->unitsLabel() }}</td>
                         <td>{{ $line->requestedQuantityLabel() }}</td>
+                        <td>{{ $line->destination_location ?: '-' }}</td>
                         <td>{{ $line->stockPallet?->location_text ?: '-' }}</td>
                     </tr>
                 @endforeach

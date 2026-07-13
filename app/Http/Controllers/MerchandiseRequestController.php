@@ -193,6 +193,7 @@ class MerchandiseRequestController extends Controller
                     'line_type' => $line['line_type'],
                     'stock_peak_index' => $line['stock_peak_index'],
                     'lot' => $line['lot'],
+                    'destination_location' => $line['destination_location'],
                     'units_per_pallet' => $line['units_per_pallet'],
                     'units_per_peak' => $line['units_per_peak'],
                     'requested_pallets' => $line['requested_pallets'],

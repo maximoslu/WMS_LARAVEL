@@ -5283,7 +5283,7 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
 .merchandise-request-line-table-head,
 .merchandise-request-line-row {
     display: grid;
-    grid-template-columns: 5.5rem minmax(14rem, 1fr) 7rem 7rem auto;
+    grid-template-columns: 5.5rem minmax(14rem, 1fr) 7rem 7rem minmax(12rem, 0.8fr) auto;
     gap: 0.75rem;
     align-items: center;
 }
@@ -5326,7 +5326,8 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     white-space: nowrap;
 }
 
-.merchandise-request-line-quantity {
+.merchandise-request-line-quantity,
+.merchandise-request-line-destination {
     min-width: 0;
 }
 

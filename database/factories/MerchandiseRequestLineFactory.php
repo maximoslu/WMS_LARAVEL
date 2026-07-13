@@ -23,6 +23,7 @@ class MerchandiseRequestLineFactory extends Factory
             'line_type' => 'pallet',
             'stock_peak_index' => null,
             'lot' => fake()->boolean(60) ? strtoupper(fake()->bothify('LOT-###')) : null,
+            'destination_location' => null,
             'units_per_pallet' => fake()->numberBetween(1, 1500),
             'units_per_peak' => null,
             'requested_pallets' => fake()->numberBetween(1, 12),

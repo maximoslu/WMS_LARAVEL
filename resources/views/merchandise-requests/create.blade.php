@@ -146,6 +146,7 @@
                     <span>Referencia</span>
                     <span>Pallets</span>
                     <span>Picos</span>
+                    <span>Ubicación destino</span>
                     <span></span>
                 </div>
 

@@ -158,8 +158,68 @@
             </ul>
         @endif
     </div>
-@endif
 
+    <div class="surface-card item-form-card entity-form compact-card">
+        <div class="item-form-header">
+            <div class="app-copy">
+                <h2 class="ops-page-title page-title-compact">Emails para albaranes de salida</h2>
+                <p>Estos correos recibiran el albaran de salida cuando se envie un pedido. Sirve para carretilleros, responsables de almacen o contactos sin usuario WMS.</p>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ route('clients.dispatch-emails.store', $client) }}" class="item-form">
+            @csrf
+
+            <div class="item-form-grid">
+                <label class="auth-field">
+                    <span>Email</span>
+                    <input type="email" name="email" value="{{ old('email') }}" class="auth-input" maxlength="255" placeholder="carretillero@cliente.com" required>
+                    @error('email')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                </label>
+
+                <label class="auth-field">
+                    <span>Nombre (opcional)</span>
+                    <input type="text" name="name" value="{{ old('name') }}" class="auth-input" maxlength="255">
+                    @error('name')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                </label>
+            </div>
+
+            <div class="item-form-actions action-buttons">
+                <button type="submit" class="button-primary compact-button btn-compact">Añadir email de salida</button>
+            </div>
+        </form>
+
+        @if ($dispatchEmailRecipients->isEmpty())
+            <p class="helper-text">Todavia no hay emails adicionales configurados para albaranes de salida.</p>
+        @else
+            <ul class="client-receipt-email-list">
+                @foreach ($dispatchEmailRecipients as $recipient)
+                    <li class="client-receipt-email-item">
+                        <span>
+                            <strong>{{ $recipient->email }}</strong>
+                            @if ($recipient->name)
+                                <span class="users-table-email">{{ $recipient->name }}</span>
+                            @endif
+                        </span>
+                        <form
+                            method="POST"
+                            action="{{ route('clients.dispatch-emails.destroy', [$client, $recipient]) }}"
+                            onsubmit="return confirm('¿Eliminar este email de la lista de albaranes de salida?');"
+                        >
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="button-secondary compact-button btn-table">Eliminar</button>
+                        </form>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </div>
+@endif
 
 
 

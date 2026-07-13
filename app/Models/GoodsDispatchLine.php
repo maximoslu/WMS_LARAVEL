@@ -23,6 +23,7 @@ class GoodsDispatchLine extends Model
         'sku',
         'description',
         'lot',
+        'destination_location',
         'units_per_pallet',
         'units_per_peak',
         'pallets',

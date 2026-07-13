@@ -170,6 +170,9 @@
                             <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
                             <span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span>
                             <p>{{ $line->item?->description ?? 'Sin descripción' }}</p>
+                            @if ($line->destination_location)
+                                <p>Ubicación destino: {{ $line->destination_location }}</p>
+                            @endif
                         </div>
                         <span class="warehouse-load-state warehouse-load-state--{{ $stateClass }}" data-prep-state>{{ $stateLabel }}</span>
                     </header>

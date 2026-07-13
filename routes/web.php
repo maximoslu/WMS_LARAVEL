@@ -339,6 +339,12 @@ Route::middleware('auth')->group(function (): void {
     Route::delete('/clientes/{client}/emails-albaranes/{clientReceiptEmailRecipient}', [ClientController::class, 'destroyReceiptEmailRecipient'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('clients.receipt-emails.destroy');
+    Route::post('/clientes/{client}/emails-albaranes-salida', [ClientController::class, 'storeDispatchEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.dispatch-emails.store');
+    Route::delete('/clientes/{client}/emails-albaranes-salida/{clientDispatchEmailRecipient}', [ClientController::class, 'destroyDispatchEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.dispatch-emails.destroy');
 
     Route::get('/almacenes', [WarehouseController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)
