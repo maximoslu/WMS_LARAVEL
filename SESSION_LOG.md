@@ -2263,3 +2263,70 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se crearon migraciones nuevas en este cambio, no se uso `migrate:fresh`, no se hizo force push y no se borraron datos operativos.
 - `.claude/` permanece sin trackear y fuera de los commits.
 - Para Forge, verificar que el deploy de `origin/main` ejecuta `php artisan migrate --force`, y despues ejecutar/verificar `php artisan optimize:clear` y `php artisan queue:restart`.
+
+---
+
+## 2026-07-13 - Integridad de stock al enviar salidas (13:50 +02:00)
+
+**Equipo:** PC del trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit funcional:** `5dfe6e1c fix: keep dispatch stock totals in sync`.
+**Push funcional:** confirmado a `origin/main` (`182973b8..5dfe6e1c`).
+**Produccion:** pendiente de despliegue y validacion en Forge; no se modifico produccion directamente.
+
+### Causa raiz
+- El descuento se ejecutaba correctamente desde `GoodsDispatchWorkflowService::changeStatus()` al pasar a `sent` o `completed`, llamando a `StockDispatchAllocationService::apply()` y usando la carga real (`loaded_pallets` / `loaded_partial_units` y asignaciones), no la solicitada.
+- Ese servicio reducia `quantity_units`; el observer de `StockPallet` recalculaba `full_pallets` y `peaks_count`.
+- La regresion estaba en `warehouse_pallets`: al ser un valor declarado/importado no nulo, el observer lo conservaba. `StockOverviewBuilder` usa precisamente `warehouse_pallets` para el KPI principal, por lo que el total visible podia seguir en 1.026 aunque las unidades y pallets completos ya hubieran bajado.
+- No es una regresion causada por permitir carga superior a lo solicitado. Esa funcionalidad entrega correctamente la carga real al servicio; el fallo procedia del KPI logistico incorporado despues.
+
+### Correccion e idempotencia
+- Cada pallet completo retirado reduce ahora `warehouse_pallets` en uno, preservando decimales existentes.
+- Vaciar un pico reduce una unidad logistica; consumir solo parte del pico no la reduce. Romper un pallet completo para dejar un pico conserva una unidad logistica; consumirlo entero la elimina.
+- El descuento sigue bloqueando stock insuficiente, otro cliente y partidas no resueltas, y toda la operacion permanece dentro de una transaccion.
+- `changeStatus()` bloquea ahora la fila de salida con `lockForUpdate()` y vuelve a comprobar el estado/marca dentro de la transaccion. `stock_applied_at` impide repetir unidades y la nueva marca `warehouse_stock_applied_at` impide repetir el descuento logistico, incluso ante reintentos concurrentes.
+- Nueva migracion aditiva: `database/migrations/2026_07_13_000001_add_warehouse_stock_applied_tracking_to_goods_dispatches.php`.
+
+### Respuestas del diagnostico
+1. El punto de descuento es `GoodsDispatchWorkflowService::changeStatus()` al entrar en `sent` (o directamente `completed`), mediante `StockDispatchAllocationService::apply()`.
+2. Si: el controlador llama realmente a ese metodo al enviar.
+3. La salida queda marcada con `stock_applied_at`; desde este cambio tambien con `warehouse_stock_applied_at`. La salida real de produccion debe verificarse por ID tras desplegar.
+4. Las lineas guardan carga real y, cuando corresponde, asignaciones por partida/lote/pico.
+5. Si: la causa exacta era que bajaban unidades/full pallets pero no el valor declarado `warehouse_pallets`.
+6. Si: el descuento actuaba sobre `StockPallet`, pero el KPI sumaba otro campo del mismo modelo que quedaba obsoleto.
+7. No: se descuenta al enviar; completar solo aplica si se llega directamente sin aplicacion previa.
+8. No existe una condicion que excluya pedidos de cliente; manuales y pedidos usan el mismo flujo.
+9. La carga superior no es la causa y queda cubierta: si se cargan 10 aunque se pidieran 8, se descuentan 10.
+10. En la base local hay 0 salidas enviadas/completadas sin `stock_applied_at` y 0 reparaciones logisticas pendientes. Produccion requiere dry-run; no se asumio ni modifico ningun dato remoto.
+
+### Reparacion segura
+- Nuevo comando: `php artisan wms:dispatches:apply-missing-stock --dry-run` lista cliente, salida, fecha y detalle de carga real sin modificar datos.
+- Para una salida sin `stock_applied_at`: primero `php artisan wms:dispatches:apply-missing-stock --dispatch=ID --dry-run` y, tras revisar, `php artisan wms:dispatches:apply-missing-stock --dispatch=ID`.
+- Para el caso historico donde las unidades ya bajaron pero el KPI no: primero `php artisan wms:dispatches:apply-missing-stock --dispatch=ID --repair-warehouse --dry-run` y, tras confirmar el ID/carga, ejecutar sin `--dry-run`.
+- La reparacion historica solo descuenta `warehouse_pallets`, no vuelve a tocar `quantity_units`, y deja marca propia. Se rechazan automaticamente reparaciones historicas con picos/unidades parciales porque no pueden reconstruirse con certeza despues del hecho.
+- No hay aplicacion masiva automatica ni cambios sin `--dry-run` o un `--dispatch=ID` explicito.
+
+### Validacion
+- Caso EDELVIVES reproducido: 1.026 pallets almacen, carga real de 10 sobre 8 solicitados, resultado persistido 1.016; SKU/lote, KPI, pantalla y exportacion reflejan el descuento.
+- Repetir `ENVIADO` no modifica de nuevo ni unidades ni pallets almacen.
+- Cubiertos: salida manual, salida de pedido cliente, carga real superior, pallets completos, pico completo, pico parcial, multiples asignaciones, stock insuficiente, aislamiento por cliente, overview, pantalla y export.
+- Tests dirigidos: `52 passed` (340 assertions).
+- `php artisan test`: **541 passed** (2611 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php artisan optimize:clear`: OK.
+- `php artisan migrate`: migracion nueva aplicada localmente; comprobacion posterior `Nothing to migrate`.
+- Pint: OK. `git diff --check`: OK.
+
+### Forge pendiente
+1. Desplegar `origin/main` y confirmar commit `5dfe6e1c` o posterior.
+2. Ejecutar `php artisan migrate --force`.
+3. Ejecutar `php artisan optimize:clear` y `php artisan queue:restart`.
+4. Ejecutar primero el dry-run global y localizar la salida real de EDELVIVES.
+5. Revisar por ID si tiene `stock_applied_at`; aplicar solo la modalidad indicada arriba.
+6. Confirmar en `/stock` que EDELVIVES baja de 1.026 a 1.016 y que el SKU/lote concreto y la exportacion coinciden.
+
+### Control de alcance
+- No se tocaron vistas, CSS, `.env`, secretos, importacion Friesland/Edelvives, Google Calendar ni facturacion.
+- No se uso `migrate:fresh`, no se borraron datos, no se hizo force push y no se parcheo stock a mano.
+- `.claude/` permanece sin trackear y fuera de los commits.
