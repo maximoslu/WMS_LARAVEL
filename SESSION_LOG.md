@@ -2330,3 +2330,52 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron vistas, CSS, `.env`, secretos, importacion Friesland/Edelvives, Google Calendar ni facturacion.
 - No se uso `migrate:fresh`, no se borraron datos, no se hizo force push y no se parcheo stock a mano.
 - `.claude/` permanece sin trackear y fuera de los commits.
+
+---
+
+## 2026-07-13 - Detalle de pedido orientado a carga (16:35 +02:00)
+
+**Equipo:** PC de casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Commit funcional:** `73d61185 feat: prioritize request loading workflow`.
+**Push funcional:** confirmado a `origin/main` (`72cde1b..73d6118`).
+**Produccion:** pendiente de despliegue y verificacion real en Forge; no se modifico produccion directamente.
+
+### Preparacion y sincronizacion
+- Se leyo `SESSION_LOG.md` completo antes de tocar archivos.
+- Comprobaciones iniciales: rama `main`, remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y ultimos commits revisados.
+- `git pull --ff-only origin main`: fast-forward correcto hasta `72cde1b`.
+- No procedio ejecutar `composer install` ni `npm install`: el pull no cambio manifiestos ni locks.
+
+### Cambio funcional
+- El detalle de solicitud de mercancia prioriza ahora la preparacion: bloque principal `Preparacion del pedido`, lineas visibles primero y CTA operativo `Empezar carga`, `Continuar carga` o `Ver carga`.
+- La accion de iniciar carga desde el detalle crea la salida y redirige directamente a la pantalla de carga real (`dispatches.requests.show`) mediante `return_to_request=1`.
+- Las acciones secundarias quedan plegadas en `Mas acciones`: cambio de estado, documentos, salida tecnica, albaran si aplica y volver.
+- Se elimino el texto operativo confuso `Generar salida` de las vistas de pedido/carga; queda solo cubierto por aserciones negativas en tests.
+- El detalle muestra para usuarios internos el estado de carga por linea: `Pendiente de cargar`, `Parcial`, `Completo` o `Exceso`.
+- Los clientes siguen viendo sus lineas, pero no ven acciones internas de carga, cambio de estado ni documentos operativos secundarios.
+- El controlador carga `dispatch.lines.allocations.stockPallet` para calcular correctamente carga real/asignaciones sin consultas adicionales descontroladas.
+
+### UI
+- Se mantuvo una interfaz compacta y corporativa en espanol.
+- La preparacion y las lineas aparecen antes de acciones secundarias.
+- `resources/css/app.css` incorpora estilos acotados para el bloque de preparacion, CTA principal, panel plegable y responsive movil.
+
+### Tests
+- Nuevas coberturas en `MerchandiseRequestManagementTest`:
+  - detalle interno prioriza carga y lineas frente a acciones secundarias;
+  - iniciar carga desde detalle crea salida y abre pantalla de carga;
+  - salida existente muestra `Continuar carga`;
+  - cliente no ve acciones internas;
+  - `almacen`, `administracion` y `superadmin` pueden iniciar carga desde detalle con trazabilidad `created_by`.
+- Tests existentes de `GoodsDispatchManagementTest` adaptados al nuevo lenguaje operativo.
+- Targeted: `php artisan test tests\Feature\MerchandiseRequestManagementTest.php tests\Feature\GoodsDispatchManagementTest.php`: `89 passed` (534 assertions).
+- Suite completa: `php artisan test`: `546 passed` (2658 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `git diff --check`: OK.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, migraciones, importacion de stock, facturacion ni datos.
+- No se uso `migrate:fresh`, no se borraron datos, no se hizo force push.
+- No se da por desplegado en produccion: falta verificar Forge y la pantalla real tras despliegue.
