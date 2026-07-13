@@ -40,6 +40,8 @@ class GoodsDispatch extends Model
         'delivery_note_sent_at',
         'stock_applied_at',
         'stock_applied_by',
+        'warehouse_stock_applied_at',
+        'warehouse_stock_applied_by',
         'notes',
         'camion_propio',
     ];
@@ -51,6 +53,7 @@ class GoodsDispatch extends Model
             'completed_at' => 'datetime',
             'delivery_note_sent_at' => 'datetime',
             'stock_applied_at' => 'datetime',
+            'warehouse_stock_applied_at' => 'datetime',
             'camion_propio' => 'boolean',
         ];
     }
@@ -102,9 +105,19 @@ class GoodsDispatch extends Model
         return $this->belongsTo(User::class, 'stock_applied_by');
     }
 
+    public function warehouseStockAppliedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'warehouse_stock_applied_by');
+    }
+
     public function hasStockApplied(): bool
     {
         return $this->stock_applied_at !== null;
+    }
+
+    public function hasWarehouseStockApplied(): bool
+    {
+        return $this->warehouse_stock_applied_at !== null;
     }
 
     public function lines(): HasMany

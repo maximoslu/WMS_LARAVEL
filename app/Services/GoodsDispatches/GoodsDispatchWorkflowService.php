@@ -182,46 +182,49 @@ class GoodsDispatchWorkflowService
 
     public function changeStatus(GoodsDispatch $dispatch, string $newStatus, User $user): ?string
     {
-        $dispatch->loadMissing(['client', 'merchandiseRequest', 'lines.item']);
-        $previousDispatchStatus = $dispatch->status;
+        $result = DB::transaction(function () use ($dispatch, $newStatus, $user): array {
+            $lockedDispatch = GoodsDispatch::query()
+                ->whereKey($dispatch->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedDispatch->load(['client', 'merchandiseRequest', 'lines.item']);
 
-        if ($previousDispatchStatus === $newStatus) {
-            return null;
-        }
+            if ($lockedDispatch->status === $newStatus) {
+                return ['changed' => false, 'previous_request_status' => null];
+            }
 
-        $this->guardStatusTransition($dispatch, $newStatus);
-
-        $previousRequestStatus = $dispatch->merchandiseRequest?->status;
-
-        DB::transaction(function () use ($dispatch, $newStatus, $user): void {
+            $this->guardStatusTransition($lockedDispatch, $newStatus);
+            $previousRequestStatus = $lockedDispatch->merchandiseRequest?->status;
             $dispatchPayload = [
                 'status' => $newStatus,
             ];
 
-            if (in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true) && $dispatch->sent_at === null) {
+            if (in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true) && $lockedDispatch->sent_at === null) {
                 $dispatchPayload['sent_at'] = now();
             }
 
-            if ($newStatus === GoodsDispatch::STATUS_COMPLETED && $dispatch->completed_at === null) {
+            if ($newStatus === GoodsDispatch::STATUS_COMPLETED && $lockedDispatch->completed_at === null) {
                 $dispatchPayload['completed_at'] = now();
             }
 
             if (
                 in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)
-                && ! $dispatch->hasStockApplied()
+                && ! $lockedDispatch->hasStockApplied()
             ) {
-                $this->stockAllocationService->apply($dispatch);
+                $this->stockAllocationService->apply($lockedDispatch);
 
                 $dispatchPayload['stock_applied_at'] = now();
                 $dispatchPayload['stock_applied_by'] = $user->id;
+                $dispatchPayload['warehouse_stock_applied_at'] = now();
+                $dispatchPayload['warehouse_stock_applied_by'] = $user->id;
             }
 
-            $dispatch->update($dispatchPayload);
+            $lockedDispatch->update($dispatchPayload);
 
-            $merchandiseRequest = $dispatch->merchandiseRequest;
+            $merchandiseRequest = $lockedDispatch->merchandiseRequest;
 
             if ($merchandiseRequest === null) {
-                return;
+                return ['changed' => true, 'previous_request_status' => null];
             }
 
             $requestPayload = [
@@ -248,17 +251,80 @@ class GoodsDispatchWorkflowService
             }
 
             $merchandiseRequest->update($requestPayload);
+
+            return ['changed' => true, 'previous_request_status' => $previousRequestStatus];
         });
 
-        if ($dispatch->merchandiseRequest !== null && $previousRequestStatus !== null) {
+        if ($result['changed'] && $result['previous_request_status'] !== null) {
             $this->notificationService->notifyDispatchStatusChanged(
                 $dispatch->fresh(['merchandiseRequest']),
-                $previousRequestStatus,
+                $result['previous_request_status'],
                 $newStatus,
             );
         }
 
         return null;
+    }
+
+    public function applyMissingStock(GoodsDispatch $dispatch): bool
+    {
+        return DB::transaction(function () use ($dispatch): bool {
+            $lockedDispatch = GoodsDispatch::query()
+                ->whereKey($dispatch->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedDispatch->load(['client', 'merchandiseRequest', 'lines.item']);
+
+            if (! in_array($lockedDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)) {
+                throw ValidationException::withMessages([
+                    'dispatch' => 'Solo se puede reparar una salida enviada o completada.',
+                ]);
+            }
+
+            if ($lockedDispatch->hasStockApplied()) {
+                return false;
+            }
+
+            $this->guardStatusTransition($lockedDispatch, $lockedDispatch->status);
+            $this->stockAllocationService->apply($lockedDispatch);
+            $lockedDispatch->update([
+                'stock_applied_at' => now(),
+                'stock_applied_by' => null,
+                'warehouse_stock_applied_at' => now(),
+                'warehouse_stock_applied_by' => null,
+            ]);
+
+            return true;
+        });
+    }
+
+    public function repairWarehouseStock(GoodsDispatch $dispatch): bool
+    {
+        return DB::transaction(function () use ($dispatch): bool {
+            $lockedDispatch = GoodsDispatch::query()
+                ->whereKey($dispatch->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedDispatch->load(['client', 'lines.item']);
+
+            if (! $lockedDispatch->hasStockApplied()) {
+                throw ValidationException::withMessages([
+                    'dispatch' => 'La salida no tiene aplicado el descuento de unidades; usa primero la reparacion normal.',
+                ]);
+            }
+
+            if ($lockedDispatch->hasWarehouseStockApplied()) {
+                return false;
+            }
+
+            $this->stockAllocationService->applyWarehousePalletsOnly($lockedDispatch);
+            $lockedDispatch->update([
+                'warehouse_stock_applied_at' => now(),
+                'warehouse_stock_applied_by' => null,
+            ]);
+
+            return true;
+        });
     }
 
     public function ensureDeliveryNoteCanBeGenerated(GoodsDispatch $dispatch): void

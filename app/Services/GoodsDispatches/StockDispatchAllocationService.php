@@ -72,6 +72,7 @@ class StockDispatchAllocationService
 
             $unitsPerPallet = (int) ($stockPallet->units_per_pallet ?: $line->units_per_pallet);
             $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - ($loadedPallets * $unitsPerPallet));
+            $this->decrementWarehousePallets($stockPallet, $loadedPallets);
         }
 
         if ($loadedPartialUnits > 0) {
@@ -114,6 +115,7 @@ class StockDispatchAllocationService
         int $alreadyLoadedPallets = 0,
     ): void {
         $remaining = max(0, $units);
+        $warehousePalletsRemoved = 0;
 
         foreach ($selectedPeakUnitsByIndex as $peakIndex => $selectedUnits) {
             if ($remaining <= 0) {
@@ -132,6 +134,10 @@ class StockDispatchAllocationService
             $stockPallet->{$peakField} = $availableUnits - $take;
             $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - $take);
             $remaining -= $take;
+
+            if ($take === $availableUnits) {
+                $warehousePalletsRemoved++;
+            }
         }
 
         $peakOrder = $this->peakConsumptionOrder($line, array_keys($selectedPeakUnitsByIndex));
@@ -152,6 +158,10 @@ class StockDispatchAllocationService
             $stockPallet->{$peakField} = $availableUnits - $take;
             $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - $take);
             $remaining -= $take;
+
+            if ($take === $availableUnits) {
+                $warehousePalletsRemoved++;
+            }
         }
 
         $breakableFullPallets = max(0, (int) $stockPallet->full_pallets - $alreadyLoadedPallets);
@@ -174,8 +184,12 @@ class StockDispatchAllocationService
 
             if ($take < $unitsPerPallet) {
                 $this->storeBrokenPalletRemainder($stockPallet, $line, $unitsPerPallet - $take);
+            } else {
+                $warehousePalletsRemoved++;
             }
         }
+
+        $this->decrementWarehousePallets($stockPallet, $warehousePalletsRemoved);
     }
 
     private function applyPalletLine(GoodsDispatch $dispatch, GoodsDispatchLine $line): void
@@ -200,6 +214,7 @@ class StockDispatchAllocationService
 
             $unitsPerPallet = (int) ($stockPallet->units_per_pallet ?: $line->units_per_pallet);
             $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - ($remaining * $unitsPerPallet));
+            $this->decrementWarehousePallets($stockPallet, $remaining);
             $stockPallet->save();
 
             return;
@@ -233,10 +248,115 @@ class StockDispatchAllocationService
 
             $unitsPerPallet = (int) ($batch->units_per_pallet ?: $line->units_per_pallet);
             $batch->quantity_units = max(0, (int) $batch->quantity_units - ($take * $unitsPerPallet));
+            $this->decrementWarehousePallets($batch, $take);
             $batch->save();
 
             $remaining -= $take;
         }
+    }
+
+    /**
+     * Repairs the warehouse-pallet metric for legacy dispatches whose units were
+     * already deducted. Partial-unit legacy repairs are rejected because their
+     * original peak shape cannot be reconstructed safely after the fact.
+     */
+    public function applyWarehousePalletsOnly(GoodsDispatch $dispatch): void
+    {
+        $lines = $dispatch->lines()->with('allocations')->get();
+
+        foreach ($lines as $line) {
+            if ($line->loadedPartialUnits() > 0) {
+                throw ValidationException::withMessages([
+                    'dispatch' => sprintf(
+                        'La reparacion automatica de pallets almacen no es segura para %s porque contiene picos o unidades parciales.',
+                        $this->lineLabel($line),
+                    ),
+                ]);
+            }
+
+            if ($line->allocations->isNotEmpty()) {
+                foreach ($line->allocations as $allocation) {
+                    $this->decrementLegacyWarehousePallets(
+                        $dispatch,
+                        $line,
+                        (int) $allocation->stock_pallet_id,
+                        $allocation->loadedPallets(),
+                    );
+                }
+
+                continue;
+            }
+
+            if ($line->loadedPallets() <= 0) {
+                continue;
+            }
+
+            if ($line->stock_pallet_id === null) {
+                throw ValidationException::withMessages([
+                    'dispatch' => sprintf(
+                        'No se puede reparar %s sin una partida de stock trazada.',
+                        $this->lineLabel($line),
+                    ),
+                ]);
+            }
+
+            $this->decrementLegacyWarehousePallets(
+                $dispatch,
+                $line,
+                (int) $line->stock_pallet_id,
+                $line->loadedPallets(),
+            );
+        }
+    }
+
+    private function decrementLegacyWarehousePallets(
+        GoodsDispatch $dispatch,
+        GoodsDispatchLine $line,
+        int $stockPalletId,
+        int $pallets,
+    ): void {
+        if ($pallets <= 0) {
+            return;
+        }
+
+        $stockPallet = StockPallet::query()
+            ->whereKey($stockPalletId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $stockPallet instanceof StockPallet) {
+            throw $this->unresolvedStockError($line);
+        }
+
+        $this->guardSameClient($dispatch, $stockPallet);
+
+        if ($this->warehousePallets($stockPallet) < $pallets) {
+            throw ValidationException::withMessages([
+                'dispatch' => sprintf(
+                    'No se puede reparar %s: el contador de pallets almacen es menor que la carga trazada.',
+                    $this->lineLabel($line),
+                ),
+            ]);
+        }
+
+        $this->decrementWarehousePallets($stockPallet, $pallets);
+        $stockPallet->save();
+    }
+
+    private function decrementWarehousePallets(StockPallet $stockPallet, int $pallets): void
+    {
+        if ($pallets <= 0) {
+            return;
+        }
+
+        $stockPallet->warehouse_pallets = max(0, $this->warehousePallets($stockPallet) - $pallets);
+    }
+
+    private function warehousePallets(StockPallet $stockPallet): float
+    {
+        return $stockPallet->warehouse_pallets !== null
+            ? (float) $stockPallet->warehouse_pallets
+            : (float) ((int) $stockPallet->full_pallets + (int) $stockPallet->peaks_count);
     }
 
     private function guardSameClient(GoodsDispatch $dispatch, StockPallet $stockPallet): void

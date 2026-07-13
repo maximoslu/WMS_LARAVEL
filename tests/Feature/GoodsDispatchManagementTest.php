@@ -16,6 +16,8 @@ use App\Notifications\CustomerDispatchDeliveryNoteNotification;
 use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
 use App\Notifications\InternalGoodsDispatchLoadingConfirmedNotification;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
+use App\Services\Stock\StockExportService;
+use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -1507,6 +1509,7 @@ class GoodsDispatchManagementTest extends TestCase
 
         $this->assertSame(100, $stock->fresh()->quantity_units, 'Dispatch must deduct the four actually loaded pallets, not the three requested.');
         $this->assertSame(1, $stock->fresh()->full_pallets);
+        $this->assertSame(1.0, (float) $stock->fresh()->warehouse_pallets);
 
         $this->actingAs($almacen)
             ->patch(route('dispatches.update-status', $dispatch->fresh()), ['status' => GoodsDispatch::STATUS_COMPLETED])
@@ -1557,7 +1560,9 @@ class GoodsDispatchManagementTest extends TestCase
         $freshStock = $stock->fresh();
         $this->assertSame(7, $freshStock->full_pallets);
         $this->assertSame(280, $freshStock->quantity_units);
+        $this->assertSame(7.0, (float) $freshStock->warehouse_pallets);
         $this->assertNotNull($dispatch->fresh()->stock_applied_at);
+        $this->assertNotNull($dispatch->fresh()->warehouse_stock_applied_at);
     }
 
     public function test_enviar_salida_descuenta_picos(): void
@@ -1608,6 +1613,54 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(0, $freshStock->peak_1);
         $this->assertSame(600, $freshStock->quantity_units);
         $this->assertSame(1, $freshStock->full_pallets, 'Full pallets must stay untouched when only a peak is shipped.');
+        $this->assertSame(1.0, (float) $freshStock->warehouse_pallets);
+    }
+
+    public function test_enviar_parte_de_un_pico_conserva_la_unidad_logistica_hasta_vaciarla(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 600]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 600,
+            'quantity_units' => 650,
+            'warehouse_pallets' => 2,
+            'peak_1' => 50,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'line_type' => 'peak',
+            'stock_peak_index' => 1,
+            'units_per_pallet' => 600,
+            'units_per_peak' => 50,
+            'requested_peaks' => 1,
+            'loaded_pallets' => 0,
+            'loaded_peaks' => 0,
+            'loaded_partial_units' => 20,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch), ['status' => GoodsDispatch::STATUS_SENT])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $freshStock = $stock->fresh();
+        $this->assertSame(630, $freshStock->quantity_units);
+        $this->assertSame(30, $freshStock->peak_1);
+        $this->assertSame(1, $freshStock->full_pallets);
+        $this->assertSame(2.0, (float) $freshStock->warehouse_pallets);
     }
 
     public function test_enviar_salida_descuenta_pallets_y_pico_parcial_de_la_partida_elegida(): void
@@ -1662,6 +1715,7 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(3700, $freshSelectedStock->quantity_units);
         $this->assertSame(3, $freshSelectedStock->full_pallets);
         $this->assertSame(700, $freshSelectedStock->peak_1);
+        $this->assertSame(4.0, (float) $freshSelectedStock->warehouse_pallets);
         $this->assertSame(5000, $untouchedStock->fresh()->quantity_units);
     }
 
@@ -1740,6 +1794,7 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(0, $freshStockB->quantity_units);
         $this->assertSame(0, $freshStockB->peak_1);
         $this->assertSame(0, $freshStockB->peak_2);
+        $this->assertSame(0.0, (float) $freshStockB->warehouse_pallets);
     }
 
     public function test_salida_enviada_no_descuenta_dos_veces(): void
@@ -1777,6 +1832,7 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertRedirect(route('dispatches.show', $dispatch));
 
         $this->assertSame(320, $stock->fresh()->quantity_units);
+        $this->assertSame(8.0, (float) $stock->fresh()->warehouse_pallets);
 
         // Simulates a duplicate form submit for the same target status.
         $this->actingAs($almacen)
@@ -1786,6 +1842,7 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertSessionHas('status', 'La salida ya estaba en ese estado.');
 
         $this->assertSame(320, $stock->fresh()->quantity_units);
+        $this->assertSame(8.0, (float) $stock->fresh()->warehouse_pallets);
     }
 
     public function test_completar_salida_no_descuenta_dos_veces(): void
@@ -2068,7 +2125,7 @@ class GoodsDispatchManagementTest extends TestCase
             'confirmed_by' => $almacen->id,
         ]);
 
-        $builder = app(\App\Support\Stock\StockOverviewBuilder::class);
+        $builder = app(StockOverviewBuilder::class);
         $before = $builder->build($almacen, ['search' => $item->sku]);
         $rowBefore = collect($before['rows'])->firstWhere('id', $stock->id);
         $this->assertNotNull($rowBefore);
@@ -2082,6 +2139,90 @@ class GoodsDispatchManagementTest extends TestCase
         $rowAfter = collect($after['rows'])->firstWhere('id', $stock->id);
         $this->assertNotNull($rowAfter);
         $this->assertSame(6, $rowAfter['full_pallets']);
+        $this->assertSame(6.0, $rowAfter['warehouse_pallets']);
+        $this->assertSame(6.0, $after['summary']['total_warehouse_pallets']);
+    }
+
+    public function test_edelvives_1026_menos_10_deja_1016_en_db_overview_pantalla_y_export(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'EDEL-REGRESION-1026',
+            'description' => 'Caso regresion stock pallets almacen',
+            'units_per_pallet' => 100,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOTE-1026',
+            'units_per_pallet' => 100,
+            'quantity_units' => 102600,
+            'full_pallets' => 1026,
+            'warehouse_pallets' => 1026,
+            'peak_1' => 0,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'type' => GoodsDispatch::TYPE_REQUEST,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'units_per_pallet' => 100,
+            'requested_pallets' => 8,
+            'requested_units' => 800,
+            'loaded_pallets' => 10,
+            'confirmed_at' => now(),
+            'confirmed_by' => $almacen->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch), ['status' => GoodsDispatch::STATUS_SENT])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $freshStock = $stock->fresh();
+        $freshDispatch = $dispatch->fresh();
+        $this->assertSame(101600, $freshStock->quantity_units);
+        $this->assertSame(1016, $freshStock->full_pallets);
+        $this->assertSame(1016.0, (float) $freshStock->warehouse_pallets);
+        $this->assertNotNull($freshDispatch->stock_applied_at);
+        $this->assertNotNull($freshDispatch->warehouse_stock_applied_at);
+
+        $overview = app(StockOverviewBuilder::class)->build($almacen, [
+            'client_id' => $client->id,
+            'search' => $item->sku,
+        ]);
+        $row = collect($overview['rows'])->firstWhere('id', $stock->id);
+        $this->assertSame(1016.0, $overview['summary']['total_warehouse_pallets']);
+        $this->assertSame(1016.0, $row['warehouse_pallets']);
+
+        $this->actingAs($almacen)
+            ->get(route('stock.index', ['client_id' => $client->id, 'search' => $item->sku]))
+            ->assertOk()
+            ->assertSeeText('1.016,00')
+            ->assertDontSeeText('1.026,00');
+
+        $exportRow = app(StockExportService::class)->rows($client->id)->firstWhere('sku', $item->sku);
+        $this->assertSame(101600, $exportRow['quantity']);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $freshDispatch), ['status' => GoodsDispatch::STATUS_SENT])
+            ->assertRedirect();
+
+        $this->assertSame(101600, $stock->fresh()->quantity_units);
+        $this->assertSame(1016.0, (float) $stock->fresh()->warehouse_pallets);
     }
 
     public function test_flujo_pedidos_pallet_y_pico_sigue_funcionando(): void
@@ -2154,8 +2295,10 @@ class GoodsDispatchManagementTest extends TestCase
 
         $this->assertSame(320, $palletStock->fresh()->quantity_units);
         $this->assertSame(8, $palletStock->fresh()->full_pallets);
+        $this->assertSame(8.0, (float) $palletStock->fresh()->warehouse_pallets);
         $this->assertSame(0, $peakStock->fresh()->peak_1);
         $this->assertSame(600, $peakStock->fresh()->quantity_units);
+        $this->assertSame(1.0, (float) $peakStock->fresh()->warehouse_pallets);
         $this->assertSame(GoodsDispatch::STATUS_SENT, $dispatch->fresh()->status);
         $this->assertSame(MerchandiseRequest::STATUS_SENT, $merchandiseRequest->fresh()->status);
     }
