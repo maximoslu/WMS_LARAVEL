@@ -2412,3 +2412,43 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, migraciones ni datos.
 - No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
 - El push a `main` puede disparar Forge; no se da por desplegado ni validado en produccion sin comprobacion real.
+
+---
+
+## 2026-07-13 - Ubicacion destino y emails de albaranes de salida (17:14 +02:00)
+
+**Equipo:** PC de casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Commit funcional:** `90617783 feat: add destination locations and dispatch email recipients`.
+**Push funcional:** confirmado a `origin/main` (`f831a8f..9061778`).
+**Produccion:** pendiente de despliegue y verificacion real en Forge; no se modifico produccion directamente.
+
+### Cambio funcional
+- Los pedidos de mercancia permiten indicar opcionalmente una `Ubicacion destino` por cada referencia/linea.
+- La ubicacion destino se guarda en `merchandise_request_lines`, se copia al generar la salida en `goods_dispatch_lines` y se muestra en:
+  - detalle del pedido;
+  - pantalla de preparacion/carga;
+  - hoja PDF de preparacion;
+  - albaran PDF de salida.
+- En la ficha de cliente se anade una lista independiente `Emails para albaranes de salida`.
+- Estos emails adicionales reciben por correo el albaran de salida sin crear usuarios WMS.
+- El email del usuario cliente sigue recibiendo el albaran como antes; los emails adicionales se deduplican contra usuarios cliente para evitar envios dobles.
+
+### Migraciones
+- `2026_07_13_000002_add_destination_location_to_request_and_dispatch_lines.php`: columnas nullable `destination_location` en lineas de pedido y salida.
+- `2026_07_13_000003_create_client_dispatch_email_recipients_table.php`: tabla para destinatarios extra de albaranes de salida por cliente.
+- `php artisan migrate`: OK. En esta base local tambien estaban pendientes y quedaron aplicadas las migraciones previas `2026_07_12_000002`, `2026_07_12_000003` y `2026_07_13_000001`.
+- Comprobacion posterior `php artisan migrate`: `Nothing to migrate`.
+
+### Tests y build
+- Targeted: `php artisan test tests\Feature\ClientManagementTest.php tests\Feature\MerchandiseRequestManagementTest.php tests\Feature\GoodsDispatchManagementTest.php`: `100 passed` (592 assertions).
+- Suite completa: `php artisan test`: `551 passed` (2695 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php -l` en requests/controladores/modelo/servicio/notificacion tocados: OK.
+- `git diff --check`: OK.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, importacion de stock ni datos de produccion.
+- No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
+- Forge debe ejecutar `php artisan migrate --force`; no se da por desplegado ni validado en produccion sin comprobacion real.
