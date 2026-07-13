@@ -150,17 +150,13 @@
                     $stateClass = 'pending';
                     $stateLabel = 'Sin preparar';
                     if ($dispatchLine?->confirmed_at !== null) {
-                        if ($loadedUnits === $requestedUnits) {
-                            $stateClass = 'ok';
-                            $stateLabel = 'Completo';
-                        } elseif ($loadedUnits > $requestedUnits && $requestedUnits > 0) {
-                            $stateClass = 'difference';
-                            $stateLabel = 'Exceso';
-                        } elseif ($loadedUnits > 0) {
-                            $stateClass = 'partial';
-                            $stateLabel = 'Parcial';
-                        }
+                        $stateClass = $dispatchLine->loadingStatus() === 'complete'
+                            ? 'ok'
+                            : $dispatchLine->loadingStatus();
+                        $stateLabel = $dispatchLine->loadingStatusLabel();
                     }
+                    $unitDifference = $loadedUnits - $requestedUnits;
+                    $differenceLabel = $unitDifference > 0 ? 'Exceso operativo' : 'Pendiente';
                 @endphp
 
                 <article class="warehouse-prep-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
@@ -189,8 +185,8 @@
                                     <dd><span data-loaded-units>{{ number_format($loadedUnits, 0, ',', '.') }}</span> uds</dd>
                                 </div>
                                 <div>
-                                    <dt>Diferencia</dt>
-                                    <dd><span data-difference-units>{{ number_format($requestedUnits - $loadedUnits, 0, ',', '.') }}</span> uds</dd>
+                                    <dt data-difference-label>{{ $differenceLabel }}</dt>
+                                    <dd><span data-difference-units>{{ number_format(abs($unitDifference), 0, ',', '.') }}</span> uds</dd>
                                 </div>
                             </dl>
                         </aside>
@@ -257,7 +253,7 @@
 
                                         <div class="warehouse-prep-peaks" data-peak-groups>
                                             @foreach ($lineStockOptions as $stockOption)
-                                                <div data-peak-group data-stock-id="{{ $stockOption->id }}" @hidden((int) $selectedStockPalletId !== (int) $stockOption->id)>
+                                                <div data-peak-group data-stock-id="{{ $stockOption->id }}" @if ((int) $selectedStockPalletId !== (int) $stockOption->id) hidden @endif>
                                                     <span>Picos existentes</span>
                                                     <div class="warehouse-prep-peak-chip-list">
                                                         @foreach (range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS) as $peakIndex)

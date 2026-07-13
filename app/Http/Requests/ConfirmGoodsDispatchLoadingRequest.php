@@ -115,9 +115,13 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             }
 
             $lines = $this->validatedLines();
+            $hasPositiveLoadedLine = collect($lines)->contains(
+                fn (array $line): bool => ! $line['remove']
+                    && (((int) $line['loaded_pallets'] + (int) $line['loaded_partial_units']) > 0)
+            );
 
-            if ($lines === []) {
-                $validator->errors()->add('lines', 'Debes informar al menos una linea de carga real.');
+            if (! $hasPositiveLoadedLine && $this->resolvedErrors() === [] && $validator->errors()->isEmpty()) {
+                $validator->errors()->add('lines', 'Debes confirmar al menos una linea con carga real mayor que cero.');
             }
 
             foreach ($this->resolvedErrors() as $field => $message) {
@@ -171,7 +175,6 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
         $submittedLines = collect($this->input('lines', []));
         $resolvedLines = [];
         $errors = [];
-        $hasPositiveLoadedLine = false;
 
         $extraRows = $submittedLines
             ->filter(function ($payload): bool {
@@ -259,20 +262,6 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                 $stockPalletId = $lineAllocations[0]['stock_pallet_id'] ?? $line->stock_pallet_id;
                 $stockPeakIndex = $lineAllocations[0]['selected_peaks'][0]['index'] ?? $line->stock_peak_index;
 
-                if ($line->isPeakLine() && $loadedQuantity > 1 && $loadedPartialUnits === 0) {
-                    $errors["lines.$rowKey.loaded_quantity"] = 'Una linea de pico solo puede cargarse como 0 o 1.';
-                    continue;
-                }
-
-                if (! $this->loadingFitsRequested($line, $loadedPallets, $loadedPartialUnits)) {
-                    $errors["lines.$rowKey.loaded_partial_units"] = 'La carga real no puede superar las unidades solicitadas.';
-                    continue;
-                }
-
-                if (! $remove && (($loadedPallets + $loadedPartialUnits) > 0)) {
-                    $hasPositiveLoadedLine = true;
-                }
-
                 $resolvedLines[] = [
                     'line_id' => $lineId,
                     'item_id' => $line->item_id,
@@ -356,10 +345,6 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                     continue;
                 }
 
-                if ($loadedQuantity > 0 || $loadedPartialUnits > 0) {
-                    $hasPositiveLoadedLine = true;
-                }
-
                 $resolvedLines[] = [
                     'line_id' => null,
                     'item_id' => $item->id,
@@ -395,10 +380,6 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
             $loadedPallets = max(0, $submittedLoadedPallets ?? $loadedQuantity);
 
-            if ($loadedPallets > 0) {
-                $hasPositiveLoadedLine = true;
-            }
-
             if ($loadedPartialUnits > 0) {
                 if (! $stockPallet instanceof StockPallet) {
                     $errors["lines.$rowKey.stock_pallet_id"] = 'Selecciona una partida concreta para cargar unidades parciales.';
@@ -409,8 +390,6 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                     $errors["lines.$rowKey.stock_pallet_id"] = 'La carga real supera el stock disponible en la partida seleccionada.';
                     continue;
                 }
-
-                $hasPositiveLoadedLine = true;
             }
 
             $resolvedLines[] = [
@@ -439,10 +418,6 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                 'loading_notes' => $loadingNotes,
                 'remove' => false,
             ];
-        }
-
-        if (! $hasPositiveLoadedLine) {
-            $errors['lines'] = 'Debes confirmar al menos una linea con carga real mayor que cero.';
         }
 
         $this->resolvedLines = $resolvedLines;
@@ -660,23 +635,6 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             ->filter(fn (int $peakIndex): bool => $peakIndex > 0)
             ->values()
             ->all();
-    }
-
-    private function loadingFitsRequested(GoodsDispatchLine $line, int $loadedPallets, int $loadedPartialUnits): bool
-    {
-        if ($line->is_extra_line) {
-            return true;
-        }
-
-        $requestedUnits = $line->requestedUnitsTotal();
-
-        if ($requestedUnits <= 0) {
-            return true;
-        }
-
-        $loadedUnits = ($loadedPallets * max(0, (int) ($line->units_per_pallet ?? 0))) + $loadedPartialUnits;
-
-        return $loadedUnits <= $requestedUnits;
     }
 
     private function loadingFitsStock(?StockPallet $stockPallet, int $loadedPallets, int $loadedPartialUnits, ?int $preferredPeakIndex): bool

@@ -244,6 +244,36 @@ class GoodsDispatchLine extends Model
         return $this->requestedUnitsTotal() !== $this->loadedUnitsTotal();
     }
 
+    public function loadingStatus(): string
+    {
+        $loadedUnits = $this->loadedUnitsTotal();
+        $requestedUnits = $this->requestedUnitsTotal();
+
+        if ($loadedUnits <= 0) {
+            return 'pending';
+        }
+
+        if ($requestedUnits > 0 && $loadedUnits < $requestedUnits) {
+            return 'partial';
+        }
+
+        if ($requestedUnits > 0 && $loadedUnits > $requestedUnits) {
+            return 'superior';
+        }
+
+        return 'complete';
+    }
+
+    public function loadingStatusLabel(): string
+    {
+        return match ($this->loadingStatus()) {
+            'partial' => 'Parcial',
+            'complete' => 'Completo',
+            'superior' => 'Carga superior a lo solicitado',
+            default => 'Sin preparar',
+        };
+    }
+
     public function hasDeliveredQuantity(): bool
     {
         return $this->loadedUnitsTotal() > 0;

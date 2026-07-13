@@ -325,7 +325,9 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_quantity]"', false)
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_pallets]"', false)
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_partial_units]"', false)
-            ->assertSee('name="lines[line_'.$dispatchLine->id.'][loading_notes]"', false);
+            ->assertSee('name="lines[line_'.$dispatchLine->id.'][loading_notes]"', false)
+            ->assertDontSee('@hidden', false)
+            ->assertDontSee('id)&gt;', false);
     }
 
     public function test_loading_can_be_saved_from_internal_request_page_without_dispatching_stock(): void
@@ -668,7 +670,7 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertNull($line->fresh()->confirmed_at);
     }
 
-    public function test_internal_loading_rejects_partial_units_above_requested_quantity(): void
+    public function test_internal_loading_allows_real_quantity_above_requested_when_stock_is_sufficient(): void
     {
         $this->seedBaseData();
 
@@ -709,9 +711,92 @@ class GoodsDispatchManagementTest extends TestCase
                 ],
             ])
             ->assertRedirect(route('dispatches.show', $dispatch))
-            ->assertSessionHasErrors('lines.line_'.$line->id.'.loaded_partial_units');
+            ->assertSessionDoesntHaveErrors();
+
+        $line->refresh();
+
+        $this->assertSame(1001, $line->loadedUnitsTotal());
+        $this->assertSame('superior', $line->loadingStatus());
+        $this->assertSame('Carga superior a lo solicitado', $line->loadingStatusLabel());
+        $this->assertNotNull($line->confirmed_at);
+        $this->assertSame(5000, $stock->fresh()->quantity_units, 'Saving preparation must not apply stock yet.');
+    }
+
+    public function test_loading_status_distinguishes_unprepared_partial_complete_and_superior(): void
+    {
+        $line = new GoodsDispatchLine([
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 3,
+            'requested_units' => 300,
+            'loaded_partial_units' => 0,
+        ]);
+
+        $line->loaded_pallets = 0;
+        $this->assertSame('pending', $line->loadingStatus());
+
+        $line->loaded_pallets = 1;
+        $this->assertSame('partial', $line->loadingStatus());
+
+        $line->loaded_pallets = 3;
+        $this->assertSame('complete', $line->loadingStatus());
+
+        $line->loaded_pallets = 4;
+        $this->assertSame('superior', $line->loadingStatus());
+        $this->assertSame('Carga superior a lo solicitado', $line->loadingStatusLabel());
+    }
+
+    public function test_internal_loading_rejects_negative_real_quantities(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 100]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 100,
+            'quantity_units' => 500,
+            'peak_1' => 0,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 1,
+            'requested_units' => 100,
+            'loaded_pallets' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.show', $dispatch))
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => -1,
+                            'loaded_partial_units' => -10,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasErrors([
+                'lines.line_'.$line->id.'.allocations.0.loaded_pallets',
+                'lines.line_'.$line->id.'.allocations.0.loaded_partial_units',
+            ])
+            ->assertSessionDoesntHaveErrors('lines');
 
         $this->assertNull($line->fresh()->confirmed_at);
+        $this->assertSame(500, $stock->fresh()->quantity_units);
     }
 
     public function test_internal_loading_rejects_partial_units_above_selected_batch_stock(): void
@@ -755,7 +840,8 @@ class GoodsDispatchManagementTest extends TestCase
                 ],
             ])
             ->assertRedirect(route('dispatches.show', $dispatch))
-            ->assertSessionHasErrors('lines.line_'.$line->id.'.allocations.0.stock_pallet_id');
+            ->assertSessionHasErrors('lines.line_'.$line->id.'.allocations.0.stock_pallet_id')
+            ->assertSessionDoesntHaveErrors('lines');
 
         $this->assertSame(100, $stock->fresh()->quantity_units);
     }
@@ -1340,6 +1426,93 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertStringContainsString('Pallets entregados', $html);
         $this->assertStringContainsString('Calle Mayor 1', $html);
         $this->assertStringContainsString('5', $html);
+    }
+
+    public function test_dispatch_uses_superior_real_loading_and_deducts_it_once(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SUPERIOR-LOAD',
+            'units_per_pallet' => 100,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 100,
+            'quantity_units' => 500,
+            'peak_1' => 0,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 3,
+            'requested_peaks' => 0,
+            'requested_units' => 300,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'source_request_line_id' => $requestLine->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 3,
+            'requested_units' => 300,
+            'loaded_pallets' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 4,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertSessionDoesntHaveErrors();
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSee('Carga superior a lo solicitado')
+            ->assertSee('Exceso operativo');
+
+        $this->assertSame(500, $stock->fresh()->quantity_units, 'Preparation must not deduct stock.');
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch), ['status' => GoodsDispatch::STATUS_SENT])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertSame(100, $stock->fresh()->quantity_units, 'Dispatch must deduct the four actually loaded pallets, not the three requested.');
+        $this->assertSame(1, $stock->fresh()->full_pallets);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.update-status', $dispatch->fresh()), ['status' => GoodsDispatch::STATUS_COMPLETED])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertSame(100, $stock->fresh()->quantity_units, 'Completing the dispatch must not deduct the superior load twice.');
     }
 
     public function test_enviar_salida_descuenta_pallets_completos(): void

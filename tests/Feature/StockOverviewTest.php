@@ -809,6 +809,7 @@ class StockOverviewTest extends TestCase
             'quantity_units' => 2000,
             'units_per_pallet' => 1000,
             'full_pallets' => 2,
+            'peak_1' => 0,
         ]);
 
         $user = $this->makeUserWithRole(Role::ALMACEN);

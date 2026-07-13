@@ -1880,11 +1880,12 @@ const setupWarehouseRequestAllocations = () => {
         });
 
         const requestedUnits = parsePositiveInteger(line.dataset.requestedUnits);
-        const differenceUnits = requestedUnits - totalUnits;
+        const differenceUnits = totalUnits - requestedUnits;
         const loadedPalletsField = line.querySelector('[data-line-loaded-pallets]');
         const loadedPartialUnitsField = line.querySelector('[data-line-loaded-partial-units]');
         const loadedUnitsNode = line.querySelector('[data-loaded-units]');
         const differenceUnitsNode = line.querySelector('[data-difference-units]');
+        const differenceLabelNode = line.querySelector('[data-difference-label]');
         const stateNode = line.querySelector('[data-prep-state]');
 
         if (loadedPalletsField) {
@@ -1900,7 +1901,11 @@ const setupWarehouseRequestAllocations = () => {
         }
 
         if (differenceUnitsNode) {
-            differenceUnitsNode.textContent = formatNumber.format(differenceUnits);
+            differenceUnitsNode.textContent = formatNumber.format(Math.abs(differenceUnits));
+        }
+
+        if (differenceLabelNode) {
+            differenceLabelNode.textContent = differenceUnits > 0 ? 'Exceso operativo' : 'Pendiente';
         }
 
         if (stateNode) {
@@ -1908,6 +1913,7 @@ const setupWarehouseRequestAllocations = () => {
                 'warehouse-load-state--pending',
                 'warehouse-load-state--partial',
                 'warehouse-load-state--difference',
+                'warehouse-load-state--superior',
                 'warehouse-load-state--ok',
             );
 
@@ -1918,8 +1924,8 @@ const setupWarehouseRequestAllocations = () => {
                 stateNode.textContent = 'Completo';
                 stateNode.classList.add('warehouse-load-state--ok');
             } else if (totalUnits > requestedUnits && requestedUnits > 0) {
-                stateNode.textContent = 'Exceso';
-                stateNode.classList.add('warehouse-load-state--difference');
+                stateNode.textContent = 'Carga superior a lo solicitado';
+                stateNode.classList.add('warehouse-load-state--superior');
             } else {
                 stateNode.textContent = 'Parcial';
                 stateNode.classList.add('warehouse-load-state--partial');
