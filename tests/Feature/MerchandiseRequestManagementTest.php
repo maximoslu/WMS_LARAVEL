@@ -1156,7 +1156,7 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertSee('START-LOAD-001')
             ->assertSee('LÍNEAS DEL PEDIDO Y CARGA REAL')
             ->assertSee('Partida / lote / ubicaci')
-            ->assertSee('GUARDAR PREPARACIÓN');
+            ->assertSee('Confirmar envío y abrir albarán');
     }
 
     public function test_existing_dispatch_shows_continue_loading_on_request_detail(): void

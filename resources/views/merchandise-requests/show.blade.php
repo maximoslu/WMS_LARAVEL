@@ -252,10 +252,6 @@
                         </a>
 
                         @if ($dispatch)
-                            <a href="{{ route('dispatches.show', $dispatch) }}" class="button-secondary compact-button btn-compact">
-                                Ver salida técnica
-                            </a>
-
                             @if (in_array($merchandiseRequest->status, [\App\Models\MerchandiseRequest::STATUS_SENT, \App\Models\MerchandiseRequest::STATUS_COMPLETED], true))
                                 <a href="{{ route('dispatches.delivery-note', $dispatch) }}" class="button-primary compact-button btn-compact wms-button-with-icon" target="_blank" rel="noopener noreferrer">
                                     <span class="wms-button-icon" aria-hidden="true"><x-module-icon name="printer" /></span>

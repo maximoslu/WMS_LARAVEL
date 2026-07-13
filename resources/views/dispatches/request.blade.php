@@ -83,8 +83,13 @@
                     <input type="hidden" name="return_to_request" value="1">
                     <button type="submit" class="button-primary compact-button btn-compact">Empezar carga</button>
                 </form>
-            @elseif ($dispatch)
-                <a href="{{ route('dispatches.show', $dispatch) }}" class="button-secondary compact-button btn-compact">Ver salida técnica</a>
+            @endif
+
+            @if ($dispatch && in_array($dispatch->status, [\App\Models\GoodsDispatch::STATUS_SENT, \App\Models\GoodsDispatch::STATUS_COMPLETED], true))
+                <a href="{{ route('dispatches.delivery-note', $dispatch) }}" class="button-primary compact-button btn-compact wms-button-with-icon" target="_blank" rel="noopener noreferrer">
+                    <span class="wms-button-icon" aria-hidden="true"><x-module-icon name="printer" /></span>
+                    Abrir albarán
+                </a>
             @endif
 
             <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact wms-button-with-icon" target="_blank" rel="noopener noreferrer">
@@ -342,8 +347,37 @@
         @if ($dispatch)
                 @if ($canEditLoading)
                     <div class="warehouse-request-save-row">
-                        <span>Carga: {{ $dispatch->hasConfirmedLoading() ? 'confirmada' : 'pendiente de confirmar' }}</span>
-                        <button type="submit" class="button-primary compact-button btn-compact">GUARDAR PREPARACIÓN</button>
+                        <div class="warehouse-request-close-panel">
+                            <div>
+                                <strong>Cerrar pedido</strong>
+                                <span>Carga: {{ $dispatch->hasConfirmedLoading() ? 'confirmada' : 'pendiente de confirmar' }}</span>
+                            </div>
+
+                            <fieldset class="warehouse-request-transport">
+                                <legend>Transporte</legend>
+                                <label>
+                                    <input type="radio" name="camion_propio" value="0" @checked(! old('camion_propio', $dispatch->camion_propio))>
+                                    Camión externo
+                                </label>
+                                <label>
+                                    <input type="radio" name="camion_propio" value="1" @checked(old('camion_propio', $dispatch->camion_propio))>
+                                    Camión propio
+                                </label>
+                            </fieldset>
+                        </div>
+
+                        <div class="warehouse-request-save-actions">
+                            <button type="submit" name="finalize_dispatch" value="0" class="button-secondary compact-button btn-compact">Guardar preparación</button>
+                            <button
+                                type="submit"
+                                name="finalize_dispatch"
+                                value="1"
+                                class="button-primary compact-button btn-compact"
+                                onclick="return confirm('Se guardará la carga, se marcará el pedido como enviado, se descontará stock y se abrirá el albarán. ¿Continuar?')"
+                            >
+                                Confirmar envío y abrir albarán
+                            </button>
+                        </div>
                     </div>
                 @endif
             </form>

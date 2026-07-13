@@ -234,12 +234,26 @@ class GoodsDispatchController extends Controller
         GoodsDispatch $goodsDispatch,
         GoodsDispatchWorkflowService $workflowService,
     ): RedirectResponse {
+        if ($request->has('camion_propio')) {
+            $goodsDispatch->update([
+                'camion_propio' => $request->boolean('camion_propio'),
+            ]);
+        }
+
         $workflowService->confirmLoading($goodsDispatch, $request->validatedLines(), $request->user());
 
+        if ($request->boolean('finalize_dispatch')) {
+            $workflowService->changeStatus($goodsDispatch->fresh(), GoodsDispatch::STATUS_SENT, $request->user());
+
+            return redirect()
+                ->route('dispatches.delivery-note', $goodsDispatch->fresh())
+                ->with('status', 'Pedido enviado correctamente. Albarán generado.');
+        }
+
         if ($request->boolean('return_to_request') && $goodsDispatch->merchandise_request_id !== null) {
-                return redirect()
-                    ->route('dispatches.requests.show', $goodsDispatch->merchandiseRequest)
-                    ->with('status', 'Preparación guardada correctamente.');
+            return redirect()
+                ->route('dispatches.requests.show', $goodsDispatch->merchandiseRequest)
+                ->with('status', 'Preparación guardada correctamente.');
         }
 
         return redirect()

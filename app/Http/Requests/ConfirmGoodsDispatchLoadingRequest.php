@@ -85,6 +85,9 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'return_to_request' => ['nullable', 'boolean'],
+            'finalize_dispatch' => ['nullable', 'boolean'],
+            'camion_propio' => ['nullable', 'boolean'],
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.line_id' => ['nullable', 'integer'],
             'lines.*.item_id' => ['nullable', 'integer'],
