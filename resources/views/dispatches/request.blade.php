@@ -81,10 +81,10 @@
                 <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
                     @csrf
                     <input type="hidden" name="return_to_request" value="1">
-                    <button type="submit" class="button-primary compact-button btn-compact">GENERAR SALIDA</button>
+                    <button type="submit" class="button-primary compact-button btn-compact">Empezar carga</button>
                 </form>
             @elseif ($dispatch)
-                <a href="{{ route('dispatches.show', $dispatch) }}" class="button-primary compact-button btn-compact">Ver salida</a>
+                <a href="{{ route('dispatches.show', $dispatch) }}" class="button-secondary compact-button btn-compact">Ver salida técnica</a>
             @endif
 
             <a href="{{ route('merchandise-requests.preparation-pdf', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact wms-button-with-icon" target="_blank" rel="noopener noreferrer">

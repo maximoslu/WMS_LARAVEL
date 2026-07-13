@@ -1060,6 +1060,225 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertSee($dispatch->dispatchNumber());
     }
 
+    public function test_internal_request_detail_prioritizes_loading_workflow(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'OPERATIVO-001',
+            'description' => 'Linea visible para preparar',
+            'units_per_pallet' => 40,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 2,
+            'requested_units' => 80,
+            'units_per_pallet' => 40,
+        ]);
+
+        $response = $this->actingAs($almacen)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('Preparación del pedido')
+            ->assertSee('Empezar carga')
+            ->assertDontSee('Generar salida')
+            ->assertSee('OPERATIVO-001')
+            ->assertSee('Linea visible para preparar')
+            ->assertSee('Pendiente de cargar')
+            ->assertSee('Más acciones')
+            ->assertSee('Imprimir preparación')
+            ->assertSee('Cambiar estado');
+
+        $html = $response->getContent();
+
+        $this->assertLessThan(
+            strpos($html, 'Más acciones'),
+            strpos($html, 'data-order-preparation-section'),
+            'La preparación y las líneas deben aparecer antes que las acciones secundarias.'
+        );
+    }
+
+    public function test_start_loading_from_request_detail_creates_dispatch_and_opens_loading_screen(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'START-LOAD-001',
+            'units_per_pallet' => 50,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 3,
+            'requested_units' => 150,
+            'units_per_pallet' => 50,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $request), [
+                'return_to_request' => '1',
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $request));
+
+        $dispatch = GoodsDispatch::query()->where('merchandise_request_id', $request->id)->firstOrFail();
+
+        $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->status);
+        $this->assertDatabaseHas('goods_dispatch_lines', [
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 3,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $request))
+            ->assertOk()
+            ->assertSee('START-LOAD-001')
+            ->assertSee('LÍNEAS DEL PEDIDO Y CARGA REAL')
+            ->assertSee('Partida / lote / ubicaci')
+            ->assertSee('GUARDAR PREPARACIÓN');
+    }
+
+    public function test_existing_dispatch_shows_continue_loading_on_request_detail(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'sku' => 'CONTINUE-001']);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $line = MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 1,
+            'requested_units' => $item->units_per_pallet,
+            'units_per_pallet' => $item->units_per_pallet,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatch->lines()->create([
+            'item_id' => $item->id,
+            'source_request_line_id' => $line->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'line_type' => 'pallet',
+            'units_per_pallet' => $item->units_per_pallet,
+            'pallets' => 1,
+            'requested_pallets' => 1,
+            'requested_units' => $item->units_per_pallet,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('Continuar carga')
+            ->assertDontSee('Empezar carga')
+            ->assertDontSee('Generar salida')
+            ->assertSee(route('dispatches.requests.show', $request), false);
+    }
+
+    public function test_cliente_does_not_see_internal_loading_actions_on_request_detail(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id, 'sku' => 'CLIENT-VIEW-001']);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('CLIENT-VIEW-001')
+            ->assertDontSee('Empezar carga')
+            ->assertDontSee('Continuar carga')
+            ->assertDontSee('Más acciones')
+            ->assertDontSee('Cambiar estado');
+    }
+
+    public function test_internal_roles_can_start_loading_from_request_detail(): void
+    {
+        $this->seedBaseData();
+
+        foreach ([Role::ALMACEN, Role::ADMINISTRACION, Role::SUPERADMIN] as $roleSlug) {
+            $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+            $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+            $internal = $this->makeUserWithRole($roleSlug);
+            $item = Item::factory()->create([
+                'client_id' => $client->id,
+                'sku' => strtoupper($roleSlug).'-LOAD-001',
+                'units_per_pallet' => 20,
+            ]);
+            $request = MerchandiseRequest::factory()->create([
+                'client_id' => $client->id,
+                'requested_by' => $requester->id,
+                'status' => MerchandiseRequest::STATUS_PENDING,
+            ]);
+            MerchandiseRequestLine::factory()->create([
+                'merchandise_request_id' => $request->id,
+                'item_id' => $item->id,
+                'line_type' => 'pallet',
+                'requested_pallets' => 1,
+                'requested_units' => 20,
+                'units_per_pallet' => 20,
+            ]);
+
+            $this->actingAs($internal)
+                ->get(route('merchandise-requests.show', $request))
+                ->assertOk()
+                ->assertSee('Empezar carga');
+
+            $this->actingAs($internal)
+                ->post(route('dispatches.requests.generate', $request), [
+                    'return_to_request' => '1',
+                ])
+                ->assertRedirect(route('dispatches.requests.show', $request));
+
+            $this->assertDatabaseHas('goods_dispatches', [
+                'merchandise_request_id' => $request->id,
+                'created_by' => $internal->id,
+                'status' => GoodsDispatch::STATUS_PREPARING,
+            ]);
+        }
+    }
+
     public function test_request_detail_shows_pallet_and_peak_type_badges(): void
     {
         $this->seedBaseData();

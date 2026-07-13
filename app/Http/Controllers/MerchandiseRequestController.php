@@ -239,6 +239,7 @@ class MerchandiseRequestController extends Controller
                 'lines.stockPallet',
                 'dispatch.lines.item',
                 'dispatch.lines.stockPallet',
+                'dispatch.lines.allocations.stockPallet',
                 'dispatch.lines.sourceRequestLine',
             ]),
             'isClient' => $user->hasRole(Role::CLIENTE),
