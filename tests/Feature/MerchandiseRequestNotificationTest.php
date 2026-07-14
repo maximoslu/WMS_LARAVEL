@@ -98,6 +98,16 @@ class MerchandiseRequestNotificationTest extends TestCase
         }
     }
 
+    public function test_internal_new_order_email_subject_contains_edelvives_and_request_code(): void
+    {
+        $this->assertInternalOrderSubject('EDELVIVES');
+    }
+
+    public function test_internal_new_order_email_subject_contains_friesland_and_request_code(): void
+    {
+        $this->assertInternalOrderSubject('FRIESLAND');
+    }
+
     public function test_status_change_dispatches_job_after_response(): void
     {
         Bus::fake();
@@ -284,6 +294,22 @@ class MerchandiseRequestNotificationTest extends TestCase
             RoleSeeder::class,
             ClientSeeder::class,
         ]);
+    }
+
+    private function assertInternalOrderSubject(string $clientCode): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', $clientCode)->firstOrFail();
+        $request = MerchandiseRequest::factory()->create(['client_id' => $client->id]);
+        $notification = new InternalMerchandiseRequestSubmittedNotification($request, ['mail']);
+        $mail = $notification->toMail(User::factory()->make(['email' => 'almacen@example.test']));
+
+        $this->assertSame(
+            'Pedido de '.$clientCode.' - '.$request->referenceCode(),
+            $mail->subject
+        );
+        $this->assertStringNotContainsString('MAXIMO WMS', $mail->subject);
     }
 
     private function makeUserWithRole(string $roleSlug, ?Client $client = null): User

@@ -205,9 +205,7 @@ class StockExcelImportService
                 'uploaded_by' => $user->id,
             ])->save();
 
-            StockPallet::query()
-                ->where('client_id', $lockedImport->client_id)
-                ->delete();
+            $this->retireCurrentStockSnapshot($lockedImport->client_id);
 
             $existingItems = Item::query()
                 ->where('client_id', $lockedImport->client_id)
@@ -330,6 +328,35 @@ class StockExcelImportService
                 'updated_items' => $updatedItems,
             ];
         });
+    }
+
+    private function retireCurrentStockSnapshot(int $clientId): void
+    {
+        $stockPalletIds = StockPallet::query()
+            ->where('client_id', $clientId)
+            ->lockForUpdate()
+            ->pluck('id');
+
+        if ($stockPalletIds->isEmpty()) {
+            return;
+        }
+
+        $retiredValues = [
+            'active' => false,
+            'quantity_units' => 0,
+            'full_pallets' => 0,
+            'peaks_count' => 0,
+            'warehouse_pallets' => 0,
+            'updated_at' => now(),
+        ];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $retiredValues['peak_'.$peakNumber] = 0;
+        }
+
+        StockPallet::query()
+            ->whereKey($stockPalletIds)
+            ->update($retiredValues);
     }
 
     /**

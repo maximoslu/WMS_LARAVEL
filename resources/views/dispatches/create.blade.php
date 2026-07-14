@@ -110,14 +110,18 @@
                     <textarea name="notes" class="auth-input" rows="4" maxlength="2000" placeholder="Opcional">{{ old('notes') }}</textarea>
                 </label>
 
-                <label class="auth-field">
-                    <span>
-                        <input type="hidden" name="camion_propio" value="0">
-                        <input type="checkbox" name="camion_propio" value="1" @checked(old('camion_propio'))>
-                        Cami&oacute;n propio
-                    </span>
-                    <small class="helper-text">Marcar si la entrega/salida se realiza con cami&oacute;n propio de MAXIMO.</small>
-                </label>
+                <fieldset class="warehouse-request-transport">
+                    <legend><x-module-icon name="truck" /> Transporte</legend>
+                    <label>
+                        <input type="radio" name="camion_propio" value="1" @checked((bool) old('camion_propio', true))>
+                        Camión propio MAXIMO
+                    </label>
+                    <label>
+                        <input type="radio" name="camion_propio" value="0" @checked(! (bool) old('camion_propio', true))>
+                        Camión externo
+                    </label>
+                    <small class="helper-text">Indica si la entrega sale con camión propio de MAXIMO o transporte externo.</small>
+                </fieldset>
             </section>
 
             <aside class="surface-card compact-card merchandise-request-summary-card wms-flow-card">

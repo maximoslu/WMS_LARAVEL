@@ -155,18 +155,21 @@
                 <form method="POST" action="{{ route('dispatches.own-truck.update', $dispatch) }}" class="wms-action-card">
                     @csrf
                     @method('PUT')
-                    <strong>Cami&oacute;n propio</strong>
-                    <p>Marca esta salida solo si la entrega se realiza con cami&oacute;n propio de MAXIMO.</p>
+                    <strong class="wms-action-card-title"><x-module-icon name="truck" /> Transporte</strong>
+                    <p>Indica si la entrega sale con camión propio de MAXIMO o transporte externo.</p>
 
-                    <label class="auth-field">
-                        <span>
-                            <input type="hidden" name="camion_propio" value="0">
-                            <input type="checkbox" name="camion_propio" value="1" @checked(old('camion_propio', $dispatch->camion_propio))>
-                            Cami&oacute;n propio
-                        </span>
-                    </label>
+                    <fieldset class="warehouse-request-transport">
+                        <label>
+                            <input type="radio" name="camion_propio" value="1" @checked((bool) old('camion_propio', $dispatch->camion_propio))>
+                            Camión propio MAXIMO
+                        </label>
+                        <label>
+                            <input type="radio" name="camion_propio" value="0" @checked(! (bool) old('camion_propio', $dispatch->camion_propio))>
+                            Camión externo
+                        </label>
+                    </fieldset>
 
-                    <button type="submit" class="button-secondary compact-button btn-compact">Guardar cami&oacute;n</button>
+                    <button type="submit" class="button-secondary compact-button btn-compact">Actualizar transporte</button>
                 </form>
             </div>
         </article>

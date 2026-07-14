@@ -143,7 +143,7 @@ const renderVariantPreview = (item, quantity = null) => {
         ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} · ${escapeHtml(formatVariantUnits(item))}`
         : item.available_pallets
             ? `${formatNumber.format(item.available_pallets)} pallets visibles`
-            : 'Pallet genÃ©rico';
+            : 'Pallet genérico';
     const extraAvailability = item.available_peaks
         ? `<span>${formatNumber.format(item.available_peaks)} picos visibles</span>`
         : '';
@@ -169,7 +169,7 @@ const renderVariantAutocompleteOption = (item) => {
         ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} · ${escapeHtml(formatVariantUnits(item))}`
         : item.available_pallets
             ? `${formatNumber.format(item.available_pallets)} pallets disponibles`
-            : 'Pallet genÃ©rico';
+            : 'Pallet genérico';
     const secondary = [
         item.lot ? `Lote ${item.lot}` : 'Sin lote',
         formatVariantUnits(item),

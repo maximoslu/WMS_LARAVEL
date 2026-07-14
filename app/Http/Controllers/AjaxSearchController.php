@@ -41,7 +41,7 @@ class AjaxSearchController extends Controller
 
         return response()->json([
             'data' => $variantCatalog->search($query, $clientId, $limit, $activeOnly),
-        ]);
+        ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     public function items(Request $request): JsonResponse

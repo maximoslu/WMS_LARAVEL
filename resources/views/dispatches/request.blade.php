@@ -368,15 +368,16 @@
                             </div>
 
                             <fieldset class="warehouse-request-transport">
-                                <legend>Transporte</legend>
+                                <legend><x-module-icon name="truck" /> Transporte</legend>
                                 <label>
-                                    <input type="radio" name="camion_propio" value="0" @checked(! old('camion_propio', $dispatch->camion_propio))>
+                                    <input type="radio" name="camion_propio" value="1" @checked((bool) old('camion_propio', $dispatch->camion_propio))>
+                                    Camión propio MAXIMO
+                                </label>
+                                <label>
+                                    <input type="radio" name="camion_propio" value="0" @checked(! (bool) old('camion_propio', $dispatch->camion_propio))>
                                     Camión externo
                                 </label>
-                                <label>
-                                    <input type="radio" name="camion_propio" value="1" @checked(old('camion_propio', $dispatch->camion_propio))>
-                                    Camión propio
-                                </label>
+                                <small>Indica si la entrega sale con camión propio de MAXIMO o transporte externo.</small>
                             </fieldset>
                         </div>
 
@@ -387,9 +388,9 @@
                                 name="finalize_dispatch"
                                 value="1"
                                 class="button-primary compact-button btn-compact"
-                                onclick="return confirm('Se guardará la carga, se marcará el pedido como enviado, se descontará stock y se abrirá el albarán. ¿Continuar?')"
+                                onclick="return confirm('Se guardará la carga, se marcará el pedido como enviado y se descontará el stock. ¿Continuar?')"
                             >
-                                Confirmar envío y abrir albarán
+                                Confirmar envío
                             </button>
                         </div>
                     </div>

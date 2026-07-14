@@ -60,6 +60,12 @@ class GoodsDispatch extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (self $dispatch): void {
+            if (! array_key_exists('camion_propio', $dispatch->getAttributes())) {
+                $dispatch->camion_propio = true;
+            }
+        });
+
         static::created(function (self $dispatch): void {
             if (filled($dispatch->dispatch_number)) {
                 return;

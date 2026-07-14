@@ -569,6 +569,7 @@ class DailyOperationsTest extends TestCase
             'status' => GoodsDispatch::STATUS_SENT,
             'sent_at' => '2026-07-09 10:00:00',
             'created_by' => $user->id,
+            'camion_propio' => false,
         ]);
 
         GoodsDispatchLine::query()->create([

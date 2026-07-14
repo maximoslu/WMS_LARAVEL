@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\GoodsDispatch;
+use App\Models\GoodsDispatchLine;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
@@ -674,9 +676,12 @@ class StockImportTest extends TestCase
             'stock_import_id' => $stockImport->id,
         ])->assertRedirect();
 
-        $this->assertDatabaseMissing('stock_pallets', [
+        $this->assertDatabaseHas('stock_pallets', [
             'client_id' => $friesland->id,
             'item_id' => $legacyItem->id,
+            'active' => false,
+            'quantity_units' => 0,
+            'full_pallets' => 0,
         ]);
 
         $this->assertDatabaseHas('stock_pallets', [
@@ -1370,19 +1375,112 @@ class StockImportTest extends TestCase
             'stock_import_id' => $secondImport->id,
         ])->assertRedirect();
 
-        $this->assertSame(1, StockPallet::query()->where('client_id', $edelvives->id)->count());
+        $this->assertSame(1, StockPallet::query()->where('client_id', $edelvives->id)->where('active', true)->count());
         $this->assertDatabaseHas('stock_pallets', [
             'client_id' => $edelvives->id,
             'location_text' => 'C',
         ]);
-        $this->assertDatabaseMissing('stock_pallets', [
+        $this->assertDatabaseHas('stock_pallets', [
             'client_id' => $edelvives->id,
             'location_text' => 'A',
+            'active' => false,
+            'quantity_units' => 0,
         ]);
         $this->assertDatabaseHas('stock_pallets', [
             'client_id' => $friesland->id,
             'lot' => 'FR-1',
         ]);
+    }
+
+    public function test_edelvives_import_preserves_historical_allocations_and_keeps_current_snapshot_idempotent(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $clientUser = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+        $historicalItem = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'ED-HISTORY',
+            'units_per_pallet' => 500,
+        ]);
+        $historicalStock = StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $historicalItem->id,
+            'lot' => 'HIST-001',
+            'quantity_units' => 1500,
+            'units_per_pallet' => 500,
+            'full_pallets' => 2,
+            'peaks_count' => 1,
+            'warehouse_pallets' => 3,
+            'peak_1' => 500,
+            'active' => true,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $edelvives->id,
+            'created_by' => $superadmin->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+        ]);
+        $dispatchLine = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $historicalItem->id,
+            'stock_pallet_id' => $historicalStock->id,
+            'sku' => $historicalItem->sku,
+        ]);
+        $allocation = $dispatchLine->allocations()->create([
+            'stock_pallet_id' => $historicalStock->id,
+            'lot' => $historicalStock->lot,
+            'loaded_pallets' => 1,
+            'loaded_partial_units' => 0,
+        ]);
+
+        foreach (range(1, 2) as $importNumber) {
+            $file = $this->makeWorkbookUpload([
+                'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                    $this->makeRealEdelvivesDataRow('C', 100, 'ED-CURRENT', 'Foto actual', 600, 600, 1, 0, [], 1),
+                ]),
+            ]);
+
+            $this->actingAs($superadmin)->post(route('stock.import.preview'), [
+                'client_id' => $edelvives->id,
+                'file' => $file,
+            ])->assertOk();
+
+            $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+            $this->actingAs($superadmin)->post(route('stock.import.confirm'), [
+                'stock_import_id' => $stockImport->id,
+            ])->assertRedirect();
+
+            $this->assertSame(StockImport::STATUS_IMPORTED, $stockImport->fresh()->status, 'Import '.$importNumber.' was not completed.');
+            $this->assertSame(1, StockPallet::query()
+                ->where('client_id', $edelvives->id)
+                ->where('active', true)
+                ->count());
+            $this->assertSame(600, (int) StockPallet::query()
+                ->where('client_id', $edelvives->id)
+                ->where('active', true)
+                ->sum('quantity_units'));
+        }
+
+        $historicalStock->refresh();
+
+        $this->assertFalse($historicalStock->active);
+        $this->assertSame(0, $historicalStock->quantity_units);
+        $this->assertSame(0, $historicalStock->full_pallets);
+        $this->assertSame(0, $historicalStock->peaks_count);
+        $this->assertSame('0.00', $historicalStock->warehouse_pallets);
+        $this->assertSame(0, $historicalStock->peak_1);
+        $this->assertDatabaseHas('goods_dispatch_line_allocations', [
+            'id' => $allocation->id,
+            'stock_pallet_id' => $historicalStock->id,
+        ]);
+
+        $this->actingAs($clientUser)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('ED-CURRENT')
+            ->assertDontSee('ED-HISTORY');
     }
 
     public function test_edelvives_client_sees_only_imported_edelvives_inventory_after_import(): void

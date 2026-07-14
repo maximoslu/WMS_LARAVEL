@@ -64,6 +64,31 @@ class AjaxSearchTest extends TestCase
         $this->assertSame('PRUEBA-OK', $data[0]['sku']);
     }
 
+    public function test_stock_variant_search_preserves_utf8_in_json(): void
+    {
+        [$client] = $this->seedClients();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'GEN-UTF8',
+            'description' => 'Artículo genérico',
+            'status' => Item::STATUS_ACTIVE,
+            'active' => true,
+        ]);
+        $user = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $response = $this->actingAs($user)
+            ->getJson(route('ajax.stock-variants', ['q' => 'GEN-UTF8']));
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.0.item_id', $item->id)
+            ->assertJsonPath('data.0.description', 'Artículo genérico')
+            ->assertJsonPath('data.0.summary', 'Pallet genérico');
+
+        $this->assertStringContainsString('Pallet genérico', $response->getContent());
+        $this->assertStringNotContainsString('genÃ©rico', $response->getContent());
+    }
+
     public function test_items_endpoint_finds_matches_by_description_only(): void
     {
         [$client] = $this->seedClients();

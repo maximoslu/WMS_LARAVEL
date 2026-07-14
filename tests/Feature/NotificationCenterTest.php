@@ -32,6 +32,71 @@ class NotificationCenterTest extends TestCase
             ->assertSee('>7<', false);
     }
 
+    public function test_dashboard_highlights_orders_for_unread_order_notifications(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+        $this->createTypedNotification($user, [
+            'type' => 'estado_solicitud_mercancia',
+            'title' => 'Pedido pendiente',
+            'url' => '/solicitudes-mercancia/1',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('ops-index-link has-pending', false)
+            ->assertSee('1 pendiente');
+    }
+
+    public function test_dashboard_highlights_users_for_unread_access_notifications(): void
+    {
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $this->createTypedNotification($user, [
+            'type' => 'solicitud_acceso',
+            'title' => 'Nuevo usuario pendiente',
+            'url' => '/solicitudes-acceso/1',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Usuarios y roles')
+            ->assertSee('1 pendiente');
+    }
+
+    public function test_dashboard_removes_module_highlight_when_notification_is_read(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+        $this->createTypedNotification($user, [
+            'type' => 'booking_estado_actualizado',
+            'title' => 'Booking actualizado',
+            'url' => '/bookings/1',
+        ]);
+        DB::table('notifications')->where('notifiable_id', $user->id)->update(['read_at' => now()]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('has-pending', false)
+            ->assertDontSee('1 pendiente');
+    }
+
+    public function test_dashboard_does_not_expose_highlight_for_modules_hidden_by_role(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+        $this->createTypedNotification($user, [
+            'type' => 'solicitud_acceso',
+            'title' => 'Nuevo usuario pendiente',
+            'url' => '/solicitudes-acceso/1',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Usuarios y roles')
+            ->assertDontSee('has-pending', false);
+    }
+
     public function test_notifications_index_is_paginated_with_summary(): void
     {
         $user = $this->makeUserWithRole(Role::CLIENTE);

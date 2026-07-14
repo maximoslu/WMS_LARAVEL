@@ -72,7 +72,7 @@
 
                 <div class="stock-export-modal-actions">
                     <a href="{{ route('stock.export', ['format' => 'xlsx'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">Excel</a>
-                    <a href="{{ route('stock.export', ['format' => 'pdf'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">PDF</a>
+                    <a href="{{ route('stock.export', ['format' => 'pdf'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact" target="_blank" rel="noopener noreferrer">PDF</a>
                     <a href="{{ route('stock.export', ['format' => 'csv'] + ($isClient ? [] : ['client_id' => $exportClientId])) }}" class="button-primary compact-button btn-compact">CSV</a>
                     <button type="submit" class="button-secondary compact-button btn-compact">Cancelar</button>
                 </div>

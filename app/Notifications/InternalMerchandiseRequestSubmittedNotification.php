@@ -30,6 +30,7 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $request = $this->merchandiseRequest;
+        $clientLabel = $request->client?->code ?: $request->client?->name ?: 'CLIENTE';
         $lines = $request->lines
             ->map(fn ($line) => sprintf(
                 '%s | %d pallets | lote %s',
@@ -40,7 +41,7 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             ->implode('; ');
 
         return (new MailMessage)
-            ->subject('Nueva solicitud de mercancia - '.$request->referenceCode())
+            ->subject('Pedido de '.$clientLabel.' - '.$request->referenceCode())
             ->greeting('Nueva solicitud pendiente')
             ->line('Se ha registrado una nueva solicitud de mercancia en el SGA.')
             ->line('Solicitud: '.$request->referenceCode())

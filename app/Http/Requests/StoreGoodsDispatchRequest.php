@@ -65,7 +65,9 @@ class StoreGoodsDispatchRequest extends FormRequest
         }
 
         $this->merge([
-            'camion_propio' => $this->boolean('camion_propio'),
+            'camion_propio' => $this->has('camion_propio')
+                ? $this->boolean('camion_propio')
+                : true,
             'lines' => collect($submittedLines)
                 ->map(function ($payload) {
                     if (! is_array($payload)) {

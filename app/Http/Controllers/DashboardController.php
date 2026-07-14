@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Booking;
 use App\Models\Role;
 use App\Services\GoogleCalendarService;
+use App\Support\Notifications\NotificationPresentation;
 use App\Support\WmsNavigation;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
@@ -15,7 +16,24 @@ class DashboardController extends Controller
     public function __invoke(Request $request, GoogleCalendarService $googleCalendarService): View
     {
         $user = $request->user();
-        $navigationSections = WmsNavigation::sectionsForUser($user);
+        $pendingByModule = $user->unreadNotifications()
+            ->get()
+            ->map(fn ($notification): ?string => NotificationPresentation::dashboardModuleKey($notification))
+            ->filter()
+            ->countBy();
+        $navigationSections = collect(WmsNavigation::sectionsForUser($user))
+            ->map(function (array $section) use ($pendingByModule): array {
+                $section['children'] = collect($section['children'])
+                    ->map(function (array $child) use ($pendingByModule): array {
+                        $child['pending_count'] = (int) $pendingByModule->get($child['key'], 0);
+
+                        return $child;
+                    })
+                    ->all();
+
+                return $section;
+            })
+            ->all();
         $calendarStart = now()->startOfWeek(Carbon::MONDAY);
         $calendarEnd = $calendarStart->copy()->addDays(6);
         $calendarBookings = Booking::query()

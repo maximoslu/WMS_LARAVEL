@@ -165,7 +165,7 @@ class MerchandiseRequestController extends Controller
 
         return response()->json([
             'data' => $variantCatalog->search($search, $clientId, 15, true),
-        ]);
+        ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     public function store(

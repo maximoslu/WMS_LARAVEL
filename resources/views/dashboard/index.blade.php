@@ -33,7 +33,7 @@
 
                 <div class="ops-index-list">
                     @foreach ($section['children'] as $child)
-                        <a href="{{ route($child['display_route'] ?? $child['route']) }}" class="ops-index-link{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}">
+                        <a href="{{ route($child['display_route'] ?? $child['route']) }}" class="ops-index-link{{ request()->routeIs(...($child['active_patterns'] ?? [$child['route']])) ? ' is-active' : '' }}{{ ($child['pending_count'] ?? 0) > 0 ? ' has-pending' : '' }}">
                             <span class="module-link-body">
                                 <span class="module-link-icon" aria-hidden="true">
                                     <x-module-icon :name="$child['display_icon']" />
@@ -42,8 +42,13 @@
                                     <strong>{{ $child['display_title'] ?? $child['title'] }}</strong>
                                 </span>
                             </span>
-                            <span class="ops-status badge-compact {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
-                                {{ $child['status_label'] }}
+                            <span class="dashboard-module-status">
+                                @if (($child['pending_count'] ?? 0) > 0)
+                                    <span class="dashboard-module-pending badge-compact">{{ $child['pending_count'] }} pendiente{{ $child['pending_count'] === 1 ? '' : 's' }}</span>
+                                @endif
+                                <span class="ops-status badge-compact {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
+                                    {{ $child['status_label'] }}
+                                </span>
                             </span>
                         </a>
                     @endforeach

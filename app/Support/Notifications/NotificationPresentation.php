@@ -12,14 +12,7 @@ class NotificationPresentation
      */
     public static function for(DatabaseNotification $notification): array
     {
-        $data = $notification->data ?? [];
-        $haystack = Str::lower(implode(' ', array_filter([
-            $notification->type,
-            $data['type'] ?? null,
-            $data['title'] ?? null,
-            $data['body'] ?? null,
-            $data['url'] ?? null,
-        ])));
+        $haystack = self::haystack($notification);
 
         if (self::containsAny($haystack, ['error', 'fallo', 'incidencia'])) {
             return ['key' => 'error', 'label' => 'ERROR'];
@@ -42,6 +35,32 @@ class NotificationPresentation
         }
 
         return ['key' => 'sistema', 'label' => 'SISTEMA'];
+    }
+
+    public static function dashboardModuleKey(DatabaseNotification $notification): ?string
+    {
+        $haystack = self::haystack($notification);
+
+        return match (true) {
+            self::containsAny($haystack, ['solicitud_mercancia', 'pedido', 'solicitud-mercancia']) => 'solicitudes',
+            self::containsAny($haystack, ['solicitud_acceso', 'solicitudes-acceso', 'access_request', 'usuario']) => 'usuarios',
+            self::containsAny($haystack, ['stock', 'inventario', 'importacion', 'importación']) => 'stock',
+            self::containsAny($haystack, ['booking', 'calendario']) => 'bookings',
+            default => null,
+        };
+    }
+
+    private static function haystack(DatabaseNotification $notification): string
+    {
+        $data = $notification->data ?? [];
+
+        return Str::lower(implode(' ', array_filter([
+            $notification->type,
+            $data['type'] ?? null,
+            $data['title'] ?? null,
+            $data['body'] ?? null,
+            $data['url'] ?? null,
+        ])));
     }
 
     /**

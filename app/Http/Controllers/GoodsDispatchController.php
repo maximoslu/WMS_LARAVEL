@@ -163,7 +163,7 @@ class GoodsDispatchController extends Controller
                 'status' => GoodsDispatch::STATUS_PREPARING,
                 'created_by' => $request->user()->id,
                 'notes' => $merchandiseRequest->notes,
-                'camion_propio' => (bool) $merchandiseRequest->camion_propio,
+                'camion_propio' => true,
             ]);
 
             foreach ($merchandiseRequest->lines as $line) {
@@ -246,9 +246,12 @@ class GoodsDispatchController extends Controller
         if ($request->boolean('finalize_dispatch')) {
             $workflowService->changeStatus($goodsDispatch->fresh(), GoodsDispatch::STATUS_SENT, $request->user());
 
-            return redirect()
-                ->route('dispatches.delivery-note', $goodsDispatch->fresh())
-                ->with('status', 'Pedido enviado correctamente. Albarán generado.');
+            $redirectRoute = $goodsDispatch->merchandise_request_id !== null
+                ? route('dispatches.requests.show', $goodsDispatch->merchandiseRequest)
+                : route('dispatches.show', $goodsDispatch->fresh());
+
+            return redirect($redirectRoute)
+                ->with('status', 'Pedido enviado correctamente. El albarán está disponible para abrirlo en una pestaña nueva.');
         }
 
         if ($request->boolean('return_to_request') && $goodsDispatch->merchandise_request_id !== null) {
@@ -304,7 +307,7 @@ class GoodsDispatchController extends Controller
 
         return redirect()
             ->route('dispatches.show', $goodsDispatch)
-            ->with('status', 'Camion propio actualizado correctamente.');
+            ->with('status', 'Transporte actualizado correctamente.');
     }
 
     public function deliveryNotePdf(

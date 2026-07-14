@@ -3001,6 +3001,25 @@ body.brand-body.app-shell-body .ops-action-card:hover {
     transform: translateY(-1px);
 }
 
+body.brand-body.app-shell-body .ops-index-link.has-pending {
+    border-color: rgba(190, 151, 70, 0.42);
+    background: linear-gradient(100deg, rgba(190, 151, 70, 0.1), rgba(255, 255, 255, 0.72));
+}
+
+.dashboard-module-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+body.brand-body.app-shell-body .dashboard-module-pending {
+    color: #765516;
+    border-color: rgba(190, 151, 70, 0.34);
+    background: rgba(245, 226, 181, 0.62);
+}
+
 body.brand-body.app-shell-body .ops-nav-link.is-active,
 body.brand-body.app-shell-body .ops-index-link.is-active,
 body.brand-body.app-shell-body .ops-action-card.is-active {
@@ -5916,6 +5935,23 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     font-weight: 850;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+}
+
+.warehouse-request-transport legend,
+.wms-action-card-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.warehouse-request-transport legend .module-link-icon-svg,
+.wms-action-card-title .module-link-icon-svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.warehouse-request-transport small {
+    flex-basis: 100%;
 }
 
 .warehouse-request-transport label {

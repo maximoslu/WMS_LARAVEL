@@ -115,6 +115,7 @@
         @break
 
     @case('suppliers')
+    @case('truck')
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {{ $attributes->merge(['class' => trim('module-link-icon-svg '.$class)]) }}>
             <path d="M4.5 7.5h10.5v7.5H4.5zM15 10.5h2.25l2.25 2.25v2.25H15z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
             <circle cx="8.25" cy="17.25" r="1.5" stroke="currentColor" stroke-width="1.5"/>

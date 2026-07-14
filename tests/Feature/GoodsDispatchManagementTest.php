@@ -131,7 +131,6 @@ class GoodsDispatchManagementTest extends TestCase
             ->post(route('dispatches.store'), [
                 'client_id' => $client->id,
                 'notes' => 'Salida urgente',
-                'camion_propio' => '1',
                 'quantities' => [
                     $item->id => 4,
                 ],
@@ -152,7 +151,7 @@ class GoodsDispatchManagementTest extends TestCase
         ]);
     }
 
-    public function test_internal_user_can_update_own_truck_flag_on_existing_dispatch(): void
+    public function test_internal_user_can_change_transport_to_external_and_back_to_own_truck(): void
     {
         $this->seedBaseData();
 
@@ -174,9 +173,25 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertTrue($dispatch->fresh()->camion_propio);
 
         $this->actingAs($almacen)
+            ->put(route('dispatches.own-truck.update', $dispatch), [
+                'camion_propio' => '0',
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertFalse($dispatch->fresh()->camion_propio);
+
+        $this->actingAs($almacen)
+            ->put(route('dispatches.own-truck.update', $dispatch), [
+                'camion_propio' => '1',
+            ]);
+
+        $this->actingAs($almacen)
             ->get(route('dispatches.show', $dispatch))
             ->assertOk()
-            ->assertSee('Cami&oacute;n propio', false);
+            ->assertSee('Camión propio MAXIMO')
+            ->assertSee('Camión externo')
+            ->assertSee('Actualizar transporte')
+            ->assertDontSee('Guardar camión');
     }
 
     public function test_dispatch_from_request_copies_lines_and_prevents_duplicates(): void
@@ -194,7 +209,7 @@ class GoodsDispatchManagementTest extends TestCase
             'client_id' => $client->id,
             'requested_by' => $cliente->id,
             'status' => MerchandiseRequest::STATUS_PENDING,
-            'camion_propio' => true,
+            'camion_propio' => false,
         ]);
         $merchandiseRequest->lines()->create([
             'item_id' => $item->id,
@@ -327,9 +342,10 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertSee('data-add-assignment', false)
             ->assertSee('Cerrar pedido')
             ->assertSee('Camión externo')
-            ->assertSee('Camión propio')
+            ->assertSee('Camión propio MAXIMO')
             ->assertSee('Guardar preparación')
-            ->assertSee('Confirmar envío y abrir albarán')
+            ->assertSee('Confirmar envío')
+            ->assertDontSee('Confirmar envío y abrir albarán')
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_quantity]"', false)
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_pallets]"', false)
             ->assertSee('name="lines[line_'.$dispatchLine->id.'][loaded_partial_units]"', false)
@@ -386,7 +402,7 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertNull($dispatch->stock_applied_at);
     }
 
-    public function test_internal_request_page_can_confirm_dispatch_and_open_delivery_note_in_one_step(): void
+    public function test_internal_request_page_confirms_dispatch_and_keeps_preparation_open(): void
     {
         Bus::fake();
         $this->seedBaseData();
@@ -458,7 +474,7 @@ class GoodsDispatchManagementTest extends TestCase
                     ],
                 ],
             ])
-            ->assertRedirect(route('dispatches.delivery-note', $dispatch));
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
 
         $dispatch->refresh();
         $merchandiseRequest->refresh();
