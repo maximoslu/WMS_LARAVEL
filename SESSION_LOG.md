@@ -2497,3 +2497,63 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, migraciones, importacion Friesland/Edelvives, Google Calendar, facturacion ni datos.
 - No se uso `migrate:fresh`, no se borraron datos y no se hara force push.
 - `.claude/` permanece sin trackear y queda fuera del commit.
+
+---
+
+## 2026-07-14 - Pedidos, transporte e importacion segura de stock (17:37 +02:00)
+
+**Equipo:** PC del trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit inicial:** `66f74a2d feat: improve client stock and dispatch completion`.
+**Commit funcional final:** `f98ca47d fix: harden request workflow and stock imports`.
+**Push funcional:** confirmado a `origin/main` (`66f74a2d..f98ca47d`).
+**Produccion:** pendiente de despliegue y validacion en Forge; no se modifico produccion directamente.
+
+### UTF y email de pedidos
+- Se localizaron dos literales con mojibake `Pallet genÃ©rico` en `resources/js/app.js`; quedaron corregidos a `Pallet genérico`.
+- Las respuestas JSON de las dos busquedas de variantes emiten Unicode sin escapar y mantienen correctamente tildes en descripcion y resumen.
+- El email interno de nuevo pedido usa ahora `Pedido de {CLIENTE} - {CODIGO}`, tomando el codigo del cliente. Quedaron cubiertos `EDELVIVES` y `FRIESLAND` sin perder `SOL-xxxxxx`.
+
+### Transporte y documentos
+- Toda nueva salida manual o preparacion generada desde pedido queda por defecto como `Camión propio MAXIMO`; las salidas antiguas no se actualizan.
+- Se anadio la migracion `2026_07_14_000001_default_goods_dispatches_to_own_truck.php`, aplicada localmente con `DONE`.
+- La UI muestra icono, selector claro `Camión propio MAXIMO` / `Camión externo`, ayuda breve y `Actualizar transporte`; ya no aparece `Guardar camión`.
+- El cambio a externo y el retorno a propio persisten y estan cubiertos por tests.
+- Confirmar envio guarda la preparacion, descuenta stock y permanece en la pantalla de trabajo. El albaran queda como accion separada `Abrir albarán` en nueva pestaña.
+- Los enlaces de albaran, preparacion y exportacion PDF revisados usan `target="_blank"` y `rel="noopener noreferrer"`.
+
+### Dashboard
+- Las tarjetas visibles del dashboard cuentan solo notificaciones no leidas y resaltan de forma discreta el modulo asociado.
+- Mapeo activo: pedidos a `Pedidos`, accesos/usuarios a `Usuarios`, stock/importaciones a `Stock` y booking/calendario a `Booking`.
+- El contador desaparece al marcar la notificacion como leida y nunca expone modulos que el rol no puede ver.
+
+### Importacion EDELVIVES y trazabilidad
+- Causa: el importador sustituia la foto actual con `delete from stock_pallets where client_id = ?`, por eso fallaba al encontrar asignaciones historicas con FK `RESTRICT`.
+- Referencias localizadas: `merchandise_request_lines.stock_pallet_id` y `goods_dispatch_lines.stock_pallet_id` usan `nullOnDelete`; `goods_dispatch_line_allocations.stock_pallet_id` usa `restrictOnDelete` y no puede borrarse sin romper auditoria.
+- `stock_pallets` ya dispone de `active`; la vista/constructor de stock actual filtra partidas activas y cantidades o unidades logisticas positivas.
+- La importacion bloquea transaccionalmente las partidas del cliente, desactiva la foto anterior y pone a cero unidades, pallets completos, pallets de almacen y los diez picos. No ejecuta `DELETE`, `TRUNCATE` ni cascade.
+- La nueva foto se crea activa. Una segunda importacion vuelve a retirar la foto previa, deja una sola partida activa por fila del Excel y conserva las fotos anteriores inactivas, evitando duplicar stock actual.
+- La prueba critica conserva la allocation y su `stock_pallet_id` original, confirma que la partida historica queda inactiva/a cero, que no aparece al cliente y que dos importaciones EDELVIVES consecutivas mantienen el total actual del Excel.
+
+### Validacion
+- Linea base focalizada antes de editar: `167 passed` (1134 assertions).
+- Suite completa final `php artisan test`: **563 passed** (2811 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php artisan optimize:clear`: OK.
+- `php artisan migrate`: migracion `2026_07_14_000001` aplicada, `DONE`.
+- `git diff --check`: OK.
+- Revision completa del diff realizada; se restauro expresamente el selector visual activo del menu lateral detectado durante la revision.
+
+### Forge pendiente
+1. Desplegar `origin/main` y confirmar `f98ca47d` o posterior.
+2. Ejecutar `php artisan migrate --force`.
+3. Ejecutar `php artisan optimize:clear`.
+4. Ejecutar `php artisan queue:restart`.
+5. Validar pedido cliente con tildes, asunto de email, transporte por defecto y apertura separada del albaran.
+6. Previsualizar e importar EDELVIVES y confirmar que termina sin error FK, que los totales coinciden con el Excel y que el historico de salidas sigue accesible.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, Google Calendar ni datos de produccion.
+- No se uso `migrate:fresh`, no se borraron allocations ni historial y no se hizo force push.
+- `.claude/` permanece sin trackear y fuera de ambos commits.
