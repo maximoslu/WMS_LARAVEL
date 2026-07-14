@@ -85,6 +85,17 @@
                 </form>
             @endif
 
+            @if ($dispatch?->status === \App\Models\GoodsDispatch::STATUS_SENT)
+                <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="status" value="{{ \App\Models\GoodsDispatch::STATUS_COMPLETED }}">
+                    <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Marcar este pedido como completado?')">
+                        Marcar como completado
+                    </button>
+                </form>
+            @endif
+
             @if ($dispatch && in_array($dispatch->status, [\App\Models\GoodsDispatch::STATUS_SENT, \App\Models\GoodsDispatch::STATUS_COMPLETED], true))
                 <a href="{{ route('dispatches.delivery-note', $dispatch) }}" class="button-primary compact-button btn-compact wms-button-with-icon" target="_blank" rel="noopener noreferrer">
                     <span class="wms-button-icon" aria-hidden="true"><x-module-icon name="printer" /></span>

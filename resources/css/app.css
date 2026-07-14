@@ -7074,6 +7074,97 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     background: rgba(24, 37, 50, 0.08);
 }
 
+.stock-table-shell--client {
+    padding: 0.75rem;
+}
+
+.stock-table--client th,
+.stock-table--client td {
+    padding-block: 0.68rem;
+    vertical-align: middle;
+}
+
+.stock-table--client .stock-description-cell {
+    min-width: 12rem;
+}
+
+.stock-client-pallet-total {
+    display: grid;
+    gap: 0.08rem;
+}
+
+.stock-client-pallet-total strong {
+    color: var(--brand-slate-dark);
+    font-size: 1rem;
+}
+
+.stock-client-pallet-total small {
+    color: var(--brand-soft);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.stock-client-state {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.55rem;
+    padding: 0.15rem 0.48rem;
+    border-radius: 5px;
+    font-size: 0.68rem;
+    font-weight: 850;
+    letter-spacing: 0.045em;
+}
+
+.stock-client-state--in-use {
+    color: #195c46;
+    background: rgba(31, 132, 96, 0.1);
+}
+
+.stock-client-state--blocked {
+    color: #85530d;
+    background: rgba(214, 145, 35, 0.13);
+}
+
+.stock-client-state--obsolete {
+    color: #704453;
+    background: rgba(137, 78, 98, 0.11);
+}
+
+.stock-detail-panel--client {
+    gap: 0.7rem;
+    padding: 0.8rem 0.9rem 0.95rem;
+}
+
+.stock-detail-panel--client .stock-detail-grid {
+    gap: 0;
+    border: 1px solid rgba(24, 37, 50, 0.08);
+    border-radius: 10px;
+    background: #fff;
+}
+
+.stock-detail-panel--client .stock-detail-card {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.stock-detail-panel--client .stock-detail-card + .stock-detail-card {
+    border-left: 1px solid rgba(24, 37, 50, 0.08);
+}
+
+.stock-client-peak-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.1rem;
+    color: var(--brand-soft);
+    font-size: 0.82rem;
+}
+
+.stock-client-peak-list strong {
+    color: var(--brand-slate-dark);
+}
+
 .stock-mobile-list {
     display: none;
 }
@@ -7110,6 +7201,11 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     .stock-detail-grid,
     .stock-detail-list {
         grid-template-columns: 1fr;
+    }
+
+    .stock-detail-panel--client .stock-detail-card + .stock-detail-card {
+        border-top: 1px solid rgba(24, 37, 50, 0.08);
+        border-left: 0;
     }
 }
 

@@ -140,7 +140,16 @@
 
                 @unless ($isClient)
                     <div class="order-primary-action">
-                        @if ($canStartLoading)
+                        @if ($dispatch?->status === \App\Models\GoodsDispatch::STATUS_SENT)
+                            <form method="POST" action="{{ route('merchandise-requests.update-status', $merchandiseRequest) }}">
+                                @csrf
+                                @method('PATCH')
+                                <input type="hidden" name="status" value="{{ \App\Models\MerchandiseRequest::STATUS_COMPLETED }}">
+                                <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Marcar este pedido como completado?')">
+                                    Marcar como completado
+                                </button>
+                            </form>
+                        @elseif ($canStartLoading)
                             <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
                                 @csrf
                                 <input type="hidden" name="return_to_request" value="1">

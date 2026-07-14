@@ -3,11 +3,11 @@
 namespace App\Support\Stock;
 
 use App\Models\Item;
-use App\Models\User;
 use App\Models\StockPallet;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class StockOverviewBuilder
@@ -50,7 +50,7 @@ class StockOverviewBuilder
      * the same visibility criteria (active, non-zero, all batch statuses) as
      * the main stock listing's default view.
      *
-     * @return Collection<int, array{sku: string, description: string, lot: string, quantity: int}>
+     * @return Collection<int, array{sku: string, description: string, lot: string, quantity: int, total_pallets: int}>
      */
     public function exportRows(int $clientId): Collection
     {
@@ -79,6 +79,9 @@ class StockOverviewBuilder
                     'description' => $item?->description ?? 'Sin descripcion',
                     'lot' => $first->lot ?: 'SIN LOTE',
                     'quantity' => (int) $group->sum('quantity_units'),
+                    'total_pallets' => (int) $group->sum(
+                        fn (StockPallet $pallet): int => (int) $pallet->full_pallets + (int) $pallet->peaks_count
+                    ),
                 ];
             })
             ->sortBy([['sku', 'asc'], ['lot', 'asc']])
@@ -307,6 +310,7 @@ class StockOverviewBuilder
             ),
             'full_pallets' => (int) $pallet->full_pallets,
             'peaks_count' => (int) $pallet->peaks_count,
+            'total_pallets' => (int) $pallet->full_pallets + (int) $pallet->peaks_count,
             'warehouse_pallets' => (float) ($pallet->warehouse_pallets ?? ((int) $pallet->full_pallets + (int) $pallet->peaks_count)),
             'peak_1' => (int) $pallet->peak_1,
             'peak_2' => (int) $pallet->peak_2,
@@ -318,7 +322,20 @@ class StockOverviewBuilder
             'peak_8' => (int) $pallet->peak_8,
             'peak_9' => (int) $pallet->peak_9,
             'peak_10' => (int) $pallet->peak_10,
+            'peak_details' => collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+                ->map(fn (int $number): array => [
+                    'label' => 'Pico '.$number,
+                    'units' => (int) $pallet->{'peak_'.$number},
+                    'location' => $this->locationLabel($pallet) ?: 'Sin ubicacion',
+                ])
+                ->where('units', '>', 0)
+                ->values()
+                ->all(),
+            'notes' => filled($pallet->notes) ? [(string) $pallet->notes] : [],
+            'batches' => [],
             'row_visual_state' => $this->rowVisualState($item?->status, $pallet->status, $pallet->stock_category),
+            'client_status' => $this->clientStatus($item?->status, $pallet->status, $pallet->stock_category),
+            'client_status_label' => $this->clientStatusLabel($item?->status, $pallet->status, $pallet->stock_category),
             'has_stock' => true,
         ];
     }
@@ -355,6 +372,7 @@ class StockOverviewBuilder
             'units_per_pallet_label' => $this->unitsPerPalletLabel((int) $item->units_per_pallet),
             'full_pallets' => 0,
             'peaks_count' => 0,
+            'total_pallets' => 0,
             'warehouse_pallets' => 0.0,
             'peak_1' => 0,
             'peak_2' => 0,
@@ -366,7 +384,12 @@ class StockOverviewBuilder
             'peak_8' => 0,
             'peak_9' => 0,
             'peak_10' => 0,
+            'peak_details' => [],
+            'notes' => [],
+            'batches' => [],
             'row_visual_state' => $this->rowVisualState($item->status, null, $item->stock_category),
+            'client_status' => $this->clientStatus($item->status, null, $item->stock_category),
+            'client_status_label' => $this->clientStatusLabel($item->status, null, $item->stock_category),
             'has_stock' => false,
         ];
     }
@@ -417,11 +440,37 @@ class StockOverviewBuilder
         return 'normal';
     }
 
+    private function clientStatus(?string $itemStatus, ?string $batchStatus, ?string $stockCategory): string
+    {
+        if ($batchStatus === StockPallet::STATUS_OBSOLETE || $itemStatus === Item::STATUS_OBSOLETE || $stockCategory === StockPallet::CATEGORY_OBSOLETE) {
+            return 'obsolete';
+        }
+
+        if ($batchStatus === StockPallet::STATUS_BLOCKED || $itemStatus === Item::STATUS_BLOCKED || $stockCategory === StockPallet::CATEGORY_BLOCKED) {
+            return 'blocked';
+        }
+
+        return 'in-use';
+    }
+
+    private function clientStatusLabel(?string $itemStatus, ?string $batchStatus, ?string $stockCategory): string
+    {
+        return match ($this->clientStatus($itemStatus, $batchStatus, $stockCategory)) {
+            'obsolete' => 'OBSOLETO',
+            'blocked' => 'BLOQUEADO',
+            default => 'EN USO',
+        };
+    }
+
     /**
      * @param  array<string, mixed>  $filters
      */
     private function paginateStockRows(array $filters): LengthAwarePaginator
     {
+        if ($filters['is_client']) {
+            return $this->paginateClientRows($filters, includeWithoutStock: false);
+        }
+
         $paginator = $this->stockQuery($filters)
             ->paginate(
                 perPage: $filters['per_page'],
@@ -456,6 +505,10 @@ class StockOverviewBuilder
      */
     private function paginateAllRows(array $filters): LengthAwarePaginator
     {
+        if ($filters['is_client']) {
+            return $this->paginateClientRows($filters, includeWithoutStock: true);
+        }
+
         $stockIndexQuery = $this->stockIndexQuery($filters);
         $withoutStockIndexQuery = $this->withoutStockIndexQuery($filters);
         $page = LengthAwarePaginator::resolveCurrentPage('page');
@@ -516,6 +569,93 @@ class StockOverviewBuilder
                 'query' => $this->paginationQuery($filters),
             ],
         );
+    }
+
+    /**
+     * La vista cliente resume una linea por referencia y lote, pero conserva
+     * cada partida en el detalle desplegable para no perder trazabilidad.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function paginateClientRows(array $filters, bool $includeWithoutStock): LengthAwarePaginator
+    {
+        $stockRows = $this->stockQuery($filters)
+            ->get()
+            ->map(fn (StockPallet $pallet): array => $this->buildStockRow($pallet))
+            ->groupBy(fn (array $row): string => $row['item_id'].'|'.($row['lot'] ?? ''))
+            ->map(fn (Collection $group): array => $this->aggregateClientRows($group));
+
+        $rows = $includeWithoutStock
+            ? $stockRows->concat(
+                $this->withoutStockQuery($filters)
+                    ->get()
+                    ->map(fn (Item $item): array => $this->buildWithoutStockRow($item))
+            )
+            : $stockRows;
+        $rows = $rows
+            ->sortBy([['sku', 'asc'], ['lot_label', 'asc']])
+            ->values();
+        $page = LengthAwarePaginator::resolveCurrentPage('page');
+        $perPage = $filters['per_page'];
+
+        return new LengthAwarePaginator(
+            items: $rows->forPage($page, $perPage)->values(),
+            total: $rows->count(),
+            perPage: $perPage,
+            currentPage: $page,
+            options: [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'pageName' => 'page',
+                'query' => $this->paginationQuery($filters),
+            ],
+        );
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    private function aggregateClientRows(Collection $rows): array
+    {
+        $first = $rows->first();
+        $statusRow = $rows
+            ->sortByDesc(fn (array $row): int => match ($row['client_status']) {
+                'obsolete' => 3,
+                'blocked' => 2,
+                default => 1,
+            })
+            ->first();
+        $unitsPerPallet = $rows->pluck('units_per_pallet')->filter()->unique();
+        $locations = $rows->pluck('location_label')->filter()->unique()->values();
+        $notes = $rows->flatMap(fn (array $row): array => $row['notes'])->filter()->unique()->values();
+        $blockedReasons = $rows->pluck('blocked_reason')->filter()->unique()->values();
+
+        return array_replace($first, [
+            'id' => 'client-'.$first['item_id'].'-'.substr(sha1((string) $first['lot']), 0, 10),
+            'quantity_units' => (int) $rows->sum('quantity_units'),
+            'full_pallets' => (int) $rows->sum('full_pallets'),
+            'peaks_count' => (int) $rows->sum('peaks_count'),
+            'total_pallets' => (int) $rows->sum('total_pallets'),
+            'warehouse_pallets' => (float) $rows->sum('warehouse_pallets'),
+            'units_per_pallet' => $unitsPerPallet->count() === 1 ? (int) $unitsPerPallet->first() : 0,
+            'units_per_pallet_label' => $unitsPerPallet->count() === 1
+                ? $this->unitsPerPalletLabel((int) $unitsPerPallet->first())
+                : 'Varios',
+            'location_label' => $locations->join(', '),
+            'blocked_reason' => $blockedReasons->join(' / '),
+            'notes' => $notes->all(),
+            'peak_details' => $rows->flatMap(fn (array $row): array => $row['peak_details'])->values()->all(),
+            'batches' => $rows->values()->all(),
+            'item_status' => $statusRow['item_status'],
+            'item_status_label' => $statusRow['item_status_label'],
+            'batch_status' => $statusRow['batch_status'],
+            'batch_status_label' => $statusRow['batch_status_label'],
+            'stock_category' => $statusRow['stock_category'],
+            'stock_category_label' => $statusRow['stock_category_label'],
+            'row_visual_state' => $statusRow['client_status'] === 'in-use' ? 'normal' : $statusRow['client_status'],
+            'client_status' => $statusRow['client_status'],
+            'client_status_label' => $statusRow['client_status_label'],
+        ]);
     }
 
     private function resolveClientId(User $user, mixed $requestedClientId): ?int

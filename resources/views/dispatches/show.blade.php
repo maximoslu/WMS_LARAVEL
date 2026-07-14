@@ -47,6 +47,16 @@
         </div>
         <div class="wms-flow-hero-side">
             <span class="status-badge dispatch-status dispatch-status--{{ $dispatch->status }}">{{ $dispatch->statusLabel() }}</span>
+            @if ($dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT)
+                <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="status" value="{{ \App\Models\GoodsDispatch::STATUS_COMPLETED }}">
+                    <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Marcar esta salida como completada?')">
+                        Marcar como completado
+                    </button>
+                </form>
+            @endif
         </div>
     </section>
 

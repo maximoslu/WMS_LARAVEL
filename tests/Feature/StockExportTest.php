@@ -43,20 +43,20 @@ class StockExportTest extends TestCase
             ->assertDontSee('Usa el buscador para localizar');
     }
 
-    public function test_stock_cliente_muestra_stock_disponible_con_boton_descargar_integrado(): void
+    public function test_stock_cliente_muestra_pales_totales_con_boton_descargar_integrado(): void
     {
         [$edelvives] = $this->seedClients();
         $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
 
         $response = $this->actingAs($user)->get(route('stock.index'));
         $response->assertOk();
-        $response->assertSee('Stock disponible');
-        $response->assertDontSee('Pallets totales');
+        $response->assertSeeText('Palés totales');
+        $response->assertSeeText('Palés completos + picos');
 
         $content = $response->getContent();
 
         $this->assertMatchesRegularExpression(
-            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Stock disponible.*?data-stock-export-trigger.*?<\/article>/s',
+            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Palés totales.*?data-stock-export-trigger.*?<\/article>/s',
             $content
         );
         $this->assertStringNotContainsString('stock-summary-toolbar', $content);
@@ -125,7 +125,7 @@ class StockExportTest extends TestCase
 
         $path = $response->baseResponse->getFile()->getPathname();
 
-        $reader = new XlsxReader();
+        $reader = new XlsxReader;
         $reader->open($path);
         $rows = [];
         foreach ($reader->getSheetIterator() as $sheet) {
@@ -135,9 +135,9 @@ class StockExportTest extends TestCase
         }
         $reader->close();
 
-        $this->assertSame(['SKU', 'DESCRIPCIÓN', 'LOTE', 'CANTIDAD'], $rows[0]);
-        $this->assertCount(4, $rows[0]);
-        $this->assertSame(['SKU-COLS', 'Articulo columnas', 'LOTE-1', 25], $rows[1]);
+        $this->assertSame(['SKU', 'DESCRIPCIÓN', 'LOTE', 'CANTIDAD', 'PALÉS TOTALES'], $rows[0]);
+        $this->assertCount(5, $rows[0]);
+        $this->assertSame(['SKU-COLS', 'Articulo columnas', 'LOTE-1', 25, 1], $rows[1]);
     }
 
     public function test_csv_contiene_solo_columnas_minimas(): void
@@ -152,9 +152,8 @@ class StockExportTest extends TestCase
         $path = $response->baseResponse->getFile()->getPathname();
         $content = file_get_contents($path);
 
-        $this->assertStringContainsString('SKU;DESCRIPCIÓN;LOTE;CANTIDAD', $content);
-        $this->assertStringContainsString('SKU-CSVCOL;"Articulo csv columnas";LOTE-9;7', $content);
-        $this->assertStringNotContainsStringIgnoringCase('pallet', $content);
+        $this->assertStringContainsString('SKU;DESCRIPCIÓN;LOTE;CANTIDAD;"PALÉS TOTALES"', $content);
+        $this->assertStringContainsString('SKU-CSVCOL;"Articulo csv columnas";LOTE-9;7;1', $content);
         $this->assertStringNotContainsStringIgnoringCase('pico', $content);
         $this->assertStringNotContainsStringIgnoringCase('ubicacion', $content);
     }
@@ -163,7 +162,7 @@ class StockExportTest extends TestCase
     {
         [$edelvives] = $this->seedClients();
         $rows = collect([
-            ['sku' => 'SKU-PDFCOL', 'description' => 'Articulo pdf columnas', 'lot' => 'LOTE-3', 'quantity' => 40],
+            ['sku' => 'SKU-PDFCOL', 'description' => 'Articulo pdf columnas', 'lot' => 'LOTE-3', 'quantity' => 40, 'total_pallets' => 8],
         ]);
 
         $html = view('stock.export-pdf', [
@@ -173,11 +172,11 @@ class StockExportTest extends TestCase
         ])->render();
 
         $this->assertStringContainsString('SKU', $html);
-        $this->assertStringContainsString('DESCRIPCIÓN', $html);
+        $this->assertStringContainsString('DESCRIPCI&Oacute;N', $html);
         $this->assertStringContainsString('LOTE', $html);
         $this->assertStringContainsString('CANTIDAD', $html);
+        $this->assertStringContainsString('PAL&Eacute;S TOTALES', $html);
         $this->assertStringContainsString('SKU-PDFCOL', $html);
-        $this->assertStringNotContainsStringIgnoringCase('pallet', $html);
         $this->assertStringNotContainsStringIgnoringCase('pico', $html);
         $this->assertStringNotContainsStringIgnoringCase('ubicacion', $html);
     }
@@ -218,7 +217,7 @@ class StockExportTest extends TestCase
 
         $content = file_get_contents($response->baseResponse->getFile()->getPathname());
 
-        $this->assertStringContainsString('110X89135;"Referencia multiubicacion";LOTE-MULTI;100', $content);
+        $this->assertStringContainsString('110X89135;"Referencia multiubicacion";LOTE-MULTI;100;2', $content);
         $this->assertSame(1, substr_count($content, '110X89135'));
     }
 
@@ -231,7 +230,32 @@ class StockExportTest extends TestCase
         $response = $this->actingAs($user)->get(route('stock.export', ['format' => 'csv']));
         $content = file_get_contents($response->baseResponse->getFile()->getPathname());
 
-        $this->assertStringContainsString('SKU-NOLOT;"Sin lote articulo";"SIN LOTE";5', $content);
+        $this->assertStringContainsString('SKU-NOLOT;"Sin lote articulo";"SIN LOTE";5;1', $content);
+    }
+
+    public function test_export_calcula_siete_pales_completos_mas_un_pico_como_ocho(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+        $item = Item::factory()->create([
+            'client_id' => $edelvives->id,
+            'sku' => 'SKU-TOTAL-8',
+            'description' => 'Total operativo',
+            'units_per_pallet' => 100,
+        ]);
+        StockPallet::factory()->create([
+            'item_id' => $item->id,
+            'client_id' => $edelvives->id,
+            'lot' => 'LOTE-8',
+            'units_per_pallet' => 100,
+            'quantity_units' => 725,
+            'peak_1' => 25,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('stock.export', ['format' => 'csv']));
+        $content = file_get_contents($response->baseResponse->getFile()->getPathname());
+
+        $this->assertStringContainsString('SKU-TOTAL-8;"Total operativo";LOTE-8;725;8', $content);
     }
 
     public function test_cliente_no_exporta_referencias_internas_varios(): void

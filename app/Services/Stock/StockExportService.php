@@ -16,14 +16,14 @@ use Symfony\Component\HttpFoundation\Response;
 
 class StockExportService
 {
-    private const HEADERS = ['SKU', 'DESCRIPCIÓN', 'LOTE', 'CANTIDAD'];
+    private const HEADERS = ['SKU', 'DESCRIPCIÓN', 'LOTE', 'CANTIDAD', 'PALÉS TOTALES'];
 
     public function __construct(
         private readonly StockOverviewBuilder $overviewBuilder,
     ) {}
 
     /**
-     * @return Collection<int, array{sku: string, description: string, lot: string, quantity: int}>
+     * @return Collection<int, array{sku: string, description: string, lot: string, quantity: int, total_pallets: int}>
      */
     public function rows(int $clientId): Collection
     {
@@ -31,24 +31,25 @@ class StockExportService
     }
 
     /**
-     * @param  Collection<int, array{sku: string, description: string, lot: string, quantity: int}>  $rows
+     * @param  Collection<int, array{sku: string, description: string, lot: string, quantity: int, total_pallets: int}>  $rows
      */
     public function toXlsxResponse(Client $client, Collection $rows): BinaryFileResponse
     {
         $tempPath = tempnam(sys_get_temp_dir(), 'stock_export_xlsx_');
 
-        $writer = new XlsxWriter();
+        $writer = new XlsxWriter;
         $writer->openToFile($tempPath);
         $writer->getCurrentSheet()->setName('STOCK');
         $writer->getCurrentSheet()->setColumnWidth(18, 1);
         $writer->getCurrentSheet()->setColumnWidth(42, 2);
         $writer->getCurrentSheet()->setColumnWidth(16, 3);
         $writer->getCurrentSheet()->setColumnWidth(14, 4);
+        $writer->getCurrentSheet()->setColumnWidth(16, 5);
 
-        $writer->addRow(Row::fromValues(self::HEADERS, (new Style())->setFontBold()));
+        $writer->addRow(Row::fromValues(self::HEADERS, (new Style)->setFontBold()));
 
         foreach ($rows as $row) {
-            $writer->addRow(Row::fromValues([$row['sku'], $row['description'], $row['lot'], $row['quantity']]));
+            $writer->addRow(Row::fromValues([$row['sku'], $row['description'], $row['lot'], $row['quantity'], $row['total_pallets']]));
         }
 
         $writer->close();
@@ -59,20 +60,20 @@ class StockExportService
     }
 
     /**
-     * @param  Collection<int, array{sku: string, description: string, lot: string, quantity: int}>  $rows
+     * @param  Collection<int, array{sku: string, description: string, lot: string, quantity: int, total_pallets: int}>  $rows
      */
     public function toCsvResponse(Client $client, Collection $rows): BinaryFileResponse
     {
         $tempPath = tempnam(sys_get_temp_dir(), 'stock_export_csv_');
 
-        $writer = new CsvWriter();
+        $writer = new CsvWriter;
         $writer->getOptions()->FIELD_DELIMITER = ';';
         $writer->openToFile($tempPath);
 
         $writer->addRow(Row::fromValues(self::HEADERS));
 
         foreach ($rows as $row) {
-            $writer->addRow(Row::fromValues([$row['sku'], $row['description'], $row['lot'], $row['quantity']]));
+            $writer->addRow(Row::fromValues([$row['sku'], $row['description'], $row['lot'], $row['quantity'], $row['total_pallets']]));
         }
 
         $writer->close();
@@ -83,7 +84,7 @@ class StockExportService
     }
 
     /**
-     * @param  Collection<int, array{sku: string, description: string, lot: string, quantity: int}>  $rows
+     * @param  Collection<int, array{sku: string, description: string, lot: string, quantity: int, total_pallets: int}>  $rows
      */
     public function toPdfResponse(Client $client, Collection $rows): Response
     {

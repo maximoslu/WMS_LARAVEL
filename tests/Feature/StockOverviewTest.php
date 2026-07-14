@@ -9,6 +9,8 @@ use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Stock\StockExportService;
+use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -238,7 +240,7 @@ class StockOverviewTest extends TestCase
             ->assertSeeText('Pallets almacen');
     }
 
-    public function test_cliente_no_ve_columnas_logisticas_pero_superadmin_si(): void
+    public function test_cliente_ve_total_operativo_pero_no_metricas_internas_de_almacen(): void
     {
         [$friesland] = $this->seedBaseData();
 
@@ -249,8 +251,9 @@ class StockOverviewTest extends TestCase
             ->assertOk()
             ->assertSee('CAJA0030')
             ->assertDontSeeText('Pallets almacen')
-            ->assertDontSeeText('Uds/pallet')
-            ->assertDontSeeText('Picos total');
+            ->assertSeeText('Palés totales')
+            ->assertSeeText('Uds/palé')
+            ->assertSeeText('Picos');
 
         $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
             ->get(route('stock.index', ['client_id' => $friesland->id]))
@@ -268,7 +271,7 @@ class StockOverviewTest extends TestCase
         $this->makeItemWithStock($friesland, '_CAJA057', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
         $this->makeItemWithStock($friesland, '_FILM0519', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
 
-        $rows = app(\App\Services\Stock\StockExportService::class)->rows($friesland->id);
+        $rows = app(StockExportService::class)->rows($friesland->id);
         $skus = $rows->pluck('sku')->all();
 
         // El export incluye lo mismo que ve el cliente en la tabla: EN USO, BLOQUEADO y OBSOLETO.
@@ -294,7 +297,7 @@ class StockOverviewTest extends TestCase
         $this->makeItemWithStock($friesland, '_HIDDEN-USCORE', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
 
         $client = $this->makeUserWithRole(Role::CLIENTE, $friesland);
-        $overview = app(\App\Support\Stock\StockOverviewBuilder::class)->build($client, []);
+        $overview = app(StockOverviewBuilder::class)->build($client, []);
 
         // La tarjeta resumen (references_with_stock) cuenta solo las 4 visibles no internas...
         $this->assertSame(4, $overview['summary']['references_with_stock']);
@@ -896,7 +899,7 @@ class StockOverviewTest extends TestCase
             'peak_1' => 500,
         ]);
 
-        $overview = app(\App\Support\Stock\StockOverviewBuilder::class)->build(
+        $overview = app(StockOverviewBuilder::class)->build(
             $this->makeUserWithRole(Role::ALMACEN),
             []
         );
@@ -934,7 +937,7 @@ class StockOverviewTest extends TestCase
 
         $user = $this->makeUserWithRole(Role::ALMACEN);
 
-        $overview = app(\App\Support\Stock\StockOverviewBuilder::class)->build($user, [
+        $overview = app(StockOverviewBuilder::class)->build($user, [
             'client_id' => $client->id,
             'search' => 'SKU-WAREHOUSE-ONLY',
         ]);
@@ -949,7 +952,7 @@ class StockOverviewTest extends TestCase
             ->assertSee('0,50');
     }
 
-    public function test_cliente_no_ve_totales_ni_detalle_de_pallets(): void
+    public function test_cliente_ve_total_de_pales_como_completos_mas_picos_y_su_detalle(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -961,9 +964,13 @@ class StockOverviewTest extends TestCase
         StockPallet::factory()->create([
             'client_id' => $client->id,
             'item_id' => $item->id,
-            'quantity_units' => 1600,
+            'lot' => 'LOTE-TOTAL-8',
+            'quantity_units' => 5625,
             'units_per_pallet' => 800,
-            'full_pallets' => 2,
+            'full_pallets' => 7,
+            'peaks_count' => 1,
+            'peak_1' => 25,
+            'notes' => 'Manipular con cuidado.',
         ]);
 
         $user = $this->makeUserWithRole(Role::CLIENTE, $client);
@@ -971,12 +978,61 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Stock disponible')
-            ->assertDontSeeText('Pallets totales')
+            ->assertSeeText('Palés totales')
+            ->assertSeeText('Palés completos + picos')
+            ->assertSeeText('LOTE-TOTAL-8')
+            ->assertSeeText('7 completos')
+            ->assertSeeText('1 pico')
+            ->assertSeeText('Pico 1: 25 uds')
+            ->assertSeeText('Manipular con cuidado.')
             ->assertDontSeeText('Pallets almacen')
-            ->assertDontSeeText('Picos total')
-            ->assertDontSeeText('Uds/pallet')
-            ->assertDontSeeText('Unidades logisticas');
+            ->assertSeeText('Uds/palé');
+
+        $overview = app(StockOverviewBuilder::class)->build($user, []);
+
+        $this->assertSame(8, $overview['summary']['total_logistic_units']);
+        $this->assertSame(8, $overview['rows']->first()['total_pallets']);
+    }
+
+    public function test_cliente_ve_una_linea_por_referencia_y_lote_con_partidas_en_detalle(): void
+    {
+        [$client] = $this->seedBaseData();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-AGRUPADO',
+            'description' => 'Articulo en dos ubicaciones',
+            'units_per_pallet' => 100,
+        ]);
+        $locationA = Location::factory()->create(['code' => 'A-01']);
+        $locationB = Location::factory()->create(['code' => 'B-02']);
+
+        foreach ([[$locationA, 200], [$locationB, 35]] as [$location, $quantity]) {
+            StockPallet::factory()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'location_id' => $location->id,
+                'lot' => 'LOTE-UNICO',
+                'quantity_units' => $quantity,
+                'units_per_pallet' => 100,
+                'peak_1' => 0,
+            ]);
+        }
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $overview = app(StockOverviewBuilder::class)->build($user, []);
+
+        $this->assertCount(1, $overview['rows']);
+        $this->assertSame(235, $overview['rows']->first()['quantity_units']);
+        $this->assertSame(3, $overview['rows']->first()['total_pallets']);
+        $this->assertCount(2, $overview['rows']->first()['batches']);
+
+        $this->actingAs($user)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeInOrder(['SKU-AGRUPADO', 'LOTE-UNICO'])
+            ->assertSeeText('A-01')
+            ->assertSeeText('B-02')
+            ->assertSee('stock-table--client', false);
     }
 
     public function test_superadmin_ve_pallets_totales(): void

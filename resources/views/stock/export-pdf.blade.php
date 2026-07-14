@@ -21,9 +21,10 @@
             <thead>
                 <tr>
                     <th>SKU</th>
-                    <th>DESCRIPCIÓN</th>
+                    <th>DESCRIPCI&Oacute;N</th>
                     <th>LOTE</th>
                     <th class="quantity">CANTIDAD</th>
+                    <th class="quantity">PAL&Eacute;S TOTALES</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,6 +34,7 @@
                         <td>{{ $row['description'] }}</td>
                         <td>{{ $row['lot'] }}</td>
                         <td class="quantity">{{ number_format($row['quantity'], 0, ',', '.') }}</td>
+                        <td class="quantity">{{ number_format($row['total_pallets'], 0, ',', '.') }}</td>
                     </tr>
                 @endforeach
             </tbody>

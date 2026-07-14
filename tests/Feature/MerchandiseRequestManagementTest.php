@@ -919,20 +919,87 @@ class MerchandiseRequestManagementTest extends TestCase
         $merchandiseRequest = MerchandiseRequest::factory()->create([
             'client_id' => $client->id,
             'requested_by' => $cliente->id,
-            'status' => MerchandiseRequest::STATUS_PREPARING,
+            'status' => MerchandiseRequest::STATUS_SENT,
+        ]);
+        GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+            'stock_applied_at' => now(),
         ]);
 
         $this->actingAs($cliente)
             ->get(route('merchandise-requests.show', $merchandiseRequest))
             ->assertOk()
-            ->assertSee('En preparación')
-            ->assertDontSee('Preparing');
+            ->assertSee('Enviado')
+            ->assertDontSee('Marcar como completado');
 
         $this->actingAs($cliente)
             ->patch(route('merchandise-requests.update-status', $merchandiseRequest), [
                 'status' => MerchandiseRequest::STATUS_COMPLETED,
             ])
             ->assertForbidden();
+    }
+
+    public function test_roles_internos_completan_un_pedido_enviado_y_sincronizan_su_salida(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 40]);
+
+        foreach ([Role::SUPERADMIN, Role::ADMINISTRACION, Role::ALMACEN] as $roleSlug) {
+            $internal = $this->makeUserWithRole($roleSlug);
+            $request = MerchandiseRequest::factory()->create([
+                'client_id' => $client->id,
+                'requested_by' => $requester->id,
+                'status' => MerchandiseRequest::STATUS_SENT,
+                'shipped_at' => now(),
+            ]);
+            $dispatch = GoodsDispatch::factory()->create([
+                'client_id' => $client->id,
+                'merchandise_request_id' => $request->id,
+                'status' => GoodsDispatch::STATUS_SENT,
+                'sent_at' => now(),
+                'stock_applied_at' => now(),
+            ]);
+            $dispatch->lines()->create([
+                'item_id' => $item->id,
+                'sku' => $item->sku,
+                'description' => $item->description,
+                'line_type' => 'pallet',
+                'pallets' => 1,
+                'units_per_pallet' => 40,
+                'requested_pallets' => 1,
+                'requested_units' => 40,
+                'loaded_pallets' => 1,
+                'confirmed_at' => now(),
+                'confirmed_by' => $internal->id,
+            ]);
+
+            $this->actingAs($internal)
+                ->get(route('merchandise-requests.show', $request))
+                ->assertOk()
+                ->assertSee('Marcar como completado');
+
+            $this->actingAs($internal)
+                ->get(route('dispatches.requests.show', $request))
+                ->assertOk()
+                ->assertSee('Marcar como completado');
+
+            $this->actingAs($internal)
+                ->patch(route('merchandise-requests.update-status', $request), [
+                    'status' => MerchandiseRequest::STATUS_COMPLETED,
+                ])
+                ->assertRedirect(route('merchandise-requests.show', $request));
+
+            $this->assertSame(MerchandiseRequest::STATUS_COMPLETED, $request->fresh()->status);
+            $this->assertSame(GoodsDispatch::STATUS_COMPLETED, $dispatch->fresh()->status);
+            $this->assertNotNull($request->fresh()->completed_at);
+            $this->assertNotNull($dispatch->fresh()->completed_at);
+        }
     }
 
     public function test_cliente_can_filter_requests_by_item_sku_without_optional_columns(): void

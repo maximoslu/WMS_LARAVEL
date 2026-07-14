@@ -2452,3 +2452,48 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, importacion de stock ni datos de produccion.
 - No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
 - Forge debe ejecutar `php artisan migrate --force`; no se da por desplegado ni validado en produccion sin comprobacion real.
+
+---
+
+## 2026-07-14 - Stock cliente compacto y cierre visible de pedidos (11:26 +02:00)
+
+**Equipo:** PC del trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Base inicial:** `95a3e9c9 docs: record destination locations and dispatch emails`.
+**Produccion:** no se modifico directamente ni se da por desplegado este cambio.
+
+### Stock cliente
+- El KPI cliente muestra `Pales totales`, calculado siempre como `pales completos + picos`; por ejemplo, 7 completos + 1 pico = 8.
+- La tabla cliente se compacta a una linea por referencia y lote, sumando partidas/ubicaciones sin perder el desglose disponible al abrir el detalle.
+- La fila principal muestra SKU, descripcion, lote, pales totales, cantidad, estado y accion de detalle. Los estados cliente quedan reducidos a `EN USO`, `BLOQUEADO` u `OBSOLETO` con color discreto.
+- El detalle muestra unidades por pale, pales completos, picos, unidades de cada pico, ubicacion, categoria, bloqueo y notas cuando existen.
+- La misma regla de visibilidad sigue ocultando `VARIOS` y referencias cuyo SKU empieza por `_`, pero conserva bloqueados y obsoletos del cliente.
+- Excel, CSV y PDF incorporan una unica columna `PALES TOTALES`; no exportan una columna independiente de picos.
+
+### Pedidos y salidas
+- Una salida `Enviada` muestra una accion directa `Marcar como completado` en el detalle de salida y en la pantalla interna de preparacion del pedido.
+- El detalle interno del pedido muestra la misma accion cuando su salida asociada esta enviada.
+- La accion solo esta disponible para `superadmin`, `administracion` y `almacen`; el cliente no la ve y la ruta sigue devolviendo 403.
+- Se reutiliza `GoodsDispatchWorkflowService`: pedido y salida pasan juntos a `Completado`, se guardan fechas y `stock_applied_at` evita un segundo descuento.
+
+### Validacion
+- Tests dirigidos de stock, exportacion, salidas y pedidos: **153 passed** (868 assertions).
+- Suite completa `php artisan test`: **555 passed** (2761 assertions).
+- `npm run build`: OK (`vite build`, 55 modules transformed).
+- `php artisan migrate`: `Nothing to migrate`; este cambio no anade migraciones.
+- `php artisan optimize:clear`: OK en config, cache, compiled, events, routes y views.
+- Pint: OK. `git diff --check`: OK.
+- La inspeccion visual automatizada local no pudo iniciarse por un error del controlador del navegador (`Cannot redefine property: process`); el HTML desktop/movil y los desplegables quedaron cubiertos por tests de renderizado.
+
+### Forge pendiente
+1. Desplegar `origin/main` cuando el commit funcional de esta entrada este disponible.
+2. Ejecutar `php artisan migrate --force` (debe quedar sin cambios pendientes).
+3. Ejecutar `php artisan optimize:clear` y `php artisan queue:restart`.
+4. Validar con un cliente que el total superior y cada fila usan completos + picos, que el detalle abre y que `VARIOS`/`_` siguen ocultos.
+5. Validar con un usuario interno que una salida enviada se completa desde el boton directo y que el stock no vuelve a descontarse.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, `vendor/`, `node_modules/`, migraciones, importacion Friesland/Edelvives, Google Calendar, facturacion ni datos.
+- No se uso `migrate:fresh`, no se borraron datos y no se hara force push.
+- `.claude/` permanece sin trackear y queda fuera del commit.

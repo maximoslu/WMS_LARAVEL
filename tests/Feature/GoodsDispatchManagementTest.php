@@ -2089,6 +2089,46 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertNotNull($dispatch->fresh()->completed_at);
     }
 
+    public function test_roles_internos_ven_y_pueden_usar_la_accion_directa_de_completar_una_salida_enviada(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 40]);
+
+        foreach ([Role::SUPERADMIN, Role::ADMINISTRACION, Role::ALMACEN] as $roleSlug) {
+            $user = $this->makeUserWithRole($roleSlug);
+            $dispatch = GoodsDispatch::factory()->create([
+                'client_id' => $client->id,
+                'status' => GoodsDispatch::STATUS_SENT,
+                'sent_at' => now(),
+                'stock_applied_at' => now(),
+            ]);
+            GoodsDispatchLine::factory()->create([
+                'goods_dispatch_id' => $dispatch->id,
+                'item_id' => $item->id,
+                'units_per_pallet' => 40,
+                'requested_pallets' => 1,
+                'loaded_pallets' => 1,
+                'confirmed_at' => now(),
+                'confirmed_by' => $user->id,
+            ]);
+
+            $this->actingAs($user)
+                ->get(route('dispatches.show', $dispatch))
+                ->assertOk()
+                ->assertSee('Marcar como completado')
+                ->assertSee('name="status" value="'.GoodsDispatch::STATUS_COMPLETED.'"', false);
+
+            $this->actingAs($user)
+                ->patch(route('dispatches.update-status', $dispatch), ['status' => GoodsDispatch::STATUS_COMPLETED])
+                ->assertRedirect(route('dispatches.show', $dispatch));
+
+            $this->assertSame(GoodsDispatch::STATUS_COMPLETED, $dispatch->fresh()->status);
+            $this->assertNotNull($dispatch->fresh()->completed_at);
+        }
+    }
+
     public function test_linea_cargada_a_cero_no_descuenta(): void
     {
         Bus::fake();
