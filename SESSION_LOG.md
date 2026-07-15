@@ -2557,3 +2557,67 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, Google Calendar ni datos de produccion.
 - No se uso `migrate:fresh`, no se borraron allocations ni historial y no se hizo force push.
 - `.claude/` permanece sin trackear y fuera de ambos commits.
+
+---
+
+## 2026-07-15 - Ubicaciones, multipicos de entrada y documentos privados (11:58 +02:00)
+
+**Equipo:** PC del trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit inicial:** `70ab9fe4 docs: record request and stock import hardening`.
+**Commit funcional:** `66ed2126 fix: harden locations receipts and document access`.
+**Push funcional:** confirmado a `origin/main` (`70ab9fe4..66ed2126`).
+**Produccion:** pendiente de despliegue, dry-run y validacion en Forge; no se modifico produccion directamente.
+
+### Diagnostico y reparacion de ubicaciones
+- Una ubicacion es unica funcionalmente por `warehouse_id + codigo normalizado`; el cliente se hereda del almacen. `name`, `aisle`, `rack`, `level` y `position` son metadatos, no forman la clave.
+- La causa era que el indice existente solo protege `warehouse_id + code` literal: `6` y `06` pueden coexistir. Ademas, la busqueda del almacen global EDELVIVES usaba `whereIn(..., null)`, que no encuentra SQL `NULL` y podia crear otra NAVE 38.
+- Referencias FK reales localizadas: `stock_pallets.location_id`, `goods_receipt_lines.location_id` e `items.default_location_id`. Las salidas, allocations, pedidos y operaciones diarias no tienen FK `location_id`; sus ubicaciones historicas son texto y el comando las informa con cero reasignaciones.
+- El normalizador convierte `6`, `06` y ` 6 ` en `6`, y `A`, `a` y ` A ` en `A`; conserva A-F, FONDO y SIN UBICACION.
+- Formularios, modelo e importador EDELVIVES reutilizan el codigo normalizado y no crean duplicados nuevos. El importador tambien reutiliza ubicaciones antiguas como `06` sin crear `6` hasta que se ejecute la consolidacion controlada.
+- Nuevo comando seguro:
+  - `php artisan wms:locations:deduplicate --dry-run`
+  - `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --dry-run`
+  - `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --apply`
+- Sin `--apply` siempre es dry-run. El informe muestra canonica, filas a fusionar y conteos de stock, entradas, articulos y salidas/asignaciones. El apply usa transaccion, reasigna todas las FK, comprueba que no quedan referencias, elimina solo entonces las duplicadas y registra el resultado.
+- Criterio canonico: ubicacion activa, preferencia por codigo ya normalizado y despues menor ID.
+- Diagnostico local real EDELVIVES/NAVE 38: **0 grupos duplicados**; el dry-run no modifico datos. La cantidad real de duplicados de produccion sigue desconocida hasta ejecutar el dry-run en Forge.
+
+### Entradas con varios picos
+- Nueva migracion aditiva `2026_07_15_000001_add_peaks_to_goods_receipt_lines_table.php`: columnas nullable `peak_1` a `peak_10`; `pico_units` se mantiene como suma para compatibilidad historica.
+- Cada linea permite 0-10 picos manuales positivos, anadir/quitar inputs y ver el total calculado como `pallets * uds/pallet + suma de picos`.
+- El backend valida negativos y valores no numericos, conserva cada pico por separado y aplica esos picos separados a `stock_pallets.peak_1..peak_10`.
+- El detalle de entrada y el stock generado muestran todos los picos, no solo el primero.
+- `Anadir linea` inserta la nueva linea al principio, enfoca el buscador de articulo y hace scroll suave; los indices siguen siendo unicos y todas las lineas se guardan.
+
+### Documento de entrada y email
+- El documento nuevo sigue guardandose en el disco privado `local`.
+- El email de usuario cliente incluye una URL firmada temporal de descarga directa con caducidad de 15 dias; no exige sesion si la firma es valida.
+- Un usuario autenticado de otro cliente recibe 403, una firma ausente/caducada recibe 403 y un documento inexistente devuelve 404.
+- Los destinatarios email adicionales mantienen ademas el adjunto privado y reciben tambien el enlace firmado.
+- La ruta autenticada de `ALBARANES` se conserva y sigue aislando documentos por cliente.
+
+### Validacion
+- Linea base focalizada antes de editar: `169 passed` (1002 assertions).
+- Suite completa final `php artisan test`: **577 passed** (2870 assertions).
+- `npm run build`: OK (`vite build`, 55 modulos transformados).
+- `php artisan migrate`: migracion `2026_07_15_000001` aplicada localmente, `DONE`; `migrate:status` la muestra `Ran`.
+- `php artisan optimize:clear`: OK en config, cache, compiled, events, routes y views.
+- Dry-run local EDELVIVES/NAVE 38: sin duplicados y sin modificaciones.
+- Pint y `git diff --check`: OK.
+- La comprobacion visual automatizada llego al login local; no se alteraron usuarios ni credenciales para atravesarlo. Interaccion, orden, foco y persistencia quedaron cubiertos por tests y build.
+
+### Forge pendiente
+1. Desplegar `origin/main` y confirmar `66ed2126` o posterior.
+2. Ejecutar `php artisan migrate --force`.
+3. Ejecutar `php artisan optimize:clear` y `php artisan queue:restart`.
+4. Ejecutar SOLO `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --dry-run`.
+5. Guardar el informe de grupos, IDs y referencias. No ejecutar `--apply` en produccion sin revisarlo y recibir confirmacion explicita.
+6. Validar una entrada con 1 pallet + picos 1000 y 1000, confirmar que el stock conserva ambos picos y que una nueva linea aparece arriba.
+7. Enviar un albaran de entrada y probar el enlace firmado en incognito, con cliente correcto y con otro cliente autenticado.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, Google Calendar, facturacion ni datos de produccion.
+- No se uso `migrate:fresh`, no se borro stock/historico, no se hizo force push y no se ejecuto `--apply` fuera de la base efimera de tests.
+- `.claude/` permanece sin trackear y fuera del commit funcional.
