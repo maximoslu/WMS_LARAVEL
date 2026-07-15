@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Locations\LocationCode;
 use Database\Factories\LocationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -30,6 +31,13 @@ class Location extends Model
         return [
             'active' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $location): void {
+            $location->code = LocationCode::normalize($location->code);
+        });
     }
 
     public function warehouse(): BelongsTo

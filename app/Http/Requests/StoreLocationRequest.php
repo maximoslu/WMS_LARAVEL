@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Location;
 use App\Models\Role;
+use App\Support\Locations\LocationCode;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -17,7 +18,7 @@ class StoreLocationRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'code' => $this->normalizeUpper($this->input('code')),
+            'code' => LocationCode::normalize($this->input('code')),
             'name' => $this->normalizeNullableText($this->input('name')),
             'zone' => $this->normalizeNullableText($this->input('zone')),
             'aisle' => $this->normalizeNullableText($this->input('aisle')),
@@ -58,11 +59,6 @@ class StoreLocationRequest extends FormRequest
                 $validator->errors()->add('code', 'Ya existe una ubicacion con el mismo codigo en este almacen.');
             }
         });
-    }
-
-    private function normalizeUpper(mixed $value): string
-    {
-        return mb_strtoupper(trim((string) $value));
     }
 
     private function normalizeNullableText(mixed $value): ?string

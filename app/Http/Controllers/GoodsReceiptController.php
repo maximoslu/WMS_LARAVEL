@@ -11,7 +11,6 @@ use App\Http\Requests\UpdateGoodsReceiptRequest;
 use App\Models\Client;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
-use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\Supplier;
@@ -542,6 +541,9 @@ class GoodsReceiptController extends Controller
                     'units_per_pallet' => $line->units_per_pallet,
                     'pallet_count' => $line->pallet_count,
                     'pico_units' => $line->pico_units,
+                    ...collect(range(1, GoodsReceiptLine::MAX_PEAK_COLUMNS))
+                        ->mapWithKeys(fn (int $number): array => ['peak_'.$number => $line->{'peak_'.$number}])
+                        ->all(),
                     'location_id' => $line->location_id,
                 ])
                 ->all();
@@ -561,6 +563,16 @@ class GoodsReceiptController extends Controller
             'units_per_pallet' => null,
             'pallet_count' => null,
             'pico_units' => null,
+            'peak_1' => null,
+            'peak_2' => null,
+            'peak_3' => null,
+            'peak_4' => null,
+            'peak_5' => null,
+            'peak_6' => null,
+            'peak_7' => null,
+            'peak_8' => null,
+            'peak_9' => null,
+            'peak_10' => null,
             'location_id' => null,
         ]];
     }
@@ -584,6 +596,9 @@ class GoodsReceiptController extends Controller
                 'units_per_pallet' => $line['units_per_pallet'] ?? $item?->units_per_pallet,
                 'pallet_count' => $line['pallet_count'] ?? 0,
                 'pico_units' => $line['pico_units'] ?? null,
+                ...collect(range(1, GoodsReceiptLine::MAX_PEAK_COLUMNS))
+                    ->mapWithKeys(fn (int $number): array => ['peak_'.$number => $line['peak_'.$number] ?? null])
+                    ->all(),
                 'location_id' => $line['location_id'] ?? null,
             ]);
         }
@@ -616,5 +631,4 @@ class GoodsReceiptController extends Controller
             throw $exception;
         }
     }
-
 }

@@ -45,8 +45,9 @@ class StoreGoodsReceiptRequest extends FormRequest
                 $unitsPerPallet = $this->normalizeNullableInteger($line['units_per_pallet'] ?? null)
                     ?? ($item?->units_per_pallet !== null ? (int) $item->units_per_pallet : null);
                 $palletCount = $this->normalizeNullableInteger($line['pallet_count'] ?? null);
-                $picoUnits = $this->normalizeNullableInteger($line['pico_units'] ?? null);
-                $manualPicoUnitsProvided = array_key_exists('pico_units', $line) && $line['pico_units'] !== '' && $line['pico_units'] !== null;
+                $peaks = $this->normalizePeaks($line);
+                $picoUnits = $this->validPeakTotal($peaks);
+                $manualPicoUnitsProvided = collect($peaks)->contains(fn (mixed $value): bool => $value !== null && $value !== '');
                 $manualPalletCountProvided = array_key_exists('pallet_count', $line)
                     && $line['pallet_count'] !== ''
                     && $line['pallet_count'] !== null
@@ -63,9 +64,10 @@ class StoreGoodsReceiptRequest extends FormRequest
                 if ($unitsPerPallet !== null && $quantityUnits > 0 && ! $manualPalletCountProvided && ! $manualPicoUnitsProvided) {
                     $palletCount = StockBatchCalculator::calculateFullPallets($quantityUnits, $unitsPerPallet);
                     $picoUnits = StockBatchCalculator::calculateRemainderPeak($quantityUnits, $unitsPerPallet);
+                    $peaks['peak_1'] = $picoUnits > 0 ? $picoUnits : null;
                 }
 
-                return [
+                return array_merge([
                     'item_id' => $itemId,
                     'sku' => $sku ?? $item?->sku,
                     'description' => $this->normalizeNullableText($line['description'] ?? null) ?? $item?->description,
@@ -75,7 +77,7 @@ class StoreGoodsReceiptRequest extends FormRequest
                     'pallet_count' => $palletCount ?? 0,
                     'pico_units' => ($picoUnits ?? 0) > 0 ? $picoUnits : null,
                     'location_id' => $this->normalizeNullableInteger($line['location_id'] ?? null),
-                ];
+                ], $peaks);
             })
             ->filter(function (array $line): bool {
                 return $line['item_id'] !== null
@@ -86,6 +88,7 @@ class StoreGoodsReceiptRequest extends FormRequest
                     || $line['units_per_pallet'] !== null
                     || $line['pallet_count'] > 0
                     || ($line['pico_units'] ?? 0) > 0
+                    || collect(range(1, 10))->contains(fn (int $number): bool => filled($line['peak_'.$number] ?? null))
                     || $line['location_id'] !== null;
             })
             ->values()
@@ -103,7 +106,7 @@ class StoreGoodsReceiptRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             'action' => ['nullable', 'in:'.implode(',', [self::ACTION_CREATE_DRAFT, self::ACTION_CREATE_AND_EXTRACT_AI])],
             'client_id' => ['required', 'exists:clients,id'],
             'supplier_id' => ['nullable', 'exists:suppliers,id'],
@@ -126,6 +129,12 @@ class StoreGoodsReceiptRequest extends FormRequest
             'lines.*.pico_units' => ['nullable', 'integer', 'min:0'],
             'lines.*.location_id' => ['nullable', 'exists:locations,id'],
         ];
+
+        foreach (range(1, 10) as $peakNumber) {
+            $rules['lines.*.peak_'.$peakNumber] = ['nullable', 'integer', 'min:1'];
+        }
+
+        return $rules;
     }
 
     public function withValidator(Validator $validator): void
@@ -159,7 +168,8 @@ class StoreGoodsReceiptRequest extends FormRequest
                 $quantityUnits = (int) ($line['quantity_units'] ?? 0);
                 $unitsPerPallet = isset($line['units_per_pallet']) ? (int) $line['units_per_pallet'] : null;
                 $palletCount = (int) ($line['pallet_count'] ?? 0);
-                $picoUnits = isset($line['pico_units']) ? (int) $line['pico_units'] : null;
+                $picoUnits = collect(range(1, 10))
+                    ->sum(fn (int $number): int => (int) ($line['peak_'.$number] ?? 0));
 
                 if ($itemId > 0) {
                     $itemData = Item::query()
@@ -214,6 +224,48 @@ class StoreGoodsReceiptRequest extends FormRequest
         }
 
         return is_numeric($value) ? (int) $value : null;
+    }
+
+    /** @return array<string, mixed> */
+    private function normalizePeaks(array $line): array
+    {
+        $hasExplicitPeaks = collect(range(1, 10))->contains(function (int $number) use ($line): bool {
+            $key = 'peak_'.$number;
+
+            return array_key_exists($key, $line) && $line[$key] !== '' && $line[$key] !== null;
+        });
+
+        $peaks = [];
+
+        foreach (range(1, 10) as $number) {
+            $key = 'peak_'.$number;
+            $value = $line[$key] ?? null;
+
+            if (! $hasExplicitPeaks && $number === 1) {
+                $value = $line['pico_units'] ?? null;
+            }
+
+            if ($value === '' || $value === null) {
+                $peaks[$key] = null;
+
+                continue;
+            }
+
+            $validated = filter_var($value, FILTER_VALIDATE_INT);
+            $peaks[$key] = $validated === false ? $value : (int) $validated;
+        }
+
+        return $peaks;
+    }
+
+    /** @param array<string, mixed> $peaks */
+    private function validPeakTotal(array $peaks): int
+    {
+        return collect($peaks)->sum(function (mixed $value): int {
+            $validated = filter_var($value, FILTER_VALIDATE_INT);
+
+            return $validated === false ? 0 : (int) $validated;
+        });
     }
 
     private function normalizeNullableUpper(mixed $value): ?string

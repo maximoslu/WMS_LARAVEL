@@ -1,6 +1,19 @@
-@php($row = is_array($line ?? null) ? $line : [])
+@php
+    $row = is_array($line ?? null) ? $line : [];
+    $peakValues = collect(range(1, 10))
+        ->mapWithKeys(fn (int $number): array => [$number => $row['peak_'.$number] ?? null])
+        ->filter(fn (mixed $value): bool => $value !== null && $value !== '');
 
-<article class="surface-card compact-card goods-receipt-line-card" data-line-row>
+    if ($peakValues->isEmpty() && filled($row['pico_units'] ?? null)) {
+        $peakValues->put(1, $row['pico_units']);
+    }
+
+    if ($peakValues->isEmpty()) {
+        $peakValues->put(1, null);
+    }
+@endphp
+
+<article class="surface-card compact-card goods-receipt-line-card" data-line-row data-line-index="{{ $index }}">
     <div class="goods-receipt-line-card-head">
         <div class="goods-receipt-line-card-copy">
             <span class="status-chip small-badge badge-compact" data-line-number>Linea</span>
@@ -136,36 +149,50 @@
         </label>
 
         <label class="auth-field goods-receipt-line-field">
-            <span>Pallets calculados</span>
+            <span>Pallets completos</span>
             <input
                 type="number"
                 min="0"
                 name="lines[{{ $index }}][pallet_count]"
                 value="{{ $row['pallet_count'] ?? '' }}"
-                class="auth-input goods-receipt-derived-output"
+                class="auth-input"
                 data-line-pallet-count
-                readonly
             >
             @error("lines.$index.pallet_count")
                 <small class="form-error">{{ $message }}</small>
             @enderror
         </label>
 
-        <label class="auth-field goods-receipt-line-field">
-            <span>Pico calculado</span>
-            <input
-                type="number"
-                min="0"
-                name="lines[{{ $index }}][pico_units]"
-                value="{{ $row['pico_units'] ?? '' }}"
-                class="auth-input goods-receipt-derived-output"
-                data-line-pico
-                readonly
-            >
-            @error("lines.$index.pico_units")
-                <small class="form-error">{{ $message }}</small>
-            @enderror
-        </label>
+        <div class="auth-field goods-receipt-line-field goods-receipt-line-field--wide goods-receipt-peaks" data-line-peaks>
+            <div class="goods-receipt-peaks-head">
+                <span>Picos</span>
+                <button type="button" class="button-secondary compact-button btn-table" data-add-peak>Añadir pico</button>
+            </div>
+            <input type="hidden" name="lines[{{ $index }}][pico_units]" value="{{ $row['pico_units'] ?? '' }}" data-line-pico-total>
+            <div class="goods-receipt-peak-list" data-line-peak-list>
+                @foreach ($peakValues as $peakNumber => $peakValue)
+                    <div class="goods-receipt-peak-entry" data-line-peak-entry data-peak-number="{{ $peakNumber }}">
+                        <label for="line-{{ $index }}-peak-{{ $peakNumber }}">Pico {{ $peakNumber }}</label>
+                        <input
+                            id="line-{{ $index }}-peak-{{ $peakNumber }}"
+                            type="number"
+                            min="1"
+                            step="1"
+                            name="lines[{{ $index }}][peak_{{ $peakNumber }}]"
+                            value="{{ $peakValue }}"
+                            class="auth-input"
+                            inputmode="numeric"
+                            data-line-peak
+                        >
+                        <button type="button" class="button-secondary compact-button btn-table" data-remove-peak aria-label="Quitar pico {{ $peakNumber }}">Quitar</button>
+                        @error("lines.$index.peak_$peakNumber")
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </div>
+                @endforeach
+            </div>
+            <small class="helper-text">Hasta 10 picos separados. El total de la línea se actualiza automáticamente.</small>
+        </div>
 
         <label class="auth-field goods-receipt-line-field goods-receipt-line-field--wide">
             <span>Ubicacion</span>

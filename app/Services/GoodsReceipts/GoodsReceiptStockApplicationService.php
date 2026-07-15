@@ -135,7 +135,8 @@ class GoodsReceiptStockApplicationService
             ]);
         }
 
-        [$fullPallets, $picoUnits] = $this->splitLine($line, $unitsPerPallet, $quantityUnits);
+        [$fullPallets, $peakUnits] = $this->splitLine($line, $unitsPerPallet, $quantityUnits);
+        $picoUnits = array_sum($peakUnits);
 
         if ($fullPallets === 0 && $picoUnits === 0) {
             throw ValidationException::withMessages([
@@ -145,6 +146,8 @@ class GoodsReceiptStockApplicationService
 
         $stockPallet = $this->resolveTargetBatch($receipt, $item, $line, $unitsPerPallet);
         $nextQuantityUnits = (int) ($stockPallet->quantity_units ?? 0) + $quantityUnits;
+
+        $stockPeaks = $this->mergedStockPeaks($stockPallet, $peakUnits, $line);
 
         $stockPallet->fill([
             'client_id' => $receipt->client_id,
@@ -159,18 +162,7 @@ class GoodsReceiptStockApplicationService
             'active' => true,
             'notes' => $line->notes,
             'quantity_units' => $nextQuantityUnits,
-            'full_pallets' => 0,
-            'peaks_count' => 0,
-            'peak_1' => 0,
-            'peak_2' => 0,
-            'peak_3' => 0,
-            'peak_4' => 0,
-            'peak_5' => 0,
-            'peak_6' => 0,
-            'peak_7' => 0,
-            'peak_8' => 0,
-            'peak_9' => 0,
-            'peak_10' => 0,
+            ...$this->peakAttributes($stockPeaks),
         ]);
         $stockPallet->save();
 
@@ -182,6 +174,7 @@ class GoodsReceiptStockApplicationService
             'units_per_pallet' => $unitsPerPallet,
             'pallet_count' => $fullPallets,
             'pico_units' => $picoUnits > 0 ? $picoUnits : null,
+            ...$this->peakAttributes($peakUnits, null),
         ])->save();
     }
 
@@ -233,14 +226,15 @@ class GoodsReceiptStockApplicationService
     }
 
     /**
-     * @return array{0: int, 1: int}
+     * @return array{0: int, 1: list<int>}
      */
     private function splitLine(GoodsReceiptLine $line, int $unitsPerPallet, int $quantityUnits): array
     {
         $palletCount = (int) $line->pallet_count;
-        $picoUnits = (int) ($line->pico_units ?? 0);
+        $peakUnits = $line->peakUnits();
+        $picoUnits = array_sum($peakUnits);
 
-        if ($palletCount > 0 || $line->pico_units !== null) {
+        if ($palletCount > 0 || $peakUnits !== [] || $line->pico_units !== null) {
             $computedTotal = ($palletCount * $unitsPerPallet) + $picoUnits;
 
             if ($computedTotal !== $quantityUnits) {
@@ -249,12 +243,47 @@ class GoodsReceiptStockApplicationService
                 ]);
             }
 
-            return [$palletCount, $picoUnits];
+            return [$palletCount, $peakUnits];
         }
+
+        $remainder = StockBatchCalculator::calculateRemainderPeak($quantityUnits, $unitsPerPallet);
 
         return [
             StockBatchCalculator::calculateFullPallets($quantityUnits, $unitsPerPallet),
-            StockBatchCalculator::calculateRemainderPeak($quantityUnits, $unitsPerPallet),
+            $remainder > 0 ? [$remainder] : [],
         ];
+    }
+
+    /** @param list<int> $incomingPeaks
+     * @return list<int>
+     */
+    private function mergedStockPeaks(StockPallet $stockPallet, array $incomingPeaks, GoodsReceiptLine $line): array
+    {
+        $existingPeaks = collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->map(fn (int $number): int => (int) ($stockPallet->{'peak_'.$number} ?? 0))
+            ->filter(fn (int $value): bool => $value > 0)
+            ->values()
+            ->all();
+        $peaks = array_values(array_merge($existingPeaks, $incomingPeaks));
+
+        if (count($peaks) > StockPallet::MAX_PEAK_COLUMNS) {
+            throw ValidationException::withMessages([
+                'goods_receipt' => "La linea {$line->id} supera el maximo de 10 picos para una misma partida de stock.",
+            ]);
+        }
+
+        return $peaks;
+    }
+
+    /** @param list<int> $peaks
+     * @return array<string, int|null>
+     */
+    private function peakAttributes(array $peaks, ?int $emptyValue = 0): array
+    {
+        return collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->mapWithKeys(fn (int $number): array => [
+                'peak_'.$number => $peaks[$number - 1] ?? $emptyValue,
+            ])
+            ->all();
     }
 }

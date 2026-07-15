@@ -1182,6 +1182,140 @@ class GoodsReceiptManagementTest extends TestCase
         ]);
     }
 
+    public function test_manual_receipt_line_accepts_one_full_pallet_without_peaks(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)->post(route('goods-receipts.store'), [
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-NO-PEAKS',
+            'lines' => [[
+                'sku' => 'SKU-NO-PEAKS',
+                'description' => 'Pallet completo',
+                'quantity_units' => 8000,
+                'units_per_pallet' => 8000,
+                'pallet_count' => 1,
+                'peak_1' => '',
+                'location_id' => $location->id,
+            ]],
+        ])->assertRedirect();
+
+        $line = GoodsReceipt::query()->where('receipt_number', 'ALB-NO-PEAKS')->firstOrFail()->lines()->firstOrFail();
+        $this->assertSame(8000, $line->quantity_units);
+        $this->assertSame(1, $line->pallet_count);
+        $this->assertNull($line->pico_units);
+        $this->assertSame([], $line->peakUnits());
+    }
+
+    public function test_manual_receipt_line_accepts_one_peak_and_keeps_aggregate_total(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)->post(route('goods-receipts.store'), [
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-ONE-PEAK',
+            'lines' => [[
+                'sku' => 'SKU-ONE-PEAK',
+                'description' => 'Pallet y pico',
+                'quantity_units' => 9000,
+                'units_per_pallet' => 8000,
+                'pallet_count' => 1,
+                'peak_1' => 1000,
+                'location_id' => $location->id,
+            ]],
+        ])->assertRedirect();
+
+        $line = GoodsReceipt::query()->where('receipt_number', 'ALB-ONE-PEAK')->firstOrFail()->lines()->firstOrFail();
+        $this->assertSame(1000, $line->pico_units);
+        $this->assertSame([1000], $line->peakUnits());
+    }
+
+    public function test_two_manual_peaks_are_saved_separately_and_reach_stock_separately(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)->post(route('goods-receipts.store'), [
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-TWO-PEAKS',
+            'lines' => [[
+                'sku' => 'SKU-TWO-PEAKS',
+                'description' => 'Pallet y dos picos',
+                'lot' => 'LOT-TWO-PEAKS',
+                'quantity_units' => 10000,
+                'units_per_pallet' => 8000,
+                'pallet_count' => 1,
+                'peak_1' => 1000,
+                'peak_2' => 1000,
+                'location_id' => $location->id,
+            ]],
+        ])->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-TWO-PEAKS')->firstOrFail();
+        $line = $receipt->lines()->firstOrFail();
+        $this->assertSame(10000, $line->quantity_units);
+        $this->assertSame(2000, $line->pico_units);
+        $this->assertSame([1000, 1000], $line->peakUnits());
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'quantity_units' => 10000,
+            'full_pallets' => 1,
+            'peaks_count' => 2,
+            'peak_1' => 1000,
+            'peak_2' => 1000,
+        ]);
+    }
+
+    public function test_manual_peaks_reject_negative_and_non_numeric_values(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-BAD-PEAKS',
+                'lines' => [[
+                    'sku' => 'SKU-BAD-PEAKS',
+                    'description' => 'Picos invalidos',
+                    'quantity_units' => 8000,
+                    'units_per_pallet' => 8000,
+                    'pallet_count' => 1,
+                    'peak_1' => -10,
+                    'peak_2' => 'abc',
+                    'location_id' => $location->id,
+                ]],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors(['lines.0.peak_1', 'lines.0.peak_2']);
+    }
+
+    public function test_goods_receipt_line_ui_inserts_new_rows_first_and_supports_dynamic_peaks(): void
+    {
+        $script = file_get_contents(resource_path('js/app.js'));
+
+        $this->assertIsString($script);
+        $this->assertStringContainsString("container.insertAdjacentHTML('afterbegin', markup)", $script);
+        $this->assertStringContainsString("querySelector('[data-autocomplete-input]')?.focus", $script);
+        $this->assertStringContainsString("event.target.closest('[data-add-peak]')", $script);
+    }
+
     public function test_store_respects_units_per_pallet_override_for_selected_item(): void
     {
         $this->seed(RoleSeeder::class);
@@ -2283,7 +2417,7 @@ class GoodsReceiptManagementTest extends TestCase
         // Simulates a superadmin manually re-locating/re-lotting the batch after
         // confirmation (via the batch edit screen), which must not block deletion.
         $otherLocation = Location::factory()->create([
-            'warehouse_id' => $stockBatch->location?->warehouse_id ?? \App\Models\Warehouse::factory()->create()->id,
+            'warehouse_id' => $stockBatch->location?->warehouse_id ?? Warehouse::factory()->create()->id,
         ]);
         $stockBatch->update([
             'location_id' => $otherLocation->id,

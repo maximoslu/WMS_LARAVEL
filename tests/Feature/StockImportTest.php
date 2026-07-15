@@ -17,6 +17,7 @@ use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
@@ -875,6 +876,51 @@ class StockImportTest extends TestCase
         $this->assertSame('A', $secondStock->location_text);
     }
 
+    public function test_edelvives_import_reuses_legacy_zero_padded_location_without_creating_duplicate(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $legacyLocationId = DB::table('locations')->insertGetId([
+            'warehouse_id' => $warehouse->id,
+            'code' => '06',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('6', 80, 'ED-LEGACY-LOC', 'Ubicacion existente', 1000, 1000, 1, 0, [], 1),
+            ]),
+        ]);
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk();
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $this->assertSame(1, Location::query()
+            ->where('warehouse_id', $warehouse->id)
+            ->whereIn('code', ['6', '06'])
+            ->count());
+        $this->assertDatabaseHas('stock_pallets', [
+            'client_id' => $edelvives->id,
+            'location_id' => $legacyLocationId,
+            'location_text' => '06',
+            'quantity_units' => 1000,
+        ]);
+    }
+
     public function test_edelvives_import_reuses_existing_sku_per_client_without_mixing_clients(): void
     {
         [$friesland, $edelvives] = $this->seedBaseData();
@@ -1673,7 +1719,7 @@ class StockImportTest extends TestCase
             unlink($path);
         }
 
-        $writer = new Writer();
+        $writer = new Writer;
         $writer->openToFile($xlsxPath);
 
         $firstSheet = true;

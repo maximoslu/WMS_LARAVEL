@@ -2,15 +2,15 @@
 
 use App\Http\Controllers\AccessRequestController;
 use App\Http\Controllers\AjaxSearchController;
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
-use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ClientGoodsReceiptDocumentController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DailyOperationController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GoodsDispatchController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\GoogleCalendarOAuthController;
@@ -46,6 +46,10 @@ Route::middleware('guest')->group(function (): void {
     Route::get('/solicitar-acceso', [AccessRequestController::class, 'create'])->name('access-requests.create');
     Route::post('/solicitar-acceso', [AccessRequestController::class, 'store'])->name('access-requests.store');
 });
+
+Route::get('/documentos/entradas/{goodsReceipt}/descargar', [ClientGoodsReceiptDocumentController::class, 'downloadSigned'])
+    ->middleware('signed')
+    ->name('client-goods-receipts.signed-download');
 
 Route::middleware('auth')->group(function (): void {
     Route::get('/ajax/items', [AjaxSearchController::class, 'items'])

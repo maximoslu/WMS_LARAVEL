@@ -19,6 +19,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class ClientGoodsReceiptDocumentTest extends TestCase
@@ -311,6 +312,76 @@ class ClientGoodsReceiptDocumentTest extends TestCase
         $this->actingAs($user)
             ->get(route('client-goods-receipts.download', $receipt))
             ->assertOk();
+    }
+
+    public function test_email_link_signed_allows_the_recipient_to_download_without_session(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+        $receipt = $this->createReceiptWithDocument($edelvives, 'SAICA', '2026-07-17');
+        $message = (new ClientGoodsReceiptDocumentAvailableNotification($receipt, ['mail']))->toMail($user);
+
+        $this->assertIsString($message->actionUrl);
+        $this->assertStringContainsString('signature=', $message->actionUrl);
+        $this->get($message->actionUrl)
+            ->assertOk()
+            ->assertHeader('content-disposition', 'attachment; filename=Entrada_Saica_17.pdf');
+    }
+
+    public function test_unsigned_or_expired_email_document_link_is_forbidden(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $receipt = $this->createReceiptWithDocument($edelvives, 'SAICA', '2026-07-17');
+
+        $this->get(route('client-goods-receipts.signed-download', $receipt))->assertForbidden();
+
+        $expiredUrl = URL::temporarySignedRoute(
+            'client-goods-receipts.signed-download',
+            now()->subMinute(),
+            ['goodsReceipt' => $receipt],
+        );
+        $this->get($expiredUrl)->assertForbidden();
+    }
+
+    public function test_authenticated_other_client_cannot_use_signed_document_link(): void
+    {
+        [$edelvives, $friesland] = $this->seedClients();
+        $otherClientUser = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $receipt = $this->createReceiptWithDocument($edelvives, 'SAICA', '2026-07-17');
+        $signedUrl = URL::temporarySignedRoute(
+            'client-goods-receipts.signed-download',
+            now()->addDays(15),
+            ['goodsReceipt' => $receipt],
+        );
+
+        $this->actingAs($otherClientUser)->get($signedUrl)->assertForbidden();
+    }
+
+    public function test_signed_link_for_missing_document_returns_404(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $edelvives->id,
+            'document_path' => null,
+        ]);
+        $signedUrl = URL::temporarySignedRoute(
+            'client-goods-receipts.signed-download',
+            now()->addDays(15),
+            ['goodsReceipt' => $receipt],
+        );
+
+        $this->get($signedUrl)->assertNotFound();
+    }
+
+    public function test_external_recipient_email_keeps_private_attachment_and_signed_link(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $receipt = $this->createReceiptWithDocument($edelvives, 'SAICA', '2026-07-17');
+        $message = (new ClientGoodsReceiptDocumentAvailableNotification($receipt, ['mail']))
+            ->toMail(new AnonymousNotifiable);
+
+        $this->assertStringContainsString('signature=', (string) $message->actionUrl);
+        $this->assertNotEmpty($message->rawAttachments);
     }
 
     public function test_no_expone_path_real_de_storage_en_el_listado(): void

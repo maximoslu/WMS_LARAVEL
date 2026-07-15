@@ -325,7 +325,7 @@
                             <th>Total uds</th>
                             <th>Uds/pallet</th>
                             <th>Pallets</th>
-                            <th>Pico</th>
+                            <th>Detalle picos</th>
                             <th>Ubicacion</th>
                         </tr>
                     </thead>
@@ -338,7 +338,7 @@
                                 <td>{{ number_format($line->quantity_units, 0, ',', '.') }}</td>
                                 <td>{{ $line->units_per_pallet ? number_format($line->units_per_pallet, 0, ',', '.') : '-' }}</td>
                                 <td>{{ number_format($line->pallet_count, 0, ',', '.') }}</td>
-                                <td>{{ $line->pico_units !== null ? number_format($line->pico_units, 0, ',', '.') : '-' }}</td>
+                                <td>{{ collect($line->peakUnits())->map(fn (int $peak): string => number_format($peak, 0, ',', '.'))->implode(' + ') ?: '-' }}</td>
                                 <td>{{ $line->location?->code ?: 'Sin ubicacion' }}</td>
                             </tr>
                         @endforeach
@@ -369,7 +369,7 @@
                             <th>Uds/pallet</th>
                             <th>Pallets</th>
                             <th>Picos</th>
-                            <th>Pico 1</th>
+                            <th>Detalle picos</th>
                             <th>Ubicacion</th>
                             <th>Fecha</th>
                             <th>Estado</th>
@@ -384,7 +384,13 @@
                                 <td>{{ number_format($stockPallet->units_per_pallet ?? 0, 0, ',', '.') }}</td>
                                 <td>{{ number_format($stockPallet->full_pallets ?? 0, 0, ',', '.') }}</td>
                                 <td>{{ number_format($stockPallet->peaks_count ?? 0, 0, ',', '.') }}</td>
-                                <td>{{ number_format($stockPallet->peak_1 ?? 0, 0, ',', '.') }}</td>
+                                <td>
+                                    {{ collect(range(1, 10))
+                                        ->map(fn (int $number): int => (int) ($stockPallet->{'peak_'.$number} ?? 0))
+                                        ->filter()
+                                        ->map(fn (int $peak): string => number_format($peak, 0, ',', '.'))
+                                        ->implode(' + ') ?: '-' }}
+                                </td>
                                 <td>{{ $stockPallet->location?->code ?: ($stockPallet->location_text ?: 'Sin ubicacion') }}</td>
                                 <td>{{ optional($stockPallet->received_at)->format('d/m/Y') ?: '-' }}</td>
                                 <td>{{ $stockPallet->statusLabel() }}</td>

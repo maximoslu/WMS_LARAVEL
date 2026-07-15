@@ -3812,6 +3812,42 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     grid-column: span 6;
 }
 
+.goods-receipt-peaks {
+    align-self: start;
+}
+
+.goods-receipt-peaks-head,
+.goods-receipt-peak-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.goods-receipt-peaks-head {
+    justify-content: space-between;
+}
+
+.goods-receipt-peak-list {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.goods-receipt-peak-entry label {
+    min-width: 3.5rem;
+    color: #52687a;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.goods-receipt-peak-entry .auth-input {
+    flex: 1 1 8rem;
+}
+
+.goods-receipt-peak-entry .form-error {
+    flex-basis: 100%;
+}
+
 .goods-receipt-line-picker {
     width: 100%;
 }

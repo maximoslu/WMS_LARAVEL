@@ -9,11 +9,13 @@ use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Support\Locations\LocationCode;
 use App\Support\Stock\StockBatchCalculator;
 use DateTimeInterface;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -24,10 +26,15 @@ use OpenSpout\Reader\Common\Creator\ReaderFactory;
 class StockExcelImportService
 {
     private const MAX_DETAILED_MESSAGES = 5;
+
     private const PROFILE_STANDARD = 'standard_multisheet';
+
     private const PROFILE_EDELVIVES = 'edelvives_single_sheet';
+
     private const EDELVIVES_WAREHOUSE_CODE = '38';
+
     private const EDELVIVES_WAREHOUSE_NAME = 'NAVE 38';
+
     private const EDELVIVES_DEFAULT_LOT = 'SIN LOTE';
 
     /**
@@ -271,7 +278,9 @@ class StockExcelImportService
                     throw new InvalidArgumentException('No se ha podido resolver el articulo maestro para SKU '.$row['sku'].'.');
                 }
 
-                $locationCode = $row['location_code'] ?? null;
+                $locationCode = isset($row['location_code'])
+                    ? LocationCode::normalize($row['location_code'])
+                    : null;
 
                 $attributes = [
                     'client_id' => $lockedImport->client_id,
@@ -908,7 +917,7 @@ class StockExcelImportService
 
     /**
      * @param  array<string, int>  $headerMap
-     * @param  \Illuminate\Support\Collection<string, Item>  $existingItems
+     * @param  Collection<string, Item>  $existingItems
      * @return array{
      *     row: array<string, mixed>|null,
      *     catalog_item: array<string, mixed>|null,
@@ -1214,7 +1223,7 @@ class StockExcelImportService
 
     /**
      * @param  array<string, int>  $headerMap
-     * @param  \Illuminate\Support\Collection<string, Item>  $existingItems
+     * @param  Collection<string, Item>  $existingItems
      * @return array{
      *     row: array<string, mixed>|null,
      *     catalog_item: array<string, mixed>|null,
@@ -1943,11 +1952,13 @@ class StockExcelImportService
         if (str_starts_with($key, 'excluded_sku_')) {
             $totals['excluded_rows']++;
             $totals['summary_rows_ignored']++;
+
             return;
         }
 
         if (str_starts_with($key, 'empty_rows_')) {
             $totals['empty_rows_ignored']++;
+
             return;
         }
 
@@ -1994,10 +2005,14 @@ class StockExcelImportService
                 $query
                     ->where(fn ($warehouseQuery) => $warehouseQuery
                         ->where('code', self::EDELVIVES_WAREHOUSE_CODE)
-                        ->whereIn('client_id', [$client->id, null]))
+                        ->where(fn ($clientQuery) => $clientQuery
+                            ->where('client_id', $client->id)
+                            ->orWhereNull('client_id')))
                     ->orWhere(fn ($warehouseQuery) => $warehouseQuery
                         ->where('name', self::EDELVIVES_WAREHOUSE_NAME)
-                        ->whereIn('client_id', [$client->id, null]));
+                        ->where(fn ($clientQuery) => $clientQuery
+                            ->where('client_id', $client->id)
+                            ->orWhereNull('client_id')));
             })
             ->orderByRaw('client_id is null desc')
             ->first();
@@ -2015,30 +2030,49 @@ class StockExcelImportService
             ->map(fn (int $value): string => (string) $value)
             ->merge(['A', 'B', 'C', 'D', 'E', 'F', 'FONDO', 'SIN UBICACION'])
             ->merge($locationCodes)
-            ->map(fn (mixed $code): string => Str::upper($this->normalizeText((string) $code)))
+            ->map(fn (mixed $code): string => LocationCode::normalize($code))
             ->filter(fn (string $code): bool => $code !== '')
             ->unique()
             ->values();
 
+        $locations = Location::query()
+            ->where('warehouse_id', $warehouse->id)
+            ->orderByDesc('active')
+            ->orderBy('id')
+            ->get()
+            ->toBase()
+            ->groupBy(fn (Location $location): string => LocationCode::normalize($location->code))
+            ->map(fn (Collection $group): Location => $group->first());
+
         foreach ($codes as $code) {
-            Location::query()->updateOrCreate(
-                [
+            $location = $locations->get($code);
+
+            if (! $location instanceof Location) {
+                $location = Location::query()->create([
                     'warehouse_id' => $warehouse->id,
                     'code' => $code,
-                ],
-                [
                     'name' => 'Calle '.$code,
                     'aisle' => $code,
                     'active' => true,
-                ],
-            );
+                ]);
+                $locations->put($code, $location);
+            } else {
+                DB::table('locations')->where('id', $location->id)->update([
+                    'name' => 'Calle '.$code,
+                    'aisle' => $code,
+                    'active' => true,
+                    'updated_at' => now(),
+                ]);
+                $location->forceFill([
+                    'name' => 'Calle '.$code,
+                    'aisle' => $code,
+                    'active' => true,
+                ]);
+            }
         }
 
-        return Location::query()
-            ->where('warehouse_id', $warehouse->id)
-            ->whereIn('code', $codes->all())
-            ->get()
-            ->keyBy('code')
+        return $locations
+            ->filter(fn (Location $location, string $code): bool => $codes->contains($code))
             ->all();
     }
 

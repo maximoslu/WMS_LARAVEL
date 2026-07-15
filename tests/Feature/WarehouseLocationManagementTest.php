@@ -199,6 +199,26 @@ class WarehouseLocationManagementTest extends TestCase
         $this->assertDatabaseCount('locations', 2);
     }
 
+    public function test_numeric_location_codes_are_normalized_before_duplicate_validation(): void
+    {
+        $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create(['code' => 'MAX-38']);
+        Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => '6']);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->from(route('locations.create'))
+            ->post(route('locations.store'), [
+                'warehouse_id' => $warehouse->id,
+                'code' => ' 06 ',
+                'active' => '1',
+            ])
+            ->assertRedirect(route('locations.create'))
+            ->assertSessionHasErrors('code');
+
+        $this->assertSame(1, Location::query()->where('warehouse_id', $warehouse->id)->count());
+    }
+
     private function seedBaseData(): void
     {
         $this->seed([

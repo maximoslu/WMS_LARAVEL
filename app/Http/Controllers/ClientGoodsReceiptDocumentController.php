@@ -156,6 +156,24 @@ class ClientGoodsReceiptDocumentController extends Controller
 
         abort_unless($user->hasRole(Role::CLIENTE), 403);
         abort_unless($user->client_id !== null && (int) $user->client_id === (int) $goodsReceipt->client_id, 403);
+
+        return $this->documentDownloadResponse($goodsReceipt);
+    }
+
+    public function downloadSigned(Request $request, GoodsReceipt $goodsReceipt): StreamedResponse
+    {
+        $user = $request->user();
+
+        if ($user !== null) {
+            abort_unless($user->hasRole(Role::CLIENTE), 403);
+            abort_unless($user->client_id !== null && (int) $user->client_id === (int) $goodsReceipt->client_id, 403);
+        }
+
+        return $this->documentDownloadResponse($goodsReceipt);
+    }
+
+    private function documentDownloadResponse(GoodsReceipt $goodsReceipt): StreamedResponse
+    {
         abort_if($goodsReceipt->document_path === null, 404);
 
         $disk = $this->documentStorage->resolveDisk($goodsReceipt->document_path);

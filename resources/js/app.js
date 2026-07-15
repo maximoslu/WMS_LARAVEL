@@ -1144,13 +1144,44 @@ const setupGoodsReceiptLines = () => {
         field.dataset.autofilled = isAutofilled ? 'true' : 'false';
     };
 
-    const recalculateRow = (row) => {
+    const peakFields = (row) => Array.from(row.querySelectorAll('[data-line-peak]'));
+
+    const recalculateTotalFromBreakdown = (row) => {
         const quantityField = row.querySelector('[data-line-quantity]');
         const unitsField = row.querySelector('[data-line-units]');
         const palletCountField = row.querySelector('[data-line-pallet-count]');
-        const picoField = row.querySelector('[data-line-pico]');
+        const picoTotalField = row.querySelector('[data-line-pico-total]');
 
-        if (!quantityField || !unitsField || !palletCountField || !picoField) {
+        if (!quantityField || !unitsField || !palletCountField || !picoTotalField) {
+            return;
+        }
+
+        const unitsPerPallet = Number.parseInt(unitsField.value, 10);
+        const palletCount = Number.parseInt(palletCountField.value, 10);
+        const peaksTotal = peakFields(row).reduce((total, field) => {
+            const value = Number.parseInt(field.value, 10);
+
+            return total + (Number.isFinite(value) ? value : 0);
+        }, 0);
+
+        picoTotalField.value = peaksTotal > 0 ? String(peaksTotal) : '';
+
+        if (!Number.isFinite(unitsPerPallet) || unitsPerPallet <= 0) {
+            quantityField.value = peaksTotal > 0 ? String(peaksTotal) : '';
+            return;
+        }
+
+        const fullPallets = Number.isFinite(palletCount) && palletCount > 0 ? palletCount : 0;
+        const total = (fullPallets * unitsPerPallet) + peaksTotal;
+        quantityField.value = total > 0 ? String(total) : '';
+    };
+
+    const recalculateBreakdownFromTotal = (row) => {
+        const quantityField = row.querySelector('[data-line-quantity]');
+        const unitsField = row.querySelector('[data-line-units]');
+        const palletCountField = row.querySelector('[data-line-pallet-count]');
+
+        if (!quantityField || !unitsField || !palletCountField) {
             return;
         }
 
@@ -1158,14 +1189,29 @@ const setupGoodsReceiptLines = () => {
         const unitsPerPallet = Number.parseInt(unitsField.value, 10);
 
         if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitsPerPallet) || unitsPerPallet <= 0) {
-            palletCountField.value = '';
-            picoField.value = '';
             return;
         }
 
         palletCountField.value = String(Math.floor(quantity / unitsPerPallet));
-        const picoUnits = quantity % unitsPerPallet;
-        picoField.value = picoUnits > 0 ? String(picoUnits) : '';
+        const remainder = quantity % unitsPerPallet;
+        const fields = peakFields(row);
+
+        fields.forEach((field, index) => {
+            field.value = index === 0 && remainder > 0 ? String(remainder) : '';
+        });
+        recalculateTotalFromBreakdown(row);
+    };
+
+    const syncRowTotals = (row) => {
+        const hasManualBreakdown = (row.querySelector('[data-line-pallet-count]')?.value ?? '') !== ''
+            || peakFields(row).some((field) => field.value !== '');
+
+        if (hasManualBreakdown) {
+            recalculateTotalFromBreakdown(row);
+            return;
+        }
+
+        recalculateBreakdownFromTotal(row);
     };
 
     const clearAutofilledFields = (row) => {
@@ -1178,7 +1224,7 @@ const setupGoodsReceiptLines = () => {
             }
         });
 
-        recalculateRow(row);
+        syncRowTotals(row);
     };
 
     const updateNewItemWarning = (row) => {
@@ -1317,7 +1363,7 @@ const setupGoodsReceiptLines = () => {
                     locationField.value = String(item.default_location_id);
                 }
 
-                recalculateRow(row);
+                syncRowTotals(row);
                 updateNewItemWarning(row);
                 hideCreateItem();
             },
@@ -1414,15 +1460,23 @@ const setupGoodsReceiptLines = () => {
             }
         });
 
-        [quantityField, unitsField].forEach((field) => {
-            field?.addEventListener('input', () => {
-                if (field === unitsField) {
-                    markAutofilled(unitsField, false);
-                }
+        quantityField?.addEventListener('input', () => {
+            recalculateBreakdownFromTotal(row);
+            updateNewItemWarning(row);
+        });
 
-                recalculateRow(row);
-                updateNewItemWarning(row);
-            });
+        unitsField?.addEventListener('input', () => {
+            markAutofilled(unitsField, false);
+            syncRowTotals(row);
+            updateNewItemWarning(row);
+        });
+
+        row.querySelector('[data-line-pallet-count]')?.addEventListener('input', () => {
+            recalculateTotalFromBreakdown(row);
+        });
+
+        peakFields(row).forEach((field) => {
+            field.addEventListener('input', () => recalculateTotalFromBreakdown(row));
         });
 
         [skuField, descriptionField].forEach((field) => {
@@ -1433,7 +1487,8 @@ const setupGoodsReceiptLines = () => {
         });
 
         row.dataset.rowBound = 'true';
-        recalculateRow(row);
+        row.querySelector('[data-add-peak]')?.toggleAttribute('disabled', peakFields(row).length >= 10);
+        syncRowTotals(row);
         updateNewItemWarning(row);
     };
 
@@ -1449,14 +1504,24 @@ const setupGoodsReceiptLines = () => {
             }
         });
 
-        recalculateRow(row);
+        syncRowTotals(row);
     };
 
+    let nextLineIndex = rows().reduce((highest, row) => {
+        const index = Number.parseInt(row.dataset.lineIndex ?? '', 10);
+
+        return Number.isFinite(index) ? Math.max(highest, index + 1) : highest;
+    }, rowCount());
+
     const addRow = () => {
-        const markup = template.innerHTML.replaceAll('__INDEX__', String(rowCount()));
-        container.insertAdjacentHTML('beforeend', markup);
-        bindRow(container.querySelectorAll('[data-line-row]')[rowCount() - 1]);
+        const markup = template.innerHTML.replaceAll('__INDEX__', String(nextLineIndex));
+        nextLineIndex += 1;
+        container.insertAdjacentHTML('afterbegin', markup);
+        const row = container.querySelector('[data-line-row]');
+        bindRow(row);
         renumberRows();
+        row?.querySelector('[data-autocomplete-input]')?.focus({ preventScroll: true });
+        row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
 
     addButtons.forEach((button) => {
@@ -1464,6 +1529,64 @@ const setupGoodsReceiptLines = () => {
     });
 
     container.addEventListener('click', (event) => {
+        const addPeakTrigger = event.target.closest('[data-add-peak]');
+
+        if (addPeakTrigger) {
+            const row = addPeakTrigger.closest('[data-line-row]');
+            const list = row?.querySelector('[data-line-peak-list]');
+            const currentPeaks = row ? peakFields(row) : [];
+
+            if (!row || !list || currentPeaks.length >= 10) {
+                return;
+            }
+
+            const usedPeakNumbers = new Set(currentPeaks.map((field) => Number.parseInt(
+                field.closest('[data-line-peak-entry]')?.dataset.peakNumber ?? '',
+                10,
+            )));
+            const peakNumber = Array.from({ length: 10 }, (_, index) => index + 1)
+                .find((number) => !usedPeakNumbers.has(number));
+            const lineIndex = row.dataset.lineIndex;
+
+            if (!peakNumber) {
+                return;
+            }
+            list.insertAdjacentHTML('beforeend', `
+                <div class="goods-receipt-peak-entry" data-line-peak-entry data-peak-number="${peakNumber}">
+                    <label for="line-${lineIndex}-peak-${peakNumber}">Pico ${peakNumber}</label>
+                    <input id="line-${lineIndex}-peak-${peakNumber}" type="number" min="1" step="1" name="lines[${lineIndex}][peak_${peakNumber}]" class="auth-input" inputmode="numeric" data-line-peak>
+                    <button type="button" class="button-secondary compact-button btn-table" data-remove-peak aria-label="Quitar pico ${peakNumber}">Quitar</button>
+                </div>
+            `);
+            const field = peakFields(row).at(-1);
+            field?.addEventListener('input', () => recalculateTotalFromBreakdown(row));
+            field?.focus();
+            addPeakTrigger.disabled = peakFields(row).length >= 10;
+            return;
+        }
+
+        const removePeakTrigger = event.target.closest('[data-remove-peak]');
+
+        if (removePeakTrigger) {
+            const row = removePeakTrigger.closest('[data-line-row]');
+            const entry = removePeakTrigger.closest('[data-line-peak-entry]');
+
+            if (!row || !entry) {
+                return;
+            }
+
+            if (peakFields(row).length === 1) {
+                const field = entry.querySelector('[data-line-peak]');
+                field.value = '';
+            } else {
+                entry.remove();
+            }
+
+            row.querySelector('[data-add-peak]')?.removeAttribute('disabled');
+            recalculateTotalFromBreakdown(row);
+            return;
+        }
+
         const trigger = event.target.closest('[data-remove-line]');
 
         if (!trigger) {

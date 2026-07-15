@@ -6,8 +6,10 @@ use App\Models\GoodsReceipt;
 use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Support\GoodsReceipts\DocumentDisplayNamer;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\URL;
 
 class ClientGoodsReceiptDocumentAvailableNotification extends Notification
 {
@@ -22,7 +24,7 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
     {
         // Anonymous (on-demand) notifiables are raw email addresses, not
         // platform users: they have no database notification inbox to write to.
-        $isAnonymous = $notifiable instanceof \Illuminate\Notifications\AnonymousNotifiable;
+        $isAnonymous = $notifiable instanceof AnonymousNotifiable;
 
         return array_values(array_filter($this->channels, function (string $channel) use ($notifiable, $isAnonymous): bool {
             if ($channel === 'mail') {
@@ -39,7 +41,13 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
     {
         $receipt = $this->receipt;
         $documentName = DocumentDisplayNamer::baseName($receipt);
-        $isAnonymous = $notifiable instanceof \Illuminate\Notifications\AnonymousNotifiable;
+        $isAnonymous = $notifiable instanceof AnonymousNotifiable;
+
+        $downloadUrl = URL::temporarySignedRoute(
+            'client-goods-receipts.signed-download',
+            now()->addDays(15),
+            ['goodsReceipt' => $receipt],
+        );
 
         $message = (new MailMessage)
             ->subject('Nuevo albarán disponible - Entrada #'.$receipt->id)
@@ -48,12 +56,12 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
             ->line('Cliente: '.($receipt->client?->name ?? ''))
             ->line('Proveedor: '.($receipt->supplier?->name ?: 'Sin proveedor'))
             ->line('Fecha de entrada: '.(optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente'))
-            ->line('Entrada: '.$documentName);
+            ->line('Entrada: '.$documentName)
+            ->action('Descargar albaran', $downloadUrl)
+            ->line('El enlace de descarga es privado y caduca en 15 dias.');
 
         if (! $isAnonymous) {
-            return $message
-                ->action('Ver ALBARANES', route('client-goods-receipts.index'))
-                ->line('Puedes consultarlo y descargarlo desde tu panel de cliente en "ALBARANES".');
+            return $message->line('Tambien puedes consultarlo desde tu panel de cliente en "ALBARANES".');
         }
 
         // External recipients are not WMS users, so a login-gated portal link
