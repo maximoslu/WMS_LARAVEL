@@ -2621,3 +2621,57 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, Google Calendar, facturacion ni datos de produccion.
 - No se uso `migrate:fresh`, no se borro stock/historico, no se hizo force push y no se ejecuto `--apply` fuera de la base efimera de tests.
 - `.claude/` permanece sin trackear y fuera del commit funcional.
+
+---
+
+## 2026-07-15 - Cierre definitivo de ubicaciones EDELVIVES / NAVE 38 (15:08 +02:00)
+
+**Equipo:** PC del trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit inicial:** `799945bb docs: record location and receipt hardening`.
+**Commit funcional:** `dcfaa45 fix: finalize nave 38 location deduplication`.
+**Produccion:** no se modifico ni se ejecuto `--apply`; queda pendiente el dry-run en Forge y la confirmacion explicita del usuario.
+
+### Diagnostico local real
+- `php artisan wms:locations:audit --client=EDELVIVES --warehouse="NAVE 38"` se ejecuto en modo de solo lectura.
+- Resultado local: **0 grupos duplicados**, **0 ubicaciones faltantes**, **2 extras conservados** (`FONDO` y `SIN UBICACION`) y **178 partidas de stock** mapeadas.
+- `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --dry-run` confirmo: `0 grupo(s) duplicado(s), 0 ubicacion(es) por crear`; no modifico ningun dato.
+- La cantidad real de duplicados de produccion sigue siendo desconocida hasta ejecutar el comando audit/dry-run en Forge.
+- Las FK reales auditadas son `stock_pallets.location_id`, `goods_receipt_lines.location_id` e `items.default_location_id`. Salidas, allocations, pedidos y operaciones diarias no tienen `location_id` en el esquema actual; conservan ubicaciones historicas en texto.
+
+### Reparacion segura e idempotente
+- Nuevo comando de auditoria `wms:locations:audit`, siempre de solo lectura, que muestra grupos por codigo normalizado, IDs, canonica propuesta, referencias, faltantes, extras y mapa de stock con item/SKU, lote, ubicacion, unidades, pallets, picos, pallets de almacen y estado activo.
+- `wms:locations:deduplicate` mantiene dry-run por defecto. Con `--apply`, una unica transaccion bloquea ubicaciones, reasigna todas las FK, comprueba referencias, elimina solo duplicadas ya libres y crea las calles esperadas `0-45` y `A-F` que falten.
+- Antes y despues del apply se compara una fotografia logica completa de cada partida. Si cambia item, lote, cantidades, desglose, estado, metadatos o ubicacion normalizada, se lanza error y se revierte toda la transaccion.
+- La ubicacion canonica se elige priorizando activa, codigo ya normalizado y menor ID. Los extras se informan y se conservan; nunca se eliminan ni desactivan.
+- Una segunda ejecucion `--apply` no hace cambios. Las pruebas cubren expresamente `5`, ` 5 ` y `05`, stock en las tres, lote, entradas, articulo por defecto, serie esperada, extras e idempotencia.
+
+### Prevencion y selector
+- `LocationCode` centraliza trim, mayusculas y normalizacion numerica; el modelo normaliza antes de guardar y el indice unico existente `warehouse_id + code` actua sobre el valor ya canonico.
+- La validacion existente impide crear ` 06 ` cuando ya existe `6`; el importador EDELVIVES sigue cubierto para reutilizar `06` historico sin crear otra ubicacion.
+- Entradas y autocomplete muestran solo ubicaciones activas/canonicas, eliminan variantes normalizadas y ordenan naturalmente `0, 1, 2, ... 45, A ... F`.
+- La etiqueta de NAVE 38 queda como `NAVE 38 - Calle {codigo}`. El test de interfaz comprueba `1, 2, 10` y que `02` no aparece duplicado.
+
+### Validacion
+- `php artisan optimize:clear`: OK en config, cache, compiled, events, routes y views.
+- Suite completa `php artisan test`: **580 passed** (2894 assertions).
+- Test especifico del importador EDELVIVES con ubicacion `06`: **1 passed** (4 assertions).
+- `npm run build`: OK (`vite build`, 55 modulos transformados).
+- `php artisan migrate:status`: todas las migraciones locales `Ran`; este cambio no anade migraciones.
+- Pint y `git diff --check`: OK.
+
+### Forge pendiente
+1. Desplegar `origin/main` y confirmar `dcfaa45` o posterior.
+2. Ejecutar `php artisan migrate --force` (este cambio no incorpora migraciones nuevas).
+3. Ejecutar `php artisan optimize:clear` y `php artisan queue:restart`.
+4. Ejecutar primero `php artisan wms:locations:audit --client=EDELVIVES --warehouse="NAVE 38"` y guardar el informe completo.
+5. Ejecutar despues `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --dry-run` y revisar canonicas, IDs, referencias, faltantes y extras.
+6. No ejecutar `--apply` en produccion hasta mostrar ambos resultados y recibir confirmacion explicita.
+7. Tras la confirmacion, ejecutar una sola vez `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --apply`; repetir audit y dry-run para confirmar cero cambios pendientes.
+8. Validar manualmente una unica calle 5/6/7, orden natural, una entrada en NAVE 38 y la ubicacion resultante en stock.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, migraciones, Google Calendar, facturacion ni datos de produccion.
+- No se uso `migrate:fresh`, no se borro stock ni historico, no se hizo force push y no se ejecuto `--apply` fuera de la base efimera de tests.
+- `.claude/` permanece sin trackear y fuera del commit.
