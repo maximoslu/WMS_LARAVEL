@@ -8,8 +8,9 @@ use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\Supplier;
-use App\Support\Stock\StockVariantCatalog;
 use App\Models\User;
+use App\Services\Locations\LocationIntegrityService;
+use App\Support\Stock\StockVariantCatalog;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -183,7 +184,7 @@ class AjaxSearchController extends Controller
         return response()->json(['data' => $clients]);
     }
 
-    public function locations(Request $request): JsonResponse
+    public function locations(Request $request, LocationIntegrityService $integrity): JsonResponse
     {
         abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
 
@@ -194,22 +195,21 @@ class AjaxSearchController extends Controller
 
         $query = trim((string) ($validated['q'] ?? ''));
 
-        if (mb_strlen($query) < 2) {
+        if (mb_strlen($query) < 1) {
             return response()->json(['data' => []]);
         }
 
-        $locations = Location::query()
+        $locations = $integrity->canonicalActiveLocations(Location::query()
             ->with('warehouse')
             ->where('active', true)
             ->where('code', 'like', '%'.$query.'%')
-            ->orderBy('code')
-            ->limit((int) ($validated['limit'] ?? 10))
-            ->get()
+            ->get())
+            ->take((int) ($validated['limit'] ?? 10))
             ->map(fn (Location $location): array => [
                 'id' => $location->id,
-                'label' => $location->code,
+                'label' => $location->displayLabel(),
                 'value' => $location->code,
-                'meta' => $location->warehouse?->code ?: 'Sin almacen',
+                'meta' => 'Codigo '.$location->code,
             ])
             ->values()
             ->all();

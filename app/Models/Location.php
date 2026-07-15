@@ -59,4 +59,19 @@ class Location extends Model
     {
         return $this->hasMany(GoodsReceiptLine::class);
     }
+
+    public function displayLabel(): string
+    {
+        $code = LocationCode::normalize($this->code);
+        $warehouseName = trim((string) ($this->warehouse?->name ?: $this->warehouse?->code));
+        $warehouseIdentity = LocationCode::normalize(($this->warehouse?->code ?? '').' '.$warehouseName);
+
+        if (preg_match('/(^|\s)(NAVE\s*)?38($|\s)/u', $warehouseIdentity) === 1) {
+            return 'NAVE 38 - Calle '.$code;
+        }
+
+        return $warehouseName !== ''
+            ? $warehouseName.' - Ubicacion '.$code
+            : 'Ubicacion '.$code;
+    }
 }

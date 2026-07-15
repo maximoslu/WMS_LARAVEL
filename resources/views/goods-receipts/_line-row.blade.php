@@ -200,7 +200,7 @@
                 <option value="">Sin ubicacion</option>
                 @foreach ($locations as $location)
                     <option value="{{ $location->id }}" @selected((string) ($row['location_id'] ?? null) === (string) $location->id)>
-                        {{ $location->code }}{{ $location->warehouse ? ' / '.$location->warehouse->code : '' }}
+                        {{ $location->displayLabel() }}
                     </option>
                 @endforeach
             </select>

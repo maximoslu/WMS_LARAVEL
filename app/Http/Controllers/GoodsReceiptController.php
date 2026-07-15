@@ -22,10 +22,12 @@ use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Services\GoodsReceipts\GoodsReceiptStockApplicationService;
 use App\Services\GoodsReceipts\GoodsReceiptSupplierResolver;
+use App\Services\Locations\LocationIntegrityService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -44,6 +46,7 @@ class GoodsReceiptController extends Controller
         private readonly GoodsReceiptDocumentStorage $documentStorage,
         private readonly GoodsReceiptStockApplicationService $stockApplicationService,
         private readonly GoodsReceiptDocumentNotificationService $documentNotificationService,
+        private readonly LocationIntegrityService $locationIntegrityService,
     ) {}
 
     public function index(Request $request): View
@@ -251,7 +254,7 @@ class GoodsReceiptController extends Controller
 
         return view('goods-receipts.show', [
             'receipt' => $goodsReceipt,
-            'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
+            'locations' => $this->locationOptions(),
             'suppliers' => Supplier::query()
                 ->where('active', true)
                 ->where(function ($query) use ($goodsReceipt): void {
@@ -511,11 +514,19 @@ class GoodsReceiptController extends Controller
             'receipt' => $receipt,
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('active', true)->orderBy('name')->get(),
-            'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
+            'locations' => $this->locationOptions(),
             'lineValues' => $this->lineValues($request, $receipt),
             'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ];
+    }
+
+    /** @return Collection<int, Location> */
+    private function locationOptions(): Collection
+    {
+        return $this->locationIntegrityService->canonicalActiveLocations(
+            Location::query()->where('active', true)->with('warehouse')->get(),
+        );
     }
 
     /**

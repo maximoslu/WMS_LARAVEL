@@ -18,6 +18,7 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Tests\TestCase;
@@ -183,6 +184,50 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('Crear borrador e interpretar con IA')
             ->assertSee('Cami&oacute;n propio', false)
             ->assertSee('Si vas a interpretar un albaran con IA, puedes dejar las lineas vacias.');
+    }
+
+    public function test_goods_receipt_location_selector_is_canonical_and_naturally_sorted(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+
+        foreach (['1', '10', '2'] as $code) {
+            Location::factory()->create([
+                'warehouse_id' => $warehouse->id,
+                'code' => $code,
+                'name' => 'Calle '.$code,
+            ]);
+        }
+
+        $duplicateId = DB::table('locations')->insertGetId([
+            'warehouse_id' => $warehouse->id,
+            'code' => '02',
+            'name' => 'Duplicada',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $content = $this->actingAs($user)
+            ->get(route('goods-receipts.create'))
+            ->assertOk()
+            ->assertDontSee('value="'.$duplicateId.'"', false)
+            ->getContent();
+
+        $position1 = strpos($content, 'NAVE 38 - Calle 1');
+        $position2 = strpos($content, 'NAVE 38 - Calle 2');
+        $position10 = strpos($content, 'NAVE 38 - Calle 10');
+
+        $this->assertNotFalse($position1);
+        $this->assertNotFalse($position2);
+        $this->assertNotFalse($position10);
+        $this->assertTrue($position1 < $position2 && $position2 < $position10);
     }
 
     public function test_detalle_borrador_con_ia_desactivada_permite_edicion_manual_desde_la_misma_pantalla(): void

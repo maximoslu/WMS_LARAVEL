@@ -12,6 +12,7 @@ use App\Models\Warehouse;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AjaxSearchTest extends TestCase
@@ -193,8 +194,38 @@ class AjaxSearchTest extends TestCase
             ->assertOk()
             ->assertJsonFragment([
                 'id' => $location->id,
-                'label' => 'A1-TEST',
+                'label' => $warehouse->name.' - Ubicacion A1-TEST',
             ]);
+    }
+
+    public function test_locations_endpoint_deduplicates_normalized_codes_and_sorts_naturally(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $warehouse = Warehouse::factory()->create(['code' => '38', 'name' => 'NAVE 38']);
+        $locations = collect(['1', '10', '11'])->mapWithKeys(fn (string $code): array => [
+            $code => Location::factory()->create([
+                'warehouse_id' => $warehouse->id,
+                'code' => $code,
+            ]),
+        ]);
+        DB::table('locations')->insert([
+            'warehouse_id' => $warehouse->id,
+            'code' => '01',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $data = $this->actingAs($user)
+            ->getJson(route('ajax.locations', ['q' => '1']))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame(['1', '10', '11'], collect($data)->pluck('value')->all());
+        $this->assertSame($locations->pluck('id')->values()->all(), collect($data)->pluck('id')->all());
+        $this->assertSame('NAVE 38 - Calle 1', $data[0]['label']);
     }
 
     public function test_suppliers_endpoint_finds_matches_scoped_to_client_and_global(): void
