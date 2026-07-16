@@ -1267,7 +1267,7 @@ class GoodsDispatchManagementTest extends TestCase
         );
     }
 
-    public function test_cliente_no_recibe_email_al_confirmar_carga_real(): void
+    public function test_confirmar_carga_real_no_envia_email_y_no_notifica_al_actor(): void
     {
         Notification::fake();
         $this->seedBaseData();
@@ -1276,6 +1276,7 @@ class GoodsDispatchManagementTest extends TestCase
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
         $cliente->update(['email' => 'cliente@friesland.test']);
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
         $dispatch = GoodsDispatch::factory()->create([
             'client_id' => $client->id,
             'status' => GoodsDispatch::STATUS_PREPARING,
@@ -1291,7 +1292,9 @@ class GoodsDispatchManagementTest extends TestCase
         (new ProcessGoodsDispatchLoadingConfirmedNotificationsJob($dispatch->id, $almacen->id))
             ->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentTo($almacen, InternalGoodsDispatchLoadingConfirmedNotification::class);
+        Notification::assertNotSentTo($almacen, InternalGoodsDispatchLoadingConfirmedNotification::class);
+        Notification::assertSentTo($administracion, InternalGoodsDispatchLoadingConfirmedNotification::class, fn ($notification, array $channels): bool => $channels === ['database']);
+        Notification::assertNotSentTo($administracion, InternalGoodsDispatchLoadingConfirmedNotification::class, fn ($notification, array $channels): bool => $channels === ['mail']);
         Notification::assertNotSentTo($cliente, InternalGoodsDispatchLoadingConfirmedNotification::class);
         Notification::assertNotSentTo($cliente, CustomerDispatchDeliveryNoteNotification::class);
         Notification::assertNotSentTo($cliente, CustomerMerchandiseRequestStatusChangedNotification::class);

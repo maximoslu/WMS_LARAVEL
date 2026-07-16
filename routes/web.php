@@ -84,13 +84,10 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/notificaciones/{notification}/leer', [NotificationController::class, 'markAsRead'])
         ->name('notifications.read');
     Route::post('/notificaciones/marcar-todas-leidas', [NotificationController::class, 'markAllAsRead'])
-        ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('notifications.read-all');
     Route::delete('/notificaciones/no-leidas', [NotificationController::class, 'destroyAllUnread'])
-        ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('notifications.destroy-unread');
     Route::delete('/notificaciones/todas', [NotificationController::class, 'destroyAll'])
-        ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('notifications.destroy-all');
 
     Route::get('/articulos', [ItemController::class, 'index'])

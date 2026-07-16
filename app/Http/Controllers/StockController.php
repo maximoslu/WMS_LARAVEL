@@ -7,6 +7,7 @@ use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Services\Stock\StockExportService;
+use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use App\Support\Stock\StockOverviewBuilder;
@@ -100,11 +101,11 @@ class StockController extends Controller
 
         return view('stock.edit', [
             'stockPallet' => $stockPallet,
-            'locations' => Location::query()
-                ->where('active', true)
-                ->with('warehouse')
-                ->orderBy('code')
-                ->get(),
+            'locations' => LocationCode::applyNaturalOrder(
+                Location::query()
+                    ->where('active', true)
+                    ->with('warehouse')
+            )->get(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }

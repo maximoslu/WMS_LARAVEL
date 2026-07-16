@@ -15,7 +15,7 @@ class InternalGoodsDispatchLoadingConfirmedNotification extends Notification
     public function __construct(
         private readonly GoodsDispatch $dispatch,
         private readonly User $confirmedBy,
-        private readonly array $channels = ['database', 'mail'],
+        private readonly array $channels = ['database'],
     ) {}
 
     public function via(object $notifiable): array

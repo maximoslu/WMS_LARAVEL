@@ -13,7 +13,7 @@ class InternalBookingSubmittedNotification extends Notification
 
     public function __construct(
         private readonly Booking $booking,
-        private readonly array $channels = ['database', 'mail'],
+        private readonly array $channels = ['database'],
     ) {}
 
     public function via(object $notifiable): array

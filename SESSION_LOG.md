@@ -2715,3 +2715,56 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Queda pendiente desplegar/verificar en Forge cuando el usuario lo indique.
 - En produccion, ejecutar primero `php artisan wms:warehouses:deduplicate --client=EDELVIVES --warehouse-code=38 --dry-run` y revisar el informe antes de cualquier `--apply`.
 - No ejecutar `--apply` en produccion sin confirmacion explicita tras ver IDs, referencias y canonico propuesto.
+
+---
+
+## 2026-07-16 - Notificaciones propias, orden natural y reduccion de emails (15:10 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit base:** `676fce31 fix: deduplicate warehouses and canonicalize locations`.
+
+### Diagnostico
+- Usuario `ALMACEN` veia la bandeja de notificaciones, pero no tenia botones de gestion propia porque las rutas bulk seguian protegidas por `minimum.role:SUPERADMIN` y la vista solo pintaba acciones para superadmin.
+- El listado de `Ubicaciones` seguia usando `orderBy('code')`, por eso NAVE 38 podia salir `0, 1, 10, 11...` en vez de orden natural.
+- Booking seguia enviando emails internos al crear booking y emails al cliente en cambios de estado. Confirmar carga real enviaba notificacion interna y mail, incluyendo potencialmente al actor.
+
+### Cambios funcionales
+- `NotificationController` separa alcance global y alcance propio:
+  - superadmin mantiene acciones globales sobre todos los usuarios;
+  - almacen, administracion y cliente gestionan solo sus propias notificaciones.
+- La vista de notificaciones muestra:
+  - superadmin: `Marcar todas como leidas`, `Eliminar no leidas`, `Eliminar todas`;
+  - resto de roles: `Marcar mis notificaciones como leidas`, `Eliminar mis no leidas`, `Eliminar mis notificaciones`.
+- Se elimino el middleware superadmin de las rutas bulk y el controlador aplica el scope correcto por usuario.
+- `LocationCode::applyNaturalOrder()` centraliza orden compatible SQLite/MySQL para codigos numericos antes que alfabeticos.
+- Orden natural aplicado en listado de ubicaciones, selectores de articulos, selector de editar stock, servicios de auditoria/dry-run de ubicaciones y almacenes.
+- Booking queda como notificacion de base de datos, sin emails por alta o cambios de estado.
+- Confirmar carga real queda como notificacion interna de base de datos, sin email y excluyendo al usuario que confirma.
+- Se conserva email en eventos importantes: nuevo pedido de cliente, albaran de salida, albaran de entrada/documento, password reset y flujos Brevo de acceso.
+
+### Auditoria de eventos
+| Evento | Notificacion interna | Email | Destinatarios |
+| --- | --- | --- | --- |
+| Nuevo pedido cliente | Si, database | Si | Internos activos almacen/administracion/superadmin con email valido; cliente solicitante recibe confirmacion |
+| Cambio intermedio de pedido | Cliente database | No | Usuario cliente propietario |
+| Generar/preparar salida | Cliente database de estado | No | Usuario cliente propietario |
+| Confirmar carga real | Si, database | No | Internos activos salvo el actor que confirma |
+| Cambiar transporte | No | No | Ninguno |
+| Booking nuevo | Si, database | No | Internos activos |
+| Booking cambio estado | Cliente database | No | Usuario cliente solicitante |
+| Albaran de salida enviado | Cliente database | Si | Usuarios cliente validos y emails adicionales no duplicados |
+| Albaran de entrada/documento | Cliente database | Si | Usuarios cliente validos y emails adicionales no duplicados |
+| Password reset / acceso | Segun flujo existente | Si | Destinatario del flujo Brevo |
+
+### Tests y validacion
+- Tests focalizados de notificaciones, ubicaciones, booking, pedidos y salidas: **58 passed**.
+- Suite completa `php artisan test`: **586 passed** (2979 assertions).
+- `npm run build`: OK (`vite build`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Control de alcance
+- No se tocaron `.env`, secretos, migraciones, datos, Google Calendar, importacion de stock ni facturacion.
+- No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
+- `.claude/` permanece sin trackear y fuera del commit.

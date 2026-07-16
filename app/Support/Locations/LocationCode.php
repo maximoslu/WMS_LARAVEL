@@ -2,6 +2,9 @@
 
 namespace App\Support\Locations;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
+
 final class LocationCode
 {
     public static function normalize(mixed $value): string
@@ -41,5 +44,23 @@ final class LocationCode
         }
 
         return [2, 0, $code];
+    }
+
+    public static function applyNaturalOrder(Builder $query, string $column = 'code'): Builder
+    {
+        $wrapped = DB::getQueryGrammar()->wrap($column);
+        $driver = DB::connection()->getDriverName();
+
+        if ($driver === 'sqlite') {
+            return $query
+                ->orderByRaw("CASE WHEN {$wrapped} GLOB '[0-9]*' AND {$wrapped} NOT GLOB '*[^0-9]*' THEN 0 ELSE 1 END")
+                ->orderByRaw("CASE WHEN {$wrapped} GLOB '[0-9]*' AND {$wrapped} NOT GLOB '*[^0-9]*' THEN CAST({$wrapped} AS INTEGER) ELSE NULL END")
+                ->orderBy($column);
+        }
+
+        return $query
+            ->orderByRaw("CASE WHEN {$wrapped} REGEXP '^[0-9]+$' THEN 0 ELSE 1 END")
+            ->orderByRaw("CASE WHEN {$wrapped} REGEXP '^[0-9]+$' THEN CAST({$wrapped} AS UNSIGNED) ELSE NULL END")
+            ->orderBy($column);
     }
 }

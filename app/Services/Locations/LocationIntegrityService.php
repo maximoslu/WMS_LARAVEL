@@ -64,10 +64,12 @@ class LocationIntegrityService
             })
             ->pluck('id');
 
-        return Location::query()
+        $query = Location::query()
             ->with('warehouse.client')
             ->whereIn('warehouse_id', $warehouseIds)
-            ->orderBy('warehouse_id')
+            ->orderBy('warehouse_id');
+
+        return LocationCode::applyNaturalOrder($query)
             ->orderBy('id')
             ->get();
     }

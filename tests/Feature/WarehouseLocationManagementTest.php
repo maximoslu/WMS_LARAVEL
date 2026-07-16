@@ -10,6 +10,7 @@ use App\Models\Warehouse;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class WarehouseLocationManagementTest extends TestCase
@@ -217,6 +218,59 @@ class WarehouseLocationManagementTest extends TestCase
             ->assertSessionHasErrors('code');
 
         $this->assertSame(1, Location::query()->where('warehouse_id', $warehouse->id)->count());
+    }
+
+    public function test_nave_38_locations_index_uses_natural_order_and_canonical_warehouse_filter(): void
+    {
+        $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+
+        foreach (['10', '0', 'F', '2', 'A', '11', '1'] as $code) {
+            Location::factory()->create([
+                'warehouse_id' => $warehouse->id,
+                'code' => $code,
+                'active' => true,
+            ]);
+        }
+
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '038',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        DB::table('locations')->insert([
+            'warehouse_id' => $duplicateWarehouse->id,
+            'code' => '02',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $content = $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->get(route('locations.index', ['warehouse_id' => $warehouse->id]))
+            ->assertOk()
+            ->assertSee('NAVE 38')
+            ->assertDontSee('value="'.$duplicateWarehouse->id.'"', false)
+            ->getContent();
+
+        $positions = collect(['0', '1', '2', '10', '11', 'A', 'F'])
+            ->mapWithKeys(fn (string $code): array => [$code => strpos($content, '<td><strong>'.$code.'</strong></td>')]);
+
+        $positions->each(fn ($position) => $this->assertNotFalse($position));
+
+        $this->assertTrue(
+            $positions['0'] < $positions['1']
+            && $positions['1'] < $positions['2']
+            && $positions['2'] < $positions['10']
+            && $positions['10'] < $positions['11']
+            && $positions['11'] < $positions['A']
+            && $positions['A'] < $positions['F']
+        );
     }
 
     private function seedBaseData(): void

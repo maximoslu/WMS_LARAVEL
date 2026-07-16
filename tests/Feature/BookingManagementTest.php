@@ -485,7 +485,7 @@ class BookingManagementTest extends TestCase
         Notification::assertSentTo($superadmin, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
     }
 
-    public function test_booking_creation_attempts_email_for_internal_users_with_valid_email(): void
+    public function test_booking_creation_does_not_email_internal_users(): void
     {
         Notification::fake();
         [$client] = $this->seedBaseData();
@@ -496,10 +496,11 @@ class BookingManagementTest extends TestCase
 
         app(BookingNotificationService::class)->deliverSubmittedNotifications($booking);
 
-        Notification::assertSentTo($almacen, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+        Notification::assertNotSentTo($almacen, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+        Notification::assertSentTo($almacen, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
     }
 
-    public function test_internal_booking_email_is_only_sent_to_valid_internal_addresses(): void
+    public function test_internal_booking_notification_stays_database_only_even_with_invalid_email(): void
     {
         Notification::fake();
         [$client] = $this->seedBaseData();
@@ -512,12 +513,13 @@ class BookingManagementTest extends TestCase
 
         app(BookingNotificationService::class)->deliverSubmittedNotifications($booking);
 
-        Notification::assertSentTo($first, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+        Notification::assertNotSentTo($first, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
         Notification::assertNotSentTo($second, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+        Notification::assertSentTo($first, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
         Notification::assertSentTo($second, InternalBookingSubmittedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
     }
 
-    public function test_cliente_receives_database_and_email_notification_when_status_changes(): void
+    public function test_cliente_receives_database_notification_only_when_booking_status_changes(): void
     {
         Notification::fake();
         [$client] = $this->seedBaseData();
@@ -531,7 +533,7 @@ class BookingManagementTest extends TestCase
         app(BookingNotificationService::class)->deliverStatusChangedNotifications($booking, Booking::STATUS_REQUESTED);
 
         Notification::assertSentTo($cliente, CustomerBookingStatusChangedNotification::class, fn ($notification, array $channels) => $channels === ['database']);
-        Notification::assertSentTo($cliente, CustomerBookingStatusChangedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
+        Notification::assertNotSentTo($cliente, CustomerBookingStatusChangedNotification::class, fn ($notification, array $channels) => $channels === ['mail']);
     }
 
     public function test_booking_routes_have_expected_permissions(): void

@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateItemRequest;
 use App\Models\Client;
 use App\Models\Item;
 use App\Models\Location;
+use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,7 +60,7 @@ class ItemController extends Controller
                 'active' => true,
             ]),
             'clients' => Client::query()->orderBy('name')->get(),
-            'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
+            'locations' => $this->locationOptions(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -78,7 +79,7 @@ class ItemController extends Controller
         return view('items.edit', [
             'item' => $item,
             'clients' => Client::query()->orderBy('name')->get(),
-            'locations' => Location::query()->where('active', true)->with('warehouse')->orderBy('code')->get(),
+            'locations' => $this->locationOptions(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -122,5 +123,12 @@ class ItemController extends Controller
             'default_location_id' => $validated['default_location_id'] ?? null,
             'active' => $validated['status'] === Item::STATUS_ACTIVE,
         ];
+    }
+
+    private function locationOptions()
+    {
+        return LocationCode::applyNaturalOrder(
+            Location::query()->where('active', true)->with('warehouse')
+        )->get();
     }
 }

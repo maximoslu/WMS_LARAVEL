@@ -15,64 +15,66 @@
     <x-breadcrumbs :items="$breadcrumbs" />
 
     <section class="surface-card ops-page-header page-header-compact compact-card">
+        @php
+            $notificationUser = auth()->user();
+            $isSuperAdmin = $notificationUser?->isSuperAdmin();
+        @endphp
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">Notificaciones</h2>
             <span class="ops-page-meta">{{ $notifications->total() }} registros</span>
-            @if (auth()->user()?->isSuperAdmin())
+            @if ($isSuperAdmin)
                 <span class="ops-page-meta">Como superadmin puedes marcar como leidas las notificaciones de todos los usuarios.</span>
             @endif
         </div>
 
-        @if (auth()->user()?->isSuperAdmin())
-            <div class="ops-page-actions page-actions-compact action-buttons notification-admin-actions">
-                <form
-                    method="POST"
-                    action="{{ route('notifications.read-all') }}"
-                    onsubmit="return confirm('Vas a marcar como leidas TODAS las notificaciones de TODOS los usuarios. Esta accion no borra nada. Continuar?');"
+        <div class="ops-page-actions page-actions-compact action-buttons notification-admin-actions">
+            <form
+                method="POST"
+                action="{{ route('notifications.read-all') }}"
+                onsubmit="return confirm('{{ $isSuperAdmin ? 'Vas a marcar como leidas TODAS las notificaciones de TODOS los usuarios. Esta accion no borra nada. Continuar?' : 'Vas a marcar tus notificaciones como leidas. Continuar?' }}');"
+            >
+                @csrf
+                <button
+                    type="submit"
+                    class="button-secondary compact-button btn-compact"
+                    aria-label="{{ $isSuperAdmin ? 'Marcar todas las notificaciones de todos los usuarios como leidas' : 'Marcar mis notificaciones como leidas' }}"
                 >
-                    @csrf
-                    <button
-                        type="submit"
-                        class="button-secondary compact-button btn-compact"
-                        aria-label="Marcar todas las notificaciones de todos los usuarios como leidas"
-                    >
-                        Marcar todas como leidas
-                    </button>
-                </form>
+                    {{ $isSuperAdmin ? 'Marcar todas como leidas' : 'Marcar mis notificaciones como leidas' }}
+                </button>
+            </form>
 
-                <form
-                    method="POST"
-                    action="{{ route('notifications.destroy-unread') }}"
-                    onsubmit="return confirm('Esto eliminara todas las notificaciones no leidas de todos los usuarios. Continuar?');"
+            <form
+                method="POST"
+                action="{{ route('notifications.destroy-unread') }}"
+                onsubmit="return confirm('{{ $isSuperAdmin ? 'Esto eliminara todas las notificaciones no leidas de todos los usuarios. Continuar?' : 'Esto eliminara tus notificaciones no leidas. Continuar?' }}');"
+            >
+                @csrf
+                @method('DELETE')
+                <button
+                    type="submit"
+                    class="button-secondary compact-button btn-compact notification-danger-btn"
+                    aria-label="{{ $isSuperAdmin ? 'Eliminar todas las notificaciones no leidas de todos los usuarios' : 'Eliminar mis notificaciones no leidas' }}"
                 >
-                    @csrf
-                    @method('DELETE')
-                    <button
-                        type="submit"
-                        class="button-secondary compact-button btn-compact notification-danger-btn"
-                        aria-label="Eliminar todas las notificaciones no leidas de todos los usuarios"
-                    >
-                        Eliminar no leidas
-                    </button>
-                </form>
+                    {{ $isSuperAdmin ? 'Eliminar no leidas' : 'Eliminar mis no leidas' }}
+                </button>
+            </form>
 
-                <form
-                    method="POST"
-                    action="{{ route('notifications.destroy-all') }}"
-                    onsubmit="return confirm('Esto eliminara TODAS las notificaciones de TODOS los usuarios. Esta accion no se puede deshacer. Continuar?');"
+            <form
+                method="POST"
+                action="{{ route('notifications.destroy-all') }}"
+                onsubmit="return confirm('{{ $isSuperAdmin ? 'Esto eliminara TODAS las notificaciones de TODOS los usuarios. Esta accion no se puede deshacer. Continuar?' : 'Esto eliminara tus notificaciones. Continuar?' }}');"
+            >
+                @csrf
+                @method('DELETE')
+                <button
+                    type="submit"
+                    class="button-secondary compact-button btn-compact notification-danger-btn"
+                    aria-label="{{ $isSuperAdmin ? 'Eliminar todas las notificaciones de todos los usuarios' : 'Eliminar mis notificaciones' }}"
                 >
-                    @csrf
-                    @method('DELETE')
-                    <button
-                        type="submit"
-                        class="button-secondary compact-button btn-compact notification-danger-btn"
-                        aria-label="Eliminar todas las notificaciones de todos los usuarios"
-                    >
-                        Eliminar todas
-                    </button>
-                </form>
-            </div>
-        @endif
+                    {{ $isSuperAdmin ? 'Eliminar todas' : 'Eliminar mis notificaciones' }}
+                </button>
+            </form>
+        </div>
     </section>
 
     @if (session('status'))
@@ -103,7 +105,6 @@
         @endif
     @endif
 @endsection
-
 
 
 

@@ -98,6 +98,45 @@ class MerchandiseRequestNotificationTest extends TestCase
         }
     }
 
+    public function test_nuevo_pedido_envia_email_interno_una_vez_por_destinatario_valido(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $superadmin->update(['email' => 'email-invalido']);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 500,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'lot' => $item->lot,
+            'units_per_pallet' => $item->units_per_pallet,
+            'requested_pallets' => 2,
+            'requested_units' => 1000,
+        ]);
+
+        app(MerchandiseRequestNotificationService::class)->deliverSubmittedNotifications($merchandiseRequest);
+
+        foreach ([$almacen, $administracion, $superadmin] as $internalUser) {
+            Notification::assertSentTo($internalUser, InternalMerchandiseRequestSubmittedNotification::class, fn ($notification, array $channels): bool => $channels === ['database']);
+        }
+
+        Notification::assertSentTo($almacen, InternalMerchandiseRequestSubmittedNotification::class, fn ($notification, array $channels): bool => $channels === ['mail']);
+        Notification::assertSentTo($administracion, InternalMerchandiseRequestSubmittedNotification::class, fn ($notification, array $channels): bool => $channels === ['mail']);
+        Notification::assertNotSentTo($superadmin, InternalMerchandiseRequestSubmittedNotification::class, fn ($notification, array $channels): bool => $channels === ['mail']);
+    }
+
     public function test_internal_new_order_email_subject_contains_edelvives_and_request_code(): void
     {
         $this->assertInternalOrderSubject('EDELVIVES');

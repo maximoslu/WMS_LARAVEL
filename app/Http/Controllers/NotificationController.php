@@ -36,21 +36,22 @@ class NotificationController extends Controller
         return back()->with('status', 'Notificacion marcada como leida.');
     }
 
-    /**
-     * Marca como leidas TODAS las notificaciones no leidas de TODOS los usuarios.
-     * Accion reservada a superadmin. No borra ni oculta registros: solo fija read_at.
-     */
     public function markAllAsRead(Request $request): RedirectResponse
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403);
+        $user = $request->user();
+        abort_unless($user !== null, 403);
 
         $now = now();
-        $count = DB::table('notifications')
+        $query = DB::table('notifications')
             ->whereNull('read_at')
-            ->update([
-                'read_at' => $now,
-                'updated_at' => $now,
-            ]);
+            ->when(! $user->isSuperAdmin(), fn ($query) => $query
+                ->where('notifiable_type', $user->getMorphClass())
+                ->where('notifiable_id', $user->id));
+
+        $count = $query->update([
+            'read_at' => $now,
+            'updated_at' => $now,
+        ]);
 
         $message = $count > 0
             ? 'Se han marcado '.$count.' notificaciones como leidas.'
@@ -59,17 +60,18 @@ class NotificationController extends Controller
         return back()->with('status', $message);
     }
 
-    /**
-     * Elimina TODAS las notificaciones no leidas de TODOS los usuarios.
-     * Accion reservada a superadmin. No borra usuarios ni datos relacionados.
-     */
     public function destroyAllUnread(Request $request): RedirectResponse
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403);
+        $user = $request->user();
+        abort_unless($user !== null, 403);
 
-        $count = DB::table('notifications')
+        $query = DB::table('notifications')
             ->whereNull('read_at')
-            ->delete();
+            ->when(! $user->isSuperAdmin(), fn ($query) => $query
+                ->where('notifiable_type', $user->getMorphClass())
+                ->where('notifiable_id', $user->id));
+
+        $count = $query->delete();
 
         $message = $count > 0
             ? 'Se han eliminado '.$count.' notificaciones no leidas.'
@@ -78,15 +80,17 @@ class NotificationController extends Controller
         return back()->with('status', $message);
     }
 
-    /**
-     * Elimina TODAS las notificaciones de TODOS los usuarios.
-     * Accion reservada a superadmin. No borra usuarios ni datos relacionados.
-     */
     public function destroyAll(Request $request): RedirectResponse
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403);
+        $user = $request->user();
+        abort_unless($user !== null, 403);
 
-        $count = DB::table('notifications')->delete();
+        $query = DB::table('notifications')
+            ->when(! $user->isSuperAdmin(), fn ($query) => $query
+                ->where('notifiable_type', $user->getMorphClass())
+                ->where('notifiable_id', $user->id));
+
+        $count = $query->delete();
 
         $message = $count > 0
             ? 'Se han eliminado '.$count.' notificaciones.'

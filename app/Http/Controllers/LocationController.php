@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateLocationRequest;
 use App\Models\Location;
 use App\Models\Warehouse;
 use App\Services\Warehouses\WarehouseIntegrityService;
+use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ class LocationController extends Controller
         $search = trim((string) $request->string('search'));
         $status = (string) $request->string('status', 'active');
 
-        $locations = Location::query()
+        $locationsQuery = Location::query()
             ->with(['warehouse.client'])
             ->when($warehouseFilter > 0, fn ($query) => $query->where('warehouse_id', $warehouseFilter))
             ->when($search !== '', function ($query) use ($search): void {
@@ -33,8 +34,9 @@ class LocationController extends Controller
             })
             ->when($status === 'active', fn ($query) => $query->where('active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('active', false))
-            ->orderBy('warehouse_id')
-            ->orderBy('code')
+            ->orderBy('warehouse_id');
+
+        $locations = LocationCode::applyNaturalOrder($locationsQuery)
             ->paginate(20)
             ->withQueryString();
 

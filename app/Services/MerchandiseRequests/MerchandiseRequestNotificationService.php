@@ -77,7 +77,8 @@ class MerchandiseRequestNotificationService
 
         $this->notifyInternalUsers(
             new InternalGoodsDispatchLoadingConfirmedNotification($dispatch, $confirmedBy, ['database']),
-            new InternalGoodsDispatchLoadingConfirmedNotification($dispatch, $confirmedBy, ['mail'])
+            null,
+            $confirmedBy
         );
     }
 
@@ -231,9 +232,11 @@ class MerchandiseRequestNotificationService
             ->values();
     }
 
-    private function notifyInternalUsers(object $databaseNotification, object $mailNotification): void
+    private function notifyInternalUsers(object $databaseNotification, ?object $mailNotification, ?User $excludeUser = null): void
     {
-        $recipients = $this->internalRecipients();
+        $recipients = $this->internalRecipients()
+            ->reject(fn (User $recipient): bool => $excludeUser !== null && $recipient->id === $excludeUser->id)
+            ->values();
 
         if ($recipients->isEmpty()) {
             return;
@@ -243,10 +246,12 @@ class MerchandiseRequestNotificationService
             $recipient->notify($databaseNotification);
         }
 
-        $recipients
-            ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
-            ->unique(fn (User $recipient) => mb_strtolower((string) $recipient->email))
-            ->each(fn (User $recipient) => $recipient->notify($mailNotification));
+        if ($mailNotification !== null) {
+            $recipients
+                ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
+                ->unique(fn (User $recipient) => mb_strtolower((string) $recipient->email))
+                ->each(fn (User $recipient) => $recipient->notify($mailNotification));
+        }
     }
 
     private function hasValidEmail(User $user): bool
