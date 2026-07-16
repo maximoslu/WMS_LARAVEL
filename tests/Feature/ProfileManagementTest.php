@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -79,6 +81,29 @@ class ProfileManagementTest extends TestCase
             ])
             ->assertRedirect(route('profile.edit'))
             ->assertSessionHasErrors('email');
+    }
+
+    public function test_password_change_is_audited_without_storing_credentials(): void
+    {
+        $user = $this->makeUserWithRole(Role::CLIENTE);
+
+        $this->actingAs($user)
+            ->put(route('profile.update'), [
+                'name' => $user->name,
+                'email' => $user->email,
+                'password' => 'new-secure-password',
+                'password_confirmation' => 'new-secure-password',
+            ])
+            ->assertRedirect(route('profile.edit'));
+
+        $this->assertTrue(Hash::check('new-secure-password', $user->fresh()->password));
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $user->id,
+            'event' => 'password_changed',
+            'old_values' => null,
+            'new_values' => null,
+        ]);
+        $this->assertStringNotContainsString('new-secure-password', (string) AuditLog::query()->where('event', 'password_changed')->firstOrFail()->toJson());
     }
 
     private function makeUserWithRole(string $roleSlug): User

@@ -6,6 +6,7 @@ use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\MerchandiseRequest;
 use App\Models\User;
+use App\Services\Audit\AuditLogService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -15,6 +16,7 @@ class GoodsDispatchWorkflowService
     public function __construct(
         private readonly MerchandiseRequestNotificationService $notificationService,
         private readonly StockDispatchAllocationService $stockAllocationService,
+        private readonly AuditLogService $audit,
     ) {}
 
     /**
@@ -49,6 +51,19 @@ class GoodsDispatchWorkflowService
         $dispatch->loadMissing(['lines.allocations', 'merchandiseRequest']);
 
         DB::transaction(function () use ($dispatch, $linePayload, $user): void {
+            $correlationId = $this->audit->correlationId();
+            $dispatch = GoodsDispatch::query()
+                ->whereKey($dispatch->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $dispatch->load(['lines.allocations', 'merchandiseRequest']);
+
+            if ($dispatch->hasStockApplied() || in_array($dispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)) {
+                throw ValidationException::withMessages([
+                    'dispatch' => 'La carga de una salida enviada o completada no se puede modificar.',
+                ]);
+            }
+
             $confirmedAt = now();
             $existingLines = $dispatch->lines->keyBy('id');
 
@@ -133,6 +148,18 @@ class GoodsDispatchWorkflowService
                     'prepared_at' => $dispatch->merchandiseRequest->prepared_at ?? now(),
                 ]);
             }
+
+            $this->audit->record(
+                event: 'goods_dispatch_loading_confirmed',
+                module: 'goods_dispatches',
+                description: 'Carga real de la salida confirmada.',
+                auditable: $dispatch,
+                subject: $dispatch->merchandiseRequest,
+                user: $user,
+                clientId: $dispatch->client_id,
+                newValues: ['line_count' => count($linePayload), 'status' => $dispatch->status],
+                correlationId: $correlationId,
+            );
         });
 
         $freshDispatch = $dispatch->fresh([
@@ -182,7 +209,8 @@ class GoodsDispatchWorkflowService
 
     public function changeStatus(GoodsDispatch $dispatch, string $newStatus, User $user): ?string
     {
-        $result = DB::transaction(function () use ($dispatch, $newStatus, $user): array {
+        $correlationId = $this->audit->correlationId();
+        $result = DB::transaction(function () use ($dispatch, $newStatus, $user, $correlationId): array {
             $lockedDispatch = GoodsDispatch::query()
                 ->whereKey($dispatch->id)
                 ->lockForUpdate()
@@ -193,6 +221,7 @@ class GoodsDispatchWorkflowService
                 return ['changed' => false, 'previous_request_status' => null];
             }
 
+            $previousDispatchStatus = $lockedDispatch->status;
             $this->guardStatusTransition($lockedDispatch, $newStatus);
             $previousRequestStatus = $lockedDispatch->merchandiseRequest?->status;
             $dispatchPayload = [
@@ -211,7 +240,7 @@ class GoodsDispatchWorkflowService
                 in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)
                 && ! $lockedDispatch->hasStockApplied()
             ) {
-                $this->stockAllocationService->apply($lockedDispatch);
+                $this->stockAllocationService->apply($lockedDispatch, $user, $correlationId);
 
                 $dispatchPayload['stock_applied_at'] = now();
                 $dispatchPayload['stock_applied_by'] = $user->id;
@@ -220,6 +249,20 @@ class GoodsDispatchWorkflowService
             }
 
             $lockedDispatch->update($dispatchPayload);
+
+            $this->audit->record(
+                event: 'goods_dispatch_status_changed',
+                module: 'goods_dispatches',
+                description: "Estado de salida cambiado de {$previousDispatchStatus} a {$newStatus}.",
+                auditable: $lockedDispatch,
+                subject: $lockedDispatch->merchandiseRequest,
+                user: $user,
+                clientId: $lockedDispatch->client_id,
+                oldValues: ['status' => $previousDispatchStatus],
+                newValues: ['status' => $newStatus, 'stock_applied_at' => $dispatchPayload['stock_applied_at'] ?? null],
+                correlationId: $correlationId,
+                severity: in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true) ? 'important' : 'info',
+            );
 
             $merchandiseRequest = $lockedDispatch->merchandiseRequest;
 
@@ -252,6 +295,20 @@ class GoodsDispatchWorkflowService
 
             $merchandiseRequest->update($requestPayload);
 
+            $this->audit->record(
+                event: 'merchandise_request_status_changed',
+                module: 'merchandise_requests',
+                description: "Estado de pedido cambiado de {$previousRequestStatus} a {$newStatus} desde su salida.",
+                auditable: $merchandiseRequest,
+                subject: $lockedDispatch,
+                user: $user,
+                clientId: $merchandiseRequest->client_id,
+                oldValues: ['status' => $previousRequestStatus],
+                newValues: ['status' => $newStatus],
+                correlationId: $correlationId,
+                severity: in_array($newStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true) ? 'important' : 'info',
+            );
+
             return ['changed' => true, 'previous_request_status' => $previousRequestStatus];
         });
 
@@ -269,6 +326,7 @@ class GoodsDispatchWorkflowService
     public function applyMissingStock(GoodsDispatch $dispatch): bool
     {
         return DB::transaction(function () use ($dispatch): bool {
+            $correlationId = $this->audit->correlationId();
             $lockedDispatch = GoodsDispatch::query()
                 ->whereKey($dispatch->id)
                 ->lockForUpdate()
@@ -285,14 +343,25 @@ class GoodsDispatchWorkflowService
                 return false;
             }
 
-            $this->guardStatusTransition($lockedDispatch, $lockedDispatch->status);
-            $this->stockAllocationService->apply($lockedDispatch);
+            $this->ensureDeliveryNoteCanBeGenerated($lockedDispatch);
+            $this->stockAllocationService->apply($lockedDispatch, null, $correlationId);
             $lockedDispatch->update([
                 'stock_applied_at' => now(),
                 'stock_applied_by' => null,
                 'warehouse_stock_applied_at' => now(),
                 'warehouse_stock_applied_by' => null,
             ]);
+
+            $this->audit->record(
+                event: 'goods_dispatch_stock_repaired',
+                module: 'goods_dispatches',
+                description: 'Descuento de stock faltante aplicado mediante reparacion.',
+                auditable: $lockedDispatch,
+                clientId: $lockedDispatch->client_id,
+                correlationId: $correlationId,
+                source: 'command',
+                severity: 'warning',
+            );
 
             return true;
         });
@@ -301,6 +370,7 @@ class GoodsDispatchWorkflowService
     public function repairWarehouseStock(GoodsDispatch $dispatch): bool
     {
         return DB::transaction(function () use ($dispatch): bool {
+            $correlationId = $this->audit->correlationId();
             $lockedDispatch = GoodsDispatch::query()
                 ->whereKey($dispatch->id)
                 ->lockForUpdate()
@@ -317,11 +387,22 @@ class GoodsDispatchWorkflowService
                 return false;
             }
 
-            $this->stockAllocationService->applyWarehousePalletsOnly($lockedDispatch);
+            $this->stockAllocationService->applyWarehousePalletsOnly($lockedDispatch, null, $correlationId);
             $lockedDispatch->update([
                 'warehouse_stock_applied_at' => now(),
                 'warehouse_stock_applied_by' => null,
             ]);
+
+            $this->audit->record(
+                event: 'goods_dispatch_warehouse_stock_repaired',
+                module: 'goods_dispatches',
+                description: 'Contador de pallets de almacen reparado para una salida historica.',
+                auditable: $lockedDispatch,
+                clientId: $lockedDispatch->client_id,
+                correlationId: $correlationId,
+                source: 'command',
+                severity: 'warning',
+            );
 
             return true;
         });
@@ -353,6 +434,20 @@ class GoodsDispatchWorkflowService
 
     private function guardStatusTransition(GoodsDispatch $dispatch, string $newStatus): void
     {
+        $allowedTransitions = [
+            GoodsDispatch::STATUS_DRAFT => [GoodsDispatch::STATUS_PREPARING, GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED, GoodsDispatch::STATUS_CANCELLED],
+            GoodsDispatch::STATUS_PREPARING => [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED, GoodsDispatch::STATUS_CANCELLED],
+            GoodsDispatch::STATUS_SENT => [GoodsDispatch::STATUS_COMPLETED],
+            GoodsDispatch::STATUS_COMPLETED => [],
+            GoodsDispatch::STATUS_CANCELLED => [],
+        ];
+
+        if (! in_array($newStatus, $allowedTransitions[$dispatch->status] ?? [], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'La transicion solicitada no es valida y podria desalinear la salida del stock aplicado.',
+            ]);
+        }
+
         if (in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)) {
             if (! $dispatch->hasConfirmedLoading()) {
                 throw ValidationException::withMessages([

@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateStockPalletRequest;
 use App\Models\Client;
+use App\Models\InventoryMovement;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
+use App\Services\Audit\AuditLogService;
+use App\Services\Inventory\InventoryMovementService;
 use App\Services\Stock\StockExportService;
 use App\Support\Locations\LocationCode;
+use App\Support\Stock\StockOverviewBuilder;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
-use App\Support\Stock\StockOverviewBuilder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
-use App\Http\Requests\UpdateStockPalletRequest;
 use Symfony\Component\HttpFoundation\Response;
 
 class StockController extends Controller
@@ -21,6 +25,8 @@ class StockController extends Controller
     public function __construct(
         private readonly StockOverviewBuilder $overviewBuilder,
         private readonly StockExportService $exportService,
+        private readonly InventoryMovementService $movements,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function index(Request $request): View
@@ -114,7 +120,46 @@ class StockController extends Controller
     {
         abort_unless($request->user()?->isSuperAdmin(), 403);
 
-        $stockPallet->update($request->payload());
+        DB::transaction(function () use ($request, $stockPallet): void {
+            $correlationId = $this->audit->correlationId();
+            $before = $this->movements->snapshot($stockPallet);
+            $oldValues = $stockPallet->only([
+                'quantity_units', 'units_per_pallet', 'location_id', 'status', 'stock_category',
+                'blocked_reason', 'active', 'warehouse_pallets',
+            ]);
+            $stockPallet->update($request->payload());
+            $fresh = $stockPallet->fresh(['client', 'item', 'location.warehouse']);
+            $after = $this->movements->snapshot($fresh);
+            $movementType = match (true) {
+                $before['location_id'] !== $after['location_id'] => InventoryMovement::TRANSFER,
+                $before['status'] !== StockPallet::STATUS_BLOCKED && $after['status'] === StockPallet::STATUS_BLOCKED => InventoryMovement::BLOCK,
+                $before['status'] === StockPallet::STATUS_BLOCKED && $after['status'] !== StockPallet::STATUS_BLOCKED => InventoryMovement::UNBLOCK,
+                default => InventoryMovement::MANUAL_ADJUSTMENT,
+            };
+
+            $this->movements->record(
+                before: $before,
+                after: $after,
+                movementType: $movementType,
+                idempotencyKey: "stock-manual:{$stockPallet->id}:{$correlationId}",
+                correlationId: $correlationId,
+                source: $fresh,
+                user: $request->user(),
+                metadata: ['reason' => 'Edicion manual autorizada de partida de stock.'],
+            );
+            $this->audit->record(
+                event: 'stock_batch_updated',
+                module: 'stock',
+                description: 'Partida de stock actualizada manualmente.',
+                auditable: $fresh,
+                user: $request->user(),
+                clientId: $fresh->client_id,
+                oldValues: $oldValues,
+                newValues: $fresh->only(array_keys($oldValues)),
+                correlationId: $correlationId,
+                severity: 'important',
+            );
+        });
 
         return redirect()
             ->route('stock.index', ['client_id' => $stockPallet->client_id])

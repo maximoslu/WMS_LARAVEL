@@ -5,7 +5,6 @@ namespace App\Support\Stock;
 use App\Models\Item;
 use App\Models\StockPallet;
 use App\Support\WmsLineType;
-use Illuminate\Support\Collection;
 
 class StockLinePayloadResolver
 {
@@ -75,6 +74,10 @@ class StockLinePayloadResolver
 
         $stockPallets = StockPallet::query()
             ->where('client_id', $clientId)
+            ->when($activeOnly, fn ($query) => $query
+                ->where('active', true)
+                ->where('status', StockPallet::STATUS_AVAILABLE)
+                ->whereNotIn('stock_category', [StockPallet::CATEGORY_BLOCKED, StockPallet::CATEGORY_OBSOLETE]))
             ->whereIn('id', $stockPalletIds)
             ->get()
             ->keyBy('id');
@@ -103,6 +106,7 @@ class StockLinePayloadResolver
 
             if (! $item instanceof Item) {
                 $errors["lines.$rowKey.item_id"] = 'Selecciona una referencia válida para este cliente.';
+
                 continue;
             }
 
@@ -110,17 +114,20 @@ class StockLinePayloadResolver
 
             if ($stockPalletId !== null && (! $stockPallet instanceof StockPallet || (int) $stockPallet->item_id !== $item->id)) {
                 $errors["lines.$rowKey.stock_pallet_id"] = 'La partida seleccionada no coincide con la referencia elegida.';
+
                 continue;
             }
 
             if ($lineType === WmsLineType::PEAK) {
                 if (! $stockPallet instanceof StockPallet) {
                     $errors["lines.$rowKey.stock_pallet_id"] = 'Selecciona un pico existente para esta referencia.';
+
                     continue;
                 }
 
                 if ($stockPeakIndex === null || $stockPeakIndex < 1 || $stockPeakIndex > StockPallet::MAX_PEAK_COLUMNS) {
                     $errors["lines.$rowKey.stock_peak_index"] = 'El pico seleccionado no es válido.';
+
                     continue;
                 }
 
@@ -128,11 +135,13 @@ class StockLinePayloadResolver
 
                 if ($unitsPerPeak <= 0) {
                     $errors["lines.$rowKey.stock_peak_index"] = 'El pico seleccionado ya no está disponible.';
+
                     continue;
                 }
 
                 if ($quantity !== 1) {
                     $errors["lines.$rowKey.quantity"] = 'Cada línea de pico representa un pico concreto. Añade otro pico en otra línea si hace falta.';
+
                     continue;
                 }
 

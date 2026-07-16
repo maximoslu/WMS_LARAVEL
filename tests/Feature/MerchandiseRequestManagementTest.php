@@ -279,6 +279,12 @@ class MerchandiseRequestManagementTest extends TestCase
             'requested_pallets' => 4,
             'requested_units' => 2800,
         ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'client_id' => $client->id,
+            'user_id' => $cliente->id,
+            'event' => 'merchandise_request_created',
+            'auditable_id' => $request->id,
+        ]);
         Bus::assertDispatchedAfterResponse(
             ProcessMerchandiseRequestSubmittedNotificationsJob::class,
             fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $request->id

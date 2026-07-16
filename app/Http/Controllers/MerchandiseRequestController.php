@@ -7,6 +7,7 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
+use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestScheduleService;
@@ -85,8 +86,7 @@ class MerchandiseRequestController extends Controller
         Request $request,
         StockVariantCatalog $variantCatalog,
         MerchandiseRequestScheduleService $scheduleService,
-    ): View
-    {
+    ): View {
         $user = $request->user();
 
         abort_unless(
@@ -172,12 +172,13 @@ class MerchandiseRequestController extends Controller
         StoreMerchandiseRequestRequest $request,
         MerchandiseRequestScheduleService $scheduleService,
         MerchandiseRequestNotificationService $notificationService,
+        AuditLogService $audit,
     ): RedirectResponse {
         $user = $request->user();
         $requestedLines = $request->validatedLines();
         $clientId = $request->effectiveClientId();
 
-        $merchandiseRequest = DB::transaction(function () use ($request, $requestedLines, $user, $clientId): MerchandiseRequest {
+        $merchandiseRequest = DB::transaction(function () use ($request, $requestedLines, $user, $clientId, $audit): MerchandiseRequest {
             $requestModel = MerchandiseRequest::query()->create([
                 'client_id' => $clientId,
                 'requested_by' => $user->id,
@@ -201,6 +202,22 @@ class MerchandiseRequestController extends Controller
                     'requested_units' => $line['requested_units'],
                 ]);
             }
+
+            $audit->record(
+                event: 'merchandise_request_created',
+                module: 'merchandise_requests',
+                description: 'Pedido de mercancia creado.',
+                auditable: $requestModel,
+                user: $user,
+                clientId: $clientId,
+                newValues: [
+                    'status' => $requestModel->status,
+                    'line_count' => count($requestedLines),
+                    'requested_pallets' => collect($requestedLines)->sum('requested_pallets'),
+                    'requested_peaks' => collect($requestedLines)->sum('requested_peaks'),
+                    'requested_units' => collect($requestedLines)->sum('requested_units'),
+                ],
+            );
 
             return $requestModel;
         });
@@ -253,6 +270,7 @@ class MerchandiseRequestController extends Controller
         MerchandiseRequest $merchandiseRequest,
         GoodsDispatchWorkflowService $workflowService,
         MerchandiseRequestNotificationService $notificationService,
+        AuditLogService $audit,
     ): RedirectResponse {
         $validated = $request->validate([
             'status' => ['required', Rule::in(MerchandiseRequest::statuses())],
@@ -299,7 +317,20 @@ class MerchandiseRequestController extends Controller
                 ]);
         }
 
-        $merchandiseRequest->update($payload);
+        DB::transaction(function () use ($merchandiseRequest, $payload, $previousStatus, $validated, $request, $audit): void {
+            $merchandiseRequest->update($payload);
+            $audit->record(
+                event: 'merchandise_request_status_changed',
+                module: 'merchandise_requests',
+                description: "Estado de pedido cambiado de {$previousStatus} a {$validated['status']}.",
+                auditable: $merchandiseRequest,
+                user: $request->user(),
+                clientId: $merchandiseRequest->client_id,
+                oldValues: ['status' => $previousStatus],
+                newValues: ['status' => $validated['status']],
+                severity: $validated['status'] === MerchandiseRequest::STATUS_CANCELLED ? 'warning' : 'info',
+            );
+        });
 
         $notificationService->notifyStatusChanged($merchandiseRequest, $previousStatus);
 
@@ -308,11 +339,22 @@ class MerchandiseRequestController extends Controller
             ->with('status', 'Estado de la solicitud actualizado correctamente.');
     }
 
-    public function preparationPdf(Request $request, MerchandiseRequest $merchandiseRequest)
-    {
+    public function preparationPdf(
+        Request $request,
+        MerchandiseRequest $merchandiseRequest,
+        AuditLogService $audit,
+    ) {
         abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
 
         $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'lines.stockPallet']);
+        $audit->record(
+            event: 'merchandise_request_preparation_pdf_generated',
+            module: 'merchandise_requests',
+            description: 'Hoja de preparacion del pedido generada.',
+            auditable: $merchandiseRequest,
+            user: $request->user(),
+            clientId: $merchandiseRequest->client_id,
+        );
 
         return Pdf::loadView('merchandise-requests.preparation-pdf', [
             'merchandiseRequest' => $merchandiseRequest,

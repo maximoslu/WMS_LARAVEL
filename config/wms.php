@@ -198,6 +198,18 @@ return [
                     'active_patterns' => ['delivery-notes.management.*'],
                 ],
                 [
+                    'key' => 'trazabilidad',
+                    'route' => 'traceability.index',
+                    'path' => '/gestion/trazabilidad',
+                    'title' => 'Trazabilidad',
+                    'icon' => 'audit',
+                    'summary' => 'Actividad, auditoria empresarial, movimientos, lotes y alertas de stock.',
+                    'minimum_role' => 'almacen',
+                    'tag' => 'Control',
+                    'status' => 'ready',
+                    'active_patterns' => ['traceability.*'],
+                ],
+                [
                     'key' => 'almacenes',
                     'route' => 'warehouses.index',
                     'path' => '/almacenes',

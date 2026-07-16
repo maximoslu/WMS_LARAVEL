@@ -23,6 +23,9 @@
             </div>
 
             <div class="ops-page-actions page-actions-compact action-buttons ops-toolbar-links">
+                @if (auth()->user()->canAccessRole(\App\Models\Role::ALMACEN))
+                    <a href="{{ route('traceability.alerts.index', ['client_id' => $exportClientId]) }}" class="button-secondary compact-button btn-compact wms-action-secondary">Alertas de stock</a>
+                @endif
                 <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Articulos</a>
                 <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Ubicaciones</a>
                 @if (auth()->user()?->isSuperAdmin())

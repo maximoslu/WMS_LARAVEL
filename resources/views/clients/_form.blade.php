@@ -219,8 +219,51 @@
             </ul>
         @endif
     </div>
-@endif
 
+    <div class="surface-card item-form-card entity-form compact-card">
+        <div class="item-form-header">
+            <div class="app-copy">
+                <h2 class="ops-page-title page-title-compact">Avisos de stock</h2>
+                <p>Destinatarios exclusivos para alertas de stock. No se reutilizan los emails de albaranes.</p>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ route('clients.stock-alert-emails.store', $client) }}" class="item-form">
+            @csrf
+            <div class="item-form-grid">
+                <label class="auth-field">
+                    <span>Email</span>
+                    <input type="email" name="email" class="auth-input" maxlength="255" placeholder="stock@cliente.com" required>
+                </label>
+                <label class="toggle-field">
+                    <input type="hidden" name="active" value="0">
+                    <input type="checkbox" name="active" value="1" checked>
+                    <span>Destinatario activo</span>
+                </label>
+            </div>
+            <div class="item-form-actions action-buttons">
+                <button type="submit" class="button-primary compact-button btn-compact">Anadir aviso</button>
+            </div>
+        </form>
+
+        @if ($stockAlertEmailRecipients->isEmpty())
+            <p class="helper-text">No hay destinatarios configurados para avisos de stock.</p>
+        @else
+            <ul class="client-receipt-email-list">
+                @foreach ($stockAlertEmailRecipients as $recipient)
+                    <li class="client-receipt-email-item">
+                        <span><strong>{{ $recipient->email }}</strong> <span class="status-chip small-badge badge-compact">{{ $recipient->active ? 'Activo' : 'Inactivo' }}</span></span>
+                        <form method="POST" action="{{ route('clients.stock-alert-emails.destroy', [$client, $recipient]) }}" onsubmit="return confirm('Eliminar este destinatario de avisos de stock?');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="button-secondary compact-button btn-table">Eliminar</button>
+                        </form>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </div>
+@endif
 
 
 

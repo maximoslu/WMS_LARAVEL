@@ -2840,3 +2840,114 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, migraciones, datos, importadores, stock, facturacion, Google Calendar, notificaciones ni generacion/descarga real de documentos.
 - No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
 - `.claude/` permanece sin trackear y fuera del commit.
+
+---
+
+## 2026-07-16 - Trazabilidad, auditoria, actividad y alertas de stock (18:45 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit base:** `73e282f3 feat: add delivery note management and pagination`.
+**Objetivo:** incorporar una primera version productiva de `GESTION > TRAZABILIDAD` sin modificar datos de produccion ni ejecutar backfills reales.
+
+### Diagnostico inicial
+- `main` y `origin/main` coincidían en `73e282f3`; el arbol rastreado estaba limpio y solo existia `.claude/launch.json` sin trackear.
+- La base ya incluia paginacion de albaranes cliente y gestion documental interna para superadmin/administracion.
+- Se mapearon los puntos reales que crean, descuentan, corrigen, importan, retiran, trasladan o consolidan stock, junto con login/logout, documentos, usuarios, clientes y maestros.
+- No existia un libro mayor historico independiente; `stock_pallets` representaba principalmente el estado actual y no permitia reconstruir por si solo toda la historia.
+
+### Arquitectura y tablas
+- La migracion aditiva y reversible `2026_07_16_000001_create_traceability_foundation_tables.php` crea:
+  - `audit_logs`: acciones empresariales con snapshots, correlacion y datos sensibles saneados;
+  - `user_activity_sessions`: sesiones y tiempo activo estimado;
+  - `user_section_metrics`: agregados diarios por usuario, fecha y seccion;
+  - `inventory_movements`: libro mayor inmutable e idempotente;
+  - `stock_alert_rules`: reglas por cliente y articulo;
+  - `stock_alert_events`: historico de alertas y notificaciones;
+  - `client_stock_alert_email_recipients`: destinatarios separados para avisos de stock.
+- La migracion se ejecuto localmente de forma segura y figura `Ran` en el batch 12. En produccion sigue pendiente `php artisan migrate --force`.
+- Los movimientos y logs de auditoria bloquean update/delete desde Eloquent. Las correcciones se expresan mediante nuevos registros; no se anadio hash encadenado en esta version para evitar una complejidad operativa no justificada.
+
+### Integracion operativa y eventos
+- Entradas: alta/edicion/cancelacion/eliminacion controlada, documentos, IA, confirmacion, descarga y movimientos de recepcion/reversion dentro de la transaccion de stock.
+- Salidas: preparacion, allocations FIFO, cambios de transporte/estado, confirmacion, envio/completado, PDF/descarga y movimientos de salida/correccion idempotentes.
+- Stock: ajuste manual, traslado, bloqueo/desbloqueo, importacion, retirada de foto anterior y consolidacion de almacen/ubicacion conservando cantidades.
+- Maestros: articulos, usuarios, clientes y destinatarios operativos relevantes quedan auditados con valores anterior/nuevo sin contrasenas ni tokens.
+- Cada operacion relacionada comparte `correlation_id`; las claves de idempotencia impiden duplicar movimientos por reintentos.
+- La evaluacion de alertas se despacha despues del commit. El email usa un job unico/no solapable, omite eventos ya resueltos y mantiene los fallos fuera de la transaccion de stock.
+
+### Permisos y pantallas
+- `SUPERADMIN` y `ADMINISTRACION`: acceso completo a portada, actividad, auditoria, movimientos, lotes, analitica, alertas e informes.
+- `ALMACEN`: consulta de portada, movimientos, lotes y alertas; sin gestion administrativa ni exportacion amplia.
+- `CLIENTE`: 403 en todo el modulo, aunque manipule URLs o parametros.
+- Se incorporaron 14 rutas bajo `/gestion/trazabilidad`, el acceso lateral `GESTION > TRAZABILIDAD` y el enlace `Alertas de stock` desde Stock.
+- Los listados son paginados, los filtros se aplican en SQL y las exportaciones CSV exigen cliente/rango, limitan 10.000 filas y quedan auditadas.
+
+### Actividad y privacidad
+- Login abre una sesion de actividad y logout la cierra.
+- El heartbeat autenticado opera cada 60 segundos solo con la pestana visible, limita cada intervalo a 90 segundos y considera inactividad tras 180 segundos.
+- La interfaz usa expresamente `Tiempo activo estimado`; no se registran teclas, formularios, cuerpos de request, contrasenas, tokens, archivos ni polling tecnico.
+- Las visitas se agregan por nombre de ruta normalizado, usuario, fecha y seccion para controlar volumen. La IP se anonimiza y el user-agent se resume.
+
+### Libro mayor y lotes
+- `InventoryMovementService` conserva unidades, pallets completos, pallets de almacen, picos, ubicacion/almacen anterior y posterior, origen, usuario, snapshots e instante efectivo.
+- Tipos cubiertos: saldo inicial, recepcion, salida, ajuste, importacion, retirada de importacion, traslado, consolidacion, bloqueo/desbloqueo, cancelacion, reversion y correccion.
+- La trazabilidad de lote exige cliente+lote y nunca mezcla el mismo lote entre clientes o articulos.
+- La vista reconstruye proveedor/entrada/documento, stock y ubicaciones, allocations/salida/destino/documento, cronologia y los indicadores `Completa`, `Parcial` o `Inconsistente`, incluyendo un paso atras y un paso adelante.
+- No se fabrica historia: relaciones ausentes, salidas sin allocation, documentos ausentes o saldos incompatibles se muestran como lagunas.
+
+### Analitica, prevision y alertas
+- La analitica por cliente incluye entradas/salidas, rotacion, inmovilizado, envejecimiento, ABC, lotes, stock bloqueado/obsoleto y ajustes manuales.
+- La prevision es determinista y explicable: medias 7/30/90 con pesos 50/30/20, demanda pendiente, lead time, stock de seguridad, cobertura, variabilidad y confianza con motivo cuando faltan datos.
+- Las reglas admiten umbrales de unidades, pallets, cobertura y agotamiento, ademas de cooldown, severidad, seguridad y criterios sobre stock bloqueado/obsoleto.
+- Los eventos se reconocen, silencian, resuelven o reabren; desactivar una regla resuelve su evento activo. No se repite correo sin cambio o empeoramiento relevante.
+- `Avisos de stock` usa una lista normalizada propia en la ficha del cliente y nunca reutiliza implicitamente emails de albaranes de entrada/salida.
+
+### Comandos y scheduler
+- `php artisan wms:traceability:backfill --dry-run|--apply [--client=...]`.
+- `php artisan wms:stock-alerts:evaluate --dry-run|--apply [--client=...] [--item=...]`.
+- Sin `--apply`, ambos comandos son de solo lectura.
+- El scheduler ejecuta la reconciliacion de alertas diariamente a las 06:00; Forge debe mantener `schedule:run` cada minuto y un worker de cola activo.
+- El backfill apply es transaccional, idempotente, solo crea trazabilidad y no modifica stock, entradas, salidas ni allocations.
+
+### Dry-runs locales
+- Antes: `inventory_movements=0`, `stock_alert_events=0`, `audit_logs=0`.
+- Backfill: 1 entrada reconstruible con certeza, 0 salidas reconstruibles, 0 entradas parciales, 0 salidas imposibles y 177 saldos iniciales candidatos; 0 movimientos creados en dry-run.
+- Alertas: 0 reglas evaluadas, 0 eventos disparados y 0 cambios.
+- Despues: `inventory_movements=0`, `stock_alert_events=0`, `audit_logs=0`; se confirmo que ambos dry-runs no escribieron datos.
+
+### Validacion final
+- Tests focalizados de trazabilidad: **19 passed** (93 assertions).
+- Tests focalizados de pedidos, salidas, perfil e importacion: **134 passed** (1023 assertions).
+- `php artisan test --compact`: **615 passed** (3156 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- Pint: OK; solo ordeno imports.
+- `git diff --check`: OK.
+- `php artisan migrate:status`: todas las migraciones `Ran`, incluida la nueva.
+- `php artisan view:cache`, rutas y `php artisan optimize:clear`: OK.
+- La compilacion de Blade y las pruebas cubren roles, vistas y responsive. La inspeccion visual autenticada local no se completo porque el navegador quedo en login y no se crearon credenciales temporales.
+
+### Limitaciones historicas reales
+- Los hechos posteriores al despliegue quedan registrados con exactitud desde los servicios de dominio.
+- La historia anterior depende de relaciones conservadas. El backfill solo reconstruye hechos verificables; el stock actual sin origen demostrable se etiqueta `Saldo inicial al activar trazabilidad` con confianza `opening_balance`.
+- No ejecutar `--apply` en produccion hasta revisar y aprobar expresamente el informe dry-run por cliente.
+- La primera version no incorpora firma criptografica encadenada ni borrado automatico; auditoria, movimientos y alertas se conservan indefinidamente.
+
+### Forge pendiente, no ejecutado en esta sesion
+1. Deploy Now o confirmar autodeploy del commit publicado.
+2. Ejecutar `php artisan migrate --force`.
+3. Ejecutar `php artisan optimize:clear`.
+4. Ejecutar `php artisan queue:restart`.
+5. Confirmar scheduler `php artisan schedule:run` cada minuto y worker de cola activo.
+6. Ejecutar `php artisan wms:traceability:backfill --dry-run` y guardar/revisar el informe.
+7. No ejecutar backfill `--apply` sin aprobacion expresa del propietario.
+8. Ejecutar `php artisan wms:stock-alerts:evaluate --dry-run`.
+9. Validar manualmente un lote real alimentario, sus documentos y un destinatario controlado de alertas.
+
+### Control de alcance y cierre Git
+- No se tocaron `.env`, secretos, datos de produccion, Google Calendar ni configuracion real de Forge.
+- No se uso `migrate:fresh`, `db:wipe`, truncado, borrado masivo, force push ni backfill apply en produccion.
+- `.claude/launch.json` permanece sin trackear y fuera del commit.
+- Commit previsto: `feat: add audit inventory traceability and stock alerts`.
+- Push previsto: un unico push normal a `origin/main` tras revisar el diff staged.

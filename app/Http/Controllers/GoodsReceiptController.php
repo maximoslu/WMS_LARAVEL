@@ -14,6 +14,7 @@ use App\Models\GoodsReceiptLine;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\Supplier;
+use App\Services\Audit\AuditLogService;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractionService;
 use App\Services\GoodsReceipts\GoodsReceiptConfirmationService;
 use App\Services\GoodsReceipts\GoodsReceiptDeletionService;
@@ -47,6 +48,7 @@ class GoodsReceiptController extends Controller
         private readonly GoodsReceiptStockApplicationService $stockApplicationService,
         private readonly GoodsReceiptDocumentNotificationService $documentNotificationService,
         private readonly LocationIntegrityService $locationIntegrityService,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function index(Request $request): View
@@ -195,6 +197,16 @@ class GoodsReceiptController extends Controller
 
             $this->syncLines($receipt, $validated['lines']);
 
+            $this->audit->record(
+                event: 'goods_receipt_created',
+                module: 'goods_receipts',
+                description: 'Entrada creada en borrador.',
+                auditable: $receipt,
+                user: $request->user(),
+                clientId: $receipt->client_id,
+                newValues: $receipt->only(['client_id', 'supplier_id', 'receipt_number', 'received_at', 'status']),
+            );
+
             return $receipt;
         });
 
@@ -289,10 +301,12 @@ class GoodsReceiptController extends Controller
 
         try {
             DB::transaction(function () use ($request, $validated, $goodsReceipt): void {
+                $correlationId = $this->audit->correlationId();
+                $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status']);
                 $mustReapplyStock = $goodsReceipt->isConfirmed() && $goodsReceipt->hasStockApplied();
 
                 if ($mustReapplyStock) {
-                    $this->stockApplicationService->revert($goodsReceipt);
+                    $this->stockApplicationService->revert($goodsReceipt, $request->user(), $correlationId);
                 }
 
                 $payload = [
@@ -316,8 +330,26 @@ class GoodsReceiptController extends Controller
                 $this->syncLines($goodsReceipt, $validated['lines']);
 
                 if ($mustReapplyStock) {
-                    $this->stockApplicationService->apply($goodsReceipt->fresh(['lines.item', 'lines.location']));
+                    $this->stockApplicationService->apply(
+                        $goodsReceipt->fresh(['lines.item', 'lines.location']),
+                        $request->user(),
+                        $correlationId,
+                    );
                 }
+
+                $this->audit->record(
+                    event: 'goods_receipt_updated',
+                    module: 'goods_receipts',
+                    description: $mustReapplyStock
+                        ? 'Entrada confirmada editada; stock revertido y reaplicado.'
+                        : 'Entrada editada.',
+                    auditable: $goodsReceipt,
+                    user: $request->user(),
+                    clientId: $goodsReceipt->client_id,
+                    oldValues: $oldValues,
+                    newValues: $goodsReceipt->fresh()->only(array_keys($oldValues)),
+                    correlationId: $correlationId,
+                );
             });
         } catch (ValidationException $exception) {
             return redirect()
@@ -361,7 +393,7 @@ class GoodsReceiptController extends Controller
             ->with('status', 'Entrada confirmada y stock actualizado correctamente.');
     }
 
-    public function cancel(GoodsReceipt $goodsReceipt): RedirectResponse
+    public function cancel(GoodsReceipt $goodsReceipt, Request $request): RedirectResponse
     {
         if ($goodsReceipt->status === GoodsReceipt::STATUS_CONFIRMED) {
             return redirect()
@@ -372,9 +404,22 @@ class GoodsReceiptController extends Controller
         }
 
         if ($goodsReceipt->status !== GoodsReceipt::STATUS_CANCELLED) {
+            $previousStatus = $goodsReceipt->status;
             $goodsReceipt->update([
                 'status' => GoodsReceipt::STATUS_CANCELLED,
             ]);
+
+            $this->audit->record(
+                event: 'goods_receipt_cancelled',
+                module: 'goods_receipts',
+                description: 'Entrada cancelada antes de aplicar stock.',
+                auditable: $goodsReceipt,
+                user: $request->user(),
+                clientId: $goodsReceipt->client_id,
+                oldValues: ['status' => $previousStatus],
+                newValues: ['status' => GoodsReceipt::STATUS_CANCELLED],
+                severity: 'warning',
+            );
         }
 
         return redirect()
@@ -385,6 +430,16 @@ class GoodsReceiptController extends Controller
     public function attachDocument(AttachGoodsReceiptDocumentRequest $request, GoodsReceipt $goodsReceipt): RedirectResponse
     {
         $goodsReceipt->update($this->documentStorage->store($request->file('document'), $goodsReceipt));
+
+        $this->audit->record(
+            event: 'goods_receipt_document_attached',
+            module: 'goods_receipts',
+            description: 'Documento adjuntado a una entrada.',
+            auditable: $goodsReceipt,
+            user: $request->user(),
+            clientId: $goodsReceipt->client_id,
+            newValues: ['document_original_name' => $goodsReceipt->document_original_name],
+        );
 
         $this->documentNotificationService->notifyDocumentAvailable($goodsReceipt->fresh());
 
@@ -408,7 +463,7 @@ class GoodsReceiptController extends Controller
             ->with('status', 'Entrada borrada correctamente.');
     }
 
-    public function extractAi(GoodsReceipt $goodsReceipt): RedirectResponse
+    public function extractAi(GoodsReceipt $goodsReceipt, Request $request): RedirectResponse
     {
         if ($goodsReceipt->isConfirmed() || $goodsReceipt->status === GoodsReceipt::STATUS_CANCELLED) {
             return redirect()
@@ -429,12 +484,16 @@ class GoodsReceiptController extends Controller
         try {
             $this->performAiExtraction($goodsReceipt);
         } catch (\Throwable $exception) {
+            $this->audit->record(event: 'goods_receipt_ai_failed', module: 'goods_receipts', description: 'La interpretacion IA de la entrada ha fallado.', auditable: $goodsReceipt, user: $request->user(), clientId: $goodsReceipt->client_id, metadata: ['exception' => $exception::class], severity: 'warning');
+
             return redirect()
                 ->route('goods-receipts.show', $goodsReceipt)
                 ->withErrors([
                     'goods_receipt' => 'La interpretacion IA no pudo completarse. Revisa el error y vuelve a intentarlo.',
                 ]);
         }
+
+        $this->audit->record(event: 'goods_receipt_ai_extracted', module: 'goods_receipts', description: 'Documento de entrada interpretado mediante IA.', auditable: $goodsReceipt, user: $request->user(), clientId: $goodsReceipt->client_id);
 
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)
@@ -484,6 +543,8 @@ class GoodsReceiptController extends Controller
                     'applied_by' => $request->user()->id,
                 ],
             ]);
+
+            $this->audit->record(event: 'goods_receipt_ai_applied', module: 'goods_receipts', description: 'Propuesta IA revisada y aplicada a la entrada.', auditable: $goodsReceipt, user: $request->user(), clientId: $goodsReceipt->client_id, newValues: ['supplier_id' => $goodsReceipt->supplier_id, 'receipt_number' => $goodsReceipt->receipt_number, 'received_at' => $goodsReceipt->received_at, 'line_count' => count($validated['lines'])]);
         });
 
         return redirect()
@@ -491,7 +552,7 @@ class GoodsReceiptController extends Controller
             ->with('status', 'Propuesta IA aplicada correctamente a la entrada. Revisa y confirma cuando proceda.');
     }
 
-    public function downloadDocument(GoodsReceipt $goodsReceipt): StreamedResponse
+    public function downloadDocument(GoodsReceipt $goodsReceipt, Request $request): StreamedResponse
     {
         abort_if($goodsReceipt->document_path === null, 404);
 
@@ -499,10 +560,13 @@ class GoodsReceiptController extends Controller
 
         abort_if($disk === null, 404);
 
-        return Storage::disk($disk)->download(
+        $response = Storage::disk($disk)->download(
             $goodsReceipt->document_path,
             $goodsReceipt->document_original_name ?: basename($goodsReceipt->document_path)
         );
+        $this->audit->record(event: 'goods_receipt_document_downloaded', module: 'goods_receipts', description: 'Documento de entrada descargado.', auditable: $goodsReceipt, user: $request->user(), clientId: $goodsReceipt->client_id);
+
+        return $response;
     }
 
     /**

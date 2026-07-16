@@ -83,6 +83,50 @@ const escapeHtml = (value) => String(value ?? '')
 
 const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
+const bindActivityHeartbeat = () => {
+    const body = document.body;
+    const endpoint = body?.dataset.activityHeartbeatUrl;
+    const routeName = body?.dataset.currentRouteName;
+
+    if (!endpoint || !routeName || body.dataset.activityHeartbeatBound === 'true') {
+        return;
+    }
+
+    const sendHeartbeat = async () => {
+        if (document.visibilityState !== 'visible') {
+            return;
+        }
+
+        try {
+            await fetch(endpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+                body: JSON.stringify({
+                    route_name: routeName,
+                    visible: true,
+                }),
+            });
+        } catch {
+            // Activity metrics must never interrupt the operational screen.
+        }
+    };
+
+    window.setInterval(sendHeartbeat, 60000);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            sendHeartbeat();
+        }
+    });
+    body.dataset.activityHeartbeatBound = 'true';
+};
+
+document.addEventListener('DOMContentLoaded', bindActivityHeartbeat);
+
 const formatNumber = new Intl.NumberFormat('es-ES');
 
 const parsePositiveInteger = (value, allowZero = false) => {

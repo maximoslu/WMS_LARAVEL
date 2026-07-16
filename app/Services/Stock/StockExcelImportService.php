@@ -3,12 +3,15 @@
 namespace App\Services\Stock;
 
 use App\Models\Client;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Audit\AuditLogService;
+use App\Services\Inventory\InventoryMovementService;
 use App\Support\Locations\LocationCode;
 use App\Support\Stock\StockBatchCalculator;
 use DateTimeInterface;
@@ -106,6 +109,8 @@ class StockExcelImportService
 
     public function __construct(
         private readonly DatabaseManager $db,
+        private readonly InventoryMovementService $movements,
+        private readonly AuditLogService $audit,
     ) {}
 
     /**
@@ -145,6 +150,16 @@ class StockExcelImportService
             'warnings_json' => $preview['warnings'],
             'errors_json' => $preview['all_errors'],
         ]);
+
+        $this->audit->record(
+            event: 'stock_import_started',
+            module: 'stock_imports',
+            description: 'Importacion de stock previsualizada.',
+            auditable: $stockImport,
+            user: $user,
+            clientId: $client->id,
+            newValues: ['filename' => $file->getClientOriginalName(), 'status' => $status, 'totals' => $preview['totals']],
+        );
 
         return [
             'stock_import' => $stockImport,
@@ -197,6 +212,7 @@ class StockExcelImportService
         }
 
         return $this->db->transaction(function () use ($stockImport, $user, $preview): array {
+            $correlationId = $this->audit->correlationId();
             $lockedImport = StockImport::query()
                 ->whereKey($stockImport->id)
                 ->lockForUpdate()
@@ -212,7 +228,7 @@ class StockExcelImportService
                 'uploaded_by' => $user->id,
             ])->save();
 
-            $this->retireCurrentStockSnapshot($lockedImport->client_id);
+            $this->retireCurrentStockSnapshot($lockedImport, $user, $correlationId);
 
             $existingItems = Item::query()
                 ->where('client_id', $lockedImport->client_id)
@@ -312,7 +328,27 @@ class StockExcelImportService
                     $attributes['peak_'.$peakNumber] = $row['peak_'.$peakNumber];
                 }
 
-                StockPallet::query()->create($attributes);
+                $stockPallet = StockPallet::query()->create($attributes);
+                $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
+                $before = [
+                    ...$after,
+                    'units' => 0,
+                    'full_pallets' => 0,
+                    'warehouse_pallets' => 0,
+                    'peaks' => array_fill(0, StockPallet::MAX_PEAK_COLUMNS, 0),
+                    'active' => false,
+                ];
+                $this->movements->record(
+                    before: $before,
+                    after: $after,
+                    movementType: InventoryMovement::IMPORT,
+                    idempotencyKey: "stock-import:{$lockedImport->id}:stock:{$stockPallet->id}",
+                    correlationId: $correlationId,
+                    source: $lockedImport,
+                    user: $user,
+                    effectiveAt: $stockPallet->imported_at,
+                    metadata: ['filename' => $lockedImport->original_filename, 'source_sheet' => $stockPallet->source_sheet],
+                );
                 $importedRows++;
             }
 
@@ -330,6 +366,17 @@ class StockExcelImportService
                 'imported_at' => now(),
             ])->save();
 
+            $this->audit->record(
+                event: 'stock_import_completed',
+                module: 'stock_imports',
+                description: 'Importacion de stock confirmada y nueva fotografia aplicada.',
+                auditable: $lockedImport,
+                user: $user,
+                clientId: $lockedImport->client_id,
+                newValues: ['imported_rows' => $importedRows, 'created_items' => $createdItems, 'updated_items' => $updatedItems],
+                correlationId: $correlationId,
+            );
+
             return [
                 'imported_rows' => $importedRows,
                 'skipped_rows' => $preview['totals']['skipped_rows'],
@@ -339,14 +386,16 @@ class StockExcelImportService
         });
     }
 
-    private function retireCurrentStockSnapshot(int $clientId): void
+    private function retireCurrentStockSnapshot(StockImport $stockImport, User $user, string $correlationId): void
     {
-        $stockPalletIds = StockPallet::query()
-            ->where('client_id', $clientId)
+        $stockPallets = StockPallet::query()
+            ->with(['client', 'item', 'location.warehouse'])
+            ->where('client_id', $stockImport->client_id)
+            ->where('active', true)
             ->lockForUpdate()
-            ->pluck('id');
+            ->get();
 
-        if ($stockPalletIds->isEmpty()) {
+        if ($stockPallets->isEmpty()) {
             return;
         }
 
@@ -359,13 +408,26 @@ class StockExcelImportService
             'updated_at' => now(),
         ];
 
-        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-            $retiredValues['peak_'.$peakNumber] = 0;
-        }
+        foreach ($stockPallets as $stockPallet) {
+            $before = $this->movements->snapshot($stockPallet);
 
-        StockPallet::query()
-            ->whereKey($stockPalletIds)
-            ->update($retiredValues);
+            foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+                $retiredValues['peak_'.$peakNumber] = 0;
+            }
+
+            $stockPallet->forceFill($retiredValues)->save();
+            $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
+            $this->movements->record(
+                before: $before,
+                after: $after,
+                movementType: InventoryMovement::IMPORT_RETIREMENT,
+                idempotencyKey: "stock-import-retirement:{$stockImport->id}:stock:{$stockPallet->id}",
+                correlationId: $correlationId,
+                source: $stockImport,
+                user: $user,
+                metadata: ['reason' => 'Partida retirada al aplicar una nueva fotografia de stock.'],
+            );
+        }
     }
 
     /**

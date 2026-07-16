@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsReceipt;
 use App\Models\Role;
+use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\GoodsReceipts\GoodsReceiptDocumentStorage;
 use App\Support\GoodsReceipts\DocumentDisplayNamer;
@@ -27,6 +28,7 @@ class ClientGoodsReceiptDocumentController extends Controller
 
     public function __construct(
         private readonly GoodsReceiptDocumentStorage $documentStorage,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function index(Request $request): View
@@ -169,7 +171,10 @@ class ClientGoodsReceiptDocumentController extends Controller
         abort_unless($user->hasRole(Role::CLIENTE), 403);
         abort_unless($user->client_id !== null && (int) $user->client_id === (int) $goodsReceipt->client_id, 403);
 
-        return $this->documentDownloadResponse($goodsReceipt);
+        $response = $this->documentDownloadResponse($goodsReceipt);
+        $this->audit->record(event: 'client_receipt_document_downloaded', module: 'documents', description: 'Albaran de entrada descargado por cliente.', auditable: $goodsReceipt, user: $user, clientId: $goodsReceipt->client_id);
+
+        return $response;
     }
 
     public function downloadSigned(Request $request, GoodsReceipt $goodsReceipt): StreamedResponse
@@ -181,7 +186,10 @@ class ClientGoodsReceiptDocumentController extends Controller
             abort_unless($user->client_id !== null && (int) $user->client_id === (int) $goodsReceipt->client_id, 403);
         }
 
-        return $this->documentDownloadResponse($goodsReceipt);
+        $response = $this->documentDownloadResponse($goodsReceipt);
+        $this->audit->record(event: 'signed_receipt_document_downloaded', module: 'documents', description: 'Albaran de entrada descargado mediante enlace firmado.', auditable: $goodsReceipt, user: $user, clientId: $goodsReceipt->client_id, source: 'signed_link');
+
+        return $response;
     }
 
     private function documentDownloadResponse(GoodsReceipt $goodsReceipt): StreamedResponse
@@ -211,6 +219,7 @@ class ClientGoodsReceiptDocumentController extends Controller
 
         $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet']);
         $workflowService->ensureDeliveryNoteCanBeGenerated($goodsDispatch);
+        $this->audit->record(event: 'client_dispatch_document_downloaded', module: 'documents', description: 'Albaran de salida descargado por cliente.', auditable: $goodsDispatch, user: $user, clientId: $goodsDispatch->client_id);
 
         return Pdf::loadView('dispatches.delivery-note-pdf', [
             'dispatch' => $goodsDispatch,

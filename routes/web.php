@@ -24,6 +24,15 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\StockImportController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\Traceability\ActivityHeartbeatController;
+use App\Http\Controllers\Traceability\BusinessAuditLogController;
+use App\Http\Controllers\Traceability\ClientInventoryAnalyticsController;
+use App\Http\Controllers\Traceability\InventoryMovementController;
+use App\Http\Controllers\Traceability\LotTraceabilityController;
+use App\Http\Controllers\Traceability\StockAlertController;
+use App\Http\Controllers\Traceability\TraceabilityDashboardController;
+use App\Http\Controllers\Traceability\TraceabilityReportController;
+use App\Http\Controllers\Traceability\UserActivityController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarehouseController;
 use App\Models\Role;
@@ -53,6 +62,52 @@ Route::get('/documentos/entradas/{goodsReceipt}/descargar', [ClientGoodsReceiptD
     ->name('client-goods-receipts.signed-download');
 
 Route::middleware('auth')->group(function (): void {
+    Route::post('/actividad/heartbeat', ActivityHeartbeatController::class)
+        ->name('traceability.activity.heartbeat');
+
+    Route::get('/gestion/trazabilidad', TraceabilityDashboardController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('traceability.index');
+    Route::get('/gestion/trazabilidad/actividad', [UserActivityController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.activity.index');
+    Route::get('/gestion/trazabilidad/auditoria', [BusinessAuditLogController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.audit.index');
+    Route::get('/gestion/trazabilidad/movimientos', [InventoryMovementController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('traceability.movements.index');
+    Route::get('/gestion/trazabilidad/lotes', [LotTraceabilityController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('traceability.lots.index');
+    Route::get('/gestion/trazabilidad/analitica', [ClientInventoryAnalyticsController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.analytics.index');
+    Route::get('/gestion/trazabilidad/alertas', [StockAlertController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('traceability.alerts.index');
+    Route::post('/gestion/trazabilidad/alertas/reglas', [StockAlertController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.alerts.rules.store');
+    Route::put('/gestion/trazabilidad/alertas/reglas/{stockAlertRule}', [StockAlertController::class, 'update'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.alerts.rules.update');
+    Route::patch('/gestion/trazabilidad/alertas/{stockAlertEvent}/reconocer', [StockAlertController::class, 'acknowledge'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.alerts.acknowledge');
+    Route::patch('/gestion/trazabilidad/alertas/{stockAlertEvent}/silenciar', [StockAlertController::class, 'silence'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.alerts.silence');
+    Route::patch('/gestion/trazabilidad/alertas/{stockAlertEvent}/resolver', [StockAlertController::class, 'resolve'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.alerts.resolve');
+    Route::get('/gestion/trazabilidad/informes', [TraceabilityReportController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.reports.index');
+    Route::get('/gestion/trazabilidad/informes/movimientos.csv', [TraceabilityReportController::class, 'movementsCsv'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('traceability.reports.movements.csv');
+
     Route::get('/ajax/items', [AjaxSearchController::class, 'items'])
         ->name('ajax.items');
     Route::get('/ajax/stock-variants', [AjaxSearchController::class, 'stockVariants'])
@@ -350,6 +405,12 @@ Route::middleware('auth')->group(function (): void {
     Route::delete('/clientes/{client}/emails-albaranes-salida/{clientDispatchEmailRecipient}', [ClientController::class, 'destroyDispatchEmailRecipient'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('clients.dispatch-emails.destroy');
+    Route::post('/clientes/{client}/emails-avisos-stock', [ClientController::class, 'storeStockAlertEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.stock-alert-emails.store');
+    Route::delete('/clientes/{client}/emails-avisos-stock/{clientStockAlertEmailRecipient}', [ClientController::class, 'destroyStockAlertEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.stock-alert-emails.destroy');
 
     Route::get('/almacenes', [WarehouseController::class, 'index'])
         ->middleware('minimum.role:'.Role::ALMACEN)

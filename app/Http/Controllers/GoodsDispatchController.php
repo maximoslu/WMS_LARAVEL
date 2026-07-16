@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
 use App\Models\StockPallet;
+use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Support\Stock\StockVariantCatalog;
@@ -15,6 +16,7 @@ use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -314,6 +316,7 @@ class GoodsDispatchController extends Controller
         Request $request,
         GoodsDispatch $goodsDispatch,
         GoodsDispatchWorkflowService $workflowService,
+        AuditLogService $audit,
     ) {
         $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet', 'lines.allocations.stockPallet']);
 
@@ -323,6 +326,7 @@ class GoodsDispatchController extends Controller
         );
 
         $workflowService->ensureDeliveryNoteCanBeGenerated($goodsDispatch);
+        $audit->record(event: 'dispatch_delivery_note_generated', module: 'dispatches', description: 'Albaran de salida generado.', auditable: $goodsDispatch, user: $request->user(), clientId: $goodsDispatch->client_id);
 
         return Pdf::loadView('dispatches.delivery-note-pdf', [
             'dispatch' => $goodsDispatch,
@@ -330,7 +334,7 @@ class GoodsDispatchController extends Controller
     }
 
     /**
-     * @return array<int, \Illuminate\Support\Collection<int, StockPallet>>
+     * @return array<int, Collection<int, StockPallet>>
      */
     private function stockOptionsByItem(MerchandiseRequest $merchandiseRequest): array
     {

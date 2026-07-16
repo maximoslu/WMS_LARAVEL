@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\StockImport;
+use App\Services\Audit\AuditLogService;
 use App\Services\Stock\StockExcelImportService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
@@ -16,6 +17,7 @@ class StockImportController extends Controller
 {
     public function __construct(
         private readonly StockExcelImportService $stockExcelImportService,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function index(Request $request): View
@@ -76,6 +78,16 @@ class StockImportController extends Controller
             $result = $this->stockExcelImportService->confirm($stockImport, $request->user());
         } catch (Throwable $exception) {
             report($exception);
+            $this->audit->record(
+                event: 'stock_import_failed',
+                module: 'stock_imports',
+                description: 'La confirmacion de la importacion de stock ha fallado.',
+                auditable: $stockImport,
+                user: $request->user(),
+                clientId: $stockImport->client_id,
+                metadata: ['exception' => $exception::class],
+                severity: 'warning',
+            );
 
             return redirect()
                 ->route('stock.import')

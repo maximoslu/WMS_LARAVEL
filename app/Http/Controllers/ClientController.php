@@ -5,14 +5,18 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreClientDispatchEmailRecipientRequest;
 use App\Http\Requests\StoreClientReceiptEmailRecipientRequest;
 use App\Http\Requests\StoreClientRequest;
+use App\Http\Requests\StoreClientStockAlertEmailRecipientRequest;
 use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
 use App\Models\ClientDispatchEmailRecipient;
 use App\Models\ClientReceiptEmailRecipient;
+use App\Models\ClientStockAlertEmailRecipient;
 use App\Models\Role;
+use App\Services\Audit\AuditLogService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class ClientController extends Controller
@@ -58,9 +62,20 @@ class ClientController extends Controller
         ]);
     }
 
-    public function store(StoreClientRequest $request): RedirectResponse
+    public function store(StoreClientRequest $request, AuditLogService $audit): RedirectResponse
     {
-        Client::query()->create($this->payload($request->validated()));
+        DB::transaction(function () use ($request, $audit): void {
+            $client = Client::query()->create($this->payload($request->validated()));
+            $audit->record(
+                event: 'client_created',
+                module: 'clients',
+                description: 'Cliente creado.',
+                auditable: $client,
+                user: $request->user(),
+                clientId: $client->id,
+                newValues: $client->toArray(),
+            );
+        });
 
         return redirect()
             ->route('clients.index')
@@ -73,66 +88,134 @@ class ClientController extends Controller
             'client' => $client,
             'receiptEmailRecipients' => $client->receiptEmailRecipients()->orderBy('email')->get(),
             'dispatchEmailRecipients' => $client->dispatchEmailRecipients()->orderBy('email')->get(),
+            'stockAlertEmailRecipients' => $client->stockAlertEmailRecipients()->orderBy('email')->get(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
 
-    public function storeReceiptEmailRecipient(StoreClientReceiptEmailRecipientRequest $request, Client $client): RedirectResponse
+    public function storeReceiptEmailRecipient(StoreClientReceiptEmailRecipientRequest $request, Client $client, AuditLogService $audit): RedirectResponse
     {
-        $client->receiptEmailRecipients()->create($request->validated());
+        DB::transaction(function () use ($request, $client, $audit): void {
+            $recipient = $client->receiptEmailRecipients()->create($request->validated());
+            $audit->record(event: 'receipt_email_added', module: 'clients', description: 'Destinatario de albaranes de entrada anadido.', auditable: $client, subject: $recipient, user: $request->user(), clientId: $client->id, newValues: $recipient->toArray());
+        });
 
         return redirect()
             ->route('clients.edit', $client)
             ->with('status', 'Email para albaranes anadido correctamente.');
     }
 
-    public function destroyReceiptEmailRecipient(Request $request, Client $client, ClientReceiptEmailRecipient $clientReceiptEmailRecipient): RedirectResponse
+    public function destroyReceiptEmailRecipient(Request $request, Client $client, ClientReceiptEmailRecipient $clientReceiptEmailRecipient, AuditLogService $audit): RedirectResponse
     {
         abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
         abort_unless((int) $clientReceiptEmailRecipient->client_id === (int) $client->id, 404);
 
-        $clientReceiptEmailRecipient->delete();
+        DB::transaction(function () use ($request, $client, $clientReceiptEmailRecipient, $audit): void {
+            $old = $clientReceiptEmailRecipient->toArray();
+            $clientReceiptEmailRecipient->delete();
+            $audit->record(event: 'receipt_email_removed', module: 'clients', description: 'Destinatario de albaranes de entrada eliminado.', auditable: $client, user: $request->user(), clientId: $client->id, oldValues: $old);
+        });
 
         return redirect()
             ->route('clients.edit', $client)
             ->with('status', 'Email para albaranes eliminado correctamente.');
     }
 
-    public function storeDispatchEmailRecipient(StoreClientDispatchEmailRecipientRequest $request, Client $client): RedirectResponse
+    public function storeDispatchEmailRecipient(StoreClientDispatchEmailRecipientRequest $request, Client $client, AuditLogService $audit): RedirectResponse
     {
-        $client->dispatchEmailRecipients()->create($request->validated());
+        DB::transaction(function () use ($request, $client, $audit): void {
+            $recipient = $client->dispatchEmailRecipients()->create($request->validated());
+            $audit->record(event: 'dispatch_email_added', module: 'clients', description: 'Destinatario de albaranes de salida anadido.', auditable: $client, subject: $recipient, user: $request->user(), clientId: $client->id, newValues: $recipient->toArray());
+        });
 
         return redirect()
             ->route('clients.edit', $client)
             ->with('status', 'Email para albaranes de salida anadido correctamente.');
     }
 
-    public function destroyDispatchEmailRecipient(Request $request, Client $client, ClientDispatchEmailRecipient $clientDispatchEmailRecipient): RedirectResponse
+    public function destroyDispatchEmailRecipient(Request $request, Client $client, ClientDispatchEmailRecipient $clientDispatchEmailRecipient, AuditLogService $audit): RedirectResponse
     {
         abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
         abort_unless((int) $clientDispatchEmailRecipient->client_id === (int) $client->id, 404);
 
-        $clientDispatchEmailRecipient->delete();
+        DB::transaction(function () use ($request, $client, $clientDispatchEmailRecipient, $audit): void {
+            $old = $clientDispatchEmailRecipient->toArray();
+            $clientDispatchEmailRecipient->delete();
+            $audit->record(event: 'dispatch_email_removed', module: 'clients', description: 'Destinatario de albaranes de salida eliminado.', auditable: $client, user: $request->user(), clientId: $client->id, oldValues: $old);
+        });
 
         return redirect()
             ->route('clients.edit', $client)
             ->with('status', 'Email para albaranes de salida eliminado correctamente.');
     }
 
-    public function update(UpdateClientRequest $request, Client $client): RedirectResponse
+    public function storeStockAlertEmailRecipient(
+        StoreClientStockAlertEmailRecipientRequest $request,
+        Client $client,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        DB::transaction(function () use ($request, $client, $audit): void {
+            $recipient = $client->stockAlertEmailRecipients()->create($request->validated());
+            $audit->record(
+                event: 'stock_alert_email_added',
+                module: 'clients',
+                description: 'Destinatario de avisos de stock anadido.',
+                auditable: $client,
+                subject: $recipient,
+                user: $request->user(),
+                clientId: $client->id,
+                newValues: ['email' => $recipient->email, 'active' => $recipient->active],
+            );
+        });
+
+        return to_route('clients.edit', $client)->with('status', 'Email para avisos de stock anadido correctamente.');
+    }
+
+    public function destroyStockAlertEmailRecipient(
+        Request $request,
+        Client $client,
+        ClientStockAlertEmailRecipient $clientStockAlertEmailRecipient,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
+        abort_unless((int) $clientStockAlertEmailRecipient->client_id === (int) $client->id, 404);
+        DB::transaction(function () use ($request, $client, $clientStockAlertEmailRecipient, $audit): void {
+            $old = ['email' => $clientStockAlertEmailRecipient->email, 'active' => $clientStockAlertEmailRecipient->active];
+            $clientStockAlertEmailRecipient->delete();
+            $audit->record(
+                event: 'stock_alert_email_removed',
+                module: 'clients',
+                description: 'Destinatario de avisos de stock eliminado.',
+                auditable: $client,
+                user: $request->user(),
+                clientId: $client->id,
+                oldValues: $old,
+            );
+        });
+
+        return to_route('clients.edit', $client)->with('status', 'Email para avisos de stock eliminado correctamente.');
+    }
+
+    public function update(UpdateClientRequest $request, Client $client, AuditLogService $audit): RedirectResponse
     {
-        $client->update($this->payload($request->validated()));
+        $old = $client->toArray();
+        DB::transaction(function () use ($request, $client, $audit, $old): void {
+            $client->update($this->payload($request->validated()));
+            $audit->record(event: 'client_updated', module: 'clients', description: 'Cliente actualizado.', auditable: $client, user: $request->user(), clientId: $client->id, oldValues: $old, newValues: $client->fresh()->toArray());
+        });
 
         return redirect()
             ->route('clients.index')
             ->with('status', 'Cliente actualizado correctamente.');
     }
 
-    public function toggleActive(Client $client): RedirectResponse
+    public function toggleActive(Request $request, Client $client, AuditLogService $audit): RedirectResponse
     {
-        $client->update([
-            'active' => ! $client->active,
-        ]);
+        $old = ['active' => $client->active];
+        DB::transaction(function () use ($request, $client, $audit, $old): void {
+            $client->update(['active' => ! $client->active]);
+            $audit->record(event: $client->active ? 'client_activated' : 'client_deactivated', module: 'clients', description: $client->active ? 'Cliente activado.' : 'Cliente desactivado.', auditable: $client, user: $request->user(), clientId: $client->id, oldValues: $old, newValues: ['active' => $client->active]);
+        });
 
         return redirect()
             ->route('clients.index')

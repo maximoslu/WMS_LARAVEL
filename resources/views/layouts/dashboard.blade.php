@@ -9,7 +9,11 @@
         <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="brand-body app-shell-body">
+    <body
+        class="brand-body app-shell-body"
+        data-activity-heartbeat-url="{{ route('traceability.activity.heartbeat') }}"
+        data-current-route-name="{{ request()->route()?->getName() }}"
+    >
         @php($user = auth()->user())
         @php($userName = $user->name)
         @php($roleName = $user->role?->name ?? 'Sin rol asignado')
@@ -198,4 +202,3 @@
         </div>
     </body>
 </html>
-

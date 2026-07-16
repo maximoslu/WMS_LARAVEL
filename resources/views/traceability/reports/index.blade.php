@@ -1,0 +1,16 @@
+@extends('layouts.dashboard')
+
+@section('title', 'Informes | Trazabilidad')
+@section('topbar_title', 'Informes de trazabilidad')
+
+@section('content')
+    <x-breadcrumbs :items="[['label' => 'Trazabilidad', 'href' => route('traceability.index'), 'icon' => 'audit'], ['label' => 'Informes']]" />
+    @include('traceability._nav')
+    <section class="surface-card ops-page-header page-header-compact compact-card"><div class="app-copy"><h1 class="ops-page-title page-title-compact">Informes operativos</h1><p>Consultas enlazadas a sus filtros y exportacion CSV limitada a 10.000 movimientos.</p></div></section>
+    <div class="traceability-link-grid">
+        <a class="surface-card compact-card" href="{{ route('traceability.activity.index') }}"><strong>Actividad de usuarios</strong><span>Sesiones y tiempo activo estimado.</span></a><a class="surface-card compact-card" href="{{ route('traceability.audit.index') }}"><strong>Auditoria empresarial</strong><span>Acciones, entidades y correlaciones.</span></a><a class="surface-card compact-card" href="{{ route('traceability.movements.index') }}"><strong>Movimientos y ajustes</strong><span>Entradas, salidas y cambios manuales.</span></a><a class="surface-card compact-card" href="{{ route('traceability.lots.index') }}"><strong>Lotes e integridad</strong><span>Origen, ubicacion, destino y lagunas.</span></a><a class="surface-card compact-card" href="{{ route('traceability.analytics.index') }}"><strong>Rotacion y cobertura</strong><span>Articulos con y sin movimiento.</span></a><a class="surface-card compact-card" href="{{ route('traceability.alerts.index') }}"><strong>Stock bajo</strong><span>Reglas, previsiones y eventos.</span></a>
+    </div>
+    <section class="surface-card item-form-card compact-card"><div class="item-form-header"><div class="app-copy"><h2 class="ops-page-title page-title-compact">Exportar movimientos CSV</h2><p>El archivo incluye fecha, usuario generador y criterios aplicados.</p></div></div><form method="GET" action="{{ route('traceability.reports.movements.csv') }}" class="stock-filters compact-filters filters-compact">
+        <label class="auth-field"><span>Cliente *</span><select name="client_id" class="auth-input" required><option value="">Seleccionar</option>@foreach ($clients as $client)<option value="{{ $client->id }}">{{ $client->name }}</option>@endforeach</select></label><label class="auth-field"><span>Desde *</span><input type="date" name="date_from" value="{{ now()->subDays(30)->toDateString() }}" class="auth-input" required></label><label class="auth-field"><span>Hasta *</span><input type="date" name="date_to" value="{{ now()->toDateString() }}" class="auth-input" required></label><label class="auth-field"><span>Tipo</span><select name="movement_type" class="auth-input"><option value="">Todos</option>@foreach (\App\Models\InventoryMovement::types() as $type)<option value="{{ $type }}">{{ str_replace('_', ' ', $type) }}</option>@endforeach</select></label><label class="auth-field"><span>Lote exacto</span><input type="text" name="lot" class="auth-input" maxlength="100"></label><div class="stock-filter-actions"><button class="button-primary compact-button btn-compact">Descargar CSV</button></div>
+    </form></section>
+@endsection

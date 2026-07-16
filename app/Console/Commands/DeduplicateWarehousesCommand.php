@@ -3,8 +3,12 @@
 namespace App\Console\Commands;
 
 use App\Models\Client;
+use App\Models\InventoryMovement;
 use App\Models\Location;
+use App\Models\StockPallet;
 use App\Models\Warehouse;
+use App\Services\Audit\AuditLogService;
+use App\Services\Inventory\InventoryMovementService;
 use App\Services\Locations\LocationIntegrityService;
 use App\Services\Warehouses\WarehouseIntegrityService;
 use App\Support\Locations\LocationCode;
@@ -24,8 +28,11 @@ class DeduplicateWarehousesCommand extends Command
 
     protected $description = 'Consolida almacenes equivalentes sin perder ubicaciones, stock ni historico';
 
-    public function handle(WarehouseIntegrityService $integrity): int
-    {
+    public function handle(
+        WarehouseIntegrityService $integrity,
+        InventoryMovementService $movements,
+        AuditLogService $audit,
+    ): int {
         if ($this->option('apply') && $this->option('dry-run')) {
             $this->error('Usa --dry-run o --apply, no ambos a la vez.');
 
@@ -65,7 +72,8 @@ class DeduplicateWarehousesCommand extends Command
         }
 
         try {
-            DB::transaction(function () use ($integrity, $warehouses, $client, $warehouseCode): void {
+            $correlationId = $audit->correlationId();
+            DB::transaction(function () use ($integrity, $movements, $audit, $warehouses, $client, $warehouseCode, $correlationId): void {
                 $lockedWarehouses = Warehouse::query()
                     ->with(['locations' => fn ($query) => $query->orderBy('id')])
                     ->whereKey($warehouses->pluck('id'))
@@ -81,6 +89,14 @@ class DeduplicateWarehousesCommand extends Command
 
                 $beforeLocations = $integrity->locationsForWarehouses($lockedWarehouses);
                 $beforeStock = $integrity->stockSnapshot($beforeLocations, $client);
+                $affectedStock = StockPallet::query()
+                    ->with(['client', 'item', 'location.warehouse'])
+                    ->whereIn('location_id', $beforeLocations->pluck('id'))
+                    ->lockForUpdate()
+                    ->get();
+                $beforeMovementSnapshots = $affectedStock->mapWithKeys(fn (StockPallet $stock): array => [
+                    $stock->id => $movements->snapshot($stock),
+                ]);
                 $duplicateIds = $lockedWarehouses
                     ->where('id', '!=', $canonical->id)
                     ->pluck('id')
@@ -136,6 +152,44 @@ class DeduplicateWarehousesCommand extends Command
                     throw new \RuntimeException('Quedan reservas en almacenes duplicados; la transaccion se ha revertido.');
                 }
 
+                foreach ($affectedStock as $stock) {
+                    $afterStockPallet = StockPallet::query()->with(['client', 'item', 'location.warehouse'])->findOrFail($stock->id);
+                    $beforeSnapshot = $beforeMovementSnapshots->get($stock->id);
+                    $afterSnapshot = $movements->snapshot($afterStockPallet);
+
+                    if (($beforeSnapshot['location_id'] ?? null) === ($afterSnapshot['location_id'] ?? null)
+                        && ($beforeSnapshot['warehouse_id'] ?? null) === ($afterSnapshot['warehouse_id'] ?? null)) {
+                        continue;
+                    }
+
+                    $movementType = ($beforeSnapshot['location_id'] ?? null) !== ($afterSnapshot['location_id'] ?? null)
+                        ? InventoryMovement::LOCATION_CONSOLIDATION
+                        : InventoryMovement::WAREHOUSE_CONSOLIDATION;
+                    $movements->record(
+                        before: $beforeSnapshot,
+                        after: $afterSnapshot,
+                        movementType: $movementType,
+                        idempotencyKey: "warehouse-dedup:{$canonical->id}:stock:{$stock->id}:".($beforeSnapshot['location_id'] ?? 0).':'.($afterSnapshot['location_id'] ?? 0),
+                        correlationId: $correlationId,
+                        source: $canonical,
+                        metadata: ['merged_warehouse_ids' => $duplicateIds->all()],
+                    );
+                }
+
+                $audit->record(
+                    event: 'warehouse_consolidated',
+                    module: 'warehouses',
+                    description: 'Almacenes y ubicaciones duplicados consolidados sin alterar cantidades.',
+                    auditable: $canonical,
+                    clientId: $client?->id ?? $canonical->client_id,
+                    oldValues: ['warehouse_ids' => $lockedWarehouses->pluck('id')->all()],
+                    newValues: ['canonical_warehouse_id' => $canonical->id],
+                    metadata: ['affected_stock_pallets' => $affectedStock->count()],
+                    correlationId: $correlationId,
+                    source: 'command',
+                    severity: 'important',
+                );
+
                 Log::info('Almacenes duplicados consolidados.', [
                     'canonical_warehouse_id' => $canonical->id,
                     'merged_warehouse_ids' => $duplicateIds->all(),
@@ -155,8 +209,8 @@ class DeduplicateWarehousesCommand extends Command
     }
 
     /** @param Collection<int, Warehouse> $warehouses
-     * @param Collection<int, Location> $locations
-     * @param Collection<int, Collection<int, Location>> $duplicateLocationGroups
+     * @param  Collection<int, Location>  $locations
+     * @param  Collection<int, Collection<int, Location>>  $duplicateLocationGroups
      * @return list<string>
      */
     private function reportPlan(

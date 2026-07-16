@@ -90,6 +90,11 @@ class Client extends Model
         return $this->hasMany(ClientDispatchEmailRecipient::class);
     }
 
+    public function stockAlertEmailRecipients(): HasMany
+    {
+        return $this->hasMany(ClientStockAlertEmailRecipient::class);
+    }
+
     public function formattedDeliveryAddress(): string
     {
         $lines = collect([

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\BrevoMailConfigurationException;
 use App\Models\AccessRequest;
 use App\Models\Role;
+use App\Models\StockAlertEvent;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\View;
@@ -134,6 +135,26 @@ class BrevoMailService
             data: [
                 'sentAt' => now()->format('Y-m-d H:i:s'),
                 'mailer' => 'brevo-api',
+            ],
+        );
+    }
+
+    /** @param list<string> $recipientEmails */
+    public function sendStockAlert(StockAlertEvent $event, array $recipientEmails): void
+    {
+        $event->loadMissing(['client', 'item', 'rule']);
+
+        $this->send(
+            toEmails: $recipientEmails,
+            subject: sprintf('MAXIMO WMS - Alerta de stock %s - %s', strtoupper($event->severity), $event->item?->sku),
+            htmlView: 'emails.brevo.stock-alert',
+            data: [
+                'event' => $event,
+                'stockUrl' => route('stock.index', [
+                    'client_id' => $event->client_id,
+                    'item_id' => $event->item_id,
+                ]),
+                'evaluatedAt' => $event->triggered_at,
             ],
         );
     }

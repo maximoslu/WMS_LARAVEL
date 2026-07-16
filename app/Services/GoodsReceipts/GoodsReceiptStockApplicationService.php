@@ -4,8 +4,11 @@ namespace App\Services\GoodsReceipts;
 
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\StockPallet;
+use App\Models\User;
+use App\Services\Inventory\InventoryMovementService;
 use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -14,13 +17,14 @@ class GoodsReceiptStockApplicationService
 {
     public function __construct(
         private readonly GoodsReceiptItemResolver $itemResolver,
+        private readonly InventoryMovementService $movements,
     ) {}
 
     /**
      * Applies the stock impact of a confirmed receipt.
      * Must be called inside a DB transaction.
      */
-    public function apply(GoodsReceipt $receipt): void
+    public function apply(GoodsReceipt $receipt, User $user, string $correlationId): void
     {
         $receipt->loadMissing([
             'lines.item',
@@ -28,7 +32,7 @@ class GoodsReceiptStockApplicationService
         ]);
 
         foreach ($receipt->lines as $line) {
-            $this->applyLine($receipt, $line);
+            $this->applyLine($receipt, $line, $user, $correlationId);
         }
     }
 
@@ -37,7 +41,7 @@ class GoodsReceiptStockApplicationService
      * lines, before any further changes). Must be called inside a DB
      * transaction. Callers are responsible for checking hasStockApplied().
      */
-    public function revert(GoodsReceipt $receipt): void
+    public function revert(GoodsReceipt $receipt, User $user, string $correlationId): void
     {
         if ($receipt->status !== GoodsReceipt::STATUS_CONFIRMED) {
             throw ValidationException::withMessages([
@@ -59,12 +63,17 @@ class GoodsReceiptStockApplicationService
             ->groupBy('item_id');
 
         foreach ($receipt->lines as $line) {
-            $this->revertLine($line, $batchesByItem->get($line->item_id, collect()));
+            $this->revertLine($receipt, $line, $batchesByItem->get($line->item_id, collect()), $user, $correlationId);
         }
     }
 
-    private function revertLine(GoodsReceiptLine $line, Collection $candidateBatches): void
-    {
+    private function revertLine(
+        GoodsReceipt $receipt,
+        GoodsReceiptLine $line,
+        Collection $candidateBatches,
+        User $user,
+        string $correlationId,
+    ): void {
         $item = $line->item;
 
         if (! $item instanceof Item) {
@@ -104,6 +113,7 @@ class GoodsReceiptStockApplicationService
         }
 
         $remainingUnits = $availableUnits - $quantityUnits;
+        $before = $this->movements->snapshot($target);
 
         if ($remainingUnits <= 0) {
             $target->delete();
@@ -111,13 +121,16 @@ class GoodsReceiptStockApplicationService
             // item never picks this (now deleted) batch again via the fallback.
             $target->quantity_units = 0;
 
+            $this->recordReversal($receipt, $line, $target, $before, $user, $correlationId);
+
             return;
         }
 
         $target->fill(['quantity_units' => $remainingUnits])->save();
+        $this->recordReversal($receipt, $line, $target, $before, $user, $correlationId);
     }
 
-    private function applyLine(GoodsReceipt $receipt, GoodsReceiptLine $line): void
+    private function applyLine(GoodsReceipt $receipt, GoodsReceiptLine $line, User $user, string $correlationId): void
     {
         $item = $this->resolveItem($receipt, $line);
         $unitsPerPallet = (int) ($line->units_per_pallet ?? $item->units_per_pallet);
@@ -145,6 +158,7 @@ class GoodsReceiptStockApplicationService
         }
 
         $stockPallet = $this->resolveTargetBatch($receipt, $item, $line, $unitsPerPallet);
+        $before = $this->movements->snapshot($stockPallet);
         $nextQuantityUnits = (int) ($stockPallet->quantity_units ?? 0) + $quantityUnits;
 
         $stockPeaks = $this->mergedStockPeaks($stockPallet, $peakUnits, $line);
@@ -165,6 +179,20 @@ class GoodsReceiptStockApplicationService
             ...$this->peakAttributes($stockPeaks),
         ]);
         $stockPallet->save();
+        $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
+
+        $this->movements->record(
+            before: $before,
+            after: $after,
+            movementType: InventoryMovement::RECEIPT,
+            idempotencyKey: "receipt:{$receipt->id}:line:{$line->id}:stock:{$stockPallet->id}:{$correlationId}",
+            correlationId: $correlationId,
+            source: $receipt,
+            sourceLine: $line,
+            user: $user,
+            effectiveAt: $receipt->received_at?->copy()->startOfDay(),
+            metadata: ['receipt_number' => $receipt->receipt_number],
+        );
 
         $line->forceFill([
             'item_id' => $item->id,
@@ -176,6 +204,47 @@ class GoodsReceiptStockApplicationService
             'pico_units' => $picoUnits > 0 ? $picoUnits : null,
             ...$this->peakAttributes($peakUnits, null),
         ])->save();
+    }
+
+    /** @param array<string, mixed> $before */
+    private function recordReversal(
+        GoodsReceipt $receipt,
+        GoodsReceiptLine $line,
+        StockPallet $stockPallet,
+        array $before,
+        User $user,
+        string $correlationId,
+    ): void {
+        $after = $this->movements->snapshot($stockPallet->exists
+            ? $stockPallet->fresh(['client', 'item', 'location.warehouse'])
+            : null);
+        $after = [
+            ...$before,
+            ...$after,
+            'client_id' => $before['client_id'],
+            'item_id' => $before['item_id'],
+            'stock_pallet_id' => $before['stock_pallet_id'],
+        ];
+
+        if (! $stockPallet->exists) {
+            $after['units'] = 0;
+            $after['full_pallets'] = 0;
+            $after['warehouse_pallets'] = 0;
+            $after['peaks'] = array_fill(0, StockPallet::MAX_PEAK_COLUMNS, 0);
+            $after['active'] = false;
+        }
+
+        $this->movements->record(
+            before: $before,
+            after: $after,
+            movementType: InventoryMovement::REVERSAL,
+            idempotencyKey: "receipt-reversal:{$receipt->id}:line:{$line->id}:stock:{$before['stock_pallet_id']}:{$correlationId}",
+            correlationId: $correlationId,
+            source: $receipt,
+            sourceLine: $line,
+            user: $user,
+            metadata: ['reason' => 'Reversion de entrada confirmada antes de editar o eliminar.'],
+        );
     }
 
     private function resolveTargetBatch(GoodsReceipt $receipt, Item $item, GoodsReceiptLine $line, int $unitsPerPallet): StockPallet

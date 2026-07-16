@@ -7,9 +7,11 @@ use App\Models\AccessRequest;
 use App\Models\Client;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Audit\AuditLogService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class UserManagementController extends Controller
@@ -67,7 +69,7 @@ class UserManagementController extends Controller
         ]);
     }
 
-    public function update(UpdateManagedUserRequest $request, User $user): RedirectResponse
+    public function update(UpdateManagedUserRequest $request, User $user, AuditLogService $audit): RedirectResponse
     {
         $actor = $request->user();
         $this->ensureEditable($actor, $user);
@@ -97,21 +99,45 @@ class UserManagementController extends Controller
             $payload['password'] = $validated['password'];
         }
 
-        $user->update($payload);
+        $old = $user->only(['name', 'email', 'role_id', 'client_id', 'active']);
+        DB::transaction(function () use ($user, $payload, $old, $actor, $audit): void {
+            $user->update($payload);
+            $audit->record(
+                event: 'user_updated',
+                module: 'users',
+                description: 'Usuario, rol o asignacion actualizados.',
+                auditable: $user,
+                user: $actor,
+                clientId: $user->client_id,
+                oldValues: $old,
+                newValues: $user->fresh()->only(['name', 'email', 'role_id', 'client_id', 'active']),
+            );
+        });
 
         return redirect()
             ->route('users.index')
             ->with('status', 'Usuario actualizado correctamente.');
     }
 
-    public function toggleActive(Request $request, User $user): RedirectResponse
+    public function toggleActive(Request $request, User $user, AuditLogService $audit): RedirectResponse
     {
         abort_unless($request->user()->isSuperAdmin(), 403);
         abort_if($request->user()->is($user), 403);
 
-        $user->update([
-            'active' => ! $user->active,
-        ]);
+        $old = ['active' => $user->active];
+        DB::transaction(function () use ($request, $user, $audit, $old): void {
+            $user->update(['active' => ! $user->active]);
+            $audit->record(
+                event: $user->active ? 'user_activated' : 'user_deactivated',
+                module: 'users',
+                description: $user->active ? 'Usuario activado.' : 'Usuario desactivado.',
+                auditable: $user,
+                user: $request->user(),
+                clientId: $user->client_id,
+                oldValues: $old,
+                newValues: ['active' => $user->active],
+            );
+        });
 
         return redirect()
             ->route('users.index')

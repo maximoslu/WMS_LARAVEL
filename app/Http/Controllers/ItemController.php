@@ -7,10 +7,12 @@ use App\Http\Requests\UpdateItemRequest;
 use App\Models\Client;
 use App\Models\Item;
 use App\Models\Location;
+use App\Services\Audit\AuditLogService;
 use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class ItemController extends Controller
@@ -65,9 +67,20 @@ class ItemController extends Controller
         ]);
     }
 
-    public function store(StoreItemRequest $request): RedirectResponse
+    public function store(StoreItemRequest $request, AuditLogService $audit): RedirectResponse
     {
-        Item::query()->create($this->payload($request->validated()));
+        DB::transaction(function () use ($request, $audit): void {
+            $item = Item::query()->create($this->payload($request->validated()));
+            $audit->record(
+                event: 'item_created',
+                module: 'items',
+                description: 'Articulo creado.',
+                auditable: $item,
+                user: $request->user(),
+                clientId: $item->client_id,
+                newValues: $item->toArray(),
+            );
+        });
 
         return redirect()
             ->route('items.index')
@@ -84,22 +97,48 @@ class ItemController extends Controller
         ]);
     }
 
-    public function update(UpdateItemRequest $request, Item $item): RedirectResponse
+    public function update(UpdateItemRequest $request, Item $item, AuditLogService $audit): RedirectResponse
     {
-        $item->update($this->payload($request->validated()));
+        $old = $item->toArray();
+        DB::transaction(function () use ($request, $item, $audit, $old): void {
+            $item->update($this->payload($request->validated()));
+            $audit->record(
+                event: 'item_updated',
+                module: 'items',
+                description: 'Articulo actualizado.',
+                auditable: $item,
+                user: $request->user(),
+                clientId: $item->client_id,
+                oldValues: $old,
+                newValues: $item->fresh()->toArray(),
+            );
+        });
 
         return redirect()
             ->route('items.index')
             ->with('status', 'Articulo actualizado correctamente.');
     }
 
-    public function toggleActive(Request $request, Item $item): RedirectResponse
+    public function toggleActive(Request $request, Item $item, AuditLogService $audit): RedirectResponse
     {
-        $item->update([
-            'status' => $item->status === Item::STATUS_ACTIVE
-                ? Item::STATUS_BLOCKED
-                : Item::STATUS_ACTIVE,
-        ]);
+        $old = $item->toArray();
+        DB::transaction(function () use ($request, $item, $audit, $old): void {
+            $item->update([
+                'status' => $item->status === Item::STATUS_ACTIVE
+                    ? Item::STATUS_BLOCKED
+                    : Item::STATUS_ACTIVE,
+            ]);
+            $audit->record(
+                event: $item->fresh()->status === Item::STATUS_ACTIVE ? 'item_unblocked' : 'item_blocked',
+                module: 'items',
+                description: $item->fresh()->status === Item::STATUS_ACTIVE ? 'Articulo desbloqueado.' : 'Articulo bloqueado.',
+                auditable: $item,
+                user: $request->user(),
+                clientId: $item->client_id,
+                oldValues: $old,
+                newValues: $item->fresh()->toArray(),
+            );
+        });
 
         return redirect()
             ->route('items.index')

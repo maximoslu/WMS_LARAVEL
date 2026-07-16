@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
@@ -2649,6 +2650,12 @@ class GoodsReceiptManagementTest extends TestCase
             'sku' => 'SKU-CONF-001',
             'lot_key' => '',
         ]);
+        $this->assertDatabaseHas('inventory_movements', [
+            'client_id' => $client->id,
+            'movement_type' => InventoryMovement::RECEIPT,
+            'source_id' => $receipt->id,
+            'units_delta' => 2500,
+        ]);
 
         $this->actingAs($user)
             ->from(route('goods-receipts.show', $receipt))
@@ -2657,6 +2664,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSessionHasErrors('goods_receipt');
 
         $this->assertDatabaseCount('stock_pallets', 1);
+        $this->assertSame(1, InventoryMovement::query()->where('source_id', $receipt->id)->where('movement_type', InventoryMovement::RECEIPT)->count());
     }
 
     public function test_confirmed_goods_receipt_status_is_visible_and_stock_page_reflects_it(): void
@@ -2880,6 +2888,7 @@ class GoodsReceiptManagementTest extends TestCase
             'full_pallets' => 2,
             'peak_1' => 500,
         ]);
+        $this->assertSame(1, InventoryMovement::query()->where('source_id', $receipt->id)->where('movement_type', InventoryMovement::RECEIPT)->count());
     }
 
     public function test_entrada_suma_stock_en_cliente_correcto(): void

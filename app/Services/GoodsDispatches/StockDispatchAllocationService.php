@@ -5,24 +5,31 @@ namespace App\Services\GoodsDispatches;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\GoodsDispatchLineAllocation;
+use App\Models\InventoryMovement;
 use App\Models\StockPallet;
+use App\Models\User;
+use App\Services\Inventory\InventoryMovementService;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class StockDispatchAllocationService
 {
+    public function __construct(private readonly InventoryMovementService $movements) {}
+
     /**
      * Deducts the real loaded quantities of a dispatch from client stock.
      * Must be called inside a DB transaction. Not idempotent by itself —
      * callers must guard on GoodsDispatch::hasStockApplied() before calling.
      */
-    public function apply(GoodsDispatch $dispatch): void
+    public function apply(GoodsDispatch $dispatch, ?User $user = null, ?string $correlationId = null): void
     {
+        $correlationId ??= (string) Str::uuid();
         $lines = $dispatch->lines()->with('allocations')->get();
 
         foreach ($lines as $line) {
             if ($line->allocations->isNotEmpty()) {
                 foreach ($line->allocations as $allocation) {
-                    $this->applyAllocation($dispatch, $line, $allocation);
+                    $this->applyAllocation($dispatch, $line, $allocation, $user, $correlationId);
                 }
 
                 continue;
@@ -36,17 +43,22 @@ class StockDispatchAllocationService
             }
 
             if ($loadedPallets > 0) {
-                $this->applyPalletLine($dispatch, $line);
+                $this->applyPalletLine($dispatch, $line, $user, $correlationId);
             }
 
             if ($loadedPartialUnits > 0) {
-                $this->applyPartialUnits($dispatch, $line, $loadedPartialUnits);
+                $this->applyPartialUnits($dispatch, $line, $loadedPartialUnits, $user, $correlationId);
             }
         }
     }
 
-    private function applyAllocation(GoodsDispatch $dispatch, GoodsDispatchLine $line, GoodsDispatchLineAllocation $allocation): void
-    {
+    private function applyAllocation(
+        GoodsDispatch $dispatch,
+        GoodsDispatchLine $line,
+        GoodsDispatchLineAllocation $allocation,
+        ?User $user,
+        string $correlationId,
+    ): void {
         $loadedPallets = $allocation->loadedPallets();
         $loadedPartialUnits = $allocation->loadedPartialUnits();
 
@@ -64,6 +76,7 @@ class StockDispatchAllocationService
         }
 
         $this->guardSameClient($dispatch, $stockPallet);
+        $before = $this->movements->snapshot($stockPallet);
 
         if ($loadedPallets > 0) {
             if ((int) $stockPallet->full_pallets < $loadedPallets) {
@@ -80,10 +93,25 @@ class StockDispatchAllocationService
         }
 
         $stockPallet->save();
+        $this->recordDispatchMovement(
+            $dispatch,
+            $line,
+            $stockPallet,
+            $before,
+            $user,
+            $correlationId,
+            "allocation:{$allocation->id}",
+            ['allocation_id' => $allocation->id],
+        );
     }
 
-    private function applyPartialUnits(GoodsDispatch $dispatch, GoodsDispatchLine $line, int $units): void
-    {
+    private function applyPartialUnits(
+        GoodsDispatch $dispatch,
+        GoodsDispatchLine $line,
+        int $units,
+        ?User $user,
+        string $correlationId,
+    ): void {
         if ($line->stock_pallet_id === null) {
             throw $this->unresolvedStockError($line);
         }
@@ -98,10 +126,20 @@ class StockDispatchAllocationService
         }
 
         $this->guardSameClient($dispatch, $stockPallet);
+        $before = $this->movements->snapshot($stockPallet);
 
         $this->applyPartialUnitsToStockPallet($stockPallet, $line, $units, [], 0);
 
         $stockPallet->save();
+        $this->recordDispatchMovement(
+            $dispatch,
+            $line,
+            $stockPallet,
+            $before,
+            $user,
+            $correlationId,
+            'partial',
+        );
     }
 
     /**
@@ -192,8 +230,12 @@ class StockDispatchAllocationService
         $this->decrementWarehousePallets($stockPallet, $warehousePalletsRemoved);
     }
 
-    private function applyPalletLine(GoodsDispatch $dispatch, GoodsDispatchLine $line): void
-    {
+    private function applyPalletLine(
+        GoodsDispatch $dispatch,
+        GoodsDispatchLine $line,
+        ?User $user,
+        string $correlationId,
+    ): void {
         $remaining = $line->loadedPallets();
 
         if ($line->stock_pallet_id !== null) {
@@ -207,6 +249,7 @@ class StockDispatchAllocationService
             }
 
             $this->guardSameClient($dispatch, $stockPallet);
+            $before = $this->movements->snapshot($stockPallet);
 
             if ((int) $stockPallet->full_pallets < $remaining) {
                 throw $this->insufficientStockError($line);
@@ -216,6 +259,15 @@ class StockDispatchAllocationService
             $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - ($remaining * $unitsPerPallet));
             $this->decrementWarehousePallets($stockPallet, $remaining);
             $stockPallet->save();
+            $this->recordDispatchMovement(
+                $dispatch,
+                $line,
+                $stockPallet,
+                $before,
+                $user,
+                $correlationId,
+                'pallet',
+            );
 
             return;
         }
@@ -247,12 +299,64 @@ class StockDispatchAllocationService
             }
 
             $unitsPerPallet = (int) ($batch->units_per_pallet ?: $line->units_per_pallet);
+            $before = $this->movements->snapshot($batch);
             $batch->quantity_units = max(0, (int) $batch->quantity_units - ($take * $unitsPerPallet));
             $this->decrementWarehousePallets($batch, $take);
             $batch->save();
+            $line->allocations()->create([
+                'stock_pallet_id' => $batch->id,
+                'lot' => $batch->lot,
+                'location_text' => $batch->location_text,
+                'loaded_pallets' => $take,
+                'loaded_partial_units' => 0,
+                'selected_peaks' => [],
+            ]);
+            $this->recordDispatchMovement(
+                $dispatch,
+                $line,
+                $batch,
+                $before,
+                $user,
+                $correlationId,
+                'pallet-batch-'.$batch->id,
+            );
 
             $remaining -= $take;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $metadata
+     */
+    private function recordDispatchMovement(
+        GoodsDispatch $dispatch,
+        GoodsDispatchLine $line,
+        StockPallet $stockPallet,
+        array $before,
+        ?User $user,
+        string $correlationId,
+        string $segment,
+        array $metadata = [],
+    ): void {
+        $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
+
+        $this->movements->record(
+            before: $before,
+            after: $after,
+            movementType: InventoryMovement::DISPATCH,
+            idempotencyKey: "dispatch:{$dispatch->id}:line:{$line->id}:{$segment}:{$correlationId}",
+            correlationId: $correlationId,
+            source: $dispatch,
+            sourceLine: $line,
+            user: $user,
+            effectiveAt: $dispatch->sent_at ?? now(),
+            metadata: [
+                ...$metadata,
+                'destination' => $line->destination_location ?? $dispatch->merchandiseRequest?->delivery_address,
+                'delivery_reference' => $dispatch->merchandiseRequest?->delivery_reference,
+            ],
+        );
     }
 
     /**
@@ -260,8 +364,9 @@ class StockDispatchAllocationService
      * already deducted. Partial-unit legacy repairs are rejected because their
      * original peak shape cannot be reconstructed safely after the fact.
      */
-    public function applyWarehousePalletsOnly(GoodsDispatch $dispatch): void
+    public function applyWarehousePalletsOnly(GoodsDispatch $dispatch, ?User $user = null, ?string $correlationId = null): void
     {
+        $correlationId ??= (string) Str::uuid();
         $lines = $dispatch->lines()->with('allocations')->get();
 
         foreach ($lines as $line) {
@@ -281,6 +386,8 @@ class StockDispatchAllocationService
                         $line,
                         (int) $allocation->stock_pallet_id,
                         $allocation->loadedPallets(),
+                        $user,
+                        $correlationId,
                     );
                 }
 
@@ -305,6 +412,8 @@ class StockDispatchAllocationService
                 $line,
                 (int) $line->stock_pallet_id,
                 $line->loadedPallets(),
+                $user,
+                $correlationId,
             );
         }
     }
@@ -314,6 +423,8 @@ class StockDispatchAllocationService
         GoodsDispatchLine $line,
         int $stockPalletId,
         int $pallets,
+        ?User $user,
+        string $correlationId,
     ): void {
         if ($pallets <= 0) {
             return;
@@ -329,6 +440,7 @@ class StockDispatchAllocationService
         }
 
         $this->guardSameClient($dispatch, $stockPallet);
+        $before = $this->movements->snapshot($stockPallet);
 
         if ($this->warehousePallets($stockPallet) < $pallets) {
             throw ValidationException::withMessages([
@@ -341,6 +453,19 @@ class StockDispatchAllocationService
 
         $this->decrementWarehousePallets($stockPallet, $pallets);
         $stockPallet->save();
+
+        $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
+        $this->movements->record(
+            before: $before,
+            after: $after,
+            movementType: InventoryMovement::CORRECTION,
+            idempotencyKey: "dispatch-warehouse-repair:{$dispatch->id}:line:{$line->id}:stock:{$stockPallet->id}:{$correlationId}",
+            correlationId: $correlationId,
+            source: $dispatch,
+            sourceLine: $line,
+            user: $user,
+            metadata: ['reason' => 'Reparacion del contador de pallets de almacen.'],
+        );
     }
 
     private function decrementWarehousePallets(StockPallet $stockPallet, int $pallets): void

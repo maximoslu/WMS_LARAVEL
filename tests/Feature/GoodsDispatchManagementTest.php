@@ -8,6 +8,7 @@ use App\Models\Client;
 use App\Models\ClientDispatchEmailRecipient;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
@@ -2457,6 +2458,13 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(1016.0, (float) $freshStock->warehouse_pallets);
         $this->assertNotNull($freshDispatch->stock_applied_at);
         $this->assertNotNull($freshDispatch->warehouse_stock_applied_at);
+        $this->assertDatabaseHas('inventory_movements', [
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'movement_type' => InventoryMovement::DISPATCH,
+            'source_id' => $dispatch->id,
+            'units_delta' => -1000,
+        ]);
 
         $overview = app(StockOverviewBuilder::class)->build($almacen, [
             'client_id' => $client->id,
@@ -2481,6 +2489,7 @@ class GoodsDispatchManagementTest extends TestCase
 
         $this->assertSame(101600, $stock->fresh()->quantity_units);
         $this->assertSame(1016.0, (float) $stock->fresh()->warehouse_pallets);
+        $this->assertSame(1, InventoryMovement::query()->where('source_id', $dispatch->id)->where('movement_type', InventoryMovement::DISPATCH)->count());
     }
 
     public function test_flujo_pedidos_pallet_y_pico_sigue_funcionando(): void

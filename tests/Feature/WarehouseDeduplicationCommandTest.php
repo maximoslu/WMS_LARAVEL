@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Client;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\StockPallet;
@@ -44,6 +45,10 @@ class WarehouseDeduplicationCommandTest extends TestCase
             'client_id' => $client->id,
             'warehouse_id' => $duplicateWarehouse->id,
         ]);
+        Booking::factory()->count(5)->create([
+            'client_id' => $client->id,
+            'warehouse_id' => $canonicalWarehouse->id,
+        ]);
         $snapshot = $this->databaseSnapshot();
 
         $this->artisan('wms:warehouses:deduplicate', [
@@ -81,6 +86,19 @@ class WarehouseDeduplicationCommandTest extends TestCase
         $this->assertSame($remainingLocation->id, $item->fresh()->default_location_id);
         $this->assertSame($remainingLocation->id, $receipt->lines()->firstOrFail()->location_id);
         $this->assertSame($remainingWarehouse->id, $booking->fresh()->warehouse_id);
+        $this->assertDatabaseHas('inventory_movements', [
+            'stock_pallet_id' => $stock->id,
+            'movement_type' => InventoryMovement::LOCATION_CONSOLIDATION,
+            'units_delta' => 0,
+            'units_before' => 2400,
+            'units_after' => 2400,
+            'from_location_id' => $duplicateLocation->id,
+            'to_location_id' => $remainingLocation->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'warehouse_consolidated',
+            'module' => 'warehouses',
+        ]);
         $this->assertSame(
             LocationCode::expectedEdelvivesCodes(),
             Location::query()
