@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Warehouse;
+use App\Support\Warehouses\WarehouseCode;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -60,7 +61,7 @@ class StoreWarehouseRequest extends FormRequest
 
     private function normalizeUpper(mixed $value): string
     {
-        return mb_strtoupper(trim((string) $value));
+        return WarehouseCode::normalize($value);
     }
 
     private function normalizeText(mixed $value): string

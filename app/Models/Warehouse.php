@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Warehouses\WarehouseCode;
 use Database\Factories\WarehouseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,6 +26,13 @@ class Warehouse extends Model
         return [
             'active' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $warehouse): void {
+            $warehouse->code = WarehouseCode::normalize($warehouse->code);
+        });
     }
 
     public function client(): BelongsTo

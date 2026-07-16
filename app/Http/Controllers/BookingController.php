@@ -12,11 +12,13 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Bookings\BookingNotificationService;
 use App\Services\GoogleCalendarService;
+use App\Services\Warehouses\WarehouseIntegrityService;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 use Illuminate\View\View;
@@ -406,7 +408,7 @@ class BookingController extends Controller
             'booking' => $booking,
             'isClient' => $user->hasRole(Role::CLIENTE),
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
-            'warehouses' => Warehouse::query()->where('active', true)->orderBy('name')->get(),
+            'warehouses' => $this->warehouseOptions(),
             'internalUsers' => User::query()
                 ->with('role')
                 ->where('active', true)
@@ -421,6 +423,14 @@ class BookingController extends Controller
             'typeOptions' => Booking::typeOptions(),
             'statusOptions' => Booking::statusOptions(),
         ];
+    }
+
+    /** @return Collection<int, Warehouse> */
+    private function warehouseOptions(): Collection
+    {
+        return app(WarehouseIntegrityService::class)->canonicalActiveWarehouses(
+            Warehouse::query()->with('client')->where('active', true)->get(),
+        );
     }
 
     private function canAccessBookings(?User $user): bool

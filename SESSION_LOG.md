@@ -2675,3 +2675,43 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, migraciones, Google Calendar, facturacion ni datos de produccion.
 - No se uso `migrate:fresh`, no se borro stock ni historico, no se hizo force push y no se ejecuto `--apply` fuera de la base efimera de tests.
 - `.claude/` permanece sin trackear y fuera del commit.
+
+---
+
+## 2026-07-16 - Consolidacion segura de almacenes EDELVIVES / NAVE 38 (14:47 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** cerrar la reparacion de almacenes duplicados con diagnostico local, comando dry-run/apply, prevencion y validacion completa antes de commit/push.
+
+### Diagnostico local
+- Se ejecuto `php artisan wms:warehouses:deduplicate --client=EDELVIVES --warehouse-code=38 --dry-run`.
+- Resultado local: solo **1 almacen 38 / NAVE 38**, ID `1`, cliente `GLOBAL`, activo.
+- El almacen ID `1` tiene **54 ubicaciones**, **178 referencias de stock**, **0 entradas**, **0 salidas**, **0 articulos por defecto** y **0 bookings**.
+- El dry-run confirmo **0 grupos de ubicacion duplicada** y **0 ubicaciones por crear**. No se modifico ningun dato local.
+
+### Cambio aplicado
+- Se anadio el comando `wms:warehouses:deduplicate` con opciones `--client`, `--warehouse-code`, `--dry-run` y `--apply`.
+- `--dry-run` informa almacenes detectados, IDs, cliente, codigo, nombre, estado, ubicaciones, stock, entradas, salidas, articulos y bookings; tambien lista ubicaciones por almacen y referencias por ubicacion.
+- `--apply` trabaja en una transaccion: elige almacen canonico, fusiona ubicaciones equivalentes por codigo normalizado, reasigna stock/entradas/articulos/bookings, crea las ubicaciones esperadas que falten y elimina duplicados solo cuando quedan vacios.
+- Antes y despues del apply se verifica un snapshot de stock; si cambia el negocio de stock, la transaccion se revierte.
+- Se centralizo la normalizacion de codigo de almacen (`038`, ` 38 ` -> `38`) y el modelo `Warehouse` normaliza antes de guardar.
+- Los selectores de booking y ubicaciones usan almacenes activos/canonicos en orden natural.
+- El importador EDELVIVES prioriza el almacen activo con mas ubicaciones para evitar crear o reutilizar una NAVE 38 vacia cuando ya existe la operativa.
+
+### Validacion
+- `php artisan test`: **583 passed** (2915 assertions).
+- `npm run build`: OK (`vite build`, 55 modulos transformados).
+- `git diff --check`: OK.
+- Tests nuevos cubren dry-run sin cambios, apply con stock/entrada/articulo/booking, idempotencia y normalizacion de codigo de almacen.
+
+### Cierre Git
+- Commit previsto: `fix: deduplicate warehouses and canonicalize locations`.
+- Push previsto: `origin/main`.
+- `.claude/` permanece sin trackear y fuera del commit.
+
+### Forge pendiente
+- Queda pendiente desplegar/verificar en Forge cuando el usuario lo indique.
+- En produccion, ejecutar primero `php artisan wms:warehouses:deduplicate --client=EDELVIVES --warehouse-code=38 --dry-run` y revisar el informe antes de cualquier `--apply`.
+- No ejecutar `--apply` en produccion sin confirmacion explicita tras ver IDs, referencias y canonico propuesto.

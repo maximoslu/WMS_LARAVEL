@@ -2001,6 +2001,7 @@ class StockExcelImportService
     private function ensureEdelvivesLocations(Client $client, array $locationCodes = []): array
     {
         $warehouse = Warehouse::query()
+            ->withCount('locations')
             ->where(function ($query) use ($client): void {
                 $query
                     ->where(fn ($warehouseQuery) => $warehouseQuery
@@ -2014,7 +2015,10 @@ class StockExcelImportService
                             ->where('client_id', $client->id)
                             ->orWhereNull('client_id')));
             })
+            ->orderByDesc('active')
+            ->orderByDesc('locations_count')
             ->orderByRaw('client_id is null desc')
+            ->orderBy('id')
             ->first();
 
         if ($warehouse === null) {

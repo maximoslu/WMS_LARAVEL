@@ -6,9 +6,11 @@ use App\Http\Requests\StoreLocationRequest;
 use App\Http\Requests\UpdateLocationRequest;
 use App\Models\Location;
 use App\Models\Warehouse;
+use App\Services\Warehouses\WarehouseIntegrityService;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class LocationController extends Controller
@@ -38,7 +40,7 @@ class LocationController extends Controller
 
         return view('locations.index', [
             'locations' => $locations,
-            'warehouses' => Warehouse::query()->orderBy('code')->get(),
+            'warehouses' => $this->warehouseOptions(),
             'filters' => [
                 'warehouse_id' => $warehouseFilter > 0 ? $warehouseFilter : null,
                 'search' => $search,
@@ -54,7 +56,7 @@ class LocationController extends Controller
             'location' => new Location([
                 'active' => true,
             ]),
-            'warehouses' => Warehouse::query()->orderBy('code')->get(),
+            'warehouses' => $this->warehouseOptions(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -72,7 +74,7 @@ class LocationController extends Controller
     {
         return view('locations.edit', [
             'location' => $location,
-            'warehouses' => Warehouse::query()->orderBy('code')->get(),
+            'warehouses' => $this->warehouseOptions(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -116,5 +118,13 @@ class LocationController extends Controller
             'position' => $validated['position'] ?? null,
             'active' => (bool) ($validated['active'] ?? false),
         ];
+    }
+
+    /** @return Collection<int, Warehouse> */
+    private function warehouseOptions(): Collection
+    {
+        return app(WarehouseIntegrityService::class)->canonicalActiveWarehouses(
+            Warehouse::query()->with('client')->where('active', true)->get(),
+        );
     }
 }
