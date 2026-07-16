@@ -11,6 +11,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ClientGoodsReceiptDocumentController;
 use App\Http\Controllers\DailyOperationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeliveryNoteManagementController;
 use App\Http\Controllers\GoodsDispatchController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\GoogleCalendarOAuthController;
@@ -334,6 +335,9 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/clientes/{client}/activar-desactivar', [ClientController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('clients.toggle-active');
+    Route::get('/gestion/albaranes', [DeliveryNoteManagementController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('delivery-notes.management.index');
     Route::post('/clientes/{client}/emails-albaranes', [ClientController::class, 'storeReceiptEmailRecipient'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('clients.receipt-emails.store');

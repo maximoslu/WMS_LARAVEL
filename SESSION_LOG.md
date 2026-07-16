@@ -2768,3 +2768,75 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron `.env`, secretos, migraciones, datos, Google Calendar, importacion de stock ni facturacion.
 - No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
 - `.claude/` permanece sin trackear y fuera del commit.
+
+---
+
+## 2026-07-16 - Albaranes cliente paginados y gestion interna documental (17:55 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit base:** `7f02bf62 fix: improve notification controls and location ordering`.
+**Objetivo:** compactar `/mis-albaranes` con paginacion independiente y anadir `GESTION > ALBARANES` para consulta interna controlada por cliente.
+
+### Diagnostico
+- La pantalla cliente `ALBARANES` renderizaba todos los albaranes de entrada y salida filtrados en una sola carga visual.
+- No existia una pantalla interna especifica para que `SUPERADMIN` y `ADMINISTRACION` buscaran albaranes de todos los clientes sin entrar en cada operacion.
+- Las descargas seguras ya existian y se mantuvieron intactas: entrada autenticada, enlace firmado de email y PDF de salida existente.
+
+### Decision de arquitectura
+- Se mantuvo `ClientGoodsReceiptDocumentController` para el portal cliente y solo se le anadio paginacion de colecciones ya filtradas.
+- Se creo `DeliveryNoteManagementController` como controlador interno especifico para no mezclar portal cliente con gestion administrativa.
+- La pantalla interna usa listado unificado de entrada/salida con paginacion unica de 20 documentos, porque evita duplicar dos tablas y deja una busqueda documental mas directa.
+- No se creo logica nueva de generacion, sustitucion, borrado ni renombrado documental.
+
+### Rutas y permisos
+- Nueva ruta: `GET /gestion/albaranes`.
+- Nombre: `delivery-notes.management.index`.
+- Middleware: `minimum.role:administracion`.
+- Controlador: aborta tambien si el usuario no puede acceder como `ADMINISTRACION`.
+- `SUPERADMIN` y `ADMINISTRACION` pueden acceder; `ALMACEN` y `CLIENTE` reciben 403.
+- Menu: nueva opcion `GESTION > ALBARANES`.
+
+### Paginacion y filtros
+- `/mis-albaranes`:
+  - entradas: 10 documentos por pagina con `entradas_page`;
+  - salidas: 10 documentos por pagina con `salidas_page`;
+  - cada paginador conserva la pagina de la otra seccion y filtros `month`, `supplier_id`, `search`;
+  - contadores usan totales filtrados completos, no solo la pagina visible.
+- Gestion interna:
+  - exige `client_id` antes de cargar resultados;
+  - no carga documentos de todos los clientes sin criterio;
+  - filtros: cliente, tipo, fecha desde/hasta, proveedor para entradas, estado de salida y busqueda libre;
+  - fechas de salida usan `completed_at`, despues `sent_at`, y por ultimo `created_at`;
+  - busqueda incluye numeros, proveedor, cliente, pedido, destino y nombre calculado por `DocumentDisplayNamer`;
+  - resultados limitados siempre al cliente seleccionado.
+
+### Archivos modificados
+- `app/Http/Controllers/ClientGoodsReceiptDocumentController.php`.
+- `app/Http/Controllers/DeliveryNoteManagementController.php`.
+- `resources/views/client/goods-receipts/index.blade.php`.
+- `resources/views/delivery-notes/management/index.blade.php`.
+- `routes/web.php`.
+- `config/wms.php`.
+- `tests/Feature/ClientGoodsReceiptDocumentTest.php`.
+- `tests/Feature/DeliveryNoteManagementTest.php`.
+
+### Validacion
+- Tests focalizados de albaranes cliente + gestion interna: **50 passed** (182 assertions).
+- `php artisan test`: **595 passed** (3050 assertions).
+- `npm run build`: OK (`vite build`, 55 modulos transformados).
+- Pint: OK.
+- `git diff --check`: OK.
+
+### Forge pendiente
+- Queda pendiente desplegar `origin/main` cuando el usuario lo indique.
+- Este cambio no incorpora migraciones nuevas.
+- En Forge bastara con despliegue normal y, si se desea limpieza operativa:
+  - `php artisan optimize:clear`
+  - `php artisan queue:restart`
+
+### Control de alcance
+- No se tocaron `.env`, secretos, migraciones, datos, importadores, stock, facturacion, Google Calendar, notificaciones ni generacion/descarga real de documentos.
+- No se uso `migrate:fresh`, no se borraron datos y no se hizo force push.
+- `.claude/` permanece sin trackear y fuera del commit.

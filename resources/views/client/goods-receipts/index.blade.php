@@ -9,8 +9,8 @@
             ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
             ['label' => 'ALBARANES'],
         ];
-        $totalEntryDocuments = $receiptDocuments->count();
-        $totalDispatchDocuments = $dispatchDocuments->count();
+        $totalEntryDocuments = $receiptDocuments->total();
+        $totalDispatchDocuments = $dispatchDocuments->total();
         $totalDocuments = $totalEntryDocuments + $totalDispatchDocuments;
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
@@ -95,6 +95,12 @@
                         </div>
                     @endforeach
                 </div>
+
+                @if ($receiptDocuments->hasPages())
+                    <div class="pagination-card surface-card compact-card">
+                        {{ $receiptDocuments->links() }}
+                    </div>
+                @endif
             @endif
         </article>
 
@@ -127,6 +133,12 @@
                         </div>
                     @endforeach
                 </div>
+
+                @if ($dispatchDocuments->hasPages())
+                    <div class="pagination-card surface-card compact-card">
+                        {{ $dispatchDocuments->links() }}
+                    </div>
+                @endif
             @endif
         </article>
     </section>

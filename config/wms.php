@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 return [
     'access_request_notification_email' => env(
@@ -183,6 +183,19 @@ return [
                     'status' => 'ready',
                     'next_step' => 'Completar datos comerciales y parametros especificos por cliente.',
                     'active_patterns' => ['clients.*'],
+                ],
+                [
+                    'key' => 'albaranes-gestion',
+                    'route' => 'delivery-notes.management.index',
+                    'path' => '/gestion/albaranes',
+                    'title' => 'ALBARANES',
+                    'icon' => 'receipts',
+                    'summary' => 'Consulta documental interna de albaranes por cliente, tipo, fecha y estado.',
+                    'minimum_role' => 'administracion',
+                    'tag' => 'Documentos',
+                    'status' => 'ready',
+                    'next_step' => 'Conectar auditoria documental completa cuando se implemente trazabilidad.',
+                    'active_patterns' => ['delivery-notes.management.*'],
                 ],
                 [
                     'key' => 'almacenes',

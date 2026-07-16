@@ -11,6 +11,8 @@ use App\Support\GoodsReceipts\DocumentDisplayNamer;
 use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -130,8 +132,18 @@ class ClientGoodsReceiptDocumentController extends Controller
         $displayNames = DocumentDisplayNamer::assignNames($filteredReceipts);
         $dispatchDisplayNames = DocumentDisplayNamer::assignDispatchNames($filteredDispatches);
 
-        $receiptDocuments = $filteredReceipts->sortByDesc(fn (GoodsReceipt $receipt) => $receipt->received_at?->timestamp ?? 0)->values();
-        $dispatchDocuments = $filteredDispatches->sortByDesc(fn (GoodsDispatch $dispatch) => $this->dispatchDocumentDate($dispatch)?->timestamp ?? 0)->values();
+        $receiptDocuments = $this->paginateCollection(
+            $filteredReceipts->sortByDesc(fn (GoodsReceipt $receipt) => $receipt->received_at?->timestamp ?? 0)->values(),
+            10,
+            'entradas_page',
+            $request,
+        );
+        $dispatchDocuments = $this->paginateCollection(
+            $filteredDispatches->sortByDesc(fn (GoodsDispatch $dispatch) => $this->dispatchDocumentDate($dispatch)?->timestamp ?? 0)->values(),
+            10,
+            'salidas_page',
+            $request,
+        );
 
         return view('client.goods-receipts.index', [
             'receiptDocuments' => $receiptDocuments,
@@ -219,5 +231,33 @@ class ClientGoodsReceiptDocumentController extends Controller
     private function dispatchDocumentDate(GoodsDispatch $dispatch)
     {
         return $dispatch->completed_at ?? $dispatch->sent_at ?? $dispatch->created_at;
+    }
+
+    /**
+     * @template TKey of array-key
+     * @template TValue
+     *
+     * @param  Collection<TKey, TValue>  $documents
+     * @return LengthAwarePaginator<TValue>
+     */
+    private function paginateCollection(Collection $documents, int $perPage, string $pageName, Request $request): LengthAwarePaginator
+    {
+        $page = max(1, $request->integer($pageName, 1));
+        $total = $documents->count();
+
+        if ($total > 0) {
+            $page = min($page, (int) ceil($total / $perPage));
+        }
+
+        return (new LengthAwarePaginator(
+            $documents->forPage($page, $perPage)->values(),
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'pageName' => $pageName,
+            ],
+        ))->appends($request->except($pageName));
     }
 }

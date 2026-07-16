@@ -653,6 +653,67 @@ class ClientGoodsReceiptDocumentTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_albaranes_cliente_pagina_entradas_de_forma_independiente(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        foreach (range(1, 12) as $day) {
+            $this->createReceiptWithDocument($edelvives, 'PROVEEDOR '.$day, '2026-07-'.str_pad((string) $day, 2, '0', STR_PAD_LEFT));
+        }
+
+        $this->actingAs($user)
+            ->get(route('client-goods-receipts.index'))
+            ->assertOk()
+            ->assertSee('12 documentos')
+            ->assertSee('Entrada_Proveedor12_12')
+            ->assertDontSee('Entrada_Proveedor2_02');
+
+        $this->actingAs($user)
+            ->get(route('client-goods-receipts.index', ['entradas_page' => 2]))
+            ->assertOk()
+            ->assertSee('12 documentos')
+            ->assertSee('Entrada_Proveedor2_02')
+            ->assertDontSee('Entrada_Proveedor12_12');
+    }
+
+    public function test_albaranes_cliente_pagina_salidas_y_conserva_pagina_de_entradas(): void
+    {
+        [$edelvives] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
+
+        foreach (range(1, 11) as $day) {
+            $date = '2026-07-'.str_pad((string) $day, 2, '0', STR_PAD_LEFT);
+
+            $this->createReceiptWithDocument($edelvives, 'SAICA '.$day, $date);
+            $this->createDispatchWithDeliveryNote($edelvives, $date, 'SAL-PAG-'.str_pad((string) $day, 3, '0', STR_PAD_LEFT));
+        }
+
+        $response = $this->actingAs($user)
+            ->get(route('client-goods-receipts.index', [
+                'entradas_page' => 2,
+                'salidas_page' => 1,
+                'month' => '2026-07',
+            ]));
+
+        $response->assertOk();
+        $response->assertSee('SAL-PAG-011');
+        $response->assertSee('Entrada_Saica1_01');
+        $response->assertSee('entradas_page=2', false);
+        $response->assertSee('month=2026-07', false);
+
+        $this->actingAs($user)
+            ->get(route('client-goods-receipts.index', [
+                'entradas_page' => 2,
+                'salidas_page' => 2,
+                'month' => '2026-07',
+            ]))
+            ->assertOk()
+            ->assertSee('SAL-PAG-001')
+            ->assertSee('Entrada_Saica1_01')
+            ->assertDontSee('SAL-PAG-011');
+    }
+
     public function test_superadmin_sigue_gestionando_entradas_con_documento_como_antes(): void
     {
         $this->seed(RoleSeeder::class);
