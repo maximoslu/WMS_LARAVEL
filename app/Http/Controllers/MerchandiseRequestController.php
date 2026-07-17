@@ -254,10 +254,10 @@ class MerchandiseRequestController extends Controller
                 'client',
                 'requestedBy',
                 'lines.item',
-                'lines.stockPallet',
+                'lines.stockPallet.location.warehouse',
                 'dispatch.lines.item',
-                'dispatch.lines.stockPallet',
-                'dispatch.lines.allocations.stockPallet',
+                'dispatch.lines.stockPallet.location.warehouse',
+                'dispatch.lines.allocations.stockPallet.location.warehouse',
                 'dispatch.lines.sourceRequestLine',
             ]),
             'isClient' => $user->hasRole(Role::CLIENTE),
@@ -346,7 +346,15 @@ class MerchandiseRequestController extends Controller
     ) {
         abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
 
-        $merchandiseRequest->load(['client', 'requestedBy', 'lines.item', 'lines.stockPallet']);
+        $merchandiseRequest->load([
+            'client',
+            'requestedBy',
+            'lines.item',
+            'lines.stockPallet.location.warehouse',
+            'dispatch.lines.stockPallet.location.warehouse',
+            'dispatch.lines.allocations.stockPallet.location.warehouse',
+            'dispatch.lines.sourceRequestLine',
+        ]);
         $audit->record(
             event: 'merchandise_request_preparation_pdf_generated',
             module: 'merchandise_requests',

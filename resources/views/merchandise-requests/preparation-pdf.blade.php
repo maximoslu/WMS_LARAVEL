@@ -8,8 +8,10 @@
             h1 { font-size: 20px; margin: 0 0 6px; }
             h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .08em; color: #5d7282; }
             table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-            th, td { border: 1px solid #cdd7df; padding: 8px; text-align: left; vertical-align: top; }
+            th, td { border: 1px solid #cdd7df; padding: 6px; text-align: left; vertical-align: top; }
             th { background: #eef5f8; }
+            .picking-location { color: #0a5f70; font-weight: bold; }
+            .picking-quantity { display: block; margin-top: 2px; color: #5d7282; font-size: 10px; font-weight: normal; }
             .meta-grid { width: 100%; margin-top: 12px; }
             .meta-grid td { border: 0; padding: 0 12px 8px 0; }
             .meta-label { color: #6b7d8a; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
@@ -78,11 +80,28 @@
                     <th>Detalle</th>
                     <th>Solicitado</th>
                     <th>Ubicación destino</th>
-                    <th>Ubicación</th>
+                    <th>Ubicación de recogida</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach ($merchandiseRequest->lines as $line)
+                <?php foreach ($merchandiseRequest->lines as $line): ?>
+                    <?php
+                        $dispatchLine = $merchandiseRequest->dispatch?->lines->first(
+                            fn ($candidate) => (int) $candidate->source_request_line_id === (int) $line->id
+                        ) ?? $merchandiseRequest->dispatch?->lines->first(
+                            fn ($candidate) => ! $candidate->is_extra_line
+                                && (int) $candidate->item_id === (int) $line->item_id
+                                && (string) $candidate->line_type === (string) $line->line_type
+                                && (int) ($candidate->stock_peak_index ?? 0) === (int) ($line->stock_peak_index ?? 0)
+                        );
+                        $pickingLocationSummaries = $dispatchLine?->pickingLocationSummaries() ?? collect();
+                        if ($pickingLocationSummaries->isEmpty() && $line->stockPallet !== null) {
+                            $pickingLocationSummaries = collect([[
+                                'location' => $line->stockPallet->pickingLocationLabel() ?? 'Sin ubicación registrada',
+                                'quantity' => null,
+                            ]]);
+                        }
+                    ?>
                     <tr>
                         <td>{{ $line->lineTypeLabel() }}</td>
                         <td>
@@ -93,9 +112,20 @@
                         <td>{{ $line->unitsLabel() }}</td>
                         <td>{{ $line->requestedQuantityLabel() }}</td>
                         <td>{{ $line->destination_location ?: '-' }}</td>
-                        <td>{{ $line->stockPallet?->location_text ?: '-' }}</td>
+                        <td class="picking-location">
+                            @forelse ($pickingLocationSummaries as $pickingSummary)
+                                <div>
+                                    {{ $pickingSummary['location'] }}
+                                    @if ($pickingSummary['quantity'])
+                                        <span class="picking-quantity">{{ $pickingSummary['quantity'] }}</span>
+                                    @endif
+                                </div>
+                            @empty
+                                Pendiente de asignar ubicación
+                            @endforelse
+                        </td>
                     </tr>
-                @endforeach
+                <?php endforeach; ?>
             </tbody>
         </table>
 

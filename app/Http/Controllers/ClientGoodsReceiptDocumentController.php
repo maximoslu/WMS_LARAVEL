@@ -217,7 +217,7 @@ class ClientGoodsReceiptDocumentController extends Controller
         abort_unless($user->client_id !== null && (int) $user->client_id === (int) $goodsDispatch->client_id, 403);
         abort_unless(in_array($goodsDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true), 403);
 
-        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet']);
+        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet', 'lines.allocations']);
         $workflowService->ensureDeliveryNoteCanBeGenerated($goodsDispatch);
         $this->audit->record(event: 'client_dispatch_document_downloaded', module: 'documents', description: 'Albaran de salida descargado por cliente.', auditable: $goodsDispatch, user: $user, clientId: $goodsDispatch->client_id);
 

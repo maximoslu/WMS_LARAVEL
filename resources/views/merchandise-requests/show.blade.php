@@ -174,6 +174,7 @@
                             <th>Uds/pallet</th>
                             <th>Tipo</th>
                             @unless ($isClient)
+                                <th>Ubicación de recogida</th>
                                 <th>Cargado</th>
                                 <th>Estado carga</th>
                             @endunless
@@ -191,6 +192,16 @@
                                 );
                                 $requestedLineUnits = $dispatchLine?->requestedUnitsTotal() ?? (int) ($line->requested_units ?? 0);
                                 $loadedLineUnits = $dispatchLine?->loadedUnitsTotal() ?? 0;
+                                $pickingLocationSummaries = collect();
+                                if (! $isClient) {
+                                    $pickingLocationSummaries = $dispatchLine?->pickingLocationSummaries() ?? collect();
+                                    if ($pickingLocationSummaries->isEmpty() && $line->stockPallet !== null) {
+                                        $pickingLocationSummaries = collect([[
+                                            'location' => $line->stockPallet->pickingLocationLabel() ?? 'Sin ubicación registrada',
+                                            'quantity' => null,
+                                        ]]);
+                                    }
+                                }
                                 $loadStateClass = 'pending';
                                 $loadStateLabel = 'Pendiente de cargar';
 
@@ -216,6 +227,13 @@
                                 <td>{{ $line->unitsLabel() }}</td>
                                 <td><span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span></td>
                                 @unless ($isClient)
+                                    <td>
+                                        @forelse ($pickingLocationSummaries as $pickingSummary)
+                                            <div><strong>{{ $pickingSummary['location'] }}</strong>{{ $pickingSummary['quantity'] ? ' · '.$pickingSummary['quantity'] : '' }}</div>
+                                        @empty
+                                            Pendiente de asignar ubicación
+                                        @endforelse
+                                    </td>
                                     <td>{{ $dispatchLine ? $dispatchLine->loadedQuantityLabel() : '—' }}</td>
                                     <td><span class="warehouse-load-state warehouse-load-state--{{ $loadStateClass }}">{{ $loadStateLabel }}</span></td>
                                 @endunless

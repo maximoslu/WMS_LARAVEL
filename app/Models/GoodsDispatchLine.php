@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class GoodsDispatchLine extends Model
 {
@@ -203,7 +205,7 @@ class GoodsDispatchLine extends Model
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, GoodsDispatchLineAllocation>
+     * @return Collection<int, GoodsDispatchLineAllocation>
      */
     public function loadingAllocations()
     {
@@ -292,5 +294,60 @@ class GoodsDispatchLine extends Model
         }
 
         return number_format((int) ($this->units_per_pallet ?? 0), 0, ',', '.').' uds/pallet';
+    }
+
+    /**
+     * @return Collection<int, array{location: string, quantity: string|null}>
+     */
+    public function pickingLocationSummaries(): Collection
+    {
+        if (! $this->relationLoaded('allocations')) {
+            $this->load('allocations.stockPallet.location.warehouse');
+        } else {
+            $this->allocations->loadMissing('stockPallet.location.warehouse');
+        }
+
+        if ($this->allocations->isNotEmpty()) {
+            return $this->allocations->map(fn (GoodsDispatchLineAllocation $allocation): array => [
+                'location' => $allocation->pickingLocationLabel() ?? 'Sin ubicación registrada',
+                'quantity' => $allocation->pickingQuantityLabel(),
+            ])->values();
+        }
+
+        if ($this->stock_pallet_id === null && $this->stockPallet === null) {
+            return collect();
+        }
+
+        $this->loadMissing('stockPallet.location.warehouse');
+        $hasRecordedLoading = $this->confirmed_at !== null
+            || $this->loaded_pallets !== null
+            || $this->loaded_peaks !== null
+            || $this->loaded_partial_units !== null;
+
+        return collect([[
+            'location' => $this->stockPallet?->pickingLocationLabel() ?? 'Sin ubicación registrada',
+            'quantity' => $hasRecordedLoading ? $this->loadedQuantityLabel() : null,
+        ]]);
+    }
+
+    public function deliveryNoteDescription(int $limit = 90): string
+    {
+        $description = trim((string) preg_replace('/\s+/u', ' ', (string) $this->description));
+        $sku = trim((string) $this->sku);
+
+        if ($sku !== '' && $description !== '') {
+            $withoutRepeatedSku = preg_replace(
+                '/^'.preg_quote($sku, '/').'\s*(?:[-:|·]\s*)?/iu',
+                '',
+                $description,
+                1,
+            );
+
+            if (filled($withoutRepeatedSku)) {
+                $description = trim((string) $withoutRepeatedSku);
+            }
+        }
+
+        return Str::limit($description !== '' ? $description : 'Sin descripción', $limit);
     }
 }

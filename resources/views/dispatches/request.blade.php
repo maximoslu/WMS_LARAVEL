@@ -149,17 +149,28 @@
                             'selected_peaks' => $dispatchLine->stock_peak_index ? [['index' => $dispatchLine->stock_peak_index, 'units' => $dispatchLine->units_per_peak]] : [],
                             'lot' => $fallbackStock?->lot,
                             'location_text' => $fallbackStock?->location_text,
+                            'stockPallet' => $fallbackStock,
                         ]]);
                     }
 
                     if ($dispatchLine && $lineAllocations->isEmpty()) {
+                        $firstStockOption = $lineStockOptions->first();
                         $lineAllocations = collect([(object) [
-                            'stock_pallet_id' => $lineStockOptions->first()?->id,
+                            'stock_pallet_id' => $firstStockOption?->id,
                             'loaded_pallets' => 0,
                             'loaded_partial_units' => 0,
                             'selected_peaks' => [],
                             'lot' => null,
                             'location_text' => null,
+                            'stockPallet' => $firstStockOption,
+                        ]]);
+                    }
+
+                    $pickingLocationSummaries = $dispatchLine?->pickingLocationSummaries() ?? collect();
+                    if ($pickingLocationSummaries->isEmpty() && $line->stockPallet !== null) {
+                        $pickingLocationSummaries = collect([[
+                            'location' => $line->stockPallet->pickingLocationLabel() ?? 'Sin ubicación registrada',
+                            'quantity' => null,
                         ]]);
                     }
 
@@ -191,6 +202,16 @@
                     <div class="warehouse-prep-line-grid">
                         <aside class="warehouse-prep-summary">
                             <dl>
+                                <div class="warehouse-prep-picking-summary">
+                                    <dt>Ubicación de recogida</dt>
+                                    <dd data-line-picking-locations>
+                                        @forelse ($pickingLocationSummaries as $pickingSummary)
+                                            <span>{{ $pickingSummary['location'] }}{{ $pickingSummary['quantity'] ? ' · '.$pickingSummary['quantity'] : '' }}</span>
+                                        @empty
+                                            <span>Pendiente de asignar ubicación</span>
+                                        @endforelse
+                                    </dd>
+                                </div>
                                 <div>
                                     <dt>Solicitado</dt>
                                     <dd>{{ number_format($line->requestedPalletsCount(), 0, ',', '.') }} pallets · {{ number_format($line->requestedPeaksCount(), 0, ',', '.') }} picos</dd>
@@ -229,6 +250,17 @@
                                             ->all();
                                         $selectedPeakUnitsTotal = collect($allocation->selected_peaks ?? [])->sum(fn ($peak) => (int) ($peak['units'] ?? 0));
                                         $manualPartialUnits = max(0, (int) ($allocation->loaded_partial_units ?? 0) - $selectedPeakUnitsTotal);
+                                        $allocationLocationText = trim((string) ($allocation->location_text ?? ''));
+                                        $pickingLocationLabel = $selectedStockPallet?->pickingLocationLabel()
+                                            ?? ($allocationLocationText !== '' ? $allocationLocationText : null);
+                                        $pickingQuantityParts = [];
+                                        if ((int) ($allocation->loaded_pallets ?? 0) > 0) {
+                                            $allocationPallets = (int) $allocation->loaded_pallets;
+                                            $pickingQuantityParts[] = number_format($allocationPallets, 0, ',', '.').' '.($allocationPallets === 1 ? 'pallet' : 'pallets');
+                                        }
+                                        if ((int) ($allocation->loaded_partial_units ?? 0) > 0) {
+                                            $pickingQuantityParts[] = 'pico '.number_format((int) $allocation->loaded_partial_units, 0, ',', '.').' uds';
+                                        }
                                     @endphp
 
                                     <div class="warehouse-prep-assignment" data-assignment>
@@ -248,12 +280,18 @@
                                                             ->filter(fn ($peakUnits) => $peakUnits > 0)
                                                             ->values();
                                                     @endphp
-                                                    <option value="{{ $stockOption->id }}" @selected((int) $selectedStockPalletId === (int) $stockOption->id)>
-                                                        {{ $stockOption->lot ?: 'NO LOTE' }} · {{ $stockOption->location_text ?: 'Sin ubicación' }} · {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} palets · picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                                    <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}" @selected((int) $selectedStockPalletId === (int) $stockOption->id)>
+                                                        Lote: {{ $stockOption->lot ?: 'SIN LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
                                                     </option>
                                                 @endforeach
                                             </select>
                                         </label>
+
+                                        <div class="warehouse-prep-picking-location" data-assignment-picking>
+                                            <span>Recoger en</span>
+                                            <strong data-picking-location-label>{{ $pickingLocationLabel ?? ($selectedStockPalletId ? 'Sin ubicación registrada' : 'Pendiente de asignar ubicación') }}</strong>
+                                            <small data-picking-location-quantity>{{ $pickingQuantityParts !== [] ? implode(' + ', $pickingQuantityParts) : 'Cantidad pendiente' }}</small>
+                                        </div>
 
                                         <div class="warehouse-prep-input-grid">
                                             <label>
@@ -311,12 +349,17 @@
                                                             ->filter(fn ($peakUnits) => $peakUnits > 0)
                                                             ->values();
                                                     @endphp
-                                                    <option value="{{ $stockOption->id }}">
-                                                        {{ $stockOption->lot ?: 'NO LOTE' }} · {{ $stockOption->location_text ?: 'Sin ubicación' }} · {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} palets · picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                                    <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}">
+                                                        Lote: {{ $stockOption->lot ?: 'SIN LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
                                                     </option>
                                                 @endforeach
                                             </select>
                                         </label>
+                                        <div class="warehouse-prep-picking-location" data-assignment-picking>
+                                            <span>Recoger en</span>
+                                            <strong data-picking-location-label>Pendiente de asignar ubicación</strong>
+                                            <small data-picking-location-quantity>Cantidad pendiente</small>
+                                        </div>
                                         <div class="warehouse-prep-input-grid">
                                             <label><span>Palets</span><input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $templateIndex }}][loaded_pallets]" value="0" class="auth-input" data-loaded-pallets></label>
                                             <label><span>Pico uds manual</span><input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $templateIndex }}][loaded_partial_units]" value="0" class="auth-input" data-loaded-partial-units></label>

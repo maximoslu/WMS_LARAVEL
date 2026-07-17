@@ -2951,3 +2951,71 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - `.claude/launch.json` permanece sin trackear y fuera del commit.
 - Commit previsto: `feat: add audit inventory traceability and stock alerts`.
 - Push previsto: un unico push normal a `origin/main` tras revisar el diff staged.
+
+---
+
+## 2026-07-17 - Ubicaciones de recogida y albaran de salida compacto (12:10 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit base:** `c1062841 feat: add audit inventory traceability and stock alerts`.
+**Objetivo:** mostrar al operario la ubicacion fisica real de cada allocation y compactar el PDF de salida sin modificar stock, cantidades, estados ni permisos.
+
+### Diagnostico
+- `HEAD` y `origin/main` coincidian en `c1062841`; el arbol rastreado estaba limpio y solo `.claude/` permanecia sin trackear.
+- La preparacion solo mostraba `location_text` dentro del selector o desde la partida principal, por lo que una carga repartida entre varias allocations no dejaba claras todas las ubicaciones.
+- La hoja interna de preparacion no cargaba allocations y su columna generica `Ubicacion` no diferenciaba recogida de destino.
+- El albaran de salida tenia nueve columnas, mezclaba SKU y descripcion y generaba filas muy altas con descripciones largas.
+
+### Ubicacion de recogida
+- `StockPallet` resuelve primero `location.displayLabel()` y conserva `location_text` como fallback historico.
+- Cada allocation expone su ubicacion y cantidad compacta; una linea puede mostrar varias recogidas, por ejemplo `NAVE 38 - Calle 15 · 3 pallets` y `NAVE 38 - Calle 18 · 3 pallets`.
+- La pantalla interna principal muestra `Ubicacion de recogida` en el resumen y un bloque destacado `Recoger en` por partida. El selector identifica de forma explicita lote, ubicacion, stock, picos y unidades.
+- El resumen se actualiza en el navegador al cambiar partida, pallets o pico y se adapta a movil.
+- Los estados seguros son `Pendiente de asignar ubicacion` y `Sin ubicacion registrada`; no se inventan datos.
+- La ubicacion destino, por ejemplo `DIGITAL`, permanece separada e intacta.
+- Detalle interno, carga real y PDF de preparacion muestran todas las ubicaciones. La vista cliente no renderiza ubicaciones internas.
+
+### Albaran de salida
+- La tabla queda limitada a `SKU`, `DESCRIPCION`, `LOTE`, `PALLETS ENTREGADOS`, `CANTIDAD` y `UBICACION DESTINO`.
+- Se eliminaron las columnas de ruido `Origen`, `Tipo`, `Solicitado`, `Detalle` y `Observaciones`.
+- SKU y descripcion se presentan por separado; se elimina un SKU repetido al inicio y la descripcion se normaliza/limita a 90 caracteres para un maximo visual de dos lineas.
+- `CANTIDAD` muestra unidades reales entregadas. La columna de pallets expresa tambien picos parciales de forma compacta.
+- Se conservan cabecera, logo, direccion, estado, firma y totales; se anadio total de unidades y el total de picos cuenta tambien picos parciales cargados en lineas de pallets.
+- No se modificaron permisos, rutas firmadas ni auditoria de generacion/descarga.
+
+### Archivos principales
+- Controladores de pedidos, salidas y descarga cliente para eager loading de ubicaciones/allocations.
+- Modelos `StockPallet`, `GoodsDispatchLineAllocation` y `GoodsDispatchLine` para etiquetas y resumenes de presentacion.
+- Vistas internas de pedido/salida, hoja de preparacion y `dispatches/delivery-note-pdf.blade.php`.
+- `resources/js/app.js`, `resources/css/app.css` y el parcial interno de ubicaciones.
+- `tests/Feature/GoodsDispatchManagementTest.php`.
+
+### Pruebas y validacion
+- Tests focalizados de salidas y documentos cliente: **100 passed** (549 assertions).
+- Suite completa final `php artisan test --compact`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- Pint sobre todos los PHP modificados: OK.
+- Pint global detecta deuda de estilo previa en 23 archivos fuera de alcance; no se modificaron.
+- `git diff --check`: OK.
+- `php artisan migrate:status`: todas las migraciones locales `Ran`; este hito no incorpora migraciones.
+- `php artisan optimize:clear`: OK.
+- Validacion visual DomPDF: PDF A4 temporal generado con 18 lineas, descripcion larga y pico; las 18 filas, totales y firma caben en una pagina, sin solapes ni filas gigantes. Los modelos fueron solo en memoria y los temporales se eliminaron.
+
+### Control de alcance
+- No se modificaron `.env`, secretos, datos, migraciones, importadores, facturacion, Google Calendar ni logica de stock/trazabilidad.
+- No se ejecuto deploy, `migrate:fresh`, backfill apply, borrado de datos ni force push.
+- `.claude/` permanece sin trackear y fuera del commit.
+
+### Forge pendiente
+1. Deploy Now o confirmar autodeploy del commit publicado.
+2. Este hito no requiere migracion nueva. Ejecutar `php artisan migrate --force` solo si sigue pendiente la migracion de trazabilidad del hito `c1062841`.
+3. Ejecutar `php artisan optimize:clear`.
+4. Ejecutar `php artisan queue:restart`, recomendado porque los albaranes adjuntos tambien se generan desde el worker de notificaciones.
+5. Validar un pedido real EDELVIVES: ubicacion de recogida visible y distinta del destino, varias allocations si aplica, albaran compacto y descarga autorizada.
+6. Confirmar que el portal cliente no muestra ubicaciones fisicas internas y mantiene aislamiento entre clientes.
+
+### Cierre Git previsto
+- Commit: `fix: show picking locations and compact dispatch delivery notes`.
+- Push normal a `origin/main`, sin force push y excluyendo `.claude/`.

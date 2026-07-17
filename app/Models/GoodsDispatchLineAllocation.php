@@ -37,6 +37,36 @@ class GoodsDispatchLineAllocation extends Model
         return $this->belongsTo(StockPallet::class);
     }
 
+    public function pickingLocationLabel(): ?string
+    {
+        $stockLocation = $this->stockPallet?->pickingLocationLabel();
+
+        if ($stockLocation !== null) {
+            return $stockLocation;
+        }
+
+        $locationText = trim((string) $this->location_text);
+
+        return $locationText !== '' ? $locationText : null;
+    }
+
+    public function pickingQuantityLabel(): ?string
+    {
+        $parts = [];
+        $pallets = $this->loadedPallets();
+        $partialUnits = $this->loadedPartialUnits();
+
+        if ($pallets > 0) {
+            $parts[] = number_format($pallets, 0, ',', '.').' '.($pallets === 1 ? 'pallet' : 'pallets');
+        }
+
+        if ($partialUnits > 0) {
+            $parts[] = 'pico '.number_format($partialUnits, 0, ',', '.').' uds';
+        }
+
+        return $parts !== [] ? implode(' + ', $parts) : null;
+    }
+
     public function loadedUnits(int $unitsPerPallet): int
     {
         return ($this->loadedPallets() * max(0, $unitsPerPallet)) + $this->loadedPartialUnits();

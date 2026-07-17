@@ -100,6 +100,7 @@ class MerchandiseRequestNotificationService
         $dispatch->loadMissing([
             'client',
             'lines.item',
+            'lines.allocations',
             'merchandiseRequest.client',
             'merchandiseRequest.requestedBy',
             'merchandiseRequest.lines.item',

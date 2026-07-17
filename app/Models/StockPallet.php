@@ -205,6 +205,17 @@ class StockPallet extends Model
         return $this->belongsTo(Location::class);
     }
 
+    public function pickingLocationLabel(): ?string
+    {
+        if ($this->location !== null) {
+            return $this->location->displayLabel();
+        }
+
+        $locationText = trim((string) $this->location_text);
+
+        return $locationText !== '' ? $locationText : null;
+    }
+
     /**
      * @return list<string>
      */

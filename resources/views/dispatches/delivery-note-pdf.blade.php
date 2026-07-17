@@ -4,25 +4,54 @@
         <meta charset="utf-8">
         <title>Albaran {{ $dispatch->dispatchNumber() }}</title>
         <style>
-            body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #13222e; }
-            h1 { font-size: 20px; margin: 0 0 6px; }
-            h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .08em; color: #5d7282; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-            th, td { border: 1px solid #cdd7df; padding: 8px; text-align: left; vertical-align: top; }
-            th { background: #eef5f8; }
-            .meta-grid { width: 100%; margin-top: 12px; }
-            .meta-grid td { border: 0; padding: 0 12px 8px 0; }
-            .meta-label { color: #6b7d8a; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
-            .brand { width: 100%; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #d9e4ea; }
+            @page { margin: 26px 28px; }
+            body { margin: 0; font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #13222e; }
+            h2 { margin: 0; color: #5d7282; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+            table { width: 100%; border-collapse: collapse; }
+            .meta-grid { margin-top: 7px; }
+            .meta-grid td { border: 0; padding: 0 10px 5px 0; }
+            .meta-label { color: #6b7d8a; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
+            .brand { margin-bottom: 7px; padding-bottom: 7px; border-bottom: 2px solid #d9e4ea; }
             .brand td { border: 0; padding: 0; vertical-align: middle; }
-            .brand-logo { width: 140px; }
-            .brand strong { display: block; font-size: 18px; }
-            .box { margin-top: 20px; border: 1px solid #cdd7df; padding: 12px; min-height: 92px; }
-            .totals { margin-top: 16px; }
+            .brand-logo { width: 125px; }
+            .brand strong { display: block; font-size: 15px; }
+            .delivery-lines { margin-top: 9px; table-layout: fixed; }
+            .delivery-lines th,
+            .delivery-lines td { border: 1px solid #aebdc8; padding: 4px 5px; text-align: left; vertical-align: top; }
+            .delivery-lines th { background: #e8f0f4; color: #263b4a; font-size: 7px; line-height: 1.15; text-transform: uppercase; }
+            .delivery-lines td { line-height: 1.2; word-wrap: break-word; }
+            .delivery-lines tr { page-break-inside: avoid; }
+            .delivery-lines .col-sku { width: 12%; }
+            .delivery-lines .col-description { width: 39%; }
+            .delivery-lines .col-lot { width: 12%; }
+            .delivery-lines .col-delivered { width: 15%; }
+            .delivery-lines .col-quantity { width: 9%; }
+            .delivery-lines .col-destination { width: 13%; }
+            .delivery-lines .number { text-align: right; white-space: nowrap; }
+            .delivery-lines .description { font-size: 8.5px; line-height: 1.15; }
+            .totals { width: 62%; margin: 9px 0 0 auto; }
+            .totals td { border: 1px solid #c4d0d8; padding: 4px 6px; }
+            .totals .label { background: #eef3f6; color: #526675; font-size: 7px; text-transform: uppercase; }
+            .totals .value { width: 24%; text-align: right; font-weight: bold; }
+            .signature { margin-top: 12px; border: 1px solid #cdd7df; padding: 7px; min-height: 58px; }
         </style>
     </head>
     <body>
         @php($deliveredLines = $dispatch->lines->filter(fn ($line) => $line->hasDeliveredQuantity()))
+        @php($totalDeliveredPeaks = $deliveredLines->sum(function ($line) {
+            if ($line->allocations->isNotEmpty()) {
+                return $line->allocations->sum(function ($allocation) {
+                    $selectedPeakUnits = collect($allocation->selectedPeakUnitsByIndex())->sum();
+                    $manualPartialUnits = max(0, $allocation->loadedPartialUnits() - $selectedPeakUnits);
+
+                    return count($allocation->selectedPeakUnitsByIndex()) + ($manualPartialUnits > 0 ? 1 : 0);
+                });
+            }
+
+            return $line->isPeakLine()
+                ? $line->loadedPeaks()
+                : ($line->loadedPartialUnits() > 0 ? 1 : 0);
+        }))
         @php($logoPath = public_path('brand/maximo-logo-horizontal.png'))
         @php($logoAvailable = file_exists($logoPath) && (extension_loaded('gd') || extension_loaded('imagick')))
 
@@ -67,45 +96,45 @@
             </tr>
         </table>
 
-        <table>
+        <table class="delivery-lines">
+            <colgroup>
+                <col style="width: 12%;">
+                <col style="width: 39%;">
+                <col style="width: 12%;">
+                <col style="width: 15%;">
+                <col style="width: 9%;">
+                <col style="width: 13%;">
+            </colgroup>
             <thead>
                 <tr>
-                    <th>Origen</th>
-                    <th>Tipo</th>
-                    <th>Mercancia</th>
-                    <th>Lote</th>
-                    <th>Ubicación destino</th>
-                    <th>Solicitado</th>
-                    <th>Pallets entregados / Picos entregados</th>
-                    <th>Detalle</th>
-                    <th>Observaciones</th>
+                    <th class="col-sku">SKU</th>
+                    <th class="col-description">Descripción</th>
+                    <th class="col-lot">Lote</th>
+                    <th class="col-delivered">Pallets entregados</th>
+                    <th class="col-quantity">Cantidad</th>
+                    <th class="col-destination">Ubicación destino</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($deliveredLines as $line)
                     <tr>
-                        <td>{{ $line->lineOriginLabel() }}</td>
-                        <td>{{ $line->lineTypeLabel() }}</td>
-                        <td>
-                            <strong>{{ $line->sku }}</strong><br>
-                            {{ $line->description }}
-                        </td>
-                        <td>{{ $line->lot ?: 'Sin lote' }}</td>
-                        <td>{{ $line->destination_location ?: '-' }}</td>
-                        <td>{{ $line->requestedQuantityLabel() }}</td>
-                        <td>{{ $line->loadedQuantityLabel() }}</td>
-                        <td>{{ $line->unitsLabel() }}</td>
-                        <td>{{ $line->loading_notes ?: '-' }}</td>
+                        <td class="col-sku"><strong>{{ $line->sku }}</strong></td>
+                        <td class="col-description description">{{ $line->deliveryNoteDescription() }}</td>
+                        <td class="col-lot">{{ $line->lot ?: 'Sin lote' }}</td>
+                        <td class="col-delivered">{{ $line->loadedQuantityLabel() }}</td>
+                        <td class="col-quantity number">{{ number_format($line->loadedUnitsTotal(), 0, ',', '.') }} uds</td>
+                        <td class="col-destination">{{ $line->destination_location ?: '-' }}</td>
                     </tr>
                 @endforeach
             </tbody>
         </table>
 
-        <div class="totals">
-            <p><strong>Total pallets entregados:</strong> {{ number_format($dispatch->loadedPalletsCount(), 0, ',', '.') }}</p>
-            <p><strong>Total picos entregados:</strong> {{ number_format($dispatch->loadedPeaksCount(), 0, ',', '.') }}</p>
-        </div>
+        <table class="totals">
+            <tr><td class="label">Total pallets entregados</td><td class="value">{{ number_format($dispatch->loadedPalletsCount(), 0, ',', '.') }}</td></tr>
+            <tr><td class="label">Total picos entregados</td><td class="value">{{ number_format($totalDeliveredPeaks, 0, ',', '.') }}</td></tr>
+            <tr><td class="label">Total unidades entregadas</td><td class="value">{{ number_format($dispatch->loadedUnitsCount(), 0, ',', '.') }}</td></tr>
+        </table>
 
-        <div class="box"><strong>Firma / Recibí:</strong></div>
+        <div class="signature"><strong>Firma / Recibí:</strong></div>
     </body>
 </html>

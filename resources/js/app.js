@@ -2050,6 +2050,37 @@ const setupWarehouseRequestAllocations = () => {
             totalNode.textContent = formatNumber.format(totalUnits);
         }
 
+        const stockSelect = assignment.querySelector('[data-stock-select]');
+        const selectedOption = stockSelect?.selectedOptions?.[0];
+        const locationLabel = stockSelect?.value
+            ? (selectedOption?.dataset.pickingLocation || 'Sin ubicación registrada')
+            : 'Pendiente de asignar ubicación';
+        const quantityParts = [];
+
+        if (loadedPallets > 0) {
+            quantityParts.push(`${formatNumber.format(loadedPallets)} ${loadedPallets === 1 ? 'pallet' : 'pallets'}`);
+        }
+
+        if (partialUnits > 0) {
+            quantityParts.push(`pico ${formatNumber.format(partialUnits)} uds`);
+        }
+
+        const quantityLabel = quantityParts.length > 0 ? quantityParts.join(' + ') : 'Cantidad pendiente';
+        const pickingLocationNode = assignment.querySelector('[data-picking-location-label]');
+        const pickingQuantityNode = assignment.querySelector('[data-picking-location-quantity]');
+
+        if (pickingLocationNode) {
+            pickingLocationNode.textContent = locationLabel;
+        }
+
+        if (pickingQuantityNode) {
+            pickingQuantityNode.textContent = quantityLabel;
+        }
+
+        assignment.dataset.pickingSummary = quantityParts.length > 0
+            ? `${locationLabel} · ${quantityLabel}`
+            : locationLabel;
+
         return {
             loadedPallets,
             partialUnits,
@@ -2068,6 +2099,22 @@ const setupWarehouseRequestAllocations = () => {
             totalPartialUnits += totals.partialUnits;
             totalUnits += totals.totalUnits;
         });
+
+        const pickingSummaryNode = line.querySelector('[data-line-picking-locations]');
+
+        if (pickingSummaryNode) {
+            const summaries = Array.from(line.querySelectorAll('[data-assignment]'))
+                .map((assignment) => assignment.dataset.pickingSummary)
+                .filter(Boolean);
+
+            pickingSummaryNode.replaceChildren();
+
+            (summaries.length > 0 ? summaries : ['Pendiente de asignar ubicación']).forEach((summary) => {
+                const row = document.createElement('span');
+                row.textContent = summary;
+                pickingSummaryNode.append(row);
+            });
+        }
 
         const requestedUnits = parsePositiveInteger(line.dataset.requestedUnits);
         const differenceUnits = totalUnits - requestedUnits;

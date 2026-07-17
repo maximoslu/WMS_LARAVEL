@@ -5926,6 +5926,18 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     font-weight: 850;
 }
 
+.warehouse-prep-picking-summary {
+    padding: 0.75rem;
+    border-left: 3px solid var(--brand-cyan);
+    border-radius: 6px;
+    background: rgba(15, 127, 147, 0.08);
+}
+
+.warehouse-prep-picking-summary dd {
+    display: grid;
+    gap: 0.25rem;
+}
+
 .warehouse-prep-assignments,
 .warehouse-prep-assignment {
     display: grid;
@@ -5942,6 +5954,55 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
 .warehouse-prep-assignment-head strong {
     color: var(--brand-slate-dark);
     font-size: 0.82rem;
+}
+
+.warehouse-prep-picking-location {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem 0.75rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid rgba(15, 127, 147, 0.2);
+    border-radius: 7px;
+    background: rgba(15, 127, 147, 0.07);
+}
+
+.warehouse-prep-picking-location span {
+    color: var(--brand-cyan-dark);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.warehouse-prep-picking-location strong {
+    color: var(--brand-slate-dark);
+    font-size: 0.86rem;
+}
+
+.warehouse-prep-picking-location small {
+    color: var(--brand-soft);
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-align: right;
+}
+
+.wms-picking-location-list {
+    display: grid;
+    gap: 0.28rem;
+    padding: 0.7rem 0.8rem;
+    border-left: 3px solid var(--brand-cyan);
+    border-radius: 6px;
+    background: rgba(15, 127, 147, 0.07);
+    color: var(--brand-slate-dark);
+    font-size: 0.78rem;
+}
+
+.wms-picking-location-list > strong {
+    color: var(--brand-cyan-dark);
+    font-size: 0.67rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
 }
 
 .warehouse-prep-assignment label,
@@ -6309,6 +6370,14 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     .warehouse-prep-assignment-head {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .warehouse-prep-picking-location {
+        grid-template-columns: 1fr;
+    }
+
+    .warehouse-prep-picking-location small {
+        text-align: left;
     }
 
     .warehouse-prep-add-assignment,

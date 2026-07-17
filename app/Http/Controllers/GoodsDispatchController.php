@@ -124,10 +124,10 @@ class GoodsDispatchController extends Controller
             'client',
             'requestedBy',
             'lines.item',
-            'lines.stockPallet',
+            'lines.stockPallet.location.warehouse',
             'dispatch.lines.item',
-            'dispatch.lines.stockPallet',
-            'dispatch.lines.allocations.stockPallet',
+            'dispatch.lines.stockPallet.location.warehouse',
+            'dispatch.lines.allocations.stockPallet.location.warehouse',
             'dispatch.lines.sourceRequestLine',
         ]);
 
@@ -217,11 +217,11 @@ class GoodsDispatchController extends Controller
             'client',
             'creator',
             'merchandiseRequest.lines.item',
-            'merchandiseRequest.lines.stockPallet',
+            'merchandiseRequest.lines.stockPallet.location.warehouse',
             'merchandiseRequest',
             'lines.item',
-            'lines.stockPallet',
-            'lines.allocations.stockPallet',
+            'lines.stockPallet.location.warehouse',
+            'lines.allocations.stockPallet.location.warehouse',
             'lines.sourceRequestLine',
         ]);
 
@@ -318,7 +318,7 @@ class GoodsDispatchController extends Controller
         GoodsDispatchWorkflowService $workflowService,
         AuditLogService $audit,
     ) {
-        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet', 'lines.allocations.stockPallet']);
+        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet', 'lines.allocations']);
 
         abort_unless(
             in_array($goodsDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true),
@@ -351,7 +351,7 @@ class GoodsDispatchController extends Controller
         }
 
         return StockPallet::query()
-            ->with('location')
+            ->with('location.warehouse')
             ->where('client_id', $merchandiseRequest->client_id)
             ->whereIn('item_id', $itemIds)
             ->where('active', true)

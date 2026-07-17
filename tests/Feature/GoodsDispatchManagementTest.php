@@ -10,10 +10,12 @@ use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\InventoryMovement;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Notifications\CustomerDispatchDeliveryNoteNotification;
 use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
 use App\Notifications\InternalGoodsDispatchLoadingConfirmedNotification;
@@ -1194,6 +1196,230 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertHeader('content-type', 'application/pdf');
     }
 
+    public function test_internal_preparation_shows_destination_and_all_real_picking_locations(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'BOBINA-80',
+            'description' => 'Bobina blanca 80 gramos',
+            'units_per_pallet' => 100,
+        ]);
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $location15 = Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => '15']);
+        $location18 = Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => '18']);
+        $stock15 = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $location15->id,
+            'lot' => 'LOTE-15',
+            'units_per_pallet' => 100,
+            'quantity_units' => 3100,
+        ]);
+        $stock18 = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $location18->id,
+            'lot' => 'LOTE-18',
+            'units_per_pallet' => 100,
+            'quantity_units' => 3100,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock15->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 6,
+            'requested_units' => 600,
+            'destination_location' => 'DIGITAL',
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'type' => GoodsDispatch::TYPE_REQUEST,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatchLine = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock15->id,
+            'source_request_line_id' => $requestLine->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 6,
+            'requested_units' => 600,
+            'destination_location' => 'DIGITAL',
+        ]);
+        $dispatchLine->allocations()->create([
+            'stock_pallet_id' => $stock15->id,
+            'lot' => 'LOTE-15',
+            'location_text' => '15',
+            'loaded_pallets' => 3,
+            'loaded_partial_units' => 0,
+        ]);
+        $dispatchLine->allocations()->create([
+            'stock_pallet_id' => $stock18->id,
+            'lot' => 'LOTE-18',
+            'location_text' => '18',
+            'loaded_pallets' => 3,
+            'loaded_partial_units' => 0,
+        ]);
+
+        foreach ([Role::ALMACEN, Role::ADMINISTRACION, Role::SUPERADMIN] as $roleSlug) {
+            $this->actingAs($this->makeUserWithRole($roleSlug))
+                ->get(route('dispatches.requests.show', $merchandiseRequest))
+                ->assertOk()
+                ->assertSeeText('Ubicación destino: DIGITAL')
+                ->assertSeeText('Ubicación de recogida')
+                ->assertSeeText('NAVE 38 - Calle 15')
+                ->assertSeeText('NAVE 38 - Calle 18')
+                ->assertSeeText('3 pallets')
+                ->assertSeeText('Lote: LOTE-15 · Ubicación: NAVE 38 - Calle 15');
+        }
+
+        $merchandiseRequest->load([
+            'client',
+            'requestedBy',
+            'lines.item',
+            'lines.stockPallet.location.warehouse',
+            'dispatch.lines.stockPallet.location.warehouse',
+            'dispatch.lines.allocations.stockPallet.location.warehouse',
+            'dispatch.lines.sourceRequestLine',
+        ]);
+        $preparationHtml = view('merchandise-requests.preparation-pdf', compact('merchandiseRequest'))->render();
+
+        $this->assertStringContainsString('Ubicación de recogida', $preparationHtml);
+        $this->assertStringContainsString('NAVE 38 - Calle 15', $preparationHtml);
+        $this->assertStringContainsString('NAVE 38 - Calle 18', $preparationHtml);
+        $this->assertStringContainsString('DIGITAL', $preparationHtml);
+    }
+
+    public function test_internal_preparation_handles_pending_and_missing_picking_locations(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $pendingItem = Item::factory()->create(['client_id' => $client->id, 'sku' => 'PENDING-LOCATION']);
+        $missingItem = Item::factory()->create(['client_id' => $client->id, 'sku' => 'MISSING-LOCATION']);
+        $stockWithoutLocation = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $missingItem->id,
+            'location_id' => null,
+            'location_text' => null,
+            'quantity_units' => 100,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $pendingRequestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $pendingItem->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 1,
+            'requested_units' => 100,
+        ]);
+        $missingRequestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $missingItem->id,
+            'stock_pallet_id' => $stockWithoutLocation->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 1,
+            'requested_units' => 100,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $pendingItem->id,
+            'source_request_line_id' => $pendingRequestLine->id,
+            'stock_pallet_id' => null,
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $missingItem->id,
+            'source_request_line_id' => $missingRequestLine->id,
+            'stock_pallet_id' => $stockWithoutLocation->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSeeText('Pendiente de asignar ubicación')
+            ->assertSeeText('Sin ubicación registrada');
+    }
+
+    public function test_client_request_detail_does_not_expose_internal_picking_location(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $warehouse = Warehouse::factory()->create(['client_id' => $client->id, 'code' => '38', 'name' => 'NAVE 38']);
+        $location = Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => '15']);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 1,
+            'requested_units' => 100,
+            'units_per_pallet' => 100,
+            'destination_location' => 'DIGITAL',
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatchLine = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'source_request_line_id' => $requestLine->id,
+        ]);
+        $dispatchLine->allocations()->create([
+            'stock_pallet_id' => $stock->id,
+            'location_text' => '15',
+            'loaded_pallets' => 1,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSeeText('DIGITAL')
+            ->assertDontSeeText('Ubicación de recogida')
+            ->assertDontSeeText('NAVE 38 - Calle 15');
+    }
+
     public function test_cannot_complete_dispatch_without_confirming_loaded_lines(): void
     {
         $this->seedBaseData();
@@ -1593,6 +1819,51 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertStringContainsString('Muelle cliente 2', $html);
         $this->assertStringContainsString('Calle Mayor 1', $html);
         $this->assertStringContainsString('5', $html);
+    }
+
+    public function test_delivery_note_uses_compact_columns_and_separates_long_description_from_sku(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'sku' => 'PDF-SKU-001',
+            'description' => 'PDF-SKU-001 - Descripción extensa del artículo para impresión compacta '.str_repeat('con información técnica ', 10).'FINAL-NO-VISIBLE',
+            'lot' => 'LOTE-PDF',
+            'destination_location' => 'DIGITAL',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 2,
+            'loaded_pallets' => 2,
+            'loaded_partial_units' => 25,
+            'confirmed_at' => now(),
+        ]);
+
+        $html = view('dispatches.delivery-note-pdf', [
+            'dispatch' => $dispatch->load('client', 'lines.allocations'),
+        ])->render();
+
+        foreach (['SKU', 'Descripción', 'Lote', 'Pallets entregados', 'Cantidad', 'Ubicación destino'] as $header) {
+            $this->assertStringContainsString('>'.$header.'</th>', $html);
+        }
+
+        foreach (['Origen', 'Tipo', 'Solicitado', 'Detalle', 'Observaciones'] as $removedHeader) {
+            $this->assertStringNotContainsString('<th>'.$removedHeader.'</th>', $html);
+        }
+
+        $this->assertSame(1, substr_count($html, 'PDF-SKU-001'));
+        $this->assertStringContainsString('Descripción extensa del artículo', $html);
+        $this->assertStringNotContainsString('FINAL-NO-VISIBLE', $html);
+        $this->assertStringContainsString('2 pallets + Pico: 25 uds', $html);
+        $this->assertStringContainsString('225 uds', $html);
+        $this->assertStringContainsString('DIGITAL', $html);
+        $this->assertStringContainsString('Total unidades entregadas', $html);
+        $this->assertStringContainsString('Total picos entregados</td><td class="value">1', $html);
     }
 
     public function test_dispatch_from_request_copies_destination_location_to_delivery_note(): void

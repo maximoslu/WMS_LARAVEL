@@ -271,10 +271,9 @@
                             <span>Solicitado {{ $line->requestedQuantityLabel() }}</span>
                             <span>{{ $line->unitsLabel() }}</span>
                             <span>{{ $line->lot ? 'Lote '.$line->lot : 'Sin lote' }}</span>
-                            @if ($line->stockPallet?->location_text)
-                                <span>Ubicación {{ $line->stockPallet->location_text }}</span>
-                            @endif
                         </div>
+
+                        @include('dispatches.partials.picking-locations', ['line' => $line])
 
                         <div class="wms-loading-row-fields">
                             <label class="auth-field">
@@ -531,6 +530,8 @@
                         <span>{{ $line->lot ? 'Lote '.$line->lot : 'Sin lote' }}</span>
                         <span>{{ $line->loading_notes ?: 'Sin observaciones' }}</span>
                     </div>
+
+                    @include('dispatches.partials.picking-locations', ['line' => $line])
                 </article>
             @endforeach
         </div>
