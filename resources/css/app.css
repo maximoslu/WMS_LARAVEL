@@ -10464,3 +10464,311 @@ body.brand-body.app-shell-body .wms-request-create .client-pending-orders-table 
         padding-right: 0.75rem;
     }
 }
+
+/* Fase 3.2: patron compacto para detalle/gestion de pedido. */
+body.brand-body.app-shell-body .wms-detail-page {
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .wms-detail-header {
+    display: grid;
+    gap: 0.72rem;
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-detail-header-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.85rem 1rem 0;
+}
+
+body.brand-body.app-shell-body .wms-detail-header .order-header-main {
+    gap: 0.45rem 0.6rem;
+}
+
+body.brand-body.app-shell-body .wms-detail-header .order-code {
+    color: var(--ops-text);
+    font-size: 1.22rem;
+    line-height: 1.05;
+}
+
+body.brand-body.app-shell-body .wms-detail-context {
+    display: grid;
+    justify-items: end;
+    gap: 0.12rem;
+    min-width: 10rem;
+    padding: 0.5rem 0.62rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 7px;
+    background: #f8fafc;
+    text-align: right;
+}
+
+body.brand-body.app-shell-body .wms-detail-context span,
+body.brand-body.app-shell-body .wms-detail-context em {
+    color: var(--ops-muted);
+    font-size: 0.66rem;
+    font-style: normal;
+    font-weight: 800;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-detail-context strong {
+    color: var(--ops-text);
+    font-size: 0.88rem;
+    font-weight: 900;
+    line-height: 1.1;
+}
+
+body.brand-body.app-shell-body .wms-detail-meta {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+    border-top: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-detail-meta .order-meta-item {
+    min-width: 0;
+    padding: 0.55rem 0.7rem;
+    border-right: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-detail-meta .order-meta-item:last-child {
+    border-right: 0;
+}
+
+body.brand-body.app-shell-body .wms-detail-meta dt {
+    color: var(--ops-muted);
+    font-size: 0.64rem;
+    line-height: 1.1;
+}
+
+body.brand-body.app-shell-body .wms-detail-meta dd {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    padding: 0 1rem 0.85rem;
+}
+
+body.brand-body.app-shell-body .wms-detail-actions form {
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .order-prep-head > .order-primary-action {
+    display: none;
+}
+
+body.brand-body.app-shell-body .order-track {
+    padding: 0.58rem 0.85rem;
+}
+
+body.brand-body.app-shell-body .order-steps {
+    gap: 0.15rem;
+}
+
+body.brand-body.app-shell-body .order-step {
+    padding: 0.12rem 0.35rem;
+}
+
+body.brand-body.app-shell-body .order-prep-card,
+body.brand-body.app-shell-body .order-lines-card,
+body.brand-body.app-shell-body .order-secondary-actions {
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .order-prep-head,
+body.brand-body.app-shell-body .order-lines-head,
+body.brand-body.app-shell-body .order-secondary-actions summary {
+    padding: 0.72rem 0.9rem;
+    border-bottom: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .order-prep-head {
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .order-prep-head strong,
+body.brand-body.app-shell-body .order-lines-head strong,
+body.brand-body.app-shell-body .order-secondary-actions summary strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .order-prep-head p,
+body.brand-body.app-shell-body .order-secondary-actions summary span {
+    color: var(--ops-muted);
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
+body.brand-body.app-shell-body .order-secondary-actions summary::after {
+    background: #ffffff;
+    border: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .order-secondary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-top: 0;
+    padding: 0.75rem 0.9rem;
+    border-top: 0;
+}
+
+body.brand-body.app-shell-body .order-secondary-grid .wms-action-card {
+    display: grid;
+    align-content: start;
+    gap: 0.55rem;
+    padding: 0.72rem;
+}
+
+body.brand-body.app-shell-body .order-secondary-grid .wms-action-card > strong {
+    color: var(--ops-text);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .order-table-wrap {
+    border: 0;
+    border-radius: 0;
+}
+
+body.brand-body.app-shell-body .order-table {
+    width: max(100%, 64rem);
+    min-width: 64rem;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+body.brand-body.app-shell-body .order-lines-card .order-table {
+    width: max(100%, 54rem);
+    min-width: 54rem;
+}
+
+body.brand-body.app-shell-body .order-table th,
+body.brand-body.app-shell-body .order-table td {
+    padding: 0.5rem 0.62rem;
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .order-table th {
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .order-table td:nth-child(5),
+body.brand-body.app-shell-body .order-table td:nth-child(6),
+body.brand-body.app-shell-body .order-table th:nth-child(5),
+body.brand-body.app-shell-body .order-table th:nth-child(6) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+body.brand-body.app-shell-body .order-table td:nth-child(2) {
+    min-width: 13rem;
+}
+
+body.brand-body.app-shell-body .order-table td:nth-child(8) {
+    min-width: 12rem;
+}
+
+body.brand-body.app-shell-body .order-table-strong {
+    color: var(--ops-text);
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .order-table .warehouse-load-state,
+body.brand-body.app-shell-body .order-table .wms-line-type-pill {
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .order-alert {
+    border-radius: 8px;
+}
+
+@media (max-width: 1100px) {
+    body.brand-body.app-shell-body .wms-detail-meta {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    body.brand-body.app-shell-body .wms-detail-header-main {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    body.brand-body.app-shell-body .wms-detail-context {
+        justify-items: start;
+        text-align: left;
+    }
+
+    body.brand-body.app-shell-body .wms-detail-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .wms-detail-meta .order-meta-item:nth-child(even) {
+        border-right: 0;
+    }
+
+    body.brand-body.app-shell-body .wms-detail-actions {
+        justify-content: flex-start;
+    }
+
+    body.brand-body.app-shell-body .wms-detail-actions,
+    body.brand-body.app-shell-body .wms-detail-actions form,
+    body.brand-body.app-shell-body .wms-detail-actions .button-primary,
+    body.brand-body.app-shell-body .wms-detail-actions .button-secondary {
+        width: 100%;
+    }
+
+    body.brand-body.app-shell-body .order-secondary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 520px) {
+    body.brand-body.app-shell-body .wms-detail-header-main {
+        padding: 0.75rem 0.75rem 0;
+    }
+
+    body.brand-body.app-shell-body .wms-detail-actions {
+        padding: 0 0.75rem 0.75rem;
+    }
+
+    body.brand-body.app-shell-body .wms-detail-meta {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-detail-meta .order-meta-item {
+        border-right: 0;
+    }
+
+    body.brand-body.app-shell-body .order-prep-head,
+    body.brand-body.app-shell-body .order-lines-head,
+    body.brand-body.app-shell-body .order-secondary-actions summary,
+    body.brand-body.app-shell-body .order-secondary-grid {
+        padding-inline: 0.75rem;
+    }
+}

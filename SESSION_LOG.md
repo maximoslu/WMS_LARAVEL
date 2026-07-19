@@ -3213,3 +3213,48 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `fix: restore spacing in merchandise request creation`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 3.2 - Detalle de pedido (22:13 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente el detalle/gestion de pedido como patron compacto para futuros detalles WMS, manteniendo intacta la logica de negocio.
+
+### Cambios realizados
+- Se reorganizo visualmente la cabecera de `resources/views/merchandise-requests/show.blade.php` con clases `wms-detail-*`, manteniendo el mismo pedido, estado, cliente, solicitante, fecha y totales.
+- Se anadio contexto operativo de salida asociada o pendiente sin inventar datos ni cambiar relaciones.
+- La accion principal interna queda visible en la cabecera: empezar carga, continuar carga, ver carga o marcar como completado segun el mismo estado existente.
+- Las acciones secundarias quedan agrupadas y visibles en el bloque de mas acciones, conservando formularios, documentos, PDF de preparacion, albaran y vuelta al listado.
+- Se anadio una capa CSS final en `resources/css/app.css` para compactar cabecera, seguimiento, tabla de lineas, carga adicional, acciones y responsive basico.
+- Las lineas del pedido quedan mas densas y legibles, con cantidades alineadas y estados de carga sobrios.
+
+### Archivos modificados
+- `resources/views/merchandise-requests/show.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron `data-*`, nombres de rutas, metodos HTTP, actions de formularios, nombres de campos ni query strings.
+- No se modifico la generacion de salidas, PDFs, albaranes, seguimiento, estados ni permisos por rol.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=MerchandiseRequestManagementTest`: **42 passed** (250 assertions).
+- `php artisan test --filter=GoodsDispatchManagementTest`: **57 passed** (421 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local no se completo; se valido por codigo, tests focalizados, suite completa y build.
+- Esta pantalla queda como patron inicial para futuros detalles de entrada, salida, albaran, cliente y administracion.
+
+### Cierre Git previsto
+- Commit: `style: redesign merchandise request detail`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

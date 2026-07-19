@@ -14,6 +14,7 @@
         $requestedPallets = $merchandiseRequest->requestedPalletsCount();
         $requestedPeaks = $merchandiseRequest->requestedPeaksCount();
         $requestedUnits = (int) $merchandiseRequest->lines->sum('requested_units');
+        $lineCount = $merchandiseRequest->lines->count();
         $timeline = [
             ['label' => 'Registrado', 'date' => $merchandiseRequest->submittedAt()],
             ['label' => 'Preparación', 'date' => $merchandiseRequest->prepared_at],
@@ -42,7 +43,7 @@
 
     <x-breadcrumbs :items="$breadcrumbs" />
 
-    <div class="order-detail">
+    <div class="order-detail wms-detail-page">
         @if (session('status'))
             <div class="order-alert order-alert--success" role="status">
                 <span class="order-alert-icon" aria-hidden="true">
@@ -77,16 +78,30 @@
             </div>
         @endif
 
-        <section class="surface-card compact-card order-header">
-            <div class="order-header-main">
-                <span class="order-type-chip">Pedido {{ $isClient ? 'cliente' : 'interno' }}</span>
-                <h2 class="order-code">{{ $merchandiseRequest->referenceCode() }}</h2>
-                <span class="status-badge merchandise-request-status merchandise-request-status--{{ $merchandiseRequest->status }}">
-                    {{ $merchandiseRequest->statusLabel() }}
-                </span>
+        <section class="surface-card compact-card order-header wms-detail-header">
+            <div class="wms-detail-header-main">
+                <div class="order-header-main">
+                    <span class="order-type-chip">Pedido {{ $isClient ? 'cliente' : 'interno' }}</span>
+                    <h2 class="order-code">{{ $merchandiseRequest->referenceCode() }}</h2>
+                    <span class="status-badge merchandise-request-status merchandise-request-status--{{ $merchandiseRequest->status }}">
+                        {{ $merchandiseRequest->statusLabel() }}
+                    </span>
+                </div>
+
+                <div class="wms-detail-context">
+                    @if ($dispatch)
+                        <span>Salida asociada</span>
+                        <strong>{{ $dispatch->dispatchNumber() }}</strong>
+                        <em>{{ $dispatch->statusLabel() }}</em>
+                    @else
+                        <span>Salida asociada</span>
+                        <strong>Sin salida</strong>
+                        <em>{{ $isClient ? 'Pendiente de preparacion' : 'Pendiente de generar' }}</em>
+                    @endif
+                </div>
             </div>
 
-            <dl class="order-meta">
+            <dl class="order-meta wms-detail-meta">
                 <div class="order-meta-item">
                     <dt>Cliente</dt>
                     <dd>{{ $merchandiseRequest->client?->name ?? 'Sin cliente' }}</dd>
@@ -98,6 +113,10 @@
                 <div class="order-meta-item">
                     <dt>Fecha</dt>
                     <dd>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') ?? '—' }}</dd>
+                </div>
+                <div class="order-meta-item">
+                    <dt>Lineas</dt>
+                    <dd>{{ number_format($lineCount, 0, ',', '.') }}</dd>
                 </div>
                 <div class="order-meta-item">
                     <dt>Pallets</dt>
@@ -112,6 +131,33 @@
                     <dd>{{ number_format($requestedUnits, 0, ',', '.') }}</dd>
                 </div>
             </dl>
+
+            @unless ($isClient)
+                <div class="wms-detail-actions order-primary-action">
+                    @if ($dispatch?->status === \App\Models\GoodsDispatch::STATUS_SENT)
+                        <form method="POST" action="{{ route('merchandise-requests.update-status', $merchandiseRequest) }}">
+                            @csrf
+                            @method('PATCH')
+                            <input type="hidden" name="status" value="{{ \App\Models\MerchandiseRequest::STATUS_COMPLETED }}">
+                            <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Marcar este pedido como completado?')">
+                                Marcar como completado
+                            </button>
+                        </form>
+                    @elseif ($canStartLoading)
+                        <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
+                            @csrf
+                            <input type="hidden" name="return_to_request" value="1">
+                            <button type="submit" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</button>
+                        </form>
+                    @elseif ($dispatch)
+                        <a href="{{ route('dispatches.requests.show', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</a>
+                    @endif
+
+                    @if ($dispatch)
+                        <a href="{{ route('dispatches.requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact">Ver salida</a>
+                    @endif
+                </div>
+            @endunless
         </section>
 
         <section class="surface-card compact-card order-track" aria-label="Seguimiento del pedido">
@@ -245,7 +291,7 @@
         </section>
 
         @unless ($isClient)
-            <details class="surface-card compact-card order-secondary-actions">
+            <details class="surface-card compact-card order-secondary-actions" open>
                 <summary>
                     <div>
                         <strong>Más acciones</strong>
