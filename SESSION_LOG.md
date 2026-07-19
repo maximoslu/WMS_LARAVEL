@@ -3019,3 +3019,34 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `fix: show picking locations and compact dispatch delivery notes`.
 - Push normal a `origin/main`, sin force push y excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 2A visual completada (21:15 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** crear una base visual global mas clara, compacta, corporativa y operativa para el WMS, sin tocar logica de negocio.
+
+### Cambios realizados
+- Se anadio una capa CSS final en `resources/css/app.css` para transformar el sistema hacia un baseline claro y operativo.
+- Se redujo la sensacion dark/glass/decorativa.
+- Se compactaron superficies, tarjetas, botones, formularios, tablas, badges, alertas, breadcrumbs, topbar, footer y elementos comunes.
+- Se normalizo visualmente la paginacion.
+- Se reemplazo la plantilla `vendor/pagination/tailwind.blade.php` por clases semanticas `wms-pagination-*`.
+- Se mantuvieron URLs, logica, accesibilidad basica, textos y comportamiento de paginacion.
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, formularios de negocio ni `resources/js/app.js`.
+- No se cambiaron `data-*`, actions, metodos HTTP ni nombres de campos.
+- No se toco `.env` ni `.claude/`.
+
+### Validaciones ya realizadas
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- No se hizo commit ni push durante la implementacion inicial.
+
+### Notas
+- La revision autenticada queda pendiente para dashboard, stock, entradas, salidas, pedidos cliente, notificaciones y listados paginados.
+- La FASE 3 recomendada sigue siendo la pantalla piloto de Listado de pedidos: `resources/views/merchandise-requests/index.blade.php`.
+- Nueva regla operativa del propietario: guardar resumen y hacer push por defecto salvo instruccion contraria expresa.
