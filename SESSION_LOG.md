@@ -3401,3 +3401,50 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign delivery note lists`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 4D - Booking / calendario de bookings (23:25 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente la pantalla principal `/bookings` con un patron WMS/ERP mas compacto, claro y operativo, sin tocar logica de booking, emails, notificaciones ni Google Calendar.
+
+### Cambios realizados
+- Se reorganizo `resources/views/bookings/index.blade.php` con cabecera WMS, metricas visibles, acciones compactas y acceso a agenda/creacion.
+- Se conservaron los filtros GET existentes de cliente, fecha desde, fecha hasta, estado, tipo y busqueda, con los mismos nombres de campos, action y query strings.
+- Se anadio resumen de filtros activos para mejorar orientacion sin crear consultas nuevas.
+- Se rediseno el listado como tabla operativa densa con codigo, cliente, tipo, fecha/hora, pallets, transporte, matricula, estado, Google Calendar y acciones.
+- Se mantuvieron enlaces Ver, Editar, Ver agenda y Nueva solicitud con las mismas rutas y condiciones de visibilidad.
+- Se normalizaron visualmente estados de booking, tipos de booking y estados de sincronizacion Google Calendar con chips sobrios.
+- Se compacto el estado vacio y se mantuvo la accion de nueva solicitud cuando el usuario puede crear.
+- Se anadio CSS scoped en `resources/css/app.css` para `wms-booking-page`, reutilizando `wms-list-*`, `wms-filter-*`, `wms-table-*`, `wms-row-actions` y `wms-status-chip`.
+
+### Archivos modificados
+- `resources/views/bookings/index.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron `data-*`, nombres de rutas, metodos HTTP, actions de formularios, nombres de campos ni query strings.
+- No se modificaron creacion, edicion, cancelacion, cambios de estado, emails, notificaciones, jobs/colas, OAuth ni integracion de Google Calendar.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=BookingManagementTest`: **28 passed** (94 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se valido por codigo, tests, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de booking, emails, notificaciones ni Google Calendar.
+
+### Cierre Git previsto
+- Commit: `style: redesign booking calendar`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
