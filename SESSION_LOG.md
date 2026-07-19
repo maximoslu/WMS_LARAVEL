@@ -3448,3 +3448,52 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign booking calendar`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 4E - Dashboard / Panel de control (23:45 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente el dashboard `/dashboard` como panel WMS/ERP mas compacto, claro y orientado a trabajo diario, sin tocar logica de dashboard, notificaciones, permisos ni Google Calendar.
+
+### Cambios realizados
+- Se reorganizo `resources/views/dashboard/index.blade.php` con cabecera WMS, metricas ya disponibles de rol, pendientes y agenda semanal.
+- Se mantuvieron todos los modulos procedentes de `navigationSections`, sus rutas, iconos, estados, contadores de pendientes y condiciones de visibilidad por rol.
+- Se dio mas jerarquia a Operaciones mediante una seccion mas amplia, manteniendo Stock, Gestion y Sistema visibles segun permisos.
+- Se hicieron los accesos de modulos mas compactos y escaneables, con resumen, icono discreto, estado y pendiente cerca del enlace correspondiente.
+- Se conservo el contador visual de pendientes por modulo y se anadio resumen visual por seccion sin crear consultas nuevas.
+- Se compacto la agenda operativa del dashboard en columna semanal, manteniendo `Agenda de BOOKING`, `Agenda operativa WMS`, `Abrir agenda`, bookings, eventos Google de solo lectura y estados.
+- Se conservaron enlaces a stock, booking, pedidos, albaranes, entradas, salidas, administracion, notificaciones en topbar/drawer y agenda.
+- Se anadio CSS scoped en `resources/css/app.css` para `wms-dashboard-page`, `wms-dashboard-section`, `wms-dashboard-module`, `wms-dashboard-agenda`, `wms-dashboard-day` y `wms-dashboard-booking`.
+
+### Archivos modificados
+- `resources/views/dashboard/index.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests, `resources/js/app.js`, `config/wms.php`, `.env`, datos ni `public/build`.
+- No se cambiaron consultas, contadores, nombres de rutas, condiciones de visibilidad por rol, acciones ni enlaces funcionales.
+- No se modificaron notificaciones funcionalmente, jobs/colas, emails, OAuth ni integracion de Google Calendar.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=RoleAccessTest`: **30 passed** (109 assertions).
+- `php artisan test --filter=BookingManagementTest`: **28 passed** (94 assertions).
+- `php artisan test --filter=NotificationCenterTest`: **27 passed** (173 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se valido por codigo, tests, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de dashboard, notificaciones, permisos ni Google Calendar.
+
+### Cierre Git previsto
+- Commit: `style: redesign dashboard overview`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
