@@ -3544,3 +3544,61 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign notification center`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 4G - Administracion ligera (23:15 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente las pantallas administrativas ligeras de usuarios, clientes y solicitudes de acceso con un patron WMS/ERP compacto, claro y profesional, sin tocar logica de usuarios, clientes, roles, permisos ni solicitudes.
+
+### Vistas detectadas y modificadas
+- `resources/views/users/index.blade.php`: listado `/usuarios`.
+- `resources/views/clients/index.blade.php`: listado `/clientes`.
+- `resources/views/access-requests/index.blade.php`: listado `/solicitudes-acceso`.
+- `resources/views/access-requests/show.blade.php`: detalle/revision de solicitud de acceso, solo presentacion.
+
+### Cambios realizados
+- Se reorganizaron las cabeceras con titulo, subtitulo operativo, contador y metricas visibles sin crear consultas nuevas.
+- Se compactaron filtros GET manteniendo mismos `name`, `action`, query strings y opciones existentes.
+- Se redisenaron tablas/listados con panel WMS, toolbar, filas densas, identidad principal, email/datos secundarios y acciones al final.
+- Se reforzaron chips de rol, cliente, codigo y estados activo/inactivo/pendiente/aprobada/rechazada.
+- Se mantuvieron acciones existentes de editar, activar/desactivar y ver solicitud con las mismas rutas, formularios, `@csrf`, `@method` y condiciones por rol.
+- Se compacto el detalle de solicitud con cabecera, datos recibidos, paneles de aprobacion/rechazo y resolucion sin cambiar formularios PATCH ni campos.
+- Se anadio CSS scoped en `resources/css/app.css` para `wms-admin-page`, `wms-admin-table`, `wms-role-chip`, `wms-user-chip` y paneles de solicitudes.
+
+### Archivos modificados
+- `resources/views/users/index.blade.php`.
+- `resources/views/clients/index.blade.php`.
+- `resources/views/access-requests/index.blade.php`.
+- `resources/views/access-requests/show.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, policies/permisos, middlewares, validaciones, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron roles, permisos, contrasenas, aprobacion/rechazo de solicitudes, creacion/edicion real de usuarios ni logica de clientes.
+- No se cambiaron nombres de rutas, metodos HTTP, actions de formularios, nombres de campos ni query strings.
+- No se ejecutaron acciones reales de aprobar, rechazar, activar, desactivar, crear, editar ni borrar.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=UserManagementTest`: **7 passed** (19 assertions).
+- `php artisan test --filter=ClientManagementTest`: **7 passed** (36 assertions).
+- `php artisan test --filter=AccessRequestManagementTest`: **10 passed** (34 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK, sin errores de whitespace; Git mostro avisos informativos de normalizacion CRLF/LF en vistas Blade tocadas.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se validara por codigo, tests focalizados, suite completa, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de usuarios, clientes, roles, permisos ni solicitudes de acceso.
+
+### Cierre Git previsto
+- Commit: `style: redesign admin list screens`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

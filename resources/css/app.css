@@ -12058,8 +12058,326 @@ body.brand-body.app-shell-body .wms-notification-empty {
         max-width: 100%;
     }
 
-    body.brand-body.app-shell-body .wms-notification-line {
+body.brand-body.app-shell-body .wms-notification-line {
         align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+/* Fase 4G: administracion ligera de usuarios, clientes y solicitudes. */
+body.brand-body.app-shell-body .wms-admin-page {
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-admin-header {
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, auto);
+}
+
+body.brand-body.app-shell-body .wms-admin-header-side {
+    display: grid;
+    justify-items: end;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-admin-metrics {
+    grid-template-columns: repeat(3, minmax(4.2rem, auto));
+}
+
+body.brand-body.app-shell-body .wms-admin-filter-panel {
+    padding: 0.72rem 0.85rem;
+}
+
+body.brand-body.app-shell-body .wms-admin-filter-grid {
+    align-items: end;
+    gap: 0.5rem;
+}
+
+body.brand-body.app-shell-body .wms-admin-filter-grid--users {
+    grid-template-columns: minmax(13rem, 1fr) minmax(8rem, 10rem) minmax(10rem, 12rem) minmax(8rem, 10rem) auto;
+}
+
+body.brand-body.app-shell-body .wms-admin-filter-grid--clients,
+body.brand-body.app-shell-body .wms-admin-filter-grid--access {
+    grid-template-columns: minmax(16rem, 1fr) minmax(9rem, 11rem) auto;
+}
+
+body.brand-body.app-shell-body .wms-admin-note {
+    padding: 0.62rem 0.8rem;
+    border-left: 3px solid #0f7f93;
+    background: #f7fbfd;
+}
+
+body.brand-body.app-shell-body .wms-admin-note p {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-admin-table-panel {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .wms-admin-table {
+    min-width: 760px;
+}
+
+body.brand-body.app-shell-body .wms-admin-table th {
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-admin-table td {
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .wms-admin-identity {
+    gap: 0.12rem;
+}
+
+body.brand-body.app-shell-body .wms-admin-identity strong {
+    color: var(--ops-text);
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .wms-admin-identity .users-table-email,
+body.brand-body.app-shell-body .wms-access-request-table .users-table-email {
+    color: var(--ops-muted);
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .wms-role-chip,
+body.brand-body.app-shell-body .wms-user-chip {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 1.45rem;
+    padding: 0.24rem 0.48rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 999px;
+    color: var(--ops-text);
+    background: #f8fafc;
+    font-size: 0.68rem;
+    font-weight: 850;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-role-chip--superadmin {
+    border-color: #c7d2fe;
+    color: #3730a3;
+    background: #eef2ff;
+}
+
+body.brand-body.app-shell-body .wms-role-chip--administracion {
+    border-color: #bae6fd;
+    color: #075985;
+    background: #f0f9ff;
+}
+
+body.brand-body.app-shell-body .wms-role-chip--almacen {
+    border-color: #bbf7d0;
+    color: #166534;
+    background: #f0fdf4;
+}
+
+body.brand-body.app-shell-body .wms-role-chip--cliente {
+    border-color: #fed7aa;
+    color: #9a3412;
+    background: #fff7ed;
+}
+
+body.brand-body.app-shell-body .wms-role-chip--none {
+    color: var(--ops-muted);
+}
+
+body.brand-body.app-shell-body .wms-client-code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    letter-spacing: 0;
+}
+
+body.brand-body.app-shell-body .wms-admin-table .status-badge,
+body.brand-body.app-shell-body .wms-admin-page .status-badge {
+    min-height: 1.5rem;
+    padding: 0.22rem 0.5rem;
+    border: 1px solid transparent;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+}
+
+body.brand-body.app-shell-body .wms-admin-table .status-badge--active,
+body.brand-body.app-shell-body .wms-admin-page .status-badge--active {
+    border-color: rgba(20, 101, 60, 0.15);
+}
+
+body.brand-body.app-shell-body .wms-admin-table .status-badge--inactive,
+body.brand-body.app-shell-body .wms-admin-page .status-badge--inactive {
+    border-color: rgba(143, 32, 32, 0.14);
+}
+
+body.brand-body.app-shell-body .wms-admin-empty {
+    min-height: 5rem;
+}
+
+body.brand-body.app-shell-body .wms-access-request-panel {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .wms-access-request-panel > h3,
+body.brand-body.app-shell-body .wms-access-request-panel > p,
+body.brand-body.app-shell-body .wms-access-request-panel > .access-request-detail-grid {
+    margin-right: 0.9rem;
+    margin-left: 0.9rem;
+}
+
+body.brand-body.app-shell-body .wms-access-request-panel > .access-request-detail-grid {
+    margin-bottom: 0.9rem;
+}
+
+body.brand-body.app-shell-body .wms-access-request-detail-header .status-badge {
+    align-self: center;
+}
+
+body.brand-body.app-shell-body .wms-access-request-actions-grid {
+    gap: 0.72rem;
+    margin-top: 0;
+}
+
+body.brand-body.app-shell-body .wms-access-request-action-card {
+    gap: 0.75rem;
+    padding: 0.85rem;
+    border-top: 3px solid #0f7f93;
+}
+
+body.brand-body.app-shell-body .wms-access-request-action-card--danger {
+    border-top-color: #b42318;
+}
+
+body.brand-body.app-shell-body .wms-access-request-action-card h3,
+body.brand-body.app-shell-body .wms-access-request-panel h3 {
+    margin: 0;
+    color: var(--ops-text);
+    font-size: 0.92rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .wms-access-request-action-card p,
+body.brand-body.app-shell-body .wms-access-request-panel p {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-access-request-action-card .button-primary,
+body.brand-body.app-shell-body .wms-access-request-action-card .button-secondary {
+    width: fit-content;
+}
+
+body.brand-body.app-shell-body .access-request-detail-grid {
+    gap: 0.55rem;
+    padding: 0.9rem;
+}
+
+body.brand-body.app-shell-body .access-request-detail-grid div {
+    padding: 0.62rem 0.7rem;
+    border-color: var(--ops-border);
+    border-radius: 7px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .access-request-detail-grid dt {
+    color: var(--ops-muted);
+    font-size: 0.62rem;
+    letter-spacing: 0.05em;
+}
+
+body.brand-body.app-shell-body .access-request-detail-grid dd {
+    margin-top: 0.22rem;
+    color: var(--ops-text);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .access-request-approval-note {
+    gap: 0.35rem;
+}
+
+body.brand-body.app-shell-body .access-request-approval-note span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    padding: 0.24rem 0.5rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 999px;
+    color: var(--ops-muted);
+    background: #f8fafc;
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+body.brand-body.app-shell-body .access-request-scope-hint,
+body.brand-body.app-shell-body .user-scope-hint {
+    padding: 0.55rem 0.65rem;
+    border-color: #bfdbfe;
+    border-radius: 7px;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+@media (max-width: 1120px) {
+    body.brand-body.app-shell-body .wms-admin-header,
+    body.brand-body.app-shell-body .wms-admin-filter-grid--users,
+    body.brand-body.app-shell-body .wms-admin-filter-grid--clients,
+    body.brand-body.app-shell-body .wms-admin-filter-grid--access {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-admin-header-side {
+        justify-items: stretch;
+    }
+
+    body.brand-body.app-shell-body .wms-admin-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .wms-admin-header .wms-list-actions,
+    body.brand-body.app-shell-body .wms-admin-header .access-request-summary,
+    body.brand-body.app-shell-body .wms-admin-filter-grid .wms-filter-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 639px) {
+    body.brand-body.app-shell-body .wms-admin-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-admin-header .button-primary,
+    body.brand-body.app-shell-body .wms-admin-header .button-secondary,
+    body.brand-body.app-shell-body .wms-admin-filter-grid .button-primary,
+    body.brand-body.app-shell-body .wms-admin-filter-grid .button-secondary,
+    body.brand-body.app-shell-body .wms-admin-empty .button-primary,
+    body.brand-body.app-shell-body .wms-admin-table .wms-row-actions,
+    body.brand-body.app-shell-body .wms-admin-table .wms-row-actions a,
+    body.brand-body.app-shell-body .wms-admin-table .wms-row-actions form,
+    body.brand-body.app-shell-body .wms-admin-table .wms-row-actions button,
+    body.brand-body.app-shell-body .wms-access-request-action-card .button-primary,
+    body.brand-body.app-shell-body .wms-access-request-action-card .button-secondary {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    body.brand-body.app-shell-body .wms-admin-table {
+        min-width: 680px;
+    }
+
+    body.brand-body.app-shell-body .wms-empty-state.wms-admin-empty {
+        align-items: stretch;
         flex-direction: column;
     }
 }
