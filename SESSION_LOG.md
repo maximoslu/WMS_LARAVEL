@@ -3497,3 +3497,50 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign dashboard overview`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 4F - Notificaciones / Centro de avisos (23:58 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente `/notificaciones` como centro de avisos operativo, compacto y claro, sin tocar logica de notificaciones, emails, jobs, eventos ni permisos.
+
+### Cambios realizados
+- Se reorganizo `resources/views/notifications/index.blade.php` con cabecera WMS, metricas visibles y toolbar de gestion separada.
+- Se conservaron todas las acciones masivas existentes: marcar como leidas, eliminar no leidas y eliminar todas, con las mismas rutas, metodos, `@csrf`, `@method('DELETE')`, confirmaciones y textos por rol.
+- Se mantuvo la diferenciacion superadmin frente a acciones propias de cliente, almacen y administracion.
+- Se rediseno la bandeja como listado compacto tipo inbox con cabecera de columnas, resumen de paginacion y contador de no leidas visibles en la pagina.
+- Se actualizo `resources/views/notifications/_card.blade.php` para reforzar estado leida/no leida, tipo, fecha y acciones por fila, manteniendo enlace Abrir y formulario PATCH de Marcar leida.
+- Se mantuvieron las clases historicas cubiertas por tests: `notification-inbox`, `notification-card`, `notification-card-title`, `notification-card-body`, `notification-card-actions`, `notification-kind-badge--*`.
+- Se anadio CSS scoped en `resources/css/app.css` para `wms-notification-page`, toolbar, bandeja, filas, estados, badges y responsive.
+
+### Archivos modificados
+- `resources/views/notifications/index.blade.php`.
+- `resources/views/notifications/_card.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, policies/permisos, jobs, events/listeners, mails, notification classes, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron nombres de campos, metodos HTTP, actions de formularios, nombres de rutas, permisos, consultas ni comportamiento de botones.
+- No se ejecutaron acciones reales sobre notificaciones.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=NotificationCenterTest`: **27 passed** (173 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se valido por codigo, tests, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de notificaciones, emails, jobs, eventos ni permisos.
+
+### Cierre Git previsto
+- Commit: `style: redesign notification center`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
