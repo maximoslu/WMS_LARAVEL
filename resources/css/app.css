@@ -9882,3 +9882,406 @@ body.brand-body.app-shell-body.drawer-open {
         transform: translate3d(0, 0, 0);
     }
 }
+
+/* Fase 3 piloto: patron operativo para listados WMS. */
+body.brand-body.app-shell-body .wms-list-page {
+    display: grid;
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .wms-list-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+}
+
+body.brand-body.app-shell-body .wms-list-heading {
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-list-kicker {
+    color: var(--ops-muted);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-list-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.65rem;
+}
+
+body.brand-body.app-shell-body .wms-list-count,
+body.brand-body.app-shell-body .wms-filter-token,
+body.brand-body.app-shell-body .wms-filter-muted,
+body.brand-body.app-shell-body .wms-status-chip,
+body.brand-body.app-shell-body .wms-muted-value {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 1.45rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-list-count {
+    padding: 0.24rem 0.52rem;
+    border: 1px solid var(--ops-border);
+    color: var(--ops-text);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-list-subtitle {
+    max-width: 48rem;
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-list-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem;
+}
+
+body.brand-body.app-shell-body .wms-list-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(4.6rem, auto));
+    gap: 0.35rem;
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .wms-list-metrics div {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+    padding: 0.45rem 0.58rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 7px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-list-metrics dt {
+    color: var(--ops-muted);
+    font-size: 0.64rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-list-metrics dd {
+    margin: 0;
+    color: var(--ops-text);
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+body.brand-body.app-shell-body .wms-filter-panel {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.78rem 0.9rem;
+}
+
+body.brand-body.app-shell-body .wms-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(9rem, 12rem) minmax(9rem, 12rem) minmax(14rem, 1fr) auto;
+    align-items: end;
+    gap: 0.55rem;
+}
+
+body.brand-body.app-shell-body .wms-filter-search {
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+
+body.brand-body.app-shell-body .wms-filter-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 1.5rem;
+}
+
+body.brand-body.app-shell-body .wms-filter-token {
+    padding: 0.26rem 0.5rem;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+body.brand-body.app-shell-body .wms-filter-muted,
+body.brand-body.app-shell-body .wms-muted-value {
+    padding: 0.26rem 0.5rem;
+    border: 1px solid var(--ops-border);
+    color: var(--ops-muted);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem;
+    padding: 1rem;
+}
+
+body.brand-body.app-shell-body .wms-empty-state h3 {
+    margin: 0;
+    color: var(--ops-text);
+    font-size: 0.98rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .wms-empty-state p {
+    margin: 0.18rem 0 0;
+    color: var(--ops-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-table-panel {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .wms-table-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.72rem 0.9rem;
+    border-bottom: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-table-toolbar > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.28rem 0.5rem;
+}
+
+body.brand-body.app-shell-body .wms-table-toolbar strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-table-toolbar span {
+    color: var(--ops-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+body.brand-body.app-shell-body .wms-table-totals span {
+    display: inline-flex;
+    min-height: 1.45rem;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid #bbf7d0;
+    border-radius: 999px;
+    color: #166534;
+    background: #f0fdf4;
+}
+
+body.brand-body.app-shell-body .wms-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+body.brand-body.app-shell-body .wms-data-table {
+    width: 100%;
+    min-width: 68rem;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+body.brand-body.app-shell-body .wms-data-table th,
+body.brand-body.app-shell-body .wms-data-table td {
+    padding: 0.58rem 0.65rem;
+    border-bottom: 1px solid var(--ops-border);
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .wms-data-table th {
+    color: var(--ops-muted);
+    background: #ffffff;
+    font-size: 0.67rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    line-height: 1.1;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-data-table td {
+    color: var(--ops-text);
+    font-size: 0.76rem;
+    line-height: 1.25;
+}
+
+body.brand-body.app-shell-body .wms-data-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-table-number {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+body.brand-body.app-shell-body .wms-table-actions-cell {
+    text-align: right;
+}
+
+body.brand-body.app-shell-body .wms-request-code,
+body.brand-body.app-shell-body .wms-request-summary {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-request-code strong,
+body.brand-body.app-shell-body .wms-request-summary strong {
+    color: var(--ops-text);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-request-code span,
+body.brand-body.app-shell-body .wms-request-summary span {
+    color: var(--ops-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+body.brand-body.app-shell-body .wms-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+
+body.brand-body.app-shell-body .wms-status-chip {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--ops-border);
+    color: var(--ops-text);
+    background: #f8fafc;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--pending {
+    border-color: #fde68a;
+    color: #92400e;
+    background: #fffbeb;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--preparing {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--sent {
+    border-color: #c4b5fd;
+    color: #5b21b6;
+    background: #f5f3ff;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--completed {
+    border-color: #bbf7d0;
+    color: #166534;
+    background: #f0fdf4;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--cancelled {
+    border-color: #fecaca;
+    color: #991b1b;
+    background: #fef2f2;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--neutral {
+    border-color: var(--ops-border);
+    color: var(--ops-muted);
+    background: #f8fafc;
+}
+
+@media (max-width: 900px) {
+    body.brand-body.app-shell-body .wms-list-header {
+        grid-template-columns: 1fr;
+        align-items: start;
+    }
+
+    body.brand-body.app-shell-body .wms-list-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+
+    body.brand-body.app-shell-body .wms-list-metrics {
+        flex: 1 1 22rem;
+    }
+
+    body.brand-body.app-shell-body .wms-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .wms-filter-search,
+    body.brand-body.app-shell-body .wms-filter-actions {
+        grid-column: 1 / -1;
+    }
+
+    body.brand-body.app-shell-body .wms-filter-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 639px) {
+    body.brand-body.app-shell-body .wms-list-header,
+    body.brand-body.app-shell-body .wms-filter-panel {
+        padding: 0.75rem;
+    }
+
+    body.brand-body.app-shell-body .wms-list-actions,
+    body.brand-body.app-shell-body .wms-empty-state,
+    body.brand-body.app-shell-body .wms-table-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.brand-body.app-shell-body .wms-list-metrics,
+    body.brand-body.app-shell-body .wms-filter-grid {
+        width: 100%;
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-list-primary-action,
+    body.brand-body.app-shell-body .wms-filter-actions .button-primary,
+    body.brand-body.app-shell-body .wms-filter-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-empty-state .button-primary {
+        width: 100%;
+    }
+
+    body.brand-body.app-shell-body .wms-table-toolbar {
+        gap: 0.45rem;
+    }
+}

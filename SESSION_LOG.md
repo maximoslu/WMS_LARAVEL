@@ -3130,3 +3130,40 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Commit: `fix: correct sidebar drawer layout regression`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
 - `.claude/` permanece sin trackear y fuera del commit.
+
+---
+
+## 2026-07-19 - FASE 3 piloto visual - Listado de pedidos (21:55 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente `/solicitudes-mercancia` como pantalla piloto para futuros listados operativos del WMS, sin tocar logica de negocio.
+
+### Cambios realizados
+- Se reorganizo `resources/views/merchandise-requests/index.blade.php` en un patron de listado WMS con cabecera operativa, metricas visibles, filtros compactos, resumen de filtros, tabla mas escaneable, acciones por fila y estado vacio.
+- Se mantuvieron las mismas rutas, formularios GET, nombres de campos, acciones, condiciones por rol, paginacion y enlaces existentes.
+- Se anadio una capa CSS final en `resources/css/app.css` bajo el bloque `Fase 3 piloto: patron operativo para listados WMS`.
+- Se definieron clases semanticas `wms-list-*`, `wms-filter-*`, `wms-table-*`, `wms-request-*` y `wms-status-chip-*` para poder reutilizar el patron en futuros listados.
+- Se conservo la accesibilidad basica con labels, tabla con `aria-label`, resumen de filtros y totales visibles.
+
+### Archivos modificados
+- `resources/views/merchandise-requests/index.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Validaciones
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron `data-*`, metodos HTTP, actions de formularios ni nombres de campos.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Cierre Git previsto
+- Commit: `style: redesign merchandise request list pilot`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
