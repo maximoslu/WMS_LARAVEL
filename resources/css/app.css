@@ -11136,3 +11136,191 @@ body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-mobile-
         justify-content: flex-start;
     }
 }
+
+/* Fase 4C: listados de albaranes y documentos. */
+body.brand-body.app-shell-body .wms-status-chip--entry {
+    border-color: #bbf7d0;
+    color: #166534;
+    background: #f0fdf4;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--dispatch {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-form,
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-form {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-form .auth-field {
+    grid-column: span 2;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-search {
+    grid-column: span 3;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-form .wms-filter-actions {
+    grid-column: span 3;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-form .auth-field {
+    grid-column: span 3;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-search {
+    grid-column: span 4;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-form .wms-filter-actions {
+    grid-column: span 2;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-table-panel,
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-panel {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-table-wrap {
+    border: 0;
+    border-radius: 0;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-table {
+    width: max(100%, 70rem);
+    min-width: 70rem;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-table th,
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-table td {
+    padding: 0.52rem 0.6rem;
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-code-cell,
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-main {
+    display: grid;
+    gap: 0.14rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-code-cell strong,
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-main strong {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-main span {
+    overflow: hidden;
+    color: var(--ops-muted);
+    font-size: 0.72rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-table .wms-status-chip,
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-panel .wms-status-chip {
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-row-actions,
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-actions {
+    justify-content: flex-end;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-panel-head {
+    padding: 0.68rem 0.8rem;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-list {
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.58rem 0.8rem;
+    border-bottom: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-row:last-child {
+    border-bottom: 0;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-empty {
+    padding: 0.78rem 0.8rem;
+    border-top: 1px solid var(--ops-border);
+    color: var(--ops-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-panel .pagination-card {
+    margin: 0;
+    border-inline: 0;
+    border-bottom: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+@media (max-width: 1180px) {
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-form .auth-field,
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-search,
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-form .wms-filter-actions,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-form .auth-field,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-search,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-form .wms-filter-actions {
+        grid-column: span 4;
+    }
+}
+
+@media (max-width: 900px) {
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 767px) {
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-form .auth-field,
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-search,
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-filter-form .wms-filter-actions,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-form .auth-field,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-search,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-notes-filter-form .wms-filter-actions {
+        grid-column: 1 / -1;
+    }
+
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-row-actions,
+    body.brand-body.app-shell-body .delivery-notes-list-page .delivery-notes-row-actions .button-secondary,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-actions,
+    body.brand-body.app-shell-body .delivery-notes-list-page .client-delivery-note-actions .button-secondary {
+        width: 100%;
+        max-width: 100%;
+        justify-content: flex-start;
+    }
+}

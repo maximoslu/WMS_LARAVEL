@@ -3349,3 +3349,55 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign goods receipt list`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 4C - Listados de albaranes/documentos (23:08 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente los listados de albaranes/documentos con un patron WMS/ERP compacto y operativo, sin tocar generacion PDF, descargas, documentos ni permisos.
+
+### Vistas detectadas y modificadas
+- `resources/views/delivery-notes/management/index.blade.php`: gestion interna `/gestion/albaranes`.
+- `resources/views/client/goods-receipts/index.blade.php`: consulta cliente `/mis-albaranes`.
+
+### Cambios realizados
+- Se reorganizo la gestion interna con cabecera WMS, metricas visibles, filtros compactos, resumen de filtros y tabla documental densa.
+- Se mantuvo la consulta controlada por cliente en gestion interna para evitar carga masiva sin criterio.
+- Se conservaron filtros GET existentes de cliente, tipo, proveedor, estado de salida, fechas y busqueda, con los mismos nombres de campos, action, validaciones y query strings.
+- Se reorganizo la vista cliente con cabecera WMS, metricas de entradas/salidas/total, filtros compactos y paneles documentales mas densos.
+- Se conservaron los paginadores independientes de cliente para `entradas_page` y `salidas_page`.
+- Se mantuvieron enlaces documentales existentes: descargar entrada, descargar salida, abrir origen y pedido asociado.
+- Se anadio CSS scoped en `resources/css/app.css` para `delivery-notes-list-page`, reutilizando `wms-list-*`, `wms-filter-*`, `wms-table-*`, `wms-row-actions` y `wms-status-chip`.
+- Se anadieron variantes visuales `wms-status-chip--entry` y `wms-status-chip--dispatch`.
+
+### Archivos modificados
+- `resources/views/delivery-notes/management/index.blade.php`.
+- `resources/views/client/goods-receipts/index.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron `data-*`, nombres de rutas, metodos HTTP, actions de formularios, nombres de campos ni query strings.
+- No se modificaron generacion PDF, plantillas PDF, almacenamiento documental, nombres de ficheros, rutas de descarga, logica de impresion ni autorizacion documental.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=DeliveryNoteManagementTest`: **7 passed** (54 assertions).
+- `php artisan test --filter=ClientGoodsReceiptDocumentTest`: **43 passed** (128 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se validara por codigo, tests, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+
+### Cierre Git previsto
+- Commit: `style: redesign delivery note lists`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
