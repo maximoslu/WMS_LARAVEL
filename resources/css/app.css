@@ -12367,7 +12367,7 @@ body.brand-body.app-shell-body .user-scope-hint {
     body.brand-body.app-shell-body .wms-admin-table .wms-row-actions form,
     body.brand-body.app-shell-body .wms-admin-table .wms-row-actions button,
     body.brand-body.app-shell-body .wms-access-request-action-card .button-primary,
-    body.brand-body.app-shell-body .wms-access-request-action-card .button-secondary {
+body.brand-body.app-shell-body .wms-access-request-action-card .button-secondary {
         width: 100%;
         max-width: 100%;
     }
@@ -12378,6 +12378,390 @@ body.brand-body.app-shell-body .user-scope-hint {
 
     body.brand-body.app-shell-body .wms-empty-state.wms-admin-empty {
         align-items: stretch;
+        flex-direction: column;
+    }
+}
+
+/* Fase 4H: pantallas satelite de stock. */
+body.brand-body.app-shell-body .wms-stock-admin-page {
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-admin-header {
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, auto);
+}
+
+body.brand-body.app-shell-body .wms-stock-admin-header-side {
+    display: grid;
+    justify-items: end;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-stock-admin-metrics {
+    grid-template-columns: repeat(3, minmax(4.2rem, auto));
+}
+
+body.brand-body.app-shell-body .wms-stock-filter-panel {
+    padding: 0.72rem 0.85rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-filter-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-filter-grid {
+    align-items: end;
+    gap: 0.5rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-filter-grid--items {
+    grid-template-columns: minmax(10rem, 12rem) minmax(14rem, 1fr) minmax(8rem, 10rem) auto;
+}
+
+body.brand-body.app-shell-body .wms-stock-filter-grid--locations,
+body.brand-body.app-shell-body .wms-stock-filter-grid--alerts {
+    grid-template-columns: minmax(12rem, 16rem) minmax(14rem, 1fr) minmax(8rem, 10rem) auto;
+}
+
+body.brand-body.app-shell-body .wms-stock-filter-grid--import {
+    grid-template-columns: minmax(12rem, 18rem) minmax(16rem, 1fr) auto;
+}
+
+body.brand-body.app-shell-body .wms-item-view-toggle {
+    align-self: end;
+    padding: 0.18rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 7px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-item-view-toggle .view-switcher-link {
+    min-height: 1.85rem;
+    padding: 0.34rem 0.58rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 850;
+}
+
+body.brand-body.app-shell-body .wms-item-view-toggle .view-switcher-link.is-active {
+    background: #ffffff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+body.brand-body.app-shell-body .wms-stock-table-panel {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .wms-stock-data-table {
+    min-width: 780px;
+}
+
+body.brand-body.app-shell-body .wms-stock-data-table th {
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-stock-data-table td {
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .wms-stock-data-table strong {
+    color: var(--ops-text);
+    font-size: 0.8rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-data-table .status-badge,
+body.brand-body.app-shell-body .wms-stock-data-table .wms-status-chip {
+    min-height: 1.45rem;
+    padding: 0.2rem 0.48rem;
+    font-size: 0.62rem;
+}
+
+body.brand-body.app-shell-body .wms-location-chip {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 1.45rem;
+    padding: 0.24rem 0.48rem;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    color: #1d4ed8;
+    background: #eff6ff;
+    font-size: 0.68rem;
+    font-weight: 850;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-stock-empty {
+    min-height: 5rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-item-card {
+    gap: 0.68rem;
+    padding: 0.8rem;
+    border-radius: 7px;
+}
+
+body.brand-body.app-shell-body .wms-stock-item-card .item-card-header {
+    align-items: flex-start;
+    gap: 0.65rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-item-card h3 {
+    margin: 0.18rem 0 0;
+    color: var(--ops-text);
+    font-size: 0.95rem;
+    line-height: 1.15;
+}
+
+body.brand-body.app-shell-body .wms-stock-item-card .item-card-description {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-stock-item-card .item-card-metadata {
+    gap: 0.45rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-item-card .item-card-metadata div {
+    padding: 0.5rem 0.58rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 7px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-stock-warning {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.72rem 0.85rem;
+    border-left: 3px solid #b45309;
+    background: #fffbeb;
+}
+
+body.brand-body.app-shell-body .wms-stock-warning strong {
+    color: #92400e;
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-stock-warning p {
+    margin: 0;
+    color: #78350f;
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-stock-import-upload {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .wms-stock-import-upload form {
+    padding: 0.72rem 0.85rem;
+}
+
+body.brand-body.app-shell-body .wms-import-summary {
+    grid-template-columns: repeat(auto-fit, minmax(8.8rem, 1fr));
+    gap: 0.55rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-import-panel,
+body.brand-body.app-shell-body .wms-stock-import-message,
+body.brand-body.app-shell-body .wms-stock-confirm-panel {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.85rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-import-panel h3,
+body.brand-body.app-shell-body .wms-stock-import-message h3,
+body.brand-body.app-shell-body .wms-stock-confirm-panel h3 {
+    margin: 0;
+    color: var(--ops-text);
+    font-size: 0.92rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .wms-stock-import-panel p,
+body.brand-body.app-shell-body .wms-stock-import-message p,
+body.brand-body.app-shell-body .wms-stock-confirm-panel p {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-import-detected-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+body.brand-body.app-shell-body .wms-import-detected-grid p {
+    padding: 0.55rem 0.62rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 7px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-stock-confirm-panel {
+    border-left: 3px solid #b45309;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-editor {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-editor summary,
+body.brand-body.app-shell-body .wms-stock-rule-row summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    padding: 0.72rem 0.85rem;
+    cursor: pointer;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-editor summary {
+    border-bottom: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-editor summary span,
+body.brand-body.app-shell-body .wms-stock-rule-row summary strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-editor summary small,
+body.brand-body.app-shell-body .wms-stock-rule-row summary small {
+    display: block;
+    margin-top: 0.1rem;
+    color: var(--ops-muted);
+    font-size: 0.68rem;
+    font-weight: 750;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    align-items: end;
+    gap: 0.55rem;
+    padding: 0.8rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-list {
+    display: grid;
+    gap: 0;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-row {
+    border-bottom: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-row:last-child {
+    border-bottom: 0;
+}
+
+body.brand-body.app-shell-body .wms-stock-alert-table {
+    min-width: 980px;
+}
+
+body.brand-body.app-shell-body .wms-stock-alert-severity {
+    border: 1px solid var(--ops-border);
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-stock-alert-severity--critical {
+    border-color: #fecaca;
+    color: #991b1b;
+    background: #fef2f2;
+}
+
+body.brand-body.app-shell-body .wms-stock-alert-severity--warning {
+    border-color: #fde68a;
+    color: #92400e;
+    background: #fffbeb;
+}
+
+body.brand-body.app-shell-body .wms-stock-rule-empty {
+    padding: 0.8rem;
+}
+
+@media (max-width: 1120px) {
+    body.brand-body.app-shell-body .wms-stock-admin-header,
+    body.brand-body.app-shell-body .wms-stock-filter-toolbar,
+    body.brand-body.app-shell-body .wms-stock-filter-grid--items,
+    body.brand-body.app-shell-body .wms-stock-filter-grid--locations,
+    body.brand-body.app-shell-body .wms-stock-filter-grid--alerts,
+    body.brand-body.app-shell-body .wms-stock-filter-grid--import {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-stock-admin-header-side {
+        justify-items: stretch;
+    }
+
+    body.brand-body.app-shell-body .wms-stock-admin-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .wms-stock-admin-header .wms-list-actions,
+    body.brand-body.app-shell-body .wms-stock-filter-grid .wms-filter-actions {
+        justify-content: flex-start;
+    }
+
+    body.brand-body.app-shell-body .wms-item-view-toggle {
+        width: fit-content;
+    }
+}
+
+@media (max-width: 639px) {
+    body.brand-body.app-shell-body .wms-stock-admin-metrics,
+    body.brand-body.app-shell-body .wms-import-detected-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-stock-admin-header .button-primary,
+    body.brand-body.app-shell-body .wms-stock-admin-header .button-secondary,
+    body.brand-body.app-shell-body .wms-stock-filter-grid .button-primary,
+    body.brand-body.app-shell-body .wms-stock-filter-grid .button-secondary,
+    body.brand-body.app-shell-body .wms-stock-empty .button-primary,
+    body.brand-body.app-shell-body .wms-stock-data-table .wms-row-actions,
+    body.brand-body.app-shell-body .wms-stock-data-table .wms-row-actions a,
+    body.brand-body.app-shell-body .wms-stock-data-table .wms-row-actions form,
+    body.brand-body.app-shell-body .wms-stock-data-table .wms-row-actions button,
+    body.brand-body.app-shell-body .wms-stock-rule-form .button-primary,
+    body.brand-body.app-shell-body .wms-stock-confirm-panel .button-primary {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    body.brand-body.app-shell-body .wms-stock-empty {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.brand-body.app-shell-body .wms-stock-rule-editor summary,
+    body.brand-body.app-shell-body .wms-stock-rule-row summary {
+        align-items: flex-start;
         flex-direction: column;
     }
 }

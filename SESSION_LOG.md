@@ -3602,3 +3602,63 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign admin list screens`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 4H - Stock satelite (23:32 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente las pantallas satelite de stock para articulos, ubicaciones, alertas e importacion con un patron WMS/ERP compacto, claro y operativo, sin tocar logica de stock, importacion, articulos, ubicaciones, alertas ni permisos.
+
+### Vistas detectadas y modificadas
+- `resources/views/items/index.blade.php`: listado `/articulos`.
+- `resources/views/locations/index.blade.php`: listado `/ubicaciones`.
+- `resources/views/traceability/alerts/index.blade.php`: equivalente real de alertas de stock en `/trazabilidad/alertas`.
+- `resources/views/stock/import.blade.php`: importacion de stock en `/stock/importar`.
+
+### Cambios realizados
+- Se reorganizaron las cabeceras con titulo, subtitulo operativo, contador y metricas visibles calculadas desde los datos ya disponibles en la vista.
+- Se compactaron filtros GET manteniendo mismos `name`, `action`, rutas, query strings y opciones existentes.
+- Se redisenaron listados de articulos y ubicaciones con panel WMS, toolbar, tablas densas, chips de estado y acciones al final.
+- Se mantuvo el conmutador lista/tarjetas de articulos con las mismas URLs y etiquetas cubiertas por tests.
+- Se preservo la celda exacta de codigo de ubicacion usada por tests para validar orden natural: `<td><strong>{{ $location->code }}</strong></td>`.
+- Se reorganizo la pantalla de alertas de stock manteniendo reglas, eventos, formularios PATCH/PUT/POST, campos ocultos, paginadores y acciones de reconocer, silenciar y resolver.
+- Se rediseno la importacion de stock como flujo visual de carga, previsualizacion, validaciones, resumen y confirmacion, preservando `enctype`, nombres de campos, `stock_import_id`, confirmacion y textos funcionales.
+- Se anadio CSS scoped en `resources/css/app.css` para `wms-stock-admin-page`, tablas, tarjetas, filtros, alertas, reglas e importacion.
+
+### Archivos modificados
+- `resources/views/items/index.blade.php`.
+- `resources/views/locations/index.blade.php`.
+- `resources/views/traceability/alerts/index.blade.php`.
+- `resources/views/stock/import.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, policies/permisos, validaciones, comandos, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambio logica de stock, importaciones, ubicaciones, ordenacion natural, deduplicacion, articulos, alertas, reglas ni eventos.
+- No se cambiaron nombres de rutas, metodos HTTP, actions de formularios, nombres de campos, `data-*`, validaciones ni comportamiento de confirmacion.
+- No se ejecuto ninguna importacion real, confirmacion real, cambio de stock, accion sobre alertas, alta/edicion real ni activacion/desactivacion.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=ItemManagementTest`: **16 passed** (56 assertions).
+- `php artisan test --filter=WarehouseLocationManagementTest`: **10 passed** (46 assertions).
+- `php artisan test --filter=TraceabilityModuleTest`: **19 passed** (93 assertions).
+- `php artisan test --filter=StockImportTest`: **34 passed** (385 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK; Git mostro un aviso informativo de normalizacion CRLF/LF en `resources/views/items/index.blade.php`.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se validara por codigo, tests focalizados, suite completa, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de stock, importaciones, ubicaciones, articulos, alertas ni permisos.
+
+### Cierre Git previsto
+- Commit: `style: redesign stock satellite screens`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
