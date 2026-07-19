@@ -3258,3 +3258,48 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign merchandise request detail`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - FASE 4A - Listado de salidas (22:34 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente el listado `/salidas` con un patron WMS/ERP mas compacto, claro y operativo, sin tocar gestion/carga ni logica de stock.
+
+### Cambios realizados
+- Se reorganizo `resources/views/dispatches/index.blade.php` con cabecera WMS, metricas visibles, accion principal compacta y accesos operativos para pedidos pendientes y salida manual.
+- Se conservo el listado de pedidos pendientes destacados, ahora con filas compactas, estado visible, pallets y accion alineada.
+- Se redisenaron las salidas recientes como tabla operativa con columnas de salida, cliente, origen, pedido asociado, estado, pallets y accion.
+- Se mejoraron los estados vacios para pedidos pendientes y salidas, manteniendo los mismos enlaces existentes.
+- Se anadio CSS scoped en `resources/css/app.css` para la pagina `dispatch-list-page`, reutilizando `wms-list-*`, `wms-table-*`, `wms-row-actions`, `wms-status-chip` y clases historicas esperadas por tests.
+- Se anadio la variante visual `wms-status-chip--draft` para el estado interno de borrador de salida.
+
+### Archivos modificados
+- `resources/views/dispatches/index.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron `data-*`, nombres de rutas, metodos HTTP, actions de formularios, nombres de campos ni query strings.
+- No se redisenaron ni modificaron la preparacion/carga, confirmacion de carga, asignaciones, descuento de stock, estados funcionales, PDFs ni albaranes.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=GoodsDispatchManagementTest`: **57 passed** (421 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La vista `/salidas` no tenia formulario GET ni filtros funcionales propios; por tanto no se inventaron filtros ni se cambio ningun query string.
+- La revision visual autenticada local queda pendiente; se validara por codigo, tests, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+
+### Cierre Git previsto
+- Commit: `style: redesign dispatch list`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

@@ -10772,3 +10772,206 @@ body.brand-body.app-shell-body .order-alert {
         padding-inline: 0.75rem;
     }
 }
+
+/* Fase 4A: listado operativo de salidas. */
+body.brand-body.app-shell-body .wms-status-chip--draft {
+    border-color: #cbd5e1;
+    color: #334155;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-panel {
+    padding: 0.65rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-grid--refined {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-card {
+    display: grid;
+    align-content: start;
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 0.72rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-card-head strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.15;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-card p,
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-section-intro span,
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card p {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-action,
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-section-action {
+    width: auto;
+    max-width: fit-content;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-section-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-section-heading {
+    padding: 0.68rem 0.8rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-section-intro {
+    display: grid;
+    gap: 0.18rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-section-intro strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-list--refined {
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card--refined {
+    display: grid;
+    grid-template-columns: minmax(11rem, 1fr) auto auto;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.58rem 0.8rem;
+    border: 0;
+    border-bottom: 1px solid var(--ops-border);
+    border-radius: 0;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card--refined:last-child {
+    border-bottom: 0;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card-copy {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card-copy strong,
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-code-cell strong {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-empty-state {
+    margin: 0;
+    border: 0;
+    border-top: 1px solid var(--ops-border);
+    border-radius: 0;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-table-wrap {
+    border: 0;
+    border-radius: 0;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-table {
+    width: max(100%, 58rem);
+    min-width: 58rem;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-table th,
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-table td {
+    padding: 0.54rem 0.62rem;
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-code-cell {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-code-cell span {
+    color: var(--ops-muted);
+    font-size: 0.7rem;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-table .wms-line-type-pill,
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-table .wms-status-chip,
+body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-meta .wms-status-chip {
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .dispatch-list-page .wms-row-actions {
+    justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-grid--refined,
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card--refined {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-meta,
+    body.brand-body.app-shell-body .dispatch-list-page .wms-row-actions {
+        justify-content: flex-start;
+    }
+
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-action,
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-section-action,
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-entry-card-actions,
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card-actions,
+    body.brand-body.app-shell-body .dispatch-list-page .dispatch-pending-card-actions .button-secondary {
+        width: 100%;
+        max-width: 100%;
+    }
+}
