@@ -3050,3 +3050,43 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - La revision autenticada queda pendiente para dashboard, stock, entradas, salidas, pedidos cliente, notificaciones y listados paginados.
 - La FASE 3 recomendada sigue siendo la pantalla piloto de Listado de pedidos: `resources/views/merchandise-requests/index.blade.php`.
 - Nueva regla operativa del propietario: guardar resumen y hacer push por defecto salvo instruccion contraria expresa.
+
+---
+
+## 2026-07-19 - FASE 2B visual completada (21:38 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** pulir la base visual de FASE 2A con navegacion global mas decidida, paginacion mas compacta y mejor alineacion de botones, filtros y KPI, sin tocar logica de negocio.
+
+### Cambios realizados
+- Se redibujo visualmente el drawer global como navegacion principal mas plana, corporativa y compacta, con rail azul tinta, secciones mas claras, separadores, marcador de seccion activa y estado activo de modulo mas fuerte.
+- Se reorganizo el HTML visual del menu y la topbar en `resources/views/layouts/dashboard.blade.php` usando envoltorios y clases compartidas, manteniendo los mismos enlaces, rutas, textos, formularios, condiciones de visibilidad y `data-drawer-*`.
+- Se compacto la topbar y se agruparon mejor acciones, identidad, rol y salida para que la cabecera sea secundaria frente al contenido.
+- Se recalculo la paginacion con una barra de controles mas compacta, botones de altura/ancho consistentes y menos separacion entre paginas.
+- En stock se evita la duplicidad visual del resumen de paginacion superior conservando el contador propio de la tabla.
+- Se ajustaron alturas, gaps y paddings globales de botones, inputs, selects, filtros, acciones de formularios, operaciones diarias, KPI y cards compactas.
+- Se reforzaron estados hover, active, disabled y focus visible sin depender solo del color.
+
+### Archivos tocados
+- `resources/css/app.css`.
+- `resources/views/layouts/dashboard.blade.php`.
+- `SESSION_LOG.md`.
+
+### Validaciones
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- Revision navegada local sin sesion: `/login` carga correctamente y las rutas protegidas revisadas redirigen a login. No se creo ni modifico ningun usuario o dato para autenticar.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests ni `resources/js/app.js`.
+- No se cambiaron nombres de campos, metodos HTTP, actions de formularios ni estructuras `data-*`.
+- No se tocaron `.env`, datos, `public/build` ni `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Cierre Git previsto
+- Commit: `style: polish visual navigation and layout details`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
+- `.claude/` permanece sin trackear y fuera del commit.
