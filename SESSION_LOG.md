@@ -3090,3 +3090,43 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Commit: `style: polish visual navigation and layout details`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
 - `.claude/` permanece sin trackear y fuera del commit.
+
+---
+
+## 2026-07-19 - HOTFIX FASE 2B.1 drawer/sidebar (21:44 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** corregir la regresion visual del menu/drawer introducida en FASE 2B, sin tocar logica de negocio ni pantallas de modulo.
+
+### Causa detectada
+- FASE 2B aumento el ancho visual de `.app-drawer-panel` a `22rem`, mientras el contenedor fijo `.app-drawer` seguia midiendo `19rem`.
+- Al cerrar el drawer, el `transform` se calculaba sobre el ancho menor del contenedor y el panel interno podia sobresalir como franja flotante/cortada sobre el lateral izquierdo.
+
+### Cambios realizados
+- Se estabilizo el contrato CSS del drawer cerrado/abierto en `resources/css/app.css`.
+- El contenedor `.app-drawer` usa ahora el mismo ancho maximo que el panel visual y queda completamente fuera de pantalla cuando esta cerrado.
+- El estado cerrado queda sin puntero, sin visibilidad y sin sombra de panel; el estado abierto vuelve a ser overlay predecible.
+- Se reforzo el comportamiento responsive movil sin cambiar `data-drawer-*` ni `resources/js/app.js`.
+
+### Archivos modificados
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Validaciones
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- Revision visual sintetica con CSS real en Chrome: drawer cerrado queda fuera de pantalla, sin scroll horizontal; drawer abierto entra visible y sin scroll horizontal. No se autentico ni se tocaron datos.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, formularios de negocio, vistas de modulos ni `resources/js/app.js`.
+- No se cambiaron actions, metodos HTTP, nombres de campos ni `data-*`.
+- No se tocaron `.env`, datos, `public/build` ni `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Cierre Git previsto
+- Commit: `fix: correct sidebar drawer layout regression`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
+- `.claude/` permanece sin trackear y fuera del commit.

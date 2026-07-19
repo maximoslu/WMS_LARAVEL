@@ -9830,3 +9830,55 @@ body.brand-body.app-shell-body .wms-pagination-link:focus-visible {
         flex: 1 1 0;
     }
 }
+
+/* Hotfix Fase 2B.1: el drawer cerrado no debe dejar rail ni panel visible. */
+body.brand-body.app-shell-body .app-drawer {
+    box-sizing: border-box;
+    width: min(22rem, calc(100vw - 1.1rem));
+    max-width: calc(100vw - 1.1rem);
+    overflow: visible;
+    pointer-events: none;
+    visibility: hidden;
+    transform: translate3d(calc(-100% - 1rem), 0, 0);
+}
+
+body.brand-body.app-shell-body.drawer-open .app-drawer,
+body.brand-body.app-shell-body .app-drawer.is-open {
+    pointer-events: auto;
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+}
+
+body.brand-body.app-shell-body .app-drawer-panel {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+body.brand-body.app-shell-body .app-drawer[aria-hidden="true"] .app-drawer-panel {
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .app-drawer-backdrop[hidden] {
+    display: none !important;
+}
+
+body.brand-body.app-shell-body.drawer-open {
+    overflow-x: hidden;
+}
+
+@media (max-width: 639px) {
+    body.brand-body.app-shell-body .app-drawer {
+        top: 0.45rem;
+        left: 0.45rem;
+        bottom: 0.45rem;
+        width: calc(100vw - 0.9rem);
+        max-width: calc(100vw - 0.9rem);
+        transform: translate3d(calc(-100% - 0.75rem), 0, 0);
+    }
+
+    body.brand-body.app-shell-body.drawer-open .app-drawer,
+    body.brand-body.app-shell-body .app-drawer.is-open {
+        transform: translate3d(0, 0, 0);
+    }
+}
