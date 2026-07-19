@@ -10975,3 +10975,164 @@ body.brand-body.app-shell-body .dispatch-list-page .wms-row-actions {
         max-width: 100%;
     }
 }
+
+/* Fase 4B: listado operativo de entradas. */
+body.brand-body.app-shell-body .wms-status-chip--pending_review {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+body.brand-body.app-shell-body .wms-status-chip--confirmed {
+    border-color: #bbf7d0;
+    color: #166534;
+    background: #f0fdf4;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-header-actions,
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-row-actions {
+    justify-content: flex-end;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-form {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-form .auth-field {
+    grid-column: span 2;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-search {
+    grid-column: span 3;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-form .wms-filter-actions {
+    grid-column: span 3;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-empty-state {
+    align-items: center;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-table-panel {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-table-wrap {
+    border: 0;
+    border-radius: 0;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-table {
+    width: max(100%, 72rem);
+    min-width: 72rem;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-table th,
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-table td {
+    padding: 0.52rem 0.6rem;
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-code-cell {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-code-cell strong {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-code-cell span,
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-document-name {
+    overflow: hidden;
+    max-width: 13rem;
+    color: var(--ops-muted);
+    font-size: 0.7rem;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-document-name {
+    display: inline-block;
+    color: var(--ops-text);
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-table .wms-status-chip,
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-mobile-card .wms-status-chip {
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-row-actions form {
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-mobile-list {
+    display: none;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-mobile-card {
+    display: grid;
+    gap: 0.68rem;
+    padding: 0.75rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-mobile-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.55rem;
+}
+
+@media (max-width: 1180px) {
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-form .auth-field,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-search,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-form .wms-filter-actions {
+        grid-column: span 4;
+    }
+}
+
+@media (max-width: 767px) {
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-form .auth-field,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-search,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-filter-form .wms-filter-actions {
+        grid-column: 1 / -1;
+    }
+
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-table-panel {
+        display: none;
+    }
+
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-mobile-list {
+        display: grid;
+        gap: 0.65rem;
+    }
+
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-header-actions,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-header-actions .button-primary,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-header-actions .button-secondary,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-row-actions,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-row-actions .button-secondary,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-row-actions form,
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-row-actions button {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    body.brand-body.app-shell-body .goods-receipts-list-page .goods-receipts-row-actions {
+        justify-content: flex-start;
+    }
+}
