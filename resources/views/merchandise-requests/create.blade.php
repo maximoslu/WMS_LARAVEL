@@ -14,6 +14,7 @@
 
     <x-breadcrumbs :items="$breadcrumbs" />
 
+    <div class="wms-list-page wms-request-create">
     <section class="surface-card ops-page-header page-header-compact compact-card merchandise-request-page-head">
         <div class="ops-page-headline">
             <h2 class="ops-page-title page-title-compact">NUEVO PEDIDO</h2>
@@ -22,7 +23,7 @@
     </section>
 
     @if ($canChooseClient)
-        <section class="surface-card compact-card wms-flow-card">
+        <section class="surface-card compact-card wms-flow-card wms-request-form-panel">
             <form method="GET" action="{{ route('merchandise-requests.create') }}" class="item-filter-form">
                 <label class="auth-field">
                     <span>Cliente del pedido</span>
@@ -74,7 +75,7 @@
                 <input type="hidden" name="client_id" value="{{ $client->id }}">
             @endif
 
-            <section class="surface-card compact-card wms-flow-card merchandise-request-new-shell">
+            <section class="surface-card compact-card wms-flow-card merchandise-request-new-shell wms-request-form-panel">
                 <input type="hidden" name="camion_propio" value="0">
 
                 <div class="merchandise-request-header-strip">
@@ -166,7 +167,7 @@
         </form>
     @endif
 
-    <section class="surface-card compact-card client-pending-orders">
+    <section class="surface-card compact-card client-pending-orders wms-pending-orders-panel">
         <div class="client-pending-orders-head">
             <strong>PEDIDOS PENDIENTES</strong>
             <span>{{ $pendingRequests->count() }}</span>
@@ -210,4 +211,5 @@
             </div>
         @endif
     </section>
+    </div>
 @endsection

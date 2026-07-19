@@ -3167,3 +3167,49 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign merchandise request list pilot`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-19 - HOTFIX FASE 3.1 - Nuevo pedido (22:04 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** corregir margenes, paddings y composicion visual de la pantalla Nuevo pedido, sin tocar logica de negocio.
+
+### Causa detectada
+- La FASE 3 piloto introdujo estilos globales sobre clases reutilizadas, especialmente `.wms-empty-state`, y la vista de creacion no tenia un wrapper propio para aislar su ritmo visual.
+- El bloque `client-pending-orders` conservaba tratamiento anterior de tabla/panel y podia quedar visualmente pegado al borde frente al nuevo patron operativo.
+
+### Cambios realizados
+- Se anadio el wrapper `.wms-request-create` en `resources/views/merchandise-requests/create.blade.php`.
+- Se marcaron los paneles principales de Nuevo pedido con clases especificas de formulario y pedidos pendientes.
+- Se anadio CSS scoped en `resources/css/app.css` para restaurar padding interno, separacion entre secciones, cabecera de pedidos pendientes, tabla contenida y comportamiento responsive.
+- Se mantuvieron los mismos formularios, rutas, metodos HTTP, nombres de campos, `data-*`, textos funcionales y flujo de creacion.
+
+### Rutas revisadas
+- `/solicitudes-mercancia/create`.
+- `/solicitudes-mercancia/create?client_id=2`.
+- `/solicitudes-mercancia` como referencia para no romper el listado piloto.
+
+### Archivos modificados
+- `resources/views/merchandise-requests/create.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Validaciones
+- `php artisan test --filter=MerchandiseRequestManagementTest`: **42 passed** (250 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, permisos, validaciones, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambiaron `data-*`, metodos HTTP, actions de formularios ni nombres de campos.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Cierre Git previsto
+- Commit: `fix: restore spacing in merchandise request creation`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
