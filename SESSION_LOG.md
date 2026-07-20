@@ -3788,3 +3788,54 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `feat: allow internal users to add order lines`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - FASE 4J - Detalle de entrada visual (08:20 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente el detalle de entrada `/entradas/{id}` como pantalla WMS/ERP compacta, clara y operativa, sin tocar logica funcional de entradas, documentos, IA, confirmacion ni stock.
+
+### Vista detectada y modificada
+- `resources/views/goods-receipts/show.blade.php`: detalle real de entrada de mercancia.
+
+### Cambios realizados
+- Se envolvio la pantalla en `wms-detail-page` / `wms-receipt-detail` para alinearla con el patron de detalle aprobado.
+- Se reforzo la cabecera con resumen operativo de cliente, proveedor, fecha, documento, lineas, pallets, picos y unidades usando datos ya cargados en la vista.
+- Se reorganizaron visualmente las acciones principales y secundarias manteniendo rutas, metodos, formularios, `@csrf`, `@method` y botones existentes.
+- Se anadio una banda compacta de IA, documento y partidas de stock para orientar rapidamente al usuario.
+- Se compactaron visualmente el workbench de edicion, bloque de documento, lineas manuales, propuesta IA y stock generado mediante CSS scoped.
+- Se diferencio visualmente la accion de cancelar como accion critica.
+- Se mantuvieron intactos los partials de lineas, proveedor e IA, los `data-*`, inputs file y plantillas de lineas.
+
+### Archivos modificados
+- `resources/views/goods-receipts/show.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, comandos, servicios, importadores, tests, `resources/js/app.js`, plantillas PDF, `.env`, datos ni `public/build`.
+- No se cambio logica de entrada, confirmacion, cancelacion, subida/descarga de documentos, interpretacion IA, aplicacion IA, creacion/actualizacion de stock ni permisos.
+- No se cambiaron nombres de rutas, metodos HTTP, actions de formularios, nombres de campos, query strings, `@csrf`, `@method`, `data-*` ni validaciones.
+- No se ejecuto IA, no se subieron documentos, no se confirmaron/cancelaron entradas y no se alteraron datos.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=GoodsReceiptManagementTest`: **98 passed** (524 assertions).
+- `php artisan test --filter=ClientGoodsReceiptDocumentTest`: **43 passed** (128 assertions).
+- `php artisan test`: **626 passed** (3266 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se valido por codigo, tests focalizados, suite completa, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de entrada, confirmacion, documentos, IA ni stock.
+
+### Cierre Git previsto
+- Commit: `style: redesign goods receipt detail`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

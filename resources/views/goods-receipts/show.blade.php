@@ -49,19 +49,24 @@
         $lineCount = count($lineValues);
         $hasPersistedLines = $receipt->lines->isNotEmpty();
         $visibleLineCount = $hasPersistedLines ? $receipt->lines->count() : 0;
+        $receiptUnits = (int) $receipt->lines->sum('quantity_units');
+        $receiptPallets = (int) $receipt->lines->sum('pallet_count');
+        $receiptPeaks = (int) $receipt->lines->sum(fn ($line) => count($line->peakUnits()));
+        $stockBatchCount = $receipt->stockPallets->count();
         $matchedSupplierId = data_get($receipt->ai_extracted_data, 'matched_supplier_id');
         $detectedSupplierName = data_get($receipt->ai_extracted_data, 'supplier_name');
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
 
-    <section class="surface-card ops-page-header page-header-compact stock-intro-card compact-card goods-receipt-header-card goods-receipt-toolbar">
-        <div class="goods-receipt-toolbar-main">
+    <div class="wms-detail-page wms-receipt-detail">
+    <section class="surface-card compact-card wms-detail-header wms-receipt-detail-header goods-receipt-header-card goods-receipt-toolbar">
+        <div class="goods-receipt-toolbar-main wms-detail-header-main">
             <div class="goods-receipt-toolbar-title">
                 <h2 class="ops-page-title page-title-compact">{{ $receipt->receipt_number ?: 'Entrada #'.$receipt->id }}</h2>
                 <span class="receipt-status-pill receipt-status-pill--{{ $receipt->status }}">{{ $receipt->statusLabel() }}</span>
             </div>
 
-            <div class="goods-receipt-toolbar-meta">
+            <div class="goods-receipt-toolbar-meta wms-receipt-toolbar-meta">
                 <span><strong>Cliente:</strong> {{ $receipt->client->name }}</span>
                 <span><strong>Proveedor:</strong> {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
                 <span><strong>Fecha:</strong> {{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</span>
@@ -70,7 +75,46 @@
             </div>
         </div>
 
-        <div class="ops-page-actions page-actions-compact action-buttons goods-receipt-header-actions">
+        <dl class="order-meta wms-detail-meta wms-receipt-meta">
+            <div class="order-meta-item">
+                <dt>Cliente</dt>
+                <dd>{{ $receipt->client->name }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Proveedor</dt>
+                <dd>{{ $receipt->supplier?->name ?: 'Sin proveedor' }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Fecha</dt>
+                <dd>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Documento</dt>
+                <dd>{{ $receipt->document_original_name ?: 'Sin documento' }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Lineas</dt>
+                <dd>{{ number_format($visibleLineCount, 0, ',', '.') }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Pallets</dt>
+                <dd>{{ number_format($receiptPallets, 0, ',', '.') }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Picos</dt>
+                <dd>{{ number_format($receiptPeaks, 0, ',', '.') }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Unidades</dt>
+                <dd>{{ number_format($receiptUnits, 0, ',', '.') }}</dd>
+            </div>
+        </dl>
+
+        <div class="ops-page-actions page-actions-compact action-buttons goods-receipt-header-actions wms-detail-actions">
+            <a href="{{ route('goods-receipts.index') }}" class="button-secondary compact-button btn-compact">Volver</a>
+            @if ($hasDocument)
+                <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer" class="button-secondary compact-button btn-compact">Ver documento</a>
+            @endif
             @if ($isEditable)
                 <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-compact">Editar</a>
                 <button type="button" class="button-primary compact-button btn-compact goods-receipt-manual-action" data-add-line>Añadir línea manual</button>
@@ -89,7 +133,7 @@
                 <form method="POST" action="{{ route('goods-receipts.cancel', $receipt) }}">
                     @csrf
                     @method('PATCH')
-                    <button type="submit" class="button-secondary compact-button btn-compact">Cancelar</button>
+                    <button type="submit" class="button-secondary compact-button btn-compact goods-receipt-delete-button">Cancelar</button>
                 </form>
             @endif
 
@@ -121,6 +165,24 @@
             Estas editando una entrada CONFIRMADA como superadmin. Al guardar, el stock generado se revertira y se volvera a aplicar con los datos nuevos.
         </div>
     @endif
+
+    <section class="surface-card compact-card wms-receipt-operational-strip" aria-label="Resumen operativo de entrada">
+        <div>
+            <span>IA</span>
+            <strong>{{ $aiStatusLabel }}</strong>
+            <small>{{ $aiStatusMessage }}</small>
+        </div>
+        <div>
+            <span>Documento</span>
+            <strong>{{ $receipt->document_original_name ?: 'Sin documento adjunto' }}</strong>
+            <small>{{ $hasDocument ? 'Disponible para consulta' : 'Pendiente de adjuntar' }}</small>
+        </div>
+        <div>
+            <span>Partidas stock</span>
+            <strong>{{ number_format($stockBatchCount, 0, ',', '.') }}</strong>
+            <small>{{ $receipt->hasStockApplied() ? 'Generadas por confirmacion' : 'Se generaran al confirmar' }}</small>
+        </div>
+    </section>
 
     @if ($isEditable)
         <form
@@ -401,4 +463,5 @@
             </div>
         </section>
     @endif
+    </div>
 @endsection
