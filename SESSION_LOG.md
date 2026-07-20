@@ -4123,3 +4123,49 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `fix: clarify stock relocation and deduplicate locations`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - HOTFIX FUNCIONAL 4M.2 - Filtro numerico de almacen en deduplicacion (13:04 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** corregir el filtro numerico `--warehouse=38` en `wms:locations:deduplicate` manteniendo el comando en modo seguro y sin ejecutar `--apply`.
+
+### Problema detectado
+- `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse=38 --dry-run` fallaba con `Call to undefined method Illuminate\Database\Eloquent\Builder::orWhereKey()`.
+- El filtro por nombre `--warehouse="NAVE 38"` funcionaba correctamente.
+
+### Causa tecnica
+- `LocationIntegrityService::locations()` usaba `orWhereKey()` dentro de un sub-builder creado con `where(function (...) {})`.
+- En ese contexto el builder disponible no expone `orWhereKey()`, aunque el filtro debe poder comparar por codigo, nombre o ID.
+
+### Correccion aplicada
+- Se sustituyo el caso de ID por `orWhere('id', (int) $warehouseFilter)`.
+- Se mantuvo intacto el filtro por codigo y nombre.
+- No se modifico la logica de stock, reubicacion, importadores, vistas ni datos.
+
+### Tests anadidos/actualizados
+- `tests/Feature/LocationDeduplicationCommandTest.php`: cobertura de `--warehouse=38`, `--warehouse="NAVE 38"` y `--warehouse=<id real>` en dry-run, verificando que evaluan el mismo conjunto y no modifican datos.
+
+### Dry-run manual local
+- `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse=38 --dry-run`: correcto; extras a conservar `FONDO, SIN UBICACION`; `0 grupo(s) duplicado(s), 0 ubicacion(es) por crear`.
+- `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --dry-run`: correcto; extras a conservar `FONDO, SIN UBICACION`; `0 grupo(s) duplicado(s), 0 ubicacion(es) por crear`.
+
+### Garantias
+- No se ejecuto `--apply`.
+- No se modificaron datos.
+- No se borro stock.
+- No se uso `migrate:fresh`.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+
+### Validaciones previstas de cierre
+- `php artisan test`.
+- `npm run build`.
+- `git diff --check`.
+- `git status --short --branch`.
+
+### Cierre Git previsto
+- Commit: `fix: support numeric warehouse filter in location deduplication`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

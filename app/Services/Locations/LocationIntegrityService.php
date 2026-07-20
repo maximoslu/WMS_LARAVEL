@@ -50,7 +50,7 @@ class LocationIntegrityService
                     $match->where('code', $warehouseFilter)->orWhere('name', $warehouseFilter);
 
                     if (ctype_digit($warehouseFilter)) {
-                        $match->orWhereKey((int) $warehouseFilter);
+                        $match->orWhere('id', (int) $warehouseFilter);
                     }
                 });
             })

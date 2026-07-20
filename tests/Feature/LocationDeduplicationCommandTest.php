@@ -172,6 +172,26 @@ class LocationDeduplicationCommandTest extends TestCase
         $this->assertSame(2, Location::query()->where('warehouse_id', $warehouse->id)->count());
     }
 
+    public function test_numeric_warehouse_filter_matches_name_filter_and_is_read_only(): void
+    {
+        [, $warehouse] = $this->makeDuplicatedNave38();
+        $snapshot = $this->databaseSnapshot();
+
+        foreach (['38', 'NAVE 38', (string) $warehouse->id] as $warehouseFilter) {
+            $this->artisan('wms:locations:deduplicate', [
+                '--client' => 'EDELVIVES',
+                '--warehouse' => $warehouseFilter,
+                '--dry-run' => true,
+            ])
+                ->expectsOutputToContain('codigo normalizado 5')
+                ->expectsOutputToContain('extras a conservar: FONDO')
+                ->expectsOutputToContain('Dry-run: 1 grupo(s) duplicado(s), 51 ubicacion(es) por crear')
+                ->assertSuccessful();
+
+            $this->assertSame($snapshot, $this->databaseSnapshot());
+        }
+    }
+
     /** @return array{Client, Warehouse, Location, int, int, int} */
     private function makeDuplicatedNave38(): array
     {
