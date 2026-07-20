@@ -31,10 +31,25 @@
         $statusOrder = array_keys($statusSteps);
         $currentStatusIndex = array_search($merchandiseRequest->status, $statusOrder, true);
         $stockOptionsByItem = $stockOptionsByItem ?? [];
+        $requestedUnitsTotal = (int) $merchandiseRequest->lines->sum(fn ($requestLine) => (int) ($requestLine->requested_units ?? 0));
+        $loadedUnitsTotal = $dispatch?->loadedUnitsCount() ?? 0;
+        $loadedPalletsTotal = $dispatch?->loadedPalletsCount() ?? 0;
+        $loadedPeaksTotal = $dispatch?->loadedPeaksCount() ?? 0;
+        $dispatchNumber = $dispatch?->dispatchNumber() ?? 'Sin salida';
+        $loadingStateLabel = $dispatch
+            ? ($dispatch->hasConfirmedLoading() ? 'Carga confirmada' : 'Carga pendiente')
+            : 'Sin salida generada';
+        $criticalActionLabel = $canGenerateDispatch
+            ? 'Empezar carga'
+            : ($canEditLoading ? 'Guardar o confirmar carga' : $loadingStateLabel);
+        $criticalActionHelp = $canGenerateDispatch
+            ? 'Genera la salida para registrar la carga real.'
+            : ($canEditLoading ? 'Confirmar envío descuenta stock y deja el albarán disponible.' : 'La carga ya no está en edición.');
     @endphp
 
     <x-breadcrumbs :items="$breadcrumbs" />
 
+    <div class="wms-detail-page wms-load-page">
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
@@ -47,13 +62,15 @@
         <div class="alert alert-error">{{ $errors->first() }}</div>
     @endif
 
-    <section class="surface-card compact-card warehouse-request-toolbar">
+    <section class="surface-card compact-card warehouse-request-toolbar wms-detail-header wms-load-header">
         <div class="warehouse-request-identity">
             <small>Pedido {{ $merchandiseRequest->referenceCode() }}</small>
             <strong>{{ $merchandiseRequest->client?->name ?? 'Sin cliente' }}</strong>
+            <span class="wms-load-dispatch-code">Salida {{ $dispatchNumber }}</span>
+            <span class="wms-load-state-text">{{ $loadingStateLabel }}</span>
         </div>
 
-        <dl class="warehouse-request-facts">
+        <dl class="warehouse-request-facts wms-detail-meta wms-load-meta">
             <div>
                 <dt>Estado</dt>
                 <dd>
@@ -74,9 +91,21 @@
                 <dt>Picos</dt>
                 <dd>{{ number_format($requestedPeaks, 0, ',', '.') }}</dd>
             </div>
+            <div>
+                <dt>Líneas</dt>
+                <dd>{{ number_format($merchandiseRequest->lines->count(), 0, ',', '.') }}</dd>
+            </div>
+            <div>
+                <dt>Unidades</dt>
+                <dd>{{ number_format($requestedUnitsTotal, 0, ',', '.') }}</dd>
+            </div>
+            <div>
+                <dt>Cargado</dt>
+                <dd>{{ number_format($loadedUnitsTotal, 0, ',', '.') }} uds</dd>
+            </div>
         </dl>
 
-        <div class="warehouse-request-actions">
+        <div class="warehouse-request-actions wms-detail-actions wms-load-actions">
             @if ($canGenerateDispatch)
                 <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
                     @csrf
@@ -111,7 +140,25 @@
         </div>
     </section>
 
-    <section class="surface-card compact-card warehouse-request-lines" data-request-lines-section>
+    <section class="surface-card compact-card wms-load-summary" aria-label="Resumen operativo de carga">
+        <div>
+            <span>Pedido / salida</span>
+            <strong>{{ $merchandiseRequest->referenceCode() }} · {{ $dispatchNumber }}</strong>
+            <small>{{ $merchandiseRequest->client?->name ?? 'Sin cliente' }}</small>
+        </div>
+        <div>
+            <span>Carga real</span>
+            <strong>{{ number_format($loadedPalletsTotal, 0, ',', '.') }} pallets · {{ number_format($loadedPeaksTotal, 0, ',', '.') }} picos</strong>
+            <small>{{ number_format($loadedUnitsTotal, 0, ',', '.') }} de {{ number_format($requestedUnitsTotal, 0, ',', '.') }} unidades</small>
+        </div>
+        <div>
+            <span>Acción crítica</span>
+            <strong>{{ $criticalActionLabel }}</strong>
+            <small>{{ $criticalActionHelp }}</small>
+        </div>
+    </section>
+
+    <section class="surface-card compact-card warehouse-request-lines wms-load-lines" data-request-lines-section>
         <div class="warehouse-request-lines-head">
             <strong>LÍNEAS DEL PEDIDO Y CARGA REAL</strong>
             <span>{{ $merchandiseRequest->lines->count() }} {{ $merchandiseRequest->lines->count() === 1 ? 'línea' : 'líneas' }}</span>
@@ -186,7 +233,7 @@
                     $differenceLabel = $unitDifference > 0 ? 'Exceso operativo' : 'Pendiente';
                 @endphp
 
-                <article class="warehouse-prep-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
+                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
                     <header class="warehouse-prep-line-head">
                         <div>
                             <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
@@ -200,7 +247,7 @@
                     </header>
 
                     <div class="warehouse-prep-line-grid">
-                        <aside class="warehouse-prep-summary">
+                        <aside class="warehouse-prep-summary wms-load-quantity">
                             <dl>
                                 <div class="warehouse-prep-picking-summary">
                                     <dt>Ubicación de recogida</dt>
@@ -231,7 +278,7 @@
                             </dl>
                         </aside>
 
-                        <div class="warehouse-prep-assignments" data-assignment-list>
+                        <div class="warehouse-prep-assignments wms-load-picking" data-assignment-list>
                             @if ($dispatchLine)
                                 <input type="hidden" name="lines[{{ $lineKey }}][line_id]" value="{{ $dispatchLine->id }}">
                                 <input type="hidden" name="lines[{{ $lineKey }}][item_id]" value="{{ $dispatchLine->item_id }}">
@@ -403,7 +450,7 @@
 
         @if ($dispatch)
                 @if ($canEditLoading)
-                    <div class="warehouse-request-save-row">
+                    <div class="warehouse-request-save-row wms-load-confirmation">
                         <div class="warehouse-request-close-panel">
                             <div>
                                 <strong>Cerrar pedido</strong>
@@ -444,7 +491,7 @@
         @endif
     </section>
 
-    <section class="surface-card compact-card warehouse-request-progress" aria-label="Seguimiento del pedido">
+    <section class="surface-card compact-card warehouse-request-progress wms-load-progress" aria-label="Seguimiento del pedido">
         @foreach ($statusSteps as $status => $label)
             @php
                 $stepIndex = array_search($status, $statusOrder, true);
@@ -453,4 +500,5 @@
             <span @class(['is-complete' => $isComplete])>{{ $label }}</span>
         @endforeach
     </section>
+    </div>
 @endsection

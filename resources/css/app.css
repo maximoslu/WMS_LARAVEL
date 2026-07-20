@@ -13603,3 +13603,336 @@ body.brand-body.app-shell-body .wms-dispatch-detail .item-filter-actions {
         max-width: 100%;
     }
 }
+
+/* Fase 4L: preparacion y carga operativa. */
+body.brand-body.app-shell-body .wms-load-page {
+    display: grid;
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-load-page > .alert {
+    margin: 0;
+    padding: 0.62rem 0.78rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-load-header {
+    grid-template-columns: minmax(13rem, 0.85fr) minmax(0, 1.8fr) minmax(14rem, auto);
+    gap: 0.85rem;
+    padding: 0.82rem 0.92rem;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-load-header .warehouse-request-identity {
+    gap: 0.16rem;
+}
+
+body.brand-body.app-shell-body .wms-load-header .warehouse-request-identity strong {
+    color: var(--ops-text);
+    font-size: 1rem;
+    line-height: 1.18;
+}
+
+body.brand-body.app-shell-body .wms-load-dispatch-code,
+body.brand-body.app-shell-body .wms-load-state-text {
+    overflow: hidden;
+    color: var(--ops-muted);
+    font-size: 0.73rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-load-state-text {
+    color: var(--brand-cyan-dark);
+}
+
+body.brand-body.app-shell-body .wms-load-meta {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.42rem;
+}
+
+body.brand-body.app-shell-body .wms-load-meta div {
+    min-height: 3.05rem;
+    padding: 0.48rem 0.58rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-load-meta dt {
+    color: var(--ops-muted);
+    font-size: 0.61rem;
+    line-height: 1.1;
+}
+
+body.brand-body.app-shell-body .wms-load-meta dd {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.78rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-load-actions {
+    align-items: center;
+    gap: 0.42rem;
+}
+
+body.brand-body.app-shell-body .wms-load-actions .button-primary,
+body.brand-body.app-shell-body .wms-load-actions .button-secondary {
+    min-height: 2.05rem;
+    padding: 0.42rem 0.7rem;
+}
+
+body.brand-body.app-shell-body .wms-load-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-load-summary > div {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.66rem 0.78rem;
+    border-right: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-load-summary > div:last-child {
+    border-right: 0;
+}
+
+body.brand-body.app-shell-body .wms-load-summary span {
+    color: var(--ops-muted);
+    font-size: 0.65rem;
+    font-weight: 900;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-load-summary strong {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.86rem;
+    font-weight: 900;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-load-summary small {
+    color: var(--ops-muted);
+    font-size: 0.73rem;
+    line-height: 1.25;
+}
+
+body.brand-body.app-shell-body .wms-load-lines {
+    gap: 0;
+    margin-top: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-load-lines .warehouse-request-lines-head {
+    padding: 0.68rem 0.82rem;
+    border-bottom: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-load-lines .warehouse-request-lines-head strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+}
+
+body.brand-body.app-shell-body .wms-load-lines .warehouse-request-preparation-form,
+body.brand-body.app-shell-body .wms-load-lines > .warehouse-request-line-list {
+    margin: 0.72rem 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-load-lines .warehouse-request-line-list,
+body.brand-body.app-shell-body .wms-load-lines .warehouse-request-preparation-form {
+    gap: 0.62rem;
+}
+
+body.brand-body.app-shell-body .wms-load-line {
+    gap: 0.68rem;
+    padding: 0.72rem 0.78rem;
+    border-color: var(--ops-border);
+    border-radius: 8px;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .wms-load-line .warehouse-prep-line-head {
+    align-items: center;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-load-line .warehouse-prep-line-head strong {
+    color: var(--ops-text);
+    font-size: 0.9rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-load-line .warehouse-prep-line-head p {
+    color: var(--ops-muted);
+    font-size: 0.73rem;
+}
+
+body.brand-body.app-shell-body .wms-load-line .warehouse-prep-line-grid {
+    grid-template-columns: minmax(13rem, 0.72fr) minmax(0, 2fr);
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity {
+    padding: 0.68rem;
+    border: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity dl {
+    gap: 0.48rem;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity dt {
+    font-size: 0.62rem;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity dd {
+    color: var(--ops-text);
+    font-size: 0.8rem;
+    line-height: 1.22;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .warehouse-prep-picking-summary {
+    padding: 0.58rem 0.62rem;
+    border: 1px solid rgba(15, 127, 147, 0.18);
+    border-left: 3px solid var(--brand-cyan);
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-load-picking {
+    gap: 0.62rem;
+}
+
+body.brand-body.app-shell-body .wms-load-picking .warehouse-prep-assignment {
+    gap: 0.62rem;
+    padding: 0.72rem;
+    border-color: var(--ops-border);
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-load-picking .warehouse-prep-assignment-head strong {
+    color: var(--ops-text);
+    font-size: 0.8rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-load-picking .warehouse-prep-picking-location {
+    padding: 0.55rem 0.62rem;
+    border-color: rgba(15, 127, 147, 0.18);
+    background: #f4fafb;
+}
+
+body.brand-body.app-shell-body .wms-load-picking .warehouse-prep-input-grid {
+    gap: 0.55rem;
+}
+
+body.brand-body.app-shell-body .wms-load-picking .warehouse-prep-assignment-total {
+    min-height: 2.85rem;
+    padding: 0.58rem 0.66rem;
+    border: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-load-picking .warehouse-prep-peak-chip {
+    padding: 0.27rem 0.42rem;
+    border-color: var(--ops-border);
+    border-radius: 8px;
+    font-size: 0.7rem;
+}
+
+body.brand-body.app-shell-body .wms-load-confirmation {
+    margin-top: 0.1rem;
+    padding: 0.82rem;
+    border: 1px solid rgba(15, 127, 147, 0.18);
+    border-radius: 8px;
+    background: #f4fafb;
+}
+
+body.brand-body.app-shell-body .wms-load-confirmation .warehouse-request-close-panel strong {
+    color: var(--ops-text);
+    font-size: 0.9rem;
+}
+
+body.brand-body.app-shell-body .wms-load-confirmation .warehouse-request-transport label {
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-load-progress {
+    margin-top: 0;
+    padding: 0.72rem 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-load-progress span {
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-load-progress span.is-complete {
+    border-color: rgba(20, 101, 60, 0.18);
+}
+
+@media (max-width: 1180px) {
+    body.brand-body.app-shell-body .wms-load-header,
+    body.brand-body.app-shell-body .wms-load-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .wms-load-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+
+    body.brand-body.app-shell-body .wms-load-summary,
+    body.brand-body.app-shell-body .wms-load-line .warehouse-prep-line-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-load-summary > div {
+        border-right: 0;
+        border-bottom: 1px solid var(--ops-border);
+    }
+
+    body.brand-body.app-shell-body .wms-load-summary > div:last-child {
+        border-bottom: 0;
+    }
+}
+
+@media (max-width: 767px) {
+    body.brand-body.app-shell-body .wms-load-header,
+    body.brand-body.app-shell-body .wms-load-meta {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-load-actions,
+    body.brand-body.app-shell-body .wms-load-actions form,
+    body.brand-body.app-shell-body .wms-load-actions .button-primary,
+    body.brand-body.app-shell-body .wms-load-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-load-confirmation .warehouse-request-save-actions,
+    body.brand-body.app-shell-body .wms-load-confirmation .warehouse-request-save-actions .button-primary,
+    body.brand-body.app-shell-body .wms-load-confirmation .warehouse-request-save-actions .button-secondary {
+        width: 100%;
+        max-width: 100%;
+    }
+}
