@@ -14,6 +14,13 @@
     $requestedPeaks = $dispatch->peaksCount();
     $loadedPallets = $dispatch->loadedPalletsCount();
     $loadedPeaks = $dispatch->loadedPeaksCount();
+    $requestedUnits = $dispatch->requestedUnitsCount();
+    $loadedUnits = $dispatch->loadedUnitsCount();
+    $lineCount = $dispatch->lines->count();
+    $sourceLabel = $dispatch->type === \App\Models\GoodsDispatch::TYPE_REQUEST ? 'Salida desde pedido' : 'Salida manual';
+    $deliveryNoteLabel = in_array($dispatch->status, [\App\Models\GoodsDispatch::STATUS_SENT, \App\Models\GoodsDispatch::STATUS_COMPLETED], true)
+        ? 'Albaran disponible'
+        : 'Albaran pendiente';
 @endphp
 
 @section('content')
@@ -27,6 +34,7 @@
 
     <x-breadcrumbs :items="$breadcrumbs" />
 
+    <div class="wms-detail-page wms-dispatch-detail">
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
@@ -39,14 +47,63 @@
         <div class="alert alert-error">{{ $errors->first() }}</div>
     @endif
 
-    <section class="surface-card compact-card wms-flow-hero">
-        <div class="wms-flow-hero-copy">
-            <span class="status-chip">{{ $dispatch->type === \App\Models\GoodsDispatch::TYPE_REQUEST ? 'Salida desde pedido' : 'Salida manual' }}</span>
-            <h2 class="ops-page-title page-title-compact">{{ $dispatch->dispatchNumber() }}</h2>
-            <p>{{ $dispatch->client?->name ?? 'Sin cliente' }}</p>
+    <section class="surface-card compact-card wms-detail-header wms-dispatch-detail-header">
+        <div class="wms-detail-header-main">
+            <div class="order-header-main wms-dispatch-title-block">
+                <span class="order-type-chip">{{ $sourceLabel }}</span>
+                <h2 class="order-code">{{ $dispatch->dispatchNumber() }}</h2>
+                <span class="wms-status-chip wms-status-chip--{{ $dispatch->status }} dispatch-status dispatch-status--{{ $dispatch->status }}">{{ $dispatch->statusLabel() }}</span>
+            </div>
+
+            <div class="wms-detail-context wms-dispatch-context">
+                <span>Documento</span>
+                <strong>{{ $deliveryNoteLabel }}</strong>
+                <em>{{ $dispatch->delivery_note_sent_at ? $dispatch->delivery_note_sent_at->format('d/m/Y H:i') : 'PDF al enviar' }}</em>
+            </div>
         </div>
-        <div class="wms-flow-hero-side">
-            <span class="status-badge dispatch-status dispatch-status--{{ $dispatch->status }}">{{ $dispatch->statusLabel() }}</span>
+
+        <dl class="order-meta wms-detail-meta wms-dispatch-meta">
+            <div class="order-meta-item">
+                <dt>Cliente</dt>
+                <dd>{{ $dispatch->client?->name ?? 'Sin cliente' }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Pedido</dt>
+                <dd>{{ $dispatch->merchandiseRequest?->referenceCode() ?? 'Sin pedido' }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Creada</dt>
+                <dd>{{ $dispatch->created_at?->format('d/m/Y H:i') ?? '-' }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Lineas</dt>
+                <dd>{{ number_format($lineCount, 0, ',', '.') }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Pallets</dt>
+                <dd>{{ number_format($requestedPallets, 0, ',', '.') }} / {{ number_format($loadedPallets, 0, ',', '.') }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Picos</dt>
+                <dd>{{ number_format($requestedPeaks, 0, ',', '.') }} / {{ number_format($loadedPeaks, 0, ',', '.') }}</dd>
+            </div>
+            <div class="order-meta-item">
+                <dt>Unidades</dt>
+                <dd>{{ number_format($requestedUnits, 0, ',', '.') }} / {{ number_format($loadedUnits, 0, ',', '.') }}</dd>
+            </div>
+        </dl>
+
+        <div class="wms-detail-actions wms-dispatch-actions">
+            <a href="{{ route('dispatches.index') }}" class="button-secondary compact-button btn-compact">Volver</a>
+            @if ($dispatch->merchandiseRequest)
+                <a href="{{ route('dispatches.requests.show', $dispatch->merchandiseRequest) }}" class="button-secondary compact-button btn-compact">Ver pedido origen</a>
+            @endif
+            @if (in_array($dispatch->status, [\App\Models\GoodsDispatch::STATUS_SENT, \App\Models\GoodsDispatch::STATUS_COMPLETED], true))
+                <a href="{{ route('dispatches.delivery-note', $dispatch) }}" class="button-primary compact-button btn-compact wms-button-with-icon" target="_blank" rel="noopener noreferrer">
+                    <span class="wms-button-icon" aria-hidden="true"><x-module-icon name="printer" /></span>
+                    Imprimir albaran
+                </a>
+            @endif
             @if ($dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT)
                 <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}">
                     @csrf
@@ -57,6 +114,24 @@
                     </button>
                 </form>
             @endif
+        </div>
+    </section>
+
+    <section class="surface-card compact-card wms-dispatch-operational-strip" aria-label="Resumen operativo de salida">
+        <div>
+            <span>Carga</span>
+            <strong>{{ $dispatch->hasConfirmedLoading() ? 'Confirmada' : 'Pendiente' }}</strong>
+            <small>{{ $dispatch->hasLoadingDifferences() ? 'Con diferencias registradas' : 'Sin diferencias registradas' }}</small>
+        </div>
+        <div>
+            <span>Stock</span>
+            <strong>{{ $dispatch->hasStockApplied() ? 'Descontado' : 'Pendiente' }}</strong>
+            <small>{{ $dispatch->stock_applied_at ? $dispatch->stock_applied_at->format('d/m/Y H:i') : 'Se descuenta al enviar' }}</small>
+        </div>
+        <div>
+            <span>Transporte</span>
+            <strong>{{ $dispatch->camion_propio ? 'Camion propio MAXIMO' : 'Camion externo' }}</strong>
+            <small>{{ $sourceLabel }}</small>
         </div>
     </section>
 
@@ -536,4 +611,5 @@
             @endforeach
         </div>
     </section>
+    </div>
 @endsection

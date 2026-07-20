@@ -3839,3 +3839,54 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign goods receipt detail`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - FASE 4K - Detalle de salida visual (08:30 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente el detalle de salida `/salidas/{id}` como pantalla WMS/ERP compacta, clara y operativa, sin tocar logica funcional de salidas, preparacion, carga, stock, documentos, albaranes ni PDFs.
+
+### Vista detectada y modificada
+- `resources/views/dispatches/show.blade.php`: detalle real de salida de mercancia.
+
+### Cambios realizados
+- Se sustituyo la cabecera tipo hero por una cabecera `wms-detail-header` con identificador, estado, cliente, pedido, fecha, lineas, pallets, picos y unidades.
+- Se anadio una banda operativa compacta para carga, stock y transporte.
+- Se agruparon visualmente las acciones principales: volver, ver pedido origen, imprimir albaran y marcar como completado cuando procede.
+- Se mantuvieron intactos los formularios de cambio de estado, transporte y confirmacion de carga.
+- Se compactaron visualmente resumen, documentos/albaranes, lineas solicitadas, carga real, picking y lineas registradas mediante CSS scoped.
+- Se mantuvieron todos los `data-dispatch-*`, plantillas, inputs ocultos y editores dinamicos de carga.
+
+### Archivos modificados
+- `resources/views/dispatches/show.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, comandos, servicios, tests, `resources/js/app.js`, plantillas PDF, `.env`, datos ni `public/build`.
+- No se cambio logica de salida, preparacion, carga, descuento de stock, confirmacion, completar/cancelar, albaranes, documentos, PDFs ni permisos.
+- No se cambiaron nombres de rutas, metodos HTTP, actions de formularios, nombres de campos, query strings, `@csrf`, `@method`, `data-*` ni validaciones.
+- No se confirmaron cargas, no se completaron salidas reales, no se generaron PDFs y no se modifico stock ni datos.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=GoodsDispatchManagementTest`: **57 passed** (421 assertions).
+- `php artisan test --filter=DeliveryNoteManagementTest`: **7 passed** (54 assertions).
+- `php artisan test --filter=ClientGoodsReceiptDocumentTest`: **43 passed** (128 assertions).
+- `php artisan test`: **626 passed** (3266 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se valido por codigo, tests focalizados, suite completa, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de salida, preparacion, carga, stock, documentos, albaranes ni PDFs.
+
+### Cierre Git previsto
+- Commit: `style: redesign dispatch detail`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
