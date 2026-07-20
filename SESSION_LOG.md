@@ -3662,3 +3662,54 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign stock satellite screens`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - FASE 4I - Operaciones diarias visual (06:39 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** redisenar visualmente `/operaciones-diarias` como pantalla WMS/ERP compacta y clara para revision diaria de almacenaje, movimientos, gestiones de camion, viajes y recalc, sin tocar logica de facturacion diaria ni calculos.
+
+### Vista detectada y modificada
+- `resources/views/daily-operations/index.blade.php`: pantalla principal `/operaciones-diarias`.
+
+### Cambios realizados
+- Se reorganizo la cabecera con contexto operativo, cliente seleccionado, dia revisado, numero de detalles y base prevista de manana.
+- Se recompuso el bloque Cliente / Dia / Ver dia / Recalcular manteniendo el formulario GET y el formulario POST originales con los mismos campos, rutas, metodos y `@csrf`.
+- Se integraron mensajes de estado y errores con una presentacion mas compacta.
+- Se sustituyeron las tarjetas anteriores por KPIs compactos para pallets facturables, pallets movidos, gestiones de camion y viajes.
+- Se anadio una banda de balance con base inicio, facturable hoy, movido hoy y base manana usando valores ya recibidos por la vista.
+- Se presento el desglose por seccion a partir de `sectionOptions` y `sectionTotals`, sin recalcular ni consultar datos nuevos.
+- Se rediseno la tabla de detalle minimo de facturacion diaria con patron `wms-table-panel` y columnas compactas.
+- Se anadio CSS scoped en `resources/css/app.css` para `wms-daily-ops-*`, con responsive basico y botones alineados.
+
+### Archivos modificados
+- `resources/views/daily-operations/index.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, servicios de calculo, comandos, tests, `resources/js/app.js`, `.env`, datos ni `public/build`.
+- No se cambio logica de facturacion diaria, calculos, stock, entradas, salidas, gestiones, viajes, recalc ni conservacion de lineas manuales.
+- No se cambiaron nombres de rutas, metodos HTTP, actions de formularios, nombres de campos, query strings, validaciones, permisos ni `@csrf`.
+- No se ejecuto ninguna accion real de recalculo fuera de tests, ni se crearon, editaron o borraron lineas manuales.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+- No se uso `migrate:fresh`, borrado de datos, `git add .` ni force push.
+
+### Validaciones
+- `php artisan test --filter=DailyOperationsTest`: **20 passed** (129 assertions).
+- `php artisan test`: **619 passed** (3207 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se validara por codigo, prueba focal, suite completa, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- Se confirma que no se toco logica de facturacion diaria, calculos, stock, entradas, salidas ni lineas manuales.
+
+### Cierre Git previsto
+- Commit: `style: redesign daily operations view`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
