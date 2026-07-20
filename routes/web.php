@@ -222,6 +222,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/solicitudes-mercancia', [MerchandiseRequestController::class, 'store'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.store');
+    Route::post('/solicitudes-mercancia/{merchandiseRequest}/lineas', [MerchandiseRequestController::class, 'storeLine'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('merchandise-requests.lines.store');
     Route::get('/solicitudes-mercancia/{merchandiseRequest}', [MerchandiseRequestController::class, 'show'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.show');

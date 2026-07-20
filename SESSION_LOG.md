@@ -3713,3 +3713,78 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign daily operations view`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - FASE FUNCIONAL 4I.1 - Anadir lineas a pedido existente (07:59 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** permitir que usuarios internos anadan referencias o lineas nuevas a un pedido ya creado, sin descontar stock hasta la confirmacion normal de carga y sin habilitar esta accion a usuarios cliente.
+
+### Cambios realizados
+- Se anadio la ruta POST `merchandise-requests.lines.store` para `/solicitudes-mercancia/{merchandiseRequest}/lineas`.
+- Se creo `AddMerchandiseRequestLineRequest` para validar el payload `lines[*]` reutilizando `StockLinePayloadResolver`.
+- Se anadio `MerchandiseRequestController::storeLine()` para crear lineas nuevas sobre `MerchandiseRequestLine`.
+- Si el pedido ya tiene una salida en borrador/preparacion, se sincroniza una `GoodsDispatchLine` asociada mediante `source_request_line_id`, sin marcar carga ni aplicar stock.
+- Se registro auditoria `merchandise_request_line_added`.
+- Se anadio en el detalle del pedido un panel interno compacto "Anadir linea al pedido" que reutiliza el autocomplete existente.
+- Se anadio CSS scoped para `wms-add-order-line`.
+
+### Archivos modificados
+- `routes/web.php`.
+- `app/Http/Controllers/MerchandiseRequestController.php`.
+- `app/Http/Requests/AddMerchandiseRequestLineRequest.php`.
+- `resources/views/merchandise-requests/show.blade.php`.
+- `resources/css/app.css`.
+- `tests/Feature/MerchandiseRequestManagementTest.php`.
+- `SESSION_LOG.md`.
+
+### Reglas de autorizacion
+- Autorizados: `superadmin`, `administracion`, `almacen`.
+- Bloqueados: usuarios `cliente` mediante middleware `minimum.role:almacen` y autorizacion del request.
+
+### Estados permitidos/no permitidos
+- Permitidos: `pending`, `preparing`.
+- No permitidos: `sent`, `completed`, `cancelled`.
+- Si existe salida asociada, solo se sincroniza cuando la salida esta en `draft` o `preparing`; no se modifican salidas enviadas, completadas o canceladas.
+
+### Validaciones
+- Referencia/articulo requerida mediante linea positiva.
+- Articulo activo y perteneciente al cliente del pedido.
+- Partida/pico coherente con la referencia cuando se selecciona stock concreto.
+- Cantidad entera mayor que cero.
+- Estado del pedido editable.
+- Usuario interno autorizado.
+
+### Tests anadidos/actualizados
+- Roles internos pueden anadir linea a pedido editable.
+- Cliente no puede anadir linea a pedido existente.
+- Pedidos enviados, completados o cancelados no admiten nuevas lineas.
+- La linea anadida aparece en el detalle.
+- Anadir linea no descuenta stock.
+- Una salida en preparacion recibe la linea sincronizada para poder cargarse.
+- Validacion falla con cantidad invalida.
+- Validacion falla con articulo de otro cliente.
+
+### Confirmaciones funcionales
+- No se toca stock al anadir la linea; el descuento sigue reservado a la confirmacion/envio normal de carga.
+- Los usuarios cliente no pueden usar esta accion.
+- No se modifico facturacion diaria, operaciones diarias, importaciones, albaranes, PDFs, emails ni Google Calendar.
+
+### Validaciones
+- `php artisan test --filter=MerchandiseRequestManagementTest`: **49 passed** (309 assertions).
+- `php artisan test --filter=GoodsDispatchManagementTest`: **57 passed** (421 assertions).
+- `php artisan test`: **626 passed** (3266 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos autorizados modificados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se validara por codigo, tests focales, suite completa, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+
+### Cierre Git previsto
+- Commit: `feat: allow internal users to add order lines`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

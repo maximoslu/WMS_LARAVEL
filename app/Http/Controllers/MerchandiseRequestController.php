@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\AddMerchandiseRequestLineRequest;
 use App\Http\Requests\StoreMerchandiseRequestRequest;
 use App\Models\Client;
+use App\Models\GoodsDispatch;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
+use App\Models\MerchandiseRequestLine;
 use App\Models\Role;
 use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
@@ -21,6 +24,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class MerchandiseRequestController extends Controller
@@ -249,8 +253,7 @@ class MerchandiseRequestController extends Controller
             abort_unless($user->canAccessRole(Role::ALMACEN), 403);
         }
 
-        return view('merchandise-requests.show', [
-            'merchandiseRequest' => $merchandiseRequest->load([
+        $merchandiseRequest->load([
                 'client',
                 'requestedBy',
                 'lines.item',
@@ -259,10 +262,93 @@ class MerchandiseRequestController extends Controller
                 'dispatch.lines.stockPallet.location.warehouse',
                 'dispatch.lines.allocations.stockPallet.location.warehouse',
                 'dispatch.lines.sourceRequestLine',
-            ]),
+            ]);
+        $canAddInternalLine = ! $user->hasRole(Role::CLIENTE)
+            && $user->canAccessRole(Role::ALMACEN)
+            && $this->canAcceptInternalLines($merchandiseRequest);
+
+        return view('merchandise-requests.show', [
+            'merchandiseRequest' => $merchandiseRequest,
             'isClient' => $user->hasRole(Role::CLIENTE),
+            'canAddInternalLine' => $canAddInternalLine,
+            'selectedItems' => $canAddInternalLine
+                ? app(StockVariantCatalog::class)->hydrateSelections(old('lines', []), (int) $merchandiseRequest->client_id)
+                : [],
+            'searchEndpoint' => route('merchandise-requests.items.search'),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
+    }
+
+    public function storeLine(
+        AddMerchandiseRequestLineRequest $request,
+        MerchandiseRequest $merchandiseRequest,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        if (! $this->canAcceptInternalLines($merchandiseRequest)) {
+            return redirect()
+                ->route('merchandise-requests.show', $merchandiseRequest)
+                ->withErrors([
+                    'lines' => 'No se pueden anadir lineas a un pedido enviado, completado o cancelado.',
+                ]);
+        }
+
+        $requestedLines = $request->validatedLines();
+
+        DB::transaction(function () use ($request, $merchandiseRequest, $requestedLines, $audit): void {
+            $lockedRequest = MerchandiseRequest::query()
+                ->whereKey($merchandiseRequest->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedRequest->load(['dispatch', 'lines']);
+
+            if (! $this->canAcceptInternalLines($lockedRequest)) {
+                throw ValidationException::withMessages([
+                    'lines' => 'No se pueden anadir lineas a un pedido enviado, completado o cancelado.',
+                ]);
+            }
+
+            $createdLines = collect();
+
+            foreach ($requestedLines as $line) {
+                $createdLine = $lockedRequest->lines()->create([
+                    'item_id' => $line['item_id'],
+                    'stock_pallet_id' => $line['stock_pallet_id'],
+                    'line_type' => $line['line_type'],
+                    'stock_peak_index' => $line['stock_peak_index'],
+                    'lot' => $line['lot'],
+                    'destination_location' => $line['destination_location'],
+                    'units_per_pallet' => $line['units_per_pallet'],
+                    'units_per_peak' => $line['units_per_peak'],
+                    'requested_pallets' => $line['requested_pallets'],
+                    'requested_peaks' => $line['requested_peaks'],
+                    'requested_units' => $line['requested_units'],
+                ]);
+
+                $createdLines->push($createdLine);
+                $this->syncPendingDispatchLine($lockedRequest->dispatch, $createdLine, $line);
+            }
+
+            $audit->record(
+                event: 'merchandise_request_line_added',
+                module: 'merchandise_requests',
+                description: 'Linea anadida a pedido existente por usuario interno.',
+                auditable: $lockedRequest,
+                user: $request->user(),
+                clientId: $lockedRequest->client_id,
+                newValues: [
+                    'line_count' => $createdLines->count(),
+                    'requested_pallets' => collect($requestedLines)->sum('requested_pallets'),
+                    'requested_peaks' => collect($requestedLines)->sum('requested_peaks'),
+                    'requested_units' => collect($requestedLines)->sum('requested_units'),
+                    'dispatch_synced' => $lockedRequest->dispatch instanceof GoodsDispatch
+                        && in_array($lockedRequest->dispatch->status, [GoodsDispatch::STATUS_DRAFT, GoodsDispatch::STATUS_PREPARING], true),
+                ],
+            );
+        });
+
+        return redirect()
+            ->route('merchandise-requests.show', $merchandiseRequest)
+            ->with('status', 'Linea anadida al pedido. No se descuenta stock hasta la confirmacion de carga.');
     }
 
     public function updateStatus(
@@ -367,5 +453,65 @@ class MerchandiseRequestController extends Controller
         return Pdf::loadView('merchandise-requests.preparation-pdf', [
             'merchandiseRequest' => $merchandiseRequest,
         ])->stream($merchandiseRequest->referenceCode().'-preparacion.pdf');
+    }
+
+    private function canAcceptInternalLines(MerchandiseRequest $merchandiseRequest): bool
+    {
+        return in_array($merchandiseRequest->status, [
+            MerchandiseRequest::STATUS_PENDING,
+            MerchandiseRequest::STATUS_PREPARING,
+        ], true)
+            && ! in_array($merchandiseRequest->dispatch?->status, [
+                GoodsDispatch::STATUS_SENT,
+                GoodsDispatch::STATUS_COMPLETED,
+                GoodsDispatch::STATUS_CANCELLED,
+            ], true);
+    }
+
+    /**
+     * @param  array{
+     *     item_id:int,
+     *     sku:string,
+     *     description:string,
+     *     stock_pallet_id:int|null,
+     *     line_type:string,
+     *     stock_peak_index:int|null,
+     *     lot:string|null,
+     *     destination_location:string|null,
+     *     units_per_pallet:int,
+     *     units_per_peak:int|null,
+     *     requested_pallets:int,
+     *     requested_peaks:int,
+     *     requested_units:int
+     * }  $resolvedLine
+     */
+    private function syncPendingDispatchLine(?GoodsDispatch $dispatch, MerchandiseRequestLine $requestLine, array $resolvedLine): void
+    {
+        if (! $dispatch instanceof GoodsDispatch) {
+            return;
+        }
+
+        if (! in_array($dispatch->status, [GoodsDispatch::STATUS_DRAFT, GoodsDispatch::STATUS_PREPARING], true)) {
+            return;
+        }
+
+        $dispatch->lines()->create([
+            'item_id' => $resolvedLine['item_id'],
+            'stock_pallet_id' => $resolvedLine['stock_pallet_id'],
+            'line_type' => $resolvedLine['line_type'],
+            'stock_peak_index' => $resolvedLine['stock_peak_index'],
+            'sku' => $resolvedLine['sku'],
+            'description' => $resolvedLine['description'],
+            'lot' => $resolvedLine['lot'],
+            'destination_location' => $resolvedLine['destination_location'],
+            'units_per_pallet' => $resolvedLine['units_per_pallet'],
+            'units_per_peak' => $resolvedLine['units_per_peak'],
+            'pallets' => $requestLine->requestedPalletsCount(),
+            'requested_units' => $resolvedLine['requested_units'],
+            'requested_pallets' => $requestLine->requestedPalletsCount(),
+            'requested_peaks' => $requestLine->requestedPeaksCount(),
+            'source_request_line_id' => $requestLine->id,
+            'notes' => $requestLine->notes,
+        ]);
     }
 }

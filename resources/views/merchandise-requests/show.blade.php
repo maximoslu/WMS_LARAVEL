@@ -208,6 +208,100 @@
                 @endunless
             </div>
 
+            @if ($canAddInternalLine)
+                <form
+                    method="POST"
+                    action="{{ route('merchandise-requests.lines.store', $merchandiseRequest) }}"
+                    class="wms-add-order-line"
+                    data-merchandise-request-form
+                    data-search-endpoint="{{ $searchEndpoint }}"
+                    data-client-id="{{ $merchandiseRequest->client_id }}"
+                >
+                    @csrf
+
+                    <div class="wms-add-order-line-head">
+                        <div>
+                            <strong>Añadir línea al pedido</strong>
+                            <p>No descuenta stock hasta la confirmación de carga.</p>
+                        </div>
+                        <div class="merchandise-request-totals-inline" aria-label="Resumen de nuevas líneas">
+                            <span><strong data-request-summary-lines>0</strong> líneas</span>
+                            <span><strong data-request-summary-pallets>0</strong> pallets</span>
+                            <span><strong data-request-summary-peaks>0</strong> picos</span>
+                        </div>
+                    </div>
+
+                    <section class="merchandise-request-entry-row wms-add-order-line-entry" aria-label="Nueva línea de pedido">
+                        <label class="auth-field merchandise-request-reference-field">
+                            <span>Referencia / SKU</span>
+                            <div
+                                class="ajax-autocomplete"
+                                data-ajax-autocomplete
+                                data-endpoint="{{ $searchEndpoint }}"
+                                data-min-chars="2"
+                                data-empty-message="Escribe 2 caracteres."
+                                data-no-results-message="Sin resultados"
+                                data-searching-message="Buscando..."
+                                data-error-message="Error al buscar"
+                                data-request-item-picker
+                            >
+                                <div class="ajax-autocomplete-control">
+                                    <input
+                                        type="text"
+                                        class="auth-input"
+                                        placeholder="Buscar referencia..."
+                                        autocomplete="off"
+                                        data-autocomplete-input
+                                    >
+                                    <button type="button" class="ajax-autocomplete-clear" data-autocomplete-clear hidden>Limpiar</button>
+                                </div>
+                                <div class="ajax-autocomplete-panel" data-autocomplete-panel hidden>
+                                    <div class="ajax-autocomplete-status" data-autocomplete-status>Escribe 2 caracteres.</div>
+                                    <div class="ajax-autocomplete-list" data-autocomplete-list role="listbox"></div>
+                                </div>
+                            </div>
+                        </label>
+
+                        <div hidden data-request-selection-preview></div>
+
+                        <label class="auth-field wms-quantity-field merchandise-request-entry-quantity">
+                            <span data-request-picker-label>Cantidad</span>
+                            <input type="number" min="1" step="1" value="1" class="auth-input" data-request-picker-quantity>
+                        </label>
+
+                        <button type="button" class="button-secondary compact-button btn-compact merchandise-request-entry-add" data-request-add-selected>
+                            Añadir línea
+                        </button>
+
+                        <p class="helper-text" data-request-search-feedback>Busca una referencia.</p>
+                    </section>
+
+                    <div class="merchandise-request-hidden-inputs" data-request-hidden-inputs></div>
+                    <script type="application/json" data-request-selected-items>@json($selectedItems)</script>
+
+                    <div class="merchandise-request-line-table-head wms-add-order-line-table-head" aria-hidden="true">
+                        <span>Línea</span>
+                        <span>Referencia</span>
+                        <span>Pallets</span>
+                        <span>Picos</span>
+                        <span>Ubicación destino</span>
+                        <span></span>
+                    </div>
+
+                    <div class="merchandise-request-summary-empty merchandise-request-summary-empty--compact" data-request-summary-empty>
+                        Sin líneas nuevas.
+                    </div>
+
+                    <div class="merchandise-request-summary-list merchandise-request-line-list" data-request-summary-rows></div>
+
+                    <div class="item-filter-actions action-buttons page-actions-compact wms-add-order-line-actions">
+                        <button type="submit" class="button-primary compact-button btn-compact" data-request-submit disabled>
+                            Añadir línea
+                        </button>
+                    </div>
+                </form>
+            @endif
+
             <div class="order-table-wrap">
                 <table class="order-table">
                     <thead>

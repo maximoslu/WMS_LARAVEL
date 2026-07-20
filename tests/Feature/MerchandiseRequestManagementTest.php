@@ -1389,6 +1389,297 @@ class MerchandiseRequestManagementTest extends TestCase
         }
     }
 
+    public function test_superadmin_administracion_and_almacen_can_add_line_to_editable_request(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+
+        foreach ([Role::SUPERADMIN, Role::ADMINISTRACION, Role::ALMACEN] as $roleSlug) {
+            $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+            $internal = $this->makeUserWithRole($roleSlug);
+            $item = Item::factory()->create([
+                'client_id' => $client->id,
+                'sku' => strtoupper($roleSlug).'-ADD-LINE',
+                'units_per_pallet' => 25,
+            ]);
+            $request = MerchandiseRequest::factory()->create([
+                'client_id' => $client->id,
+                'requested_by' => $requester->id,
+                'status' => MerchandiseRequest::STATUS_PENDING,
+            ]);
+
+            $this->actingAs($internal)
+                ->post(route('merchandise-requests.lines.store', $request), [
+                    'lines' => [
+                        'line_1' => [
+                            'item_id' => $item->id,
+                            'line_type' => 'pallet',
+                            'quantity' => 3,
+                            'destination_location' => 'Muelle interno',
+                        ],
+                    ],
+                ])
+                ->assertRedirect(route('merchandise-requests.show', $request))
+                ->assertSessionHasNoErrors();
+
+            $this->assertDatabaseHas('merchandise_request_lines', [
+                'merchandise_request_id' => $request->id,
+                'item_id' => $item->id,
+                'requested_pallets' => 3,
+                'requested_units' => 75,
+                'destination_location' => 'Muelle interno',
+            ]);
+
+            $this->assertDatabaseHas('audit_logs', [
+                'client_id' => $client->id,
+                'user_id' => $internal->id,
+                'event' => 'merchandise_request_line_added',
+                'auditable_id' => $request->id,
+            ]);
+        }
+    }
+
+    public function test_cliente_cannot_add_line_to_existing_request(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.lines.store', $request), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('merchandise_request_lines', 0);
+    }
+
+    public function test_cannot_add_line_to_sent_completed_or_cancelled_request(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::ALMACEN);
+
+        foreach ([MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED, MerchandiseRequest::STATUS_CANCELLED] as $status) {
+            $item = Item::factory()->create(['client_id' => $client->id]);
+            $request = MerchandiseRequest::factory()->create([
+                'client_id' => $client->id,
+                'requested_by' => $internal->id,
+                'status' => $status,
+            ]);
+
+            $this->actingAs($internal)
+                ->from(route('merchandise-requests.show', $request))
+                ->post(route('merchandise-requests.lines.store', $request), [
+                    'lines' => [
+                        'line_1' => [
+                            'item_id' => $item->id,
+                            'line_type' => 'pallet',
+                            'quantity' => 1,
+                        ],
+                    ],
+                ])
+                ->assertRedirect(route('merchandise-requests.show', $request))
+                ->assertSessionHasErrors('lines');
+
+            $this->assertDatabaseMissing('merchandise_request_lines', [
+                'merchandise_request_id' => $request->id,
+                'item_id' => $item->id,
+            ]);
+        }
+    }
+
+    public function test_added_line_appears_on_request_detail_and_does_not_discount_stock(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'PHONE-ADD-001',
+            'description' => 'Referencia añadida por telefono',
+            'units_per_pallet' => 50,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 50,
+            'quantity_units' => 500,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+            'peak_1' => 0,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('merchandise-requests.lines.store', $request), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'stock_pallet_id' => $stock->id,
+                        'quantity' => 2,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $request));
+
+        $this->actingAs($almacen)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('PHONE-ADD-001')
+            ->assertSee('Referencia añadida por telefono')
+            ->assertSee('Añadir línea al pedido')
+            ->assertSee('No descuenta stock hasta la confirmación de carga');
+
+        $stock->refresh();
+        $this->assertSame(500, (int) $stock->quantity_units);
+        $this->assertSame(10, (int) $stock->full_pallets);
+        $this->assertNull(GoodsDispatch::query()->first());
+    }
+
+    public function test_added_line_is_available_in_existing_preparation_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'PREP-ADD-001',
+            'description' => 'Linea añadida durante carga',
+            'units_per_pallet' => 40,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'type' => GoodsDispatch::TYPE_REQUEST,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('merchandise-requests.lines.store', $request), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 4,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $request));
+
+        $requestLine = MerchandiseRequestLine::query()
+            ->where('merchandise_request_id', $request->id)
+            ->where('item_id', $item->id)
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('goods_dispatch_lines', [
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'source_request_line_id' => $requestLine->id,
+            'requested_pallets' => 4,
+            'requested_units' => 160,
+            'loaded_pallets' => null,
+            'confirmed_at' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $request))
+            ->assertOk()
+            ->assertSee('PREP-ADD-001')
+            ->assertSee('Linea añadida durante carga')
+            ->assertSee('name="lines[line_'.GoodsDispatch::query()->find($dispatch->id)->lines()->where('item_id', $item->id)->firstOrFail()->id.'][line_id]"', false);
+    }
+
+    public function test_add_line_validation_fails_with_invalid_quantity(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $almacen->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('merchandise-requests.show', $request))
+            ->post(route('merchandise-requests.lines.store', $request), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 0,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $request))
+            ->assertSessionHasErrors('lines');
+
+        $this->assertDatabaseCount('merchandise_request_lines', 0);
+    }
+
+    public function test_add_line_validation_fails_with_item_from_another_client(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $foreignItem = Item::factory()->create(['client_id' => $otherClient->id]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $almacen->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('merchandise-requests.show', $request))
+            ->post(route('merchandise-requests.lines.store', $request), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $foreignItem->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $request))
+            ->assertSessionHasErrors('lines.line_1.item_id');
+
+        $this->assertDatabaseCount('merchandise_request_lines', 0);
+    }
+
     public function test_request_detail_shows_pallet_and_peak_type_badges(): void
     {
         $this->seedBaseData();
