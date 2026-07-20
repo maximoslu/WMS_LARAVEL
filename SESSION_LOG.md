@@ -3941,3 +3941,75 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: redesign dispatch loading screen`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - FASE FUNCIONAL 4M - Reubicar stock (08:56 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** crear una herramienta rapida y segura para reubicar una partida de stock sin modificar cantidades, cliente, articulo, lote, categoria, pallets, picos ni unidades.
+
+### Ruta creada
+- `GET /stock/reubicar` (`stock.relocations.create`): formulario de seleccion de cliente, referencia, partida y destino.
+- `POST /stock/reubicar` (`stock.relocations.store`): ejecucion de reubicacion.
+
+### Controlador/request creados
+- `app/Http/Controllers/StockRelocationController.php`: pantalla, seleccion de partidas reubicables, destinos compatibles y escritura transaccional.
+- `app/Http/Requests/StoreStockRelocationRequest.php`: autorizacion y validaciones de cliente, referencia, partida, destino activo/compatible y misma ubicacion.
+
+### Vista creada
+- `resources/views/stock/relocate.blade.php`: pantalla movil-first con cabecera compacta, seleccion rapida, tarjetas de partida, resumen previo y confirmacion.
+
+### Reglas de autorizacion
+- Acceso permitido a `superadmin`, `administracion` y `almacen`.
+- Usuarios `cliente` no pueden ver la pantalla ni ejecutar POST por URL directa.
+- Entrada integrada en `config/wms.php` dentro de Stock con `minimum_role: almacen`.
+- Enlace directo `Reubicar` añadido al encabezado interno de `resources/views/stock/index.blade.php`.
+
+### Validaciones funcionales
+- Cliente requerido.
+- Referencia/articulo requerido.
+- Partida de stock requerida.
+- Ubicacion destino requerida y existente.
+- Ubicacion destino activa y en almacen activo.
+- Ubicacion destino compatible con el cliente seleccionado.
+- Ubicacion destino distinta de la actual.
+- Stock seleccionado debe pertenecer al cliente y referencia indicados.
+- Stock seleccionado debe estar activo y tener stock fisico.
+
+### Seleccion de partida
+- Si la referencia tiene una unica partida, se muestra directamente como opcion seleccionable.
+- Si tiene varias partidas, se muestran tarjetas compactas con referencia, descripcion, ubicacion actual, lote, pallets, picos, unidades y categoria.
+- No se mueve todo el stock automaticamente: el usuario debe enviar una partida concreta.
+
+### Confirmaciones de seguridad
+- La actualizacion en base de datos solo cambia `location_id`, `location_text` y `updated_at` de la partida seleccionada.
+- Se conserva cliente, articulo, lote, categoria, estado, cantidad, unidades por pallet, pallets, picos y unidades.
+- No descuenta stock, no suma stock, no crea entradas, no crea salidas, no genera albaranes y no toca PDFs.
+- Se registra movimiento de inventario `transfer` mediante el servicio existente con delta cero de unidades/pallets.
+- Se registra auditoria `stock_batch_relocated` con valores antiguos/nuevos de ubicacion.
+
+### Tests anadidos/actualizados
+- `tests/Feature/StockRelocationTest.php`: acceso por roles internos, bloqueo a cliente, reubicacion real, conservacion de campos, rechazo de misma ubicacion, rechazo de otro cliente, destino inactivo/incompatible, seleccion obligatoria de partida con multiples partidas, visualizacion de ubicaciones y navegacion.
+- `tests/Feature/RoleAccessTest.php`: contador de opciones visibles de Stock actualizado a cuatro e inclusion de `stock-relocations`.
+
+### Validaciones ejecutadas
+- `php artisan test --filter=StockRelocationTest`: **9 passed** (57 assertions).
+- `php artisan test --filter=StockOverviewTest`: **38 passed** (200 assertions).
+- `php artisan test --filter=WarehouseLocationManagementTest`: **10 passed** (46 assertions).
+- `php artisan test --filter=TraceabilityModuleTest`: **19 passed** (93 assertions).
+- `php artisan test`: **635 passed** (3324 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos de FASE 4M modificados/creados y `.claude/` sin seguimiento.
+
+### Notas
+- La revision visual autenticada local queda pendiente; se valido por codigo, tests focalizados, suite completa, build y estado Git.
+- `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+- No se tocaron importadores, preparacion/carga, confirmacion de stock, entradas, salidas, operaciones diarias, PDFs, albaranes, Google Calendar, emails ni notificaciones.
+
+### Cierre Git previsto
+- Commit: `feat: add stock relocation workflow`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

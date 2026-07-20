@@ -13936,3 +13936,296 @@ body.brand-body.app-shell-body .wms-load-progress span.is-complete {
         max-width: 100%;
     }
 }
+
+/* Fase funcional 4M: reubicacion rapida de stock. */
+body.brand-body.app-shell-body .wms-relocation-page {
+    display: grid;
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-page > .alert {
+    margin: 0;
+    padding: 0.62rem 0.78rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-header {
+    grid-template-columns: minmax(0, 1.25fr) minmax(13rem, 0.9fr) auto;
+    gap: 0.82rem;
+    padding: 0.82rem 0.92rem;
+    align-items: center;
+}
+
+body.brand-body.app-shell-body .wms-relocation-title {
+    display: grid;
+    gap: 0.16rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-relocation-title span,
+body.brand-body.app-shell-body .wms-relocation-safe-note strong,
+body.brand-body.app-shell-body .wms-relocation-summary span,
+body.brand-body.app-shell-body .wms-relocation-batch-meta span {
+    color: var(--ops-muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-relocation-title h2 {
+    margin: 0;
+    color: var(--ops-text);
+    font-size: 1.05rem;
+    font-weight: 900;
+    line-height: 1.16;
+}
+
+body.brand-body.app-shell-body .wms-relocation-title p,
+body.brand-body.app-shell-body .wms-relocation-safe-note span,
+body.brand-body.app-shell-body .wms-relocation-summary small,
+body.brand-body.app-shell-body .wms-relocation-batch-main small,
+body.brand-body.app-shell-body .wms-relocation-confirm p,
+body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head p,
+body.brand-body.app-shell-body .wms-relocation-destination .wms-section-head p {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.73rem;
+    line-height: 1.3;
+}
+
+body.brand-body.app-shell-body .wms-relocation-safe-note {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.58rem 0.66rem;
+    border: 1px solid rgba(15, 127, 147, 0.18);
+    border-radius: 8px;
+    background: #f4fafb;
+}
+
+body.brand-body.app-shell-body .wms-relocation-safe-note span {
+    color: var(--ops-text);
+    font-weight: 750;
+}
+
+body.brand-body.app-shell-body .wms-relocation-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.42rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-picker,
+body.brand-body.app-shell-body .wms-relocation-stock,
+body.brand-body.app-shell-body .wms-relocation-destination {
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-relocation-filter-form {
+    display: grid;
+    grid-template-columns: minmax(12rem, 0.8fr) minmax(18rem, 1.3fr) auto;
+    gap: 0.68rem;
+    align-items: end;
+    padding: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-workflow {
+    display: grid;
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-relocation-summary > div {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.66rem 0.78rem;
+    border-right: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-relocation-summary > div:last-child {
+    border-right: 0;
+}
+
+body.brand-body.app-shell-body .wms-relocation-summary strong {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.85rem;
+    font-weight: 900;
+    line-height: 1.18;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head,
+body.brand-body.app-shell-body .wms-relocation-destination .wms-section-head {
+    margin: 0;
+    padding: 0.68rem 0.82rem;
+    border-bottom: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head strong,
+body.brand-body.app-shell-body .wms-relocation-destination .wms-section-head strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head > span {
+    color: var(--ops-muted);
+    font-size: 0.75rem;
+    font-weight: 850;
+}
+
+body.brand-body.app-shell-body .wms-relocation-batch {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1.6fr);
+    gap: 0.62rem;
+    align-items: center;
+    margin: 0.62rem 0.82rem;
+    padding: 0.68rem 0.72rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+}
+
+body.brand-body.app-shell-body .wms-relocation-batch:has(input:checked) {
+    border-color: rgba(15, 127, 147, 0.44);
+    background: #f4fafb;
+}
+
+body.brand-body.app-shell-body .wms-relocation-batch input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--brand-teal);
+}
+
+body.brand-body.app-shell-body .wms-relocation-batch-main {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-relocation-batch-main strong {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.84rem;
+    font-weight: 900;
+    line-height: 1.18;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-relocation-batch-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.32rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-batch-meta span {
+    min-height: 1.42rem;
+    padding: 0.2rem 0.45rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: var(--ops-text);
+    font-size: 0.68rem;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-relocation-destination > .auth-field {
+    padding: 0.82rem 0.82rem 0;
+}
+
+body.brand-body.app-shell-body .wms-relocation-confirm {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.72rem;
+    margin: 0.82rem;
+    padding: 0.72rem;
+    border: 1px solid rgba(15, 127, 147, 0.18);
+    border-radius: 8px;
+    background: #f4fafb;
+}
+
+body.brand-body.app-shell-body .wms-relocation-confirm p {
+    color: var(--ops-text);
+    font-weight: 800;
+}
+
+body.brand-body.app-shell-body .wms-relocation-empty {
+    padding: 0.82rem;
+    color: var(--ops-muted);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+    body.brand-body.app-shell-body .wms-relocation-header,
+    body.brand-body.app-shell-body .wms-relocation-filter-form,
+    body.brand-body.app-shell-body .wms-relocation-summary,
+    body.brand-body.app-shell-body .wms-relocation-batch {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-actions,
+    body.brand-body.app-shell-body .wms-relocation-filter-actions,
+    body.brand-body.app-shell-body .wms-relocation-batch-meta {
+        justify-content: flex-start;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-summary > div {
+        border-right: 0;
+        border-bottom: 1px solid var(--ops-border);
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-summary > div:last-child {
+        border-bottom: 0;
+    }
+}
+
+@media (max-width: 767px) {
+    body.brand-body.app-shell-body .wms-relocation-actions,
+    body.brand-body.app-shell-body .wms-relocation-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-relocation-filter-actions,
+    body.brand-body.app-shell-body .wms-relocation-filter-actions .button-primary,
+    body.brand-body.app-shell-body .wms-relocation-filter-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-relocation-confirm,
+    body.brand-body.app-shell-body .wms-relocation-confirm .button-primary {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-confirm {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-batch-main strong,
+    body.brand-body.app-shell-body .wms-relocation-summary strong {
+        white-space: normal;
+    }
+}

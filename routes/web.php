@@ -23,6 +23,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\StockImportController;
+use App\Http\Controllers\StockRelocationController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\Traceability\ActivityHeartbeatController;
 use App\Http\Controllers\Traceability\BusinessAuditLogController;
@@ -172,6 +173,12 @@ Route::middleware('auth')->group(function (): void {
         ->whereIn('format', ['xlsx', 'csv', 'pdf'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('stock.export');
+    Route::get('/stock/reubicar', [StockRelocationController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('stock.relocations.create');
+    Route::post('/stock/reubicar', [StockRelocationController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('stock.relocations.store');
     Route::get('/stock/partidas/{stockPallet}/editar', [StockController::class, 'edit'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('stock.batches.edit');

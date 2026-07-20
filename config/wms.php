@@ -39,6 +39,18 @@ return [
                     'active_patterns' => ['stock.index'],
                 ],
                 [
+                    'key' => 'stock-relocations',
+                    'route' => 'stock.relocations.create',
+                    'path' => '/stock/reubicar',
+                    'title' => 'Reubicar',
+                    'icon' => 'locations',
+                    'summary' => 'Cambio rapido de ubicacion fisica de partidas sin modificar cantidades.',
+                    'minimum_role' => 'almacen',
+                    'tag' => 'Stock',
+                    'status' => 'ready',
+                    'active_patterns' => ['stock.relocations.*'],
+                ],
+                [
                     'key' => 'items',
                     'route' => 'items.index',
                     'path' => '/articulos',

@@ -269,7 +269,7 @@ class RoleAccessTest extends TestCase
             ->assertDontSee('Palets');
     }
 
-    public function test_contador_stock_refleja_tres_opciones_visibles(): void
+    public function test_contador_stock_refleja_cuatro_opciones_visibles(): void
     {
         $user = $this->makeUserWithRole(Role::ALMACEN);
 
@@ -281,9 +281,10 @@ class RoleAccessTest extends TestCase
             ->firstWhere('key', 'stock');
 
         $this->assertNotNull($stockSection);
-        $this->assertCount(3, $stockSection['children']);
+        $this->assertCount(4, $stockSection['children']);
+        $this->assertSame('stock-relocations', $stockSection['children'][1]['key']);
         $this->assertSame(
-            3,
+            4,
             count(collect(WmsNavigation::sectionsForUser($user))->firstWhere('key', 'stock')['children'])
         );
     }
