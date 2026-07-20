@@ -14186,9 +14186,13 @@ body.brand-body.app-shell-body .wms-relocation-empty {
 @media (max-width: 1100px) {
     body.brand-body.app-shell-body .wms-relocation-header,
     body.brand-body.app-shell-body .wms-relocation-filter-form,
-    body.brand-body.app-shell-body .wms-relocation-summary,
-    body.brand-body.app-shell-body .wms-relocation-batch {
+    body.brand-body.app-shell-body .wms-relocation-summary {
         grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-batch {
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: flex-start;
     }
 
     body.brand-body.app-shell-body .wms-relocation-actions,
@@ -14204,6 +14208,10 @@ body.brand-body.app-shell-body .wms-relocation-empty {
 
     body.brand-body.app-shell-body .wms-relocation-summary > div:last-child {
         border-bottom: 0;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-batch-meta {
+        grid-column: 1 / -1;
     }
 }
 
@@ -14222,6 +14230,16 @@ body.brand-body.app-shell-body .wms-relocation-empty {
     body.brand-body.app-shell-body .wms-relocation-confirm {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-batch {
+        margin: 0.52rem 0.62rem;
+        padding: 0.62rem;
+    }
+
+    body.brand-body.app-shell-body .wms-relocation-batch-meta span {
+        flex: 1 1 calc(50% - 0.32rem);
+        text-align: center;
     }
 
     body.brand-body.app-shell-body .wms-relocation-batch-main strong,

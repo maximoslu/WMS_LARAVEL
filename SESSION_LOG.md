@@ -4013,3 +4013,53 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `feat: add stock relocation workflow`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - FASE 5A - QA visual global y microajustes (12:22 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** revisar la coherencia visual global tras el rediseño y aplicar solo microajustes reales, sin tocar logica de negocio ni flujos operativos.
+
+### Pantallas y patrones revisados
+- Layout autenticado global: shell, topbar, menu lateral y footer.
+- Dashboard operativo.
+- Pedidos cliente: listado, creacion y detalle.
+- Salidas: listado, detalle y preparacion/carga.
+- Entradas y albaranes.
+- Bookings, notificaciones, usuarios, clientes y solicitudes de acceso.
+- Articulos, ubicaciones, stock, importar stock, reubicar stock y operaciones diarias.
+- Patrones comunes de tablas, filtros, acciones, badges, alertas, breadcrumbs, formularios y paginacion.
+
+### Microajustes realizados
+- Se pulio la tarjeta movil de seleccion de partida en `/stock/reubicar`.
+- En tablet/movil se mantiene el radio junto al contenido principal para facilitar lectura y seleccion tactil.
+- Los metadatos de la partida pasan a ocupar una fila completa bajo el contenido principal.
+- En movil se ajustaron margen, padding y envoltura de chips para reducir ruido y evitar saltos visuales innecesarios.
+
+### Archivos modificados
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Riesgos evitados
+- No se tocaron controladores, modelos, rutas, migraciones, comandos, servicios, tests, `resources/js/app.js`, plantillas PDF, `.env`, datos ni `public/build`.
+- No se modificaron acciones de formularios, metodos HTTP, nombres de campos, `data-*`, IDs, autocompletados, permisos, validaciones ni textos funcionales.
+- No se confirmaron operaciones, no se movio stock real, no se generaron documentos y no se alteraron datos.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+
+### Validaciones previstas de cierre
+- `php artisan test`.
+- `npm run build`.
+- `git diff --check`.
+- `git status --short --branch`.
+
+### Notas
+- La revision visual autenticada local queda pendiente; la QA se realizo por inspeccion de vistas/CSS y validaciones automatizadas.
+- No se detectaron incidencias funcionales nuevas durante esta pasada.
+- La carpeta local `.claude/` permanece fuera de Git y debe seguir ignorada operativamente.
+
+### Cierre Git previsto
+- Commit: `style: polish visual qa issues`.
+- Push normal a `origin/main`, excluyendo `.claude/`.
