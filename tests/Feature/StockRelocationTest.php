@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Warehouse;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class StockRelocationTest extends TestCase
@@ -210,18 +211,117 @@ class StockRelocationTest extends TestCase
 
     public function test_screen_shows_current_and_destination_locations(): void
     {
-        [$client, $item, , $source, $destination] = $this->stockFixture();
+        [$client, $item, $stockPallet, $source, $destination] = $this->stockFixture([
+            'lot' => 'LOTE-VISIBLE',
+            'quantity_units' => 1250,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 1,
+            'peaks_count' => 1,
+            'peak_1' => 250,
+        ]);
 
         $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
             ->get(route('stock.relocations.create', [
                 'client_id' => $client->id,
                 'item_id' => $item->id,
+                'stock_pallet_id' => $stockPallet->id,
                 'destination_location_id' => $destination->id,
             ]))
             ->assertOk()
+            ->assertSee('Resumen de reubicacion')
+            ->assertSee('Partida concreta')
+            ->assertSee('#'.$stockPallet->id)
+            ->assertSee('Ubicacion actual')
             ->assertSee($source->displayLabel())
+            ->assertSee('Ubicacion destino')
             ->assertSee($destination->displayLabel())
+            ->assertSee('1 pallets')
+            ->assertSee('1 picos')
+            ->assertSee('250 uds pico')
+            ->assertSee('1.250 uds')
+            ->assertSee('LOTE-VISIBLE')
             ->assertSee('Reubicar');
+    }
+
+    public function test_each_batch_shows_current_location_and_destination_select_hides_duplicates(): void
+    {
+        [$client, $item, , $source] = $this->stockFixture(['lot' => 'LOTE-A']);
+        $secondLocation = $this->locationForClient($client, 'SRC-02');
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $secondLocation->id,
+            'lot' => 'LOTE-B',
+            'quantity_units' => 800,
+            'units_per_pallet' => 100,
+        ]);
+
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $canonicalDestination = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '11',
+            'active' => true,
+        ]);
+        $duplicateDestinationId = DB::table('locations')->insertGetId([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'Calle 11',
+            'name' => 'Duplicada historica',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->get(route('stock.relocations.create', [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+            ]))
+            ->assertOk()
+            ->assertSee('Ubicacion actual: '.$source->displayLabel())
+            ->assertSee('Ubicacion actual: '.$secondLocation->displayLabel())
+            ->assertSee('Partida #')
+            ->assertSee('value="'.$canonicalDestination->id.'"', false)
+            ->assertDontSee('value="'.$duplicateDestinationId.'"', false);
+
+        $this->assertSame(1, substr_count($response->getContent(), 'NAVE 38 - Calle 11'));
+    }
+
+    public function test_duplicate_non_canonical_destination_is_rejected_on_submit(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture();
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '14',
+            'active' => true,
+        ]);
+        $duplicateDestinationId = DB::table('locations')->insertGetId([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'Calle 14',
+            'name' => 'Duplicada historica',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->post(route('stock.relocations.store'), [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'stock_pallet_id' => $stockPallet->id,
+                'destination_location_id' => $duplicateDestinationId,
+            ])
+            ->assertSessionHasErrors('destination_location_id');
     }
 
     public function test_stock_navigation_exposes_relocation_for_internal_roles_only(): void

@@ -12,11 +12,12 @@ use Illuminate\Support\Facades\DB;
 
 class LocationIntegrityService
 {
-    /** @var array<string, string> */
+    /** @var array<string, list<string>> */
     public const REFERENCES = [
-        'stock_pallets' => 'location_id',
-        'goods_receipt_lines' => 'location_id',
-        'items' => 'default_location_id',
+        'stock_pallets' => ['location_id'],
+        'goods_receipt_lines' => ['location_id'],
+        'items' => ['default_location_id'],
+        'inventory_movements' => ['location_id', 'from_location_id', 'to_location_id'],
     ];
 
     public function resolveClient(?string $filter): ?Client
@@ -89,11 +90,17 @@ class LocationIntegrityService
         $normalized = LocationCode::normalize($group->first()->code);
 
         return $group
-            ->sortBy(fn (Location $location): array => [
-                $location->active ? 0 : 1,
-                $location->code === $normalized ? 0 : 1,
-                $location->id,
-            ])
+            ->sortBy(function (Location $location) use ($normalized): array {
+                $references = $this->referenceCounts($location->id);
+                $referenceTotal = array_sum($references);
+
+                return [
+                    $location->active ? 0 : 1,
+                    -$referenceTotal,
+                    $location->code === $normalized ? 0 : 1,
+                    $location->id,
+                ];
+            })
             ->first();
     }
 
@@ -156,13 +163,18 @@ class LocationIntegrityService
         ];
     }
 
-    /** @return array{stock: int, receipts: int, items: int} */
+    /** @return array{stock: int, receipts: int, items: int, movements: int} */
     public function referenceCounts(int $locationId): array
     {
         return [
             'stock' => DB::table('stock_pallets')->where('location_id', $locationId)->count(),
             'receipts' => DB::table('goods_receipt_lines')->where('location_id', $locationId)->count(),
             'items' => DB::table('items')->where('default_location_id', $locationId)->count(),
+            'movements' => DB::table('inventory_movements')
+                ->where('location_id', $locationId)
+                ->orWhere('from_location_id', $locationId)
+                ->orWhere('to_location_id', $locationId)
+                ->count(),
         ];
     }
 

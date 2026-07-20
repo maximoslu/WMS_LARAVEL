@@ -11,6 +11,9 @@ final class LocationCode
     {
         $code = mb_strtoupper(trim((string) $value));
         $code = preg_replace('/\s+/u', ' ', $code) ?? $code;
+        if (preg_match('/^(?:NAVE\s*38\s*[- ]\s*)?(?:CALLE|UBICACION)\s+([0-9]{1,3}|[A-F])$/u', $code, $matches) === 1) {
+            $code = $matches[1];
+        }
 
         if ($code !== '' && ctype_digit($code)) {
             return (string) ((int) $code);

@@ -4063,3 +4063,63 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `style: polish visual qa issues`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-20 - HOTFIX FUNCIONAL 4M.1 - Reubicar stock y ubicaciones duplicadas (12:34 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** aclarar la ubicacion actual en `/stock/reubicar` y corregir la deteccion, consolidacion y prevencion de ubicaciones fisicas duplicadas.
+
+### Problema detectado
+- La pantalla de reubicacion mostraba la ubicacion actual dentro de la linea de partida, pero no como bloque operativo inequivoco.
+- La deduplicacion existente cubria variantes exactas/ceros a la izquierda, pero no equivalencias fisicas como `Calle 11` frente a `11`.
+- El selector de destino podia recibir ubicaciones activas duplicadas si existian historicamente.
+
+### Correccion en Reubicar stock
+- Se anadio un resumen claro con cliente, referencia, partida concreta, ubicacion actual, ubicacion destino, pallets, picos, unidades, lote y categoria.
+- Cada tarjeta de partida muestra explicitamente `Ubicacion actual`.
+- El selector de destino usa ubicaciones activas canonicas para no mostrar duplicados.
+- El POST rechaza destinos duplicados no canonicos y tambien destinos equivalentes a la ubicacion fisica actual.
+
+### Estrategia de deteccion y consolidacion
+- La clave canonica de ubicacion sigue siendo `warehouse_id + codigo normalizado`.
+- La normalizacion ahora interpreta `Calle 11`, `Ubicacion 11` y `NAVE 38 - Calle 11` como `11` cuando aplica.
+- El comando `wms:locations:deduplicate` conserva una ubicacion canonica priorizando activa, mayor numero de relaciones, codigo limpio y menor id.
+
+### Relaciones reasignadas
+- `stock_pallets.location_id`.
+- `goods_receipt_lines.location_id`.
+- `items.default_location_id`.
+- `inventory_movements.location_id`, `inventory_movements.from_location_id` e `inventory_movements.to_location_id`.
+
+### Prevencion futura
+- La creacion y edicion manual reutilizan la normalizacion comun antes de validar duplicados.
+- La importacion Edelvives normaliza textos tipo `Calle 18` y reutiliza la ubicacion `18`.
+- Reubicar stock no ofrece destinos duplicados y valida contra manipulacion directa del formulario.
+- No se creo migracion nueva porque ya existe indice unico `warehouse_id + code`; el fallo estaba en normalizacion previa.
+
+### Tests anadidos/actualizados
+- `tests/Feature/StockRelocationTest.php`: resumen con ubicacion actual/destino/cantidades, tarjetas con ubicacion actual, selector sin duplicados y rechazo de destino no canonico.
+- `tests/Feature/LocationDeduplicationCommandTest.php`: consolidacion de `Calle 5`, reasignacion de stock, entradas, articulos y movimientos de inventario sin perder datos.
+- `tests/Feature/WarehouseLocationManagementTest.php`: creacion/edicion no permiten duplicar `Calle 11` frente a `11`.
+- `tests/Feature/StockImportTest.php`: importacion Edelvives con `Calle 18` reutiliza ubicacion `18`.
+
+### Validaciones previstas de cierre
+- `php artisan test`.
+- `npm run build`.
+- `git diff --check`.
+- `git status --short --branch`.
+
+### Notas
+- Se intento `php artisan wms:locations:deduplicate --dry-run` contra la base local MySQL, pero no habia conexion disponible en `127.0.0.1:3306`; no se modifico ningun dato.
+- No se ejecuto `--apply` contra datos reales.
+- No se borro stock, no se modificaron cantidades, pallets, picos, unidades, cliente, articulo, lote ni categoria.
+- No se uso `migrate:fresh`.
+- No se inspecciono, modifico, preparo ni incluyo `.claude/`.
+
+### Cierre Git previsto
+- Commit: `fix: clarify stock relocation and deduplicate locations`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

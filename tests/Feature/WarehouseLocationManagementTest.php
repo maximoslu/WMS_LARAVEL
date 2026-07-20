@@ -220,6 +220,47 @@ class WarehouseLocationManagementTest extends TestCase
         $this->assertSame(1, Location::query()->where('warehouse_id', $warehouse->id)->count());
     }
 
+    public function test_prefixed_calle_location_code_is_normalized_before_duplicate_validation(): void
+    {
+        $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create(['code' => '38', 'name' => 'NAVE 38']);
+        Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => '11']);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->from(route('locations.create'))
+            ->post(route('locations.store'), [
+                'warehouse_id' => $warehouse->id,
+                'code' => ' Calle 11 ',
+                'active' => '1',
+            ])
+            ->assertRedirect(route('locations.create'))
+            ->assertSessionHasErrors('code');
+
+        $this->assertSame(1, Location::query()->where('warehouse_id', $warehouse->id)->count());
+    }
+
+    public function test_editing_location_cannot_duplicate_physical_location_with_prefixed_code(): void
+    {
+        $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create(['code' => '38', 'name' => 'NAVE 38']);
+        Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => '11']);
+        $editable = Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => '12']);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->from(route('locations.edit', $editable))
+            ->put(route('locations.update', $editable), [
+                'warehouse_id' => $warehouse->id,
+                'code' => 'NAVE 38 - Calle 11',
+                'active' => '1',
+            ])
+            ->assertRedirect(route('locations.edit', $editable))
+            ->assertSessionHasErrors('code');
+
+        $this->assertSame('12', $editable->fresh()->code);
+    }
+
     public function test_nave_38_locations_index_uses_natural_order_and_canonical_warehouse_filter(): void
     {
         $this->seedBaseData();

@@ -311,13 +311,17 @@ class DeduplicateWarehousesCommand extends Command
             $canonical = $integrity->canonicalLocation($group, $canonicalWarehouse);
             $duplicateIds = $group->where('id', '!=', $canonical->id)->pluck('id')->values();
 
-            foreach (LocationIntegrityService::REFERENCES as $table => $column) {
-                DB::table($table)->whereIn($column, $duplicateIds)->update([$column => $canonical->id]);
+            foreach (LocationIntegrityService::REFERENCES as $table => $columns) {
+                foreach ($columns as $column) {
+                    DB::table($table)->whereIn($column, $duplicateIds)->update([$column => $canonical->id]);
+                }
             }
 
-            foreach (LocationIntegrityService::REFERENCES as $table => $column) {
-                if (DB::table($table)->whereIn($column, $duplicateIds)->exists()) {
-                    throw new \RuntimeException("Quedan referencias en {$table}; la transaccion se ha revertido.");
+            foreach (LocationIntegrityService::REFERENCES as $table => $columns) {
+                foreach ($columns as $column) {
+                    if (DB::table($table)->whereIn($column, $duplicateIds)->exists()) {
+                        throw new \RuntimeException("Quedan referencias en {$table}.{$column}; la transaccion se ha revertido.");
+                    }
                 }
             }
 

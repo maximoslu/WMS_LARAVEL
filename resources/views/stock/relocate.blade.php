@@ -16,6 +16,9 @@
         $selectedDestination = $locations->firstWhere('id', old('destination_location_id', $filters['destination_location_id']));
         $singleStockPallet = $stockPallets->count() === 1 ? $stockPallets->first() : null;
         $summaryStockPallet = $selectedStockPallet ?? $singleStockPallet;
+        $summaryPeakUnits = $summaryStockPallet
+            ? collect(range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS))->sum(fn (int $peakNumber): int => (int) ($summaryStockPallet->{'peak_'.$peakNumber} ?? 0))
+            : 0;
     @endphp
 
     <x-breadcrumbs :items="$breadcrumbs" />
@@ -98,12 +101,67 @@
                     </div>
                     <div>
                         <span>Ubicacion actual</span>
-                        <strong>{{ $summaryStockPallet?->pickingLocationLabel() ?? 'Selecciona partida' }}</strong>
+                        <strong>{{ $summaryStockPallet?->pickingLocationLabel() ?? 'Selecciona una partida para ver su ubicacion actual.' }}</strong>
                     </div>
                     <div>
                         <span>Ubicacion destino</span>
                         <strong>{{ $selectedDestination?->displayLabel() ?? 'Pendiente de seleccionar' }}</strong>
                     </div>
+                </section>
+
+                <section class="surface-card compact-card wms-relocation-selected" aria-label="Partida seleccionada para reubicar">
+                    <div class="wms-section-head">
+                        <div>
+                            <strong>Resumen de reubicacion</strong>
+                            <p>{{ $summaryStockPallet ? 'Comprueba origen, destino y cantidad antes de reubicar.' : 'Selecciona una partida para ver su ubicacion actual.' }}</p>
+                        </div>
+                    </div>
+
+                    @if ($summaryStockPallet)
+                        <dl class="wms-relocation-selected-grid">
+                            <div>
+                                <dt>Cliente</dt>
+                                <dd>{{ $selectedClient?->name ?? $summaryStockPallet->client?->name ?? 'Cliente seleccionado' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Referencia</dt>
+                                <dd>{{ $summaryStockPallet->item?->sku }} - {{ $summaryStockPallet->item?->description }}</dd>
+                            </div>
+                            <div>
+                                <dt>Partida concreta</dt>
+                                <dd>#{{ $summaryStockPallet->id }}{{ $summaryStockPallet->pallet_code ? ' / '.$summaryStockPallet->pallet_code : '' }}</dd>
+                            </div>
+                            <div class="wms-relocation-selected-current">
+                                <dt>Ubicacion actual</dt>
+                                <dd>{{ $summaryStockPallet->pickingLocationLabel() ?? 'Sin ubicacion registrada' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Ubicacion destino</dt>
+                                <dd>{{ $selectedDestination?->displayLabel() ?? 'Pendiente de seleccionar' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Cantidad</dt>
+                                <dd>
+                                    {{ number_format((int) $summaryStockPallet->full_pallets, 0, ',', '.') }} pallets /
+                                    {{ number_format((int) $summaryStockPallet->peaks_count, 0, ',', '.') }} picos /
+                                    {{ number_format($summaryPeakUnits, 0, ',', '.') }} uds pico /
+                                    {{ number_format((int) $summaryStockPallet->quantity_units, 0, ',', '.') }} uds
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Lote</dt>
+                                <dd>{{ $summaryStockPallet->lot ?: 'SIN LOTE' }}</dd>
+                            </div>
+                            <div>
+                                <dt>Categoria</dt>
+                                <dd>{{ $summaryStockPallet->stockCategoryLabel() }}</dd>
+                            </div>
+                        </dl>
+                    @else
+                        <div class="wms-empty-state wms-relocation-empty">
+                            Selecciona una partida para ver su ubicacion actual.
+                        </div>
+                    @endif
                 </section>
 
                 <section class="surface-card compact-card wms-relocation-stock">
@@ -126,10 +184,11 @@
                         <label class="wms-relocation-batch" for="{{ $radioId }}">
                             <input id="{{ $radioId }}" type="radio" name="stock_pallet_id" value="{{ $stockPallet->id }}" @checked($isSelected) required>
                             <span class="wms-relocation-batch-main">
-                                <strong>{{ $stockPallet->item?->sku }} · {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicacion registrada' }}</strong>
+                                <strong>{{ $stockPallet->item?->sku }} / Ubicacion actual: {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicacion registrada' }}</strong>
                                 <small>{{ $stockPallet->item?->description }}</small>
                             </span>
                             <span class="wms-relocation-batch-meta">
+                                <span>Partida #{{ $stockPallet->id }}</span>
                                 <span>Lote: {{ $stockPallet->lot ?: 'SIN LOTE' }}</span>
                                 <span>{{ number_format((int) $stockPallet->full_pallets, 0, ',', '.') }} pallets</span>
                                 <span>{{ number_format((int) $stockPallet->peaks_count, 0, ',', '.') }} picos</span>

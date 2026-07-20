@@ -5,6 +5,8 @@ namespace App\Http\Requests;
 use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
+use App\Services\Locations\LocationIntegrityService;
+use App\Support\Locations\LocationCode;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -76,7 +78,27 @@ class StoreStockRelocationRequest extends FormRequest
                 $validator->errors()->add('destination_location_id', 'La ubicacion destino no pertenece a un almacen compatible con el cliente.');
             }
 
+            $canonicalDestination = app(LocationIntegrityService::class)
+                ->canonicalActiveLocations(Location::query()
+                    ->with('warehouse')
+                    ->where('warehouse_id', $destination->warehouse_id)
+                    ->where('active', true)
+                    ->get())
+                ->first(fn (Location $location): bool => (int) $location->id === (int) $destination->id);
+
+            if (! $canonicalDestination instanceof Location) {
+                $validator->errors()->add('destination_location_id', 'La ubicacion destino esta duplicada. Usa la ubicacion canonica activa.');
+            }
+
             if ((int) $stockPallet->location_id === (int) $destination->id) {
+                $validator->errors()->add('destination_location_id', 'La ubicacion destino debe ser distinta de la ubicacion actual.');
+            }
+
+            if (
+                $stockPallet->location instanceof Location
+                && (int) $stockPallet->location->warehouse_id === (int) $destination->warehouse_id
+                && LocationCode::normalize($stockPallet->location->code) === LocationCode::normalize($destination->code)
+            ) {
                 $validator->errors()->add('destination_location_id', 'La ubicacion destino debe ser distinta de la ubicacion actual.');
             }
         });

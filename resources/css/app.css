@@ -13988,6 +13988,7 @@ body.brand-body.app-shell-body .wms-relocation-safe-note span,
 body.brand-body.app-shell-body .wms-relocation-summary small,
 body.brand-body.app-shell-body .wms-relocation-batch-main small,
 body.brand-body.app-shell-body .wms-relocation-confirm p,
+body.brand-body.app-shell-body .wms-relocation-selected .wms-section-head p,
 body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head p,
 body.brand-body.app-shell-body .wms-relocation-destination .wms-section-head p {
     margin: 0;
@@ -14019,6 +14020,7 @@ body.brand-body.app-shell-body .wms-relocation-actions {
 }
 
 body.brand-body.app-shell-body .wms-relocation-picker,
+body.brand-body.app-shell-body .wms-relocation-selected,
 body.brand-body.app-shell-body .wms-relocation-stock,
 body.brand-body.app-shell-body .wms-relocation-destination {
     padding: 0;
@@ -14075,6 +14077,7 @@ body.brand-body.app-shell-body .wms-relocation-summary strong {
 }
 
 body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head,
+body.brand-body.app-shell-body .wms-relocation-selected .wms-section-head,
 body.brand-body.app-shell-body .wms-relocation-destination .wms-section-head {
     margin: 0;
     padding: 0.68rem 0.82rem;
@@ -14083,6 +14086,7 @@ body.brand-body.app-shell-body .wms-relocation-destination .wms-section-head {
 }
 
 body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head strong,
+body.brand-body.app-shell-body .wms-relocation-selected .wms-section-head strong,
 body.brand-body.app-shell-body .wms-relocation-destination .wms-section-head strong {
     color: var(--ops-text);
     font-size: 0.82rem;
@@ -14095,6 +14099,49 @@ body.brand-body.app-shell-body .wms-relocation-stock .wms-section-head > span {
     color: var(--ops-muted);
     font-size: 0.75rem;
     font-weight: 850;
+}
+
+body.brand-body.app-shell-body .wms-relocation-selected-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.56rem;
+    margin: 0;
+    padding: 0.72rem 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-relocation-selected-grid > div {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.58rem 0.62rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-relocation-selected-current {
+    border-color: rgba(15, 127, 147, 0.32);
+    background: #f4fafb;
+}
+
+body.brand-body.app-shell-body .wms-relocation-selected-grid dt {
+    color: var(--ops-muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-relocation-selected-grid dd {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.8rem;
+    font-weight: 850;
+    line-height: 1.22;
+    text-overflow: ellipsis;
 }
 
 body.brand-body.app-shell-body .wms-relocation-batch {
@@ -14186,7 +14233,8 @@ body.brand-body.app-shell-body .wms-relocation-empty {
 @media (max-width: 1100px) {
     body.brand-body.app-shell-body .wms-relocation-header,
     body.brand-body.app-shell-body .wms-relocation-filter-form,
-    body.brand-body.app-shell-body .wms-relocation-summary {
+    body.brand-body.app-shell-body .wms-relocation-summary,
+    body.brand-body.app-shell-body .wms-relocation-selected-grid {
         grid-template-columns: 1fr;
     }
 
@@ -14243,7 +14291,8 @@ body.brand-body.app-shell-body .wms-relocation-empty {
     }
 
     body.brand-body.app-shell-body .wms-relocation-batch-main strong,
-    body.brand-body.app-shell-body .wms-relocation-summary strong {
+    body.brand-body.app-shell-body .wms-relocation-summary strong,
+    body.brand-body.app-shell-body .wms-relocation-selected-grid dd {
         white-space: normal;
     }
 }

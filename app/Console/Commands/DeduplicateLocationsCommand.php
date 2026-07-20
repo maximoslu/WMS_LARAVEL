@@ -125,7 +125,7 @@ class DeduplicateLocationsCommand extends Command
                 $canonical->code,
             ));
             $this->table(
-                ['Accion', 'ID', 'Codigo', 'Activa', 'Stock', 'Entradas', 'Articulos'],
+                ['Accion', 'ID', 'Codigo', 'Activa', 'Stock', 'Entradas', 'Articulos', 'Movimientos'],
                 $group->map(function (Location $location) use ($canonical, $integrity): array {
                     $references = $integrity->referenceCounts($location->id);
 
@@ -137,6 +137,7 @@ class DeduplicateLocationsCommand extends Command
                         $references['stock'],
                         $references['receipts'],
                         $references['items'],
+                        $references['movements'],
                     ];
                 })->all(),
             );
@@ -169,13 +170,17 @@ class DeduplicateLocationsCommand extends Command
         $lockedCanonical = Location::query()->whereKey($canonical->id)->lockForUpdate()->firstOrFail();
         Location::query()->whereKey($duplicateIds)->lockForUpdate()->get();
 
-        foreach (LocationIntegrityService::REFERENCES as $table => $column) {
-            DB::table($table)->whereIn($column, $duplicateIds)->update([$column => $lockedCanonical->id]);
+        foreach (LocationIntegrityService::REFERENCES as $table => $columns) {
+            foreach ($columns as $column) {
+                DB::table($table)->whereIn($column, $duplicateIds)->update([$column => $lockedCanonical->id]);
+            }
         }
 
-        foreach (LocationIntegrityService::REFERENCES as $table => $column) {
-            if (DB::table($table)->whereIn($column, $duplicateIds)->exists()) {
-                throw new \RuntimeException("Quedan referencias en {$table}; la transaccion se ha revertido.");
+        foreach (LocationIntegrityService::REFERENCES as $table => $columns) {
+            foreach ($columns as $column) {
+                if (DB::table($table)->whereIn($column, $duplicateIds)->exists()) {
+                    throw new \RuntimeException("Quedan referencias en {$table}.{$column}; la transaccion se ha revertido.");
+                }
             }
         }
 

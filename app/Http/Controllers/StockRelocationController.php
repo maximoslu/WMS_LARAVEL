@@ -10,6 +10,7 @@ use App\Models\Location;
 use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
 use App\Services\Inventory\InventoryMovementService;
+use App\Services\Locations\LocationIntegrityService;
 use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,6 +25,7 @@ class StockRelocationController extends Controller
     public function __construct(
         private readonly InventoryMovementService $movements,
         private readonly AuditLogService $audit,
+        private readonly LocationIntegrityService $locations,
     ) {}
 
     public function create(Request $request): View
@@ -159,7 +161,7 @@ class StockRelocationController extends Controller
     /** @return Collection<int, Location> */
     private function destinationLocations(int $clientId): Collection
     {
-        return LocationCode::applyNaturalOrder(
+        $locations = LocationCode::applyNaturalOrder(
             Location::query()
                 ->with('warehouse')
                 ->where('active', true)
@@ -169,6 +171,8 @@ class StockRelocationController extends Controller
                         ->whereNull('client_id')
                         ->orWhere('client_id', $clientId)))
         )->get();
+
+        return $this->locations->canonicalActiveLocations($locations);
     }
 
     private function relocatableScope(Builder $query): void

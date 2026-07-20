@@ -38,7 +38,7 @@ class AuditLocationsCommand extends Command
         $duplicates = $integrity->duplicateGroups($locations);
 
         $this->info('AUDITORIA DE SOLO LECTURA. No se modificara ningun dato.');
-        $this->line('FK auditadas: stock_pallets.location_id, goods_receipt_lines.location_id e items.default_location_id.');
+        $this->line('FK auditadas: stock_pallets.location_id, goods_receipt_lines.location_id, items.default_location_id e inventory_movements location/from/to.');
         $this->line('Salidas, asignaciones, pedidos y operaciones diarias no tienen location_id en el esquema actual.');
 
         foreach ($duplicates as $group) {
@@ -103,7 +103,7 @@ class AuditLocationsCommand extends Command
             $canonical->id,
         ));
         $this->table(
-            ['ID', 'Codigo', 'Accion propuesta', 'Stock', 'Entradas', 'Articulos'],
+            ['ID', 'Codigo', 'Accion propuesta', 'Stock', 'Entradas', 'Articulos', 'Movimientos'],
             $group->map(function (Location $location) use ($canonical, $integrity): array {
                 $references = $integrity->referenceCounts($location->id);
 
@@ -114,6 +114,7 @@ class AuditLocationsCommand extends Command
                     $references['stock'],
                     $references['receipts'],
                     $references['items'],
+                    $references['movements'],
                 ];
             })->all(),
         );

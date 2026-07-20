@@ -832,7 +832,7 @@ class StockImportTest extends TestCase
         $user = $this->makeUserWithRole(Role::SUPERADMIN);
         $file = $this->makeWorkbookUpload([
             'STOCK' => $this->makeRealEdelvivesWorkbookRows([
-                $this->makeRealEdelvivesDataRow('18.0', 80, '70x100 80', 'Papel offset 70x100 80', 1880, 1000, 1, 1, [880], 2),
+                $this->makeRealEdelvivesDataRow('Calle 18', 80, '70x100 80', 'Papel offset 70x100 80', 1880, 1000, 1, 1, [880], 2),
                 $this->makeRealEdelvivesDataRow('A', 110, '100x127 110', 'Papel estucado 100x127 110', 2500, 1000, 2, 1, [500], 3),
             ]),
         ]);
@@ -864,6 +864,7 @@ class StockImportTest extends TestCase
         $this->assertTrue($firstItem->active);
         $this->assertSame('Papel offset 70x100 80', $firstItem->description);
         $this->assertSame('SIN LOTE', $firstStock->lot);
+        $this->assertSame('18', $firstStock->location?->code);
         $this->assertSame(StockPallet::STATUS_AVAILABLE, $firstStock->status);
         $this->assertSame(1880, $firstStock->quantity_units);
         $this->assertSame(1000, $firstStock->units_per_pallet);

@@ -12,6 +12,7 @@ use App\Models\Warehouse;
 use App\Support\Locations\LocationCode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class LocationDeduplicationCommandTest extends TestCase
@@ -20,7 +21,7 @@ class LocationDeduplicationCommandTest extends TestCase
 
     public function test_audit_is_read_only_and_apply_consolidates_real_variants_without_losing_stock(): void
     {
-        [$client, $warehouse, $canonical, $spacedId, $zeroPaddedId] = $this->makeDuplicatedNave38();
+        [$client, $warehouse, $canonical, $spacedId, $zeroPaddedId, $prefixedId] = $this->makeDuplicatedNave38();
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'default_location_id' => $spacedId,
@@ -47,6 +48,26 @@ class LocationDeduplicationCommandTest extends TestCase
             'goods_receipt_id' => $receipt->id,
             'item_id' => $item->id,
             'location_id' => $zeroPaddedId,
+        ]);
+        $movementId = DB::table('inventory_movements')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'correlation_id' => (string) Str::uuid(),
+            'idempotency_key' => 'location-dedup-test',
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => null,
+            'movement_type' => 'transfer',
+            'source' => 'test',
+            'warehouse_id' => $warehouse->id,
+            'location_id' => $spacedId,
+            'from_location_id' => $zeroPaddedId,
+            'to_location_id' => $prefixedId,
+            'units_delta' => 0,
+            'full_pallets_delta' => 0,
+            'warehouse_pallets_delta' => 0,
+            'effective_at' => now(),
+            'recorded_at' => now(),
+            'created_at' => now(),
         ]);
 
         $databaseBeforeAudit = $this->databaseSnapshot();
@@ -84,11 +105,20 @@ class LocationDeduplicationCommandTest extends TestCase
             ->expectsOutputToContain('1 grupo(s) consolidados y 51 ubicacion(es) creadas')
             ->assertSuccessful();
 
-        $this->assertDatabaseMissing('locations', ['id' => $spacedId]);
-        $this->assertDatabaseMissing('locations', ['id' => $zeroPaddedId]);
-        $this->assertSame(3, StockPallet::query()->where('location_id', $canonical->id)->count());
-        $this->assertSame($canonical->id, $item->fresh()->default_location_id);
-        $this->assertSame($canonical->id, $receipt->lines()->firstOrFail()->location_id);
+        $remainingLocation = Location::query()
+            ->where('warehouse_id', $warehouse->id)
+            ->where('code', '5')
+            ->firstOrFail();
+
+        $this->assertSame(1, Location::query()->where('warehouse_id', $warehouse->id)->where('code', '5')->count());
+        $this->assertNotContains($prefixedId, [$remainingLocation->id]);
+        $this->assertSame(3, StockPallet::query()->where('location_id', $remainingLocation->id)->count());
+        $this->assertSame($remainingLocation->id, $item->fresh()->default_location_id);
+        $this->assertSame($remainingLocation->id, $receipt->lines()->firstOrFail()->location_id);
+        $movement = DB::table('inventory_movements')->where('id', $movementId)->first();
+        $this->assertSame($remainingLocation->id, (int) $movement->location_id);
+        $this->assertSame($remainingLocation->id, (int) $movement->from_location_id);
+        $this->assertSame($remainingLocation->id, (int) $movement->to_location_id);
         $this->assertSame($stockBefore, $this->stockBusinessSnapshot());
         $this->assertSame(
             LocationCode::expectedEdelvivesCodes(),
@@ -142,7 +172,7 @@ class LocationDeduplicationCommandTest extends TestCase
         $this->assertSame(2, Location::query()->where('warehouse_id', $warehouse->id)->count());
     }
 
-    /** @return array{Client, Warehouse, Location, int, int} */
+    /** @return array{Client, Warehouse, Location, int, int, int} */
     private function makeDuplicatedNave38(): array
     {
         $client = Client::factory()->create(['code' => 'EDELVIVES', 'name' => 'Edelvives']);
@@ -159,13 +189,14 @@ class LocationDeduplicationCommandTest extends TestCase
         ]);
         $spacedId = $this->insertRawLocation($warehouse->id, ' 5 ');
         $zeroPaddedId = $this->insertRawLocation($warehouse->id, '05');
+        $prefixedId = $this->insertRawLocation($warehouse->id, 'Calle 5');
         Location::factory()->create([
             'warehouse_id' => $warehouse->id,
             'code' => 'FONDO',
             'active' => true,
         ]);
 
-        return [$client, $warehouse, $canonical, $spacedId, $zeroPaddedId];
+        return [$client, $warehouse, $canonical, $spacedId, $zeroPaddedId, $prefixedId];
     }
 
     private function insertRawLocation(int $warehouseId, string $code): int

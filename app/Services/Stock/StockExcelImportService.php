@@ -2172,6 +2172,7 @@ class StockExcelImportService
         }
 
         $normalized = Str::upper($this->normalizeText($this->stringValue($value)));
+        $canonicalLocationCode = LocationCode::normalize($normalized);
 
         if ($normalized === '') {
             return [
@@ -2181,6 +2182,19 @@ class StockExcelImportService
                     'summary' => 'Se importaran :count filas de '.$sheetName.' sin ubicacion en SIN UBICACION.',
                     'detail' => $lineNumber > 0 ? 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' sin ubicacion. Se importa en SIN UBICACION.' : null,
                 ]],
+            ];
+        }
+
+        if (ctype_digit($canonicalLocationCode) && (int) $canonicalLocationCode >= 0 && (int) $canonicalLocationCode <= 45) {
+            return [
+                'code' => $canonicalLocationCode,
+                'warning_groups' => $canonicalLocationCode === $normalized
+                    ? []
+                    : [[
+                        'key' => 'normalized_location_'.$sheetName,
+                        'summary' => 'Se normalizaran :count ubicaciones especiales en '.$sheetName.'.',
+                        'detail' => $lineNumber > 0 ? 'Fila '.$lineNumber.' de '.$sheetName.' para SKU '.$sku.' con ubicacion '.$normalized.'. Se normaliza a '.$canonicalLocationCode.'.' : null,
+                    ]],
             ];
         }
 
