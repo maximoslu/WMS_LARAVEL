@@ -158,8 +158,10 @@ class BookingManagementTest extends TestCase
         Bus::fake();
         [$client] = $this->seedBaseData();
         $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
         $booking = Booking::factory()->create([
             'client_id' => $client->id,
+            'requested_by' => $cliente->id,
             'status' => Booking::STATUS_REQUESTED,
         ]);
 
@@ -173,14 +175,117 @@ class BookingManagementTest extends TestCase
         $this->assertSame(Booking::STATUS_APPROVED, $booking->status);
         $this->assertSame($administracion->id, $booking->approved_by);
 
+        $rejectedBooking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => Booking::STATUS_REQUESTED,
+        ]);
+
         $this->actingAs($administracion)
-            ->patch(route('bookings.update-status', $booking), [
+            ->patch(route('bookings.update-status', $rejectedBooking), [
                 'status' => Booking::STATUS_REJECTED,
             ])
             ->assertRedirect();
 
-        $this->assertSame(Booking::STATUS_REJECTED, $booking->fresh()->status);
+        $this->assertSame(Booking::STATUS_REJECTED, $rejectedBooking->fresh()->status);
         Bus::assertDispatchedAfterResponse(ProcessBookingStatusChangedJob::class);
+    }
+
+    public function test_pending_client_booking_shows_only_approve_and_reject_to_internal_users(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => Booking::STATUS_REQUESTED,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('bookings.show', $booking))
+            ->assertOk()
+            ->assertSee('Solicitud pendiente')
+            ->assertSee('Aprueba el booking para incorporarlo a la agenda o rechazalo.')
+            ->assertSee('Aprobar booking')
+            ->assertSee('Rechazar')
+            ->assertDontSee('Planificado')
+            ->assertDontSee('En curso')
+            ->assertDontSee('Completado')
+            ->assertDontSee('Cancelado');
+    }
+
+    public function test_approved_client_booking_does_not_show_extra_status_buttons(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => Booking::STATUS_APPROVED,
+        ]);
+
+        $this->actingAs($administracion)
+            ->get(route('bookings.show', $booking))
+            ->assertOk()
+            ->assertSee('Booking aprobado')
+            ->assertSee('Ya esta aprobado y aparece en la agenda operativa.')
+            ->assertDontSee('Planificado')
+            ->assertDontSee('En curso')
+            ->assertDontSee('Completado')
+            ->assertDontSee('Cancelado');
+    }
+
+    public function test_cliente_cannot_approve_or_reject_booking(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => Booking::STATUS_REQUESTED,
+        ]);
+
+        $this->actingAs($cliente)
+            ->patch(route('bookings.update-status', $booking), ['status' => Booking::STATUS_APPROVED])
+            ->assertForbidden();
+
+        $this->actingAs($cliente)
+            ->patch(route('bookings.update-status', $booking), ['status' => Booking::STATUS_REJECTED])
+            ->assertForbidden();
+    }
+
+    public function test_almacen_can_approve_and_reject_pending_client_booking(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => Booking::STATUS_REQUESTED,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('bookings.update-status', $booking), ['status' => Booking::STATUS_APPROVED])
+            ->assertRedirect();
+
+        $booking->refresh();
+        $this->assertSame(Booking::STATUS_APPROVED, $booking->status);
+        $this->assertSame($almacen->id, $booking->approved_by);
+
+        $otherBooking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => Booking::STATUS_REQUESTED,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('bookings.update-status', $otherBooking), ['status' => Booking::STATUS_REJECTED])
+            ->assertRedirect();
+
+        $this->assertSame(Booking::STATUS_REJECTED, $otherBooking->fresh()->status);
     }
 
     public function test_superadmin_can_manage_everything(): void
@@ -288,6 +393,7 @@ class BookingManagementTest extends TestCase
         $booking = Booking::factory()->create([
             'client_id' => $client->id,
             'booking_code' => 'BK-200001',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => $calendarDate,
         ]);
 
@@ -296,6 +402,50 @@ class BookingManagementTest extends TestCase
             ->assertOk()
             ->assertSee('Agenda operativa WMS')
             ->assertSee($booking->referenceCode());
+    }
+
+    public function test_dashboard_does_not_show_rejected_bookings_as_active_agenda(): void
+    {
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
+        $approved = Booking::factory()->create([
+            'client_id' => $client->id,
+            'booking_code' => 'BK-230001',
+            'status' => Booking::STATUS_APPROVED,
+            'scheduled_date' => $calendarDate,
+        ]);
+        $rejected = Booking::factory()->create([
+            'client_id' => $client->id,
+            'booking_code' => 'BK-230002',
+            'status' => Booking::STATUS_REJECTED,
+            'scheduled_date' => $calendarDate,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee($approved->referenceCode())
+            ->assertDontSee($rejected->referenceCode());
+    }
+
+    public function test_approving_client_booking_does_not_create_duplicate_wms_booking(): void
+    {
+        [$client] = $this->seedBaseData();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => Booking::STATUS_REQUESTED,
+        ]);
+
+        $this->actingAs($administracion)
+            ->patch(route('bookings.update-status', $booking), ['status' => Booking::STATUS_APPROVED])
+            ->assertRedirect();
+
+        $this->assertSame(1, Booking::query()->count());
+        $this->assertSame(Booking::STATUS_APPROVED, $booking->fresh()->status);
     }
 
     public function test_cliente_only_sees_own_bookings_on_dashboard(): void
@@ -307,11 +457,13 @@ class BookingManagementTest extends TestCase
         $ownBooking = Booking::factory()->create([
             'client_id' => $friesland->id,
             'booking_code' => 'BK-210001',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => $calendarDate,
         ]);
         $foreignBooking = Booking::factory()->create([
             'client_id' => $edelvives->id,
             'booking_code' => 'BK-210002',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => $calendarDate,
         ]);
 
@@ -331,11 +483,13 @@ class BookingManagementTest extends TestCase
         Booking::factory()->create([
             'client_id' => $friesland->id,
             'booking_code' => 'BK-220001',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => $calendarDate,
         ]);
         Booking::factory()->create([
             'client_id' => $edelvives->id,
             'booking_code' => 'BK-220002',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => $calendarDate,
         ]);
 
@@ -365,11 +519,13 @@ class BookingManagementTest extends TestCase
         Booking::factory()->create([
             'client_id' => $client->id,
             'booking_code' => 'BK-300001',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => '2026-07-05',
         ]);
         Booking::factory()->create([
             'client_id' => $client->id,
             'booking_code' => 'BK-300002',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => '2026-07-05',
         ]);
 
@@ -390,7 +546,7 @@ class BookingManagementTest extends TestCase
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
         Booking::factory()->create([
             'client_id' => $client->id,
-            'status' => Booking::STATUS_REQUESTED,
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => '2026-07-05',
         ]);
 
@@ -400,7 +556,28 @@ class BookingManagementTest extends TestCase
                 'date_to' => '2026-07-10',
             ]))
             ->assertOk()
-            ->assertSee('dashboard-booking-chip--solicitado', false);
+            ->assertSee('dashboard-booking-chip--aprobado', false);
+    }
+
+    public function test_calendar_can_show_requested_bookings_when_filter_is_explicit(): void
+    {
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Booking::factory()->create([
+            'client_id' => $client->id,
+            'status' => Booking::STATUS_REQUESTED,
+            'booking_code' => 'BK-REQUESTED',
+            'scheduled_date' => '2026-07-05',
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('bookings.calendar', [
+                'date_from' => '2026-07-01',
+                'date_to' => '2026-07-10',
+                'status' => Booking::STATUS_REQUESTED,
+            ]))
+            ->assertOk()
+            ->assertSee('BK-REQUESTED');
     }
 
     public function test_google_calendar_status_is_rendered_for_administracion_in_calendar(): void
@@ -555,6 +732,26 @@ class BookingManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('bookings.calendar'))
             ->assertOk();
+    }
+
+    public function test_internal_booking_keeps_operational_state_actions_for_warehouse_role(): void
+    {
+        [$client] = $this->seedBaseData();
+        $internalCreator = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $booking = Booking::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $internalCreator->id,
+            'status' => Booking::STATUS_APPROVED,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('bookings.show', $booking))
+            ->assertOk()
+            ->assertSee('Gestion interna')
+            ->assertSee('Planificado')
+            ->assertSee('En curso')
+            ->assertSee('Completado');
     }
 
     /**

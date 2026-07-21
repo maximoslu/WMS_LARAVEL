@@ -12,6 +12,25 @@
         ['label' => $isClient ? 'Solicitudes' : 'Bookings', 'href' => route('bookings.index')],
         ['label' => $booking->referenceCode()],
         ];
+        $isClientRequestedBooking = $booking->wasRequestedByClient();
+        $statusActionTitle = match (true) {
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_REQUESTED => 'Solicitud pendiente',
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_APPROVED => 'Booking aprobado',
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_REJECTED => 'Solicitud rechazada',
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_CANCELLED => 'Solicitud cancelada',
+            default => 'Gestion interna',
+        };
+        $statusActionCopy = match (true) {
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_REQUESTED => 'Aprueba el booking para incorporarlo a la agenda o rechazalo.',
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_APPROVED => 'Ya esta aprobado y aparece en la agenda operativa.',
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_REJECTED => 'No aparece como actividad operativa activa en agenda.',
+            $isClientRequestedBooking && $booking->status === \App\Models\Booking::STATUS_CANCELLED => 'La solicitud queda fuera de la agenda operativa activa.',
+            default => 'Acciones contextuales segun el estado actual del booking.',
+        };
+        $statusActionLabels = [
+            \App\Models\Booking::STATUS_APPROVED => 'Aprobar booking',
+            \App\Models\Booking::STATUS_REJECTED => 'Rechazar',
+        ];
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
 
@@ -136,12 +155,12 @@
 
         <article class="surface-card compact-card daily-ops-card">
             <div class="ops-index-heading">
-                <strong>Acciones de estado</strong>
-                <span class="ops-page-meta">Gestion operativa de la solicitud</span>
+                <strong>{{ $statusActionTitle }}</strong>
+                <span class="ops-page-meta">{{ $statusActionCopy }}</span>
             </div>
 
             @if ($availableStatuses === [])
-                <div class="item-empty-state">No hay acciones de estado disponibles para este usuario.</div>
+                <div class="item-empty-state">{{ $isClientRequestedBooking ? $booking->statusLabel() : 'No hay acciones de estado disponibles para este usuario.' }}</div>
             @else
                 <div class="inline-actions action-buttons" style="margin-bottom: 1rem;">
                     @foreach ($availableStatuses as $status)
@@ -149,7 +168,7 @@
                             @csrf
                             @method('PATCH')
                             <input type="hidden" name="status" value="{{ $status }}">
-                            <button type="submit" class="button-primary compact-button btn-table">{{ \App\Models\Booking::statusOptions()[$status] ?? ucfirst($status) }}</button>
+                            <button type="submit" class="button-primary compact-button btn-table">{{ $statusActionLabels[$status] ?? (\App\Models\Booking::statusOptions()[$status] ?? ucfirst($status)) }}</button>
                         </form>
                     @endforeach
                 </div>
@@ -169,20 +188,11 @@
                     </div>
                 </form>
 
-                @if (in_array($booking->googleCalendarSyncState(), ['pending', 'error'], true))
-                    <form method="POST" action="{{ route('bookings.google-calendar.retry', $booking) }}" class="item-form" style="margin-top: 1rem;">
-                        @csrf
-                        @method('PATCH')
-                        <div class="item-form-actions action-buttons">
-                            <button type="submit" class="button-secondary compact-button btn-compact">Reintentar sincronizacion Google</button>
-                        </div>
-                    </form>
-                @endif
+                <p class="ops-page-meta">Google Calendar se muestra en modo solo lectura. WMS no crea ni modifica eventos Google.</p>
             @endunless
         </article>
     </section>
 @endsection
-
 
 
 

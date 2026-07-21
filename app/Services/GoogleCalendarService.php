@@ -56,7 +56,7 @@ class GoogleCalendarService
         return [
             'state' => 'connected',
             'label' => 'Conectado',
-            'message' => 'Google Calendar esta listo para leer la agenda y sincronizar bookings.',
+            'message' => 'Google Calendar esta listo para leer la agenda en modo solo lectura.',
         ];
     }
 
@@ -180,73 +180,22 @@ class GoogleCalendarService
 
     public function syncBookingEvent(Booking $booking): array
     {
-        if ($booking->status === Booking::STATUS_CANCELLED) {
-            return $this->deleteBookingEvent($booking);
-        }
-
-        if (filled($booking->google_calendar_event_id)) {
-            return $this->updateBookingEvent($booking);
-        }
-
-        return $this->createBookingEvent($booking);
+        return $this->readOnlyBookingSyncResult($booking, 'skipped');
     }
 
     public function createBookingEvent(Booking $booking): array
     {
-        return $this->runBookingSync($booking, 'create', function (GoogleCalendar $calendar, Booking $booking): array {
-            return $this->upsertBookingEvent($calendar, $booking, null);
-        });
+        return $this->readOnlyBookingSyncResult($booking, 'create_skipped');
     }
 
     public function updateBookingEvent(Booking $booking): array
     {
-        return $this->runBookingSync($booking, 'update', function (GoogleCalendar $calendar, Booking $booking): array {
-            if (blank($booking->google_calendar_event_id)) {
-                return $this->upsertBookingEvent($calendar, $booking, null);
-            }
-
-            try {
-                $eventId = (string) $booking->google_calendar_event_id;
-                $updated = $calendar->events->update(
-                    $this->calendarId(),
-                    $eventId,
-                    $this->makeBookingEvent($booking, $eventId)
-                );
-
-                return $this->markBookingSyncSuccess($booking, $updated->getId(), 'updated');
-            } catch (Throwable $exception) {
-                if (! $this->isMissingGoogleEvent($exception)) {
-                    throw $exception;
-                }
-
-                return $this->upsertBookingEvent($calendar, $booking, (string) $booking->google_calendar_event_id);
-            }
-        });
+        return $this->readOnlyBookingSyncResult($booking, 'update_skipped');
     }
 
     public function deleteBookingEvent(Booking $booking): array
     {
-        return $this->runBookingSync($booking, 'delete', function (GoogleCalendar $calendar, Booking $booking): array {
-            $candidateIds = array_values(array_unique(array_filter([
-                $booking->google_calendar_event_id,
-                $this->defaultBookingEventId($booking),
-            ])));
-
-            foreach ($candidateIds as $candidateId) {
-                try {
-                    $calendar->events->delete($this->calendarId(), $candidateId);
-                    break;
-                } catch (Throwable $exception) {
-                    if ($this->isMissingGoogleEvent($exception)) {
-                        continue;
-                    }
-
-                    throw $exception;
-                }
-            }
-
-            return $this->markBookingSyncSuccess($booking, null, 'deleted', true);
-        });
+        return $this->readOnlyBookingSyncResult($booking, 'delete_skipped');
     }
 
     public function redirectUri(): ?string
@@ -272,6 +221,16 @@ class GoogleCalendarService
         } catch (Throwable $exception) {
             return $this->markBookingSyncFailure($booking, $action, $exception);
         }
+    }
+
+    private function readOnlyBookingSyncResult(Booking $booking, string $action): array
+    {
+        return [
+            'success' => true,
+            'action' => $action,
+            'event_id' => $booking->google_calendar_event_id,
+            'warning' => null,
+        ];
     }
 
     private function upsertBookingEvent(GoogleCalendar $calendar, Booking $booking, ?string $preferredEventId): array
@@ -558,7 +517,7 @@ class GoogleCalendarService
         $client->setClientId((string) config('google-calendar.client_id'));
         $client->setClientSecret((string) config('google-calendar.client_secret'));
         $client->setRedirectUri((string) config('google-calendar.redirect_uri'));
-        $client->setScopes([GoogleCalendar::CALENDAR_EVENTS]);
+        $client->setScopes([GoogleCalendar::CALENDAR_READONLY]);
         $client->setAccessType('offline');
         $client->setPrompt('consent');
         $client->setIncludeGrantedScopes(true);

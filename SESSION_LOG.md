@@ -4278,3 +4278,103 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit previsto: `fix: validate entry uploads and filter receipt locations`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-21 - HOTFIX FUNCIONAL BOOKINGS 1 - Aprobacion simple y agenda sin duplicados
+
+**Equipo:** entorno Codex local.
+**Ruta usada:** `D:\dev\WMS_LARAVEL` (la ruta indicada en el adjunto, `C:\DEV\WMS_LARAVEL_PORTATIL`, no existia en este entorno).
+**Rama:** `main`.
+**Commit inicial tras pull:** `d5ce9e8 fix: validate entry uploads and filter receipt locations` (`e916df9` estaba en la historia, un commit por detras).
+**Objetivo:** simplificar el flujo de booking solicitado por cliente y evitar duplicidad visual entre booking WMS y evento Google Calendar read-only.
+
+### Problema detectado
+- El detalle de booking mostraba una botonera generica con todos los estados permitidos por rol, no una accion contextual de aprobacion/rechazo.
+- Un booking solicitado por cliente podia terminar mostrando acciones como `Planificado`, `En curso`, `Completado` o `Cancelado`, que no forman parte de la decision inicial del interno.
+- La agenda mezclaba dos fuentes:
+  - bookings WMS;
+  - eventos Google Calendar leidos.
+- El supuesto duplicado no era una duplicacion de filas WMS: era duplicidad visual cuando un evento Google tenia el mismo cliente, tipo y fecha que un booking WMS.
+- El codigo tenia sincronizacion de bookings contra Google Calendar, pero esta fase debe dejar Google Calendar como capa read-only.
+
+### Diagnostico del flujo actual
+- Estados reales de `Booking`: `solicitado`, `aprobado`, `planificado`, `en_curso`, `completado`, `cancelado`, `rechazado`.
+- Estado inicial al crear booking: `solicitado`.
+- Roles cliente solo pueden cancelar sus bookings propios en estados permitidos.
+- Roles internos pueden gestionar bookings; ahora las solicitudes creadas por cliente se tratan de forma contextual.
+- `completado` se conserva para bookings internos/operativos, pero no se muestra como decision inicial de una solicitud de cliente.
+- Dashboard y calendario se alimentan de bookings WMS y eventos Google Calendar read-only.
+- No habia relacion comun fiable por ID entre booking WMS y evento Google; se aplico matching conservador por fecha, cliente y tipo, o por codigo WMS en el texto del evento.
+
+### Cambio funcional
+- Para bookings solicitados por cliente en `solicitado`, los internos ven solo:
+  - `Aprobar booking`;
+  - `Rechazar`.
+- Al aprobar:
+  - el booking pasa a `aprobado`;
+  - se registra `approved_by` y `approved_at`;
+  - aparece en la agenda operativa;
+  - no se crea ningun booking WMS duplicado.
+- Al rechazar:
+  - el booking pasa a `rechazado`;
+  - no aparece como actividad operativa activa en dashboard/calendario por defecto.
+- Para bookings internos se conservan acciones operativas necesarias (`planificado`, `en_curso`, `completado`) donde aplican.
+- El detalle muestra una zona contextual:
+  - `Solicitud pendiente`;
+  - `Booking aprobado`;
+  - `Solicitud rechazada`;
+  - `Gestion interna`.
+- El dashboard y calendario, con filtro `Estado: Todos`, muestran solo estados operativos activos: `aprobado`, `planificado`, `en_curso`.
+- Si el usuario filtra explicitamente por `solicitado`, el calendario puede mostrar solicitudes pendientes como vista historica/consulta.
+
+### Google Calendar
+- Google Calendar queda como read-only.
+- WMS deja de llamar a sincronizacion Google al crear, editar, aprobar, rechazar o cancelar bookings.
+- Los metodos publicos de sincronizacion del servicio devuelven resultado no operativo en modo solo lectura.
+- El scope OAuth usado por el servicio pasa a `CALENDAR_READONLY`.
+- No se implemento creacion, actualizacion ni borrado real de eventos Google.
+- No se tocaron tokens ni secretos.
+
+### Agenda sin duplicados
+- Se creo `App\Support\Bookings\GoogleCalendarEventDeduplicator`.
+- Regla conservadora:
+  - misma fecha;
+  - cliente detectado por nombre o codigo;
+  - tipo detectado (`Entrada`, `Salida`, etc.);
+  - o codigo WMS presente en titulo/descripcion/ubicacion.
+- Si hay equivalencia segura, se prioriza el booking WMS y se oculta el evento Google equivalente.
+- Si el evento Google no es equivalente, se sigue mostrando.
+
+### Tests anadidos/actualizados
+- `tests/Feature/BookingManagementTest.php`:
+  - solicitud de cliente pendiente muestra solo aprobar/rechazar;
+  - no muestra planificado/en curso/completado/cancelado;
+  - cliente no puede aprobar ni rechazar;
+  - almacen puede aprobar/rechazar solicitud pendiente;
+  - aprobado aparece en agenda;
+  - rechazado no aparece como activo;
+  - aprobar no crea duplicado WMS;
+  - bookings internos conservan estados operativos.
+- `tests/Feature/GoogleCalendarBookingSyncTest.php`:
+  - crear/editar/cancelar/reintentar no escribe en Google;
+  - eventos Google equivalentes se ocultan en dashboard y calendario;
+  - eventos Google no equivalentes se conservan.
+
+### Validaciones ejecutadas
+- Tests focalizados: `php artisan test tests\Feature\BookingManagementTest.php tests\Feature\GoogleCalendarDashboardTest.php tests\Feature\GoogleCalendarBookingSyncTest.php tests\Unit\GoogleCalendarServiceTest.php`: **54 passed** (202 assertions).
+- Suite completa: `php artisan test`: **657 passed** (3450 assertions).
+- Build: `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo archivos del alcance y `app/Support/Bookings/` nuevo pendiente de stage; `.claude/` no se inspecciono ni se preparo.
+
+### Control de alcance
+- No se crearon migraciones.
+- No se uso `migrate:fresh`.
+- No se borraron datos.
+- No se toco `.env`, secretos, `.claude/`, stock, entradas/salidas, facturacion diaria, PDFs ni emails.
+- No se implemento escritura en Google Calendar.
+
+### Cierre Git previsto
+- Commit: `fix: simplify booking approval flow and agenda duplicates`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

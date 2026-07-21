@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Bookings\BookingNotificationService;
 use App\Services\GoogleCalendarService;
+use App\Support\Bookings\GoogleCalendarEventDeduplicator;
 use App\Services\Warehouses\WarehouseIntegrityService;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
@@ -63,7 +64,6 @@ class BookingController extends Controller
     public function store(
         StoreBookingRequest $request,
         BookingNotificationService $notificationService,
-        GoogleCalendarService $googleCalendarService,
     ): RedirectResponse {
         $user = $request->user();
         abort_unless($this->canCreateBooking($user), 403);
@@ -104,13 +104,10 @@ class BookingController extends Controller
         $booking = Booking::query()->create($payload);
 
         $notificationService->notifySubmitted($booking);
-        $syncResult = $googleCalendarService->syncBookingEvent($booking->fresh());
 
-        return $this->redirectWithSyncFeedback(
-            redirect()->route('bookings.show', $booking),
-            'Solicitud registrada correctamente. Queda pendiente de validacion operativa.',
-            $syncResult
-        );
+        return redirect()
+            ->route('bookings.show', $booking)
+            ->with('status', 'Solicitud registrada correctamente. Queda pendiente de validacion operativa.');
     }
 
     public function show(Request $request, Booking $booking): View
@@ -118,7 +115,7 @@ class BookingController extends Controller
         $user = $request->user();
         abort_unless($this->canViewBooking($user, $booking), 403);
 
-        $booking->load(['client', 'requestedBy', 'assignedTo', 'approvedBy', 'cancelledBy', 'warehouse']);
+        $booking->load(['client', 'requestedBy.role', 'assignedTo', 'approvedBy', 'cancelledBy', 'warehouse']);
 
         return view('bookings.show', [
             'booking' => $booking,
@@ -140,7 +137,6 @@ class BookingController extends Controller
     public function update(
         UpdateBookingRequest $request,
         Booking $booking,
-        GoogleCalendarService $googleCalendarService,
     ): RedirectResponse
     {
         $user = $request->user();
@@ -172,20 +168,16 @@ class BookingController extends Controller
         }
 
         $booking->update($payload);
-        $syncResult = $googleCalendarService->syncBookingEvent($booking->fresh());
 
-        return $this->redirectWithSyncFeedback(
-            redirect()->route('bookings.show', $booking),
-            'Booking actualizado correctamente.',
-            $syncResult
-        );
+        return redirect()
+            ->route('bookings.show', $booking)
+            ->with('status', 'Booking actualizado correctamente.');
     }
 
     public function updateStatus(
         UpdateBookingStatusRequest $request,
         Booking $booking,
         BookingNotificationService $notificationService,
-        GoogleCalendarService $googleCalendarService,
     ): RedirectResponse {
         $user = $request->user();
         abort_unless($this->canViewBooking($user, $booking), 403);
@@ -229,16 +221,17 @@ class BookingController extends Controller
 
         $booking->update($payload);
         $notificationService->notifyStatusChanged($booking->fresh(), $previousStatus);
-        $syncResult = $googleCalendarService->syncBookingEvent($booking->fresh());
 
-        return $this->redirectWithSyncFeedback(
-            redirect()->route('bookings.show', $booking),
-            'Estado del booking actualizado correctamente.',
-            $syncResult
-        );
+        return redirect()
+            ->route('bookings.show', $booking)
+            ->with('status', 'Estado del booking actualizado correctamente.');
     }
 
-    public function calendar(Request $request, GoogleCalendarService $googleCalendarService): View
+    public function calendar(
+        Request $request,
+        GoogleCalendarService $googleCalendarService,
+        GoogleCalendarEventDeduplicator $eventDeduplicator,
+    ): View
     {
         $user = $request->user();
         abort_unless($this->canAccessBookings($user), 403);
@@ -249,6 +242,10 @@ class BookingController extends Controller
         $filters['date_to'] ??= now()->addDays(30)->toDateString();
 
         $bookings = $this->filteredQuery($user, $filters)
+            ->when(
+                ($filters['status'] ?? 'all') === 'all',
+                fn (Builder $query) => $query->whereIn('status', $this->operationalAgendaStatuses())
+            )
             ->whereBetween('scheduled_date', [$filters['date_from'], $filters['date_to']])
             ->orderBy('scheduled_date')
             ->orderBy('scheduled_time_from')
@@ -273,6 +270,8 @@ class BookingController extends Controller
                 ]);
             }
         }
+
+        $googleCalendarEvents = $eventDeduplicator->removeEquivalentEvents($googleCalendarEvents, $bookings);
 
         $calendarDays = collect();
         $startDate = Carbon::parse($filters['date_from'])->startOfDay();
@@ -308,7 +307,6 @@ class BookingController extends Controller
         Request $request,
         Booking $booking,
         BookingNotificationService $notificationService,
-        GoogleCalendarService $googleCalendarService,
     ): RedirectResponse
     {
         $user = $request->user();
@@ -328,30 +326,21 @@ class BookingController extends Controller
             $notificationService->notifyStatusChanged($booking->fresh(), $previousStatus);
         }
 
-        $syncResult = $googleCalendarService->syncBookingEvent($booking->fresh());
-
-        return $this->redirectWithSyncFeedback(
-            redirect()->route('bookings.index'),
-            'Booking cancelado correctamente.',
-            $syncResult
-        );
+        return redirect()
+            ->route('bookings.index')
+            ->with('status', 'Booking cancelado correctamente.');
     }
 
     public function retryGoogleCalendarSync(
         Request $request,
         Booking $booking,
-        GoogleCalendarService $googleCalendarService,
     ): RedirectResponse {
         $user = $request->user();
         abort_unless($this->isInternalUser($user) && $this->canViewBooking($user, $booking), 403);
 
-        $syncResult = $googleCalendarService->syncBookingEvent($booking->fresh());
-
-        return $this->redirectWithSyncFeedback(
-            redirect()->route('bookings.show', $booking),
-            'Sincronizacion con Google Calendar reintentada correctamente.',
-            $syncResult
-        );
+        return redirect()
+            ->route('bookings.show', $booking)
+            ->with('status', 'Google Calendar esta en modo solo lectura; WMS no crea ni modifica eventos.');
     }
 
     /**
@@ -362,7 +351,7 @@ class BookingController extends Controller
         $isClient = $user->hasRole(Role::CLIENTE);
 
         return Booking::query()
-            ->with(['client', 'requestedBy', 'assignedTo', 'approvedBy', 'cancelledBy'])
+            ->with(['client', 'requestedBy.role', 'assignedTo', 'approvedBy', 'cancelledBy'])
             ->when($isClient, fn (Builder $query) => $query->where('client_id', $user->client_id))
             ->when(! $isClient && ! empty($filters['client_id']), fn (Builder $query) => $query->where('client_id', $filters['client_id']))
             ->when(! empty($filters['status']) && $filters['status'] !== 'all', fn (Builder $query) => $query->where('status', $filters['status']))
@@ -473,6 +462,14 @@ class BookingController extends Controller
             return [Booking::STATUS_CANCELLED];
         }
 
+        $booking->loadMissing('requestedBy.role');
+
+        if ($this->isInternalUser($user) && $booking->wasRequestedByClient()) {
+            return $booking->status === Booking::STATUS_REQUESTED
+                ? [Booking::STATUS_APPROVED, Booking::STATUS_REJECTED]
+                : [];
+        }
+
         if ($user->hasRole(Role::ALMACEN)) {
             return [
                 Booking::STATUS_PLANNED,
@@ -482,10 +479,25 @@ class BookingController extends Controller
         }
 
         if ($user->canAccessRole(Role::ADMINISTRACION)) {
-            return Booking::statuses();
+            return array_values(array_filter(
+                Booking::statuses(),
+                fn (string $status): bool => $status !== $booking->status
+            ));
         }
 
         return [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function operationalAgendaStatuses(): array
+    {
+        return [
+            Booking::STATUS_APPROVED,
+            Booking::STATUS_PLANNED,
+            Booking::STATUS_IN_PROGRESS,
+        ];
     }
 
     private function isInternalUser(User $user): bool

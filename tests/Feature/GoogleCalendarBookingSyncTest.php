@@ -18,7 +18,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_crear_booking_crea_evento_google_calendar(): void
+    public function test_crear_booking_no_crea_evento_google_calendar(): void
     {
         $service = new FakeGoogleCalendarService();
         $this->app->instance(GoogleCalendarService::class, $service);
@@ -35,12 +35,11 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
         $booking = Booking::query()->firstOrFail();
 
-        $this->assertCount(1, $service->syncCalls);
-        $this->assertSame($booking->id, $service->syncCalls[0]['booking_id']);
-        $this->assertSame('evt-'.$booking->id, $booking->fresh()->google_calendar_event_id);
+        $this->assertCount(0, $service->syncCalls);
+        $this->assertNull($booking->fresh()->google_calendar_event_id);
     }
 
-    public function test_crear_booking_guarda_google_event_id(): void
+    public function test_crear_booking_mantiene_google_calendar_solo_lectura(): void
     {
         $service = new FakeGoogleCalendarService();
         $this->app->instance(GoogleCalendarService::class, $service);
@@ -57,12 +56,12 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
         $booking = Booking::query()->firstOrFail()->fresh();
 
-        $this->assertNotNull($booking->google_calendar_synced_at);
-        $this->assertSame('evt-'.$booking->id, $booking->google_calendar_event_id);
+        $this->assertNull($booking->google_calendar_synced_at);
+        $this->assertNull($booking->google_calendar_event_id);
         $this->assertNull($booking->google_calendar_sync_error);
     }
 
-    public function test_crear_booking_no_falla_si_google_calendar_falla(): void
+    public function test_crear_booking_no_intenta_sincronizar_aunque_google_fallaria(): void
     {
         $service = new FakeGoogleCalendarService();
         $service->shouldFail = true;
@@ -77,15 +76,16 @@ class GoogleCalendarBookingSyncTest extends TestCase
                 'carrier_name' => 'Proveedor Norte',
             ])
             ->assertRedirect()
-            ->assertSessionHas('warning', 'Booking registrado en WMS, pero no se pudo sincronizar con Google Calendar. Revisalo desde administracion.');
+            ->assertSessionMissing('warning');
 
         $booking = Booking::query()->firstOrFail();
 
         $this->assertSame(Booking::STATUS_REQUESTED, $booking->status);
-        $this->assertNotNull($booking->google_calendar_sync_error);
+        $this->assertNull($booking->google_calendar_sync_error);
+        $this->assertCount(0, $service->syncCalls);
     }
 
-    public function test_editar_booking_actualiza_evento_google_calendar(): void
+    public function test_editar_booking_no_actualiza_evento_google_calendar(): void
     {
         $service = new FakeGoogleCalendarService();
         $this->app->instance(GoogleCalendarService::class, $service);
@@ -112,10 +112,10 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
         $this->assertSame('evt-existing', $booking->google_calendar_event_id);
         $this->assertNotNull($booking->google_calendar_synced_at);
-        $this->assertSame('evt-existing', $service->syncCalls[0]['event_id']);
+        $this->assertCount(0, $service->syncCalls);
     }
 
-    public function test_cancelar_booking_cancela_o_elimina_evento_google_calendar(): void
+    public function test_cancelar_booking_no_elimina_evento_google_calendar(): void
     {
         $service = new FakeGoogleCalendarService();
         $this->app->instance(GoogleCalendarService::class, $service);
@@ -137,11 +137,12 @@ class GoogleCalendarBookingSyncTest extends TestCase
         $booking->refresh();
 
         $this->assertSame(Booking::STATUS_CANCELLED, $booking->status);
-        $this->assertNull($booking->google_calendar_event_id);
+        $this->assertSame('evt-cancel', $booking->google_calendar_event_id);
         $this->assertNull($booking->google_calendar_sync_error);
+        $this->assertCount(0, $service->syncCalls);
     }
 
-    public function test_reintentar_sincronizacion_crea_evento_si_no_existe(): void
+    public function test_reintentar_sincronizacion_informa_modo_solo_lectura(): void
     {
         $service = new FakeGoogleCalendarService();
         $this->app->instance(GoogleCalendarService::class, $service);
@@ -157,15 +158,16 @@ class GoogleCalendarBookingSyncTest extends TestCase
         $this->actingAs($almacen)
             ->patch(route('bookings.google-calendar.retry', $booking))
             ->assertRedirect()
-            ->assertSessionHas('status', 'Sincronizacion con Google Calendar reintentada correctamente.');
+            ->assertSessionHas('status', 'Google Calendar esta en modo solo lectura; WMS no crea ni modifica eventos.');
 
         $booking->refresh();
 
-        $this->assertSame('evt-'.$booking->id, $booking->google_calendar_event_id);
-        $this->assertNull($booking->google_calendar_sync_error);
+        $this->assertNull($booking->google_calendar_event_id);
+        $this->assertSame('Token expirado', $booking->google_calendar_sync_error);
+        $this->assertCount(0, $service->syncCalls);
     }
 
-    public function test_no_duplica_evento_si_booking_ya_tiene_google_calendar_event_id(): void
+    public function test_reintentar_no_toca_evento_existente_en_modo_solo_lectura(): void
     {
         $service = new FakeGoogleCalendarService();
         $this->app->instance(GoogleCalendarService::class, $service);
@@ -185,8 +187,8 @@ class GoogleCalendarBookingSyncTest extends TestCase
         $booking->refresh();
 
         $this->assertSame('evt-stable', $booking->google_calendar_event_id);
-        $this->assertNull($booking->google_calendar_sync_error);
-        $this->assertSame('evt-stable', $service->syncCalls[0]['event_id']);
+        $this->assertSame('Error previo', $booking->google_calendar_sync_error);
+        $this->assertCount(0, $service->syncCalls);
     }
 
     public function test_cliente_puede_crear_booking_y_queda_pendiente_si_google_falla(): void
@@ -209,7 +211,8 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
         $this->assertSame(Booking::STATUS_REQUESTED, $booking->status);
         $this->assertNull($booking->google_calendar_event_id);
-        $this->assertNotNull($booking->google_calendar_sync_error);
+        $this->assertNull($booking->google_calendar_sync_error);
+        $this->assertCount(0, $service->syncCalls);
     }
 
     public function test_listado_muestra_estado_sincronizacion_google_para_internos(): void
@@ -258,6 +261,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
         $booking = Booking::factory()->create([
             'client_id' => $client->id,
             'booking_code' => 'BK-900001',
+            'status' => Booking::STATUS_APPROVED,
             'scheduled_date' => now()->startOfWeek(Carbon::MONDAY)->addDay()->toDateString(),
         ]);
 
@@ -268,6 +272,112 @@ class GoogleCalendarBookingSyncTest extends TestCase
             ->assertSee('Reserva externa de muelle')
             ->assertSee('Dock 3')
             ->assertSee('Google');
+    }
+
+    public function test_dashboard_hides_equivalent_google_event_when_wms_booking_exists(): void
+    {
+        $service = new FakeGoogleCalendarService();
+        $date = now()->startOfWeek(Carbon::MONDAY)->addDay();
+        $service->events = collect([
+            [
+                'source' => 'google',
+                'id' => 'evt-equivalente',
+                'title' => 'EDELVIVES - Booking Entrada',
+                'starts_at' => $date->copy()->setTime(9, 0),
+                'ends_at' => $date->copy()->setTime(10, 0),
+                'all_day' => false,
+                'location' => 'Dock 3',
+                'description' => 'Reserva externa',
+            ],
+        ]);
+        $this->app->instance(GoogleCalendarService::class, $service);
+        [, $edelvives] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $booking = Booking::factory()->create([
+            'client_id' => $edelvives->id,
+            'booking_code' => 'BK-910001',
+            'type' => Booking::TYPE_ENTRY,
+            'status' => Booking::STATUS_APPROVED,
+            'scheduled_date' => $date->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee($booking->referenceCode())
+            ->assertDontSee('evt-equivalente')
+            ->assertDontSee('EDELVIVES - Booking Entrada');
+    }
+
+    public function test_booking_calendar_hides_equivalent_google_event_when_wms_booking_exists(): void
+    {
+        $service = new FakeGoogleCalendarService();
+        $date = Carbon::parse('2026-07-05');
+        $service->events = collect([
+            [
+                'source' => 'google',
+                'id' => 'evt-calendar-equivalente',
+                'title' => 'EDELVIVES - Booking Entrada',
+                'starts_at' => $date->copy()->setTime(9, 0),
+                'ends_at' => $date->copy()->setTime(10, 0),
+                'all_day' => false,
+                'location' => 'Dock 3',
+                'description' => 'Reserva externa',
+            ],
+        ]);
+        $this->app->instance(GoogleCalendarService::class, $service);
+        [, $edelvives] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $booking = Booking::factory()->create([
+            'client_id' => $edelvives->id,
+            'booking_code' => 'BK-930001',
+            'type' => Booking::TYPE_ENTRY,
+            'status' => Booking::STATUS_APPROVED,
+            'scheduled_date' => $date->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('bookings.calendar', [
+                'date_from' => '2026-07-01',
+                'date_to' => '2026-07-10',
+            ]))
+            ->assertOk()
+            ->assertSee($booking->referenceCode())
+            ->assertDontSee('EDELVIVES - Booking Entrada');
+    }
+
+    public function test_dashboard_keeps_non_equivalent_google_event(): void
+    {
+        $service = new FakeGoogleCalendarService();
+        $date = now()->startOfWeek(Carbon::MONDAY)->addDay();
+        $service->events = collect([
+            [
+                'source' => 'google',
+                'id' => 'evt-no-equivalente',
+                'title' => 'Reserva externa de muelle',
+                'starts_at' => $date->copy()->setTime(9, 0),
+                'ends_at' => $date->copy()->setTime(10, 0),
+                'all_day' => false,
+                'location' => 'Dock 8',
+                'description' => 'No corresponde a booking WMS',
+            ],
+        ]);
+        $this->app->instance(GoogleCalendarService::class, $service);
+        [$client] = $this->seedBaseData();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        Booking::factory()->create([
+            'client_id' => $client->id,
+            'booking_code' => 'BK-920001',
+            'type' => Booking::TYPE_ENTRY,
+            'status' => Booking::STATUS_APPROVED,
+            'scheduled_date' => $date->toDateString(),
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Reserva externa de muelle')
+            ->assertSee('Dock 8');
     }
 
     /**

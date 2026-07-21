@@ -211,6 +211,20 @@ class Booking extends Model
         return in_array($this->status, [self::STATUS_REQUESTED, self::STATUS_APPROVED], true);
     }
 
+    public function wasRequestedByClient(): bool
+    {
+        return $this->requestedBy?->hasRole(Role::CLIENTE) === true;
+    }
+
+    public function isOperationalForAgenda(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_APPROVED,
+            self::STATUS_PLANNED,
+            self::STATUS_IN_PROGRESS,
+        ], true);
+    }
+
     public function googleCalendarSyncState(): string
     {
         if (filled($this->google_calendar_sync_error)) {
@@ -234,7 +248,7 @@ class Booking extends Model
             'synced' => 'Sincronizado con Google Calendar',
             'cancelled' => 'Cancelado en Google Calendar',
             'error' => 'Error de sincronizacion con Google Calendar',
-            default => 'Pendiente de sincronizar',
+            default => 'Google Calendar solo lectura',
         };
     }
 }

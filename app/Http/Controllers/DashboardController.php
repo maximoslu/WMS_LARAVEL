@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Booking;
 use App\Models\Role;
 use App\Services\GoogleCalendarService;
+use App\Support\Bookings\GoogleCalendarEventDeduplicator;
 use App\Support\Notifications\NotificationPresentation;
 use App\Support\WmsNavigation;
 use Illuminate\Support\Carbon;
@@ -13,7 +14,11 @@ use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, GoogleCalendarService $googleCalendarService): View
+    public function __invoke(
+        Request $request,
+        GoogleCalendarService $googleCalendarService,
+        GoogleCalendarEventDeduplicator $eventDeduplicator,
+    ): View
     {
         $user = $request->user();
         $pendingByModule = $user->unreadNotifications()
@@ -39,6 +44,11 @@ class DashboardController extends Controller
         $calendarBookings = Booking::query()
             ->with(['client'])
             ->when($user->hasRole(Role::CLIENTE), fn ($query) => $query->where('client_id', $user->client_id))
+            ->whereIn('status', [
+                Booking::STATUS_APPROVED,
+                Booking::STATUS_PLANNED,
+                Booking::STATUS_IN_PROGRESS,
+            ])
             ->whereBetween('scheduled_date', [$calendarStart->toDateString(), $calendarEnd->toDateString()])
             ->orderBy('scheduled_date')
             ->orderBy('scheduled_time_from')
@@ -47,6 +57,7 @@ class DashboardController extends Controller
         $googleCalendarEvents = $showGoogleCalendarLayer
             ? $googleCalendarService->getEventsBetween($calendarStart, $calendarEnd)
             : collect();
+        $googleCalendarEvents = $eventDeduplicator->removeEquivalentEvents($googleCalendarEvents, $calendarBookings);
         $calendarDays = collect(range(0, 6))
             ->map(function (int $offset) use ($calendarStart, $calendarBookings, $googleCalendarEvents): array {
                 $date = $calendarStart->copy()->addDays($offset);
