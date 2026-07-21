@@ -14281,11 +14281,149 @@ body.brand-body.app-shell-body .wms-danger-zone-action .button-secondary {
     color: #8f1d1d;
 }
 
+body.brand-body.app-shell-body .wms-stock-locations-page {
+    gap: 0.62rem;
+    max-width: 1180px;
+    margin-inline: auto;
+}
+
+body.brand-body.app-shell-body .wms-stock-locations-page .wms-list-header {
+    padding: 0.82rem 0.95rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-locations-page .wms-list-subtitle {
+    max-width: 42rem;
+}
+
+body.brand-body.app-shell-body .wms-location-filter-form {
+    grid-template-columns: minmax(11rem, 14rem) minmax(15rem, 1fr) minmax(8rem, 10rem) auto;
+}
+
+body.brand-body.app-shell-body .wms-location-range-form {
+    grid-template-columns: minmax(11rem, 14rem) minmax(8rem, 10rem) minmax(6rem, 7.5rem) minmax(6rem, 7.5rem) minmax(15rem, 1fr) auto;
+    padding: 0 0.85rem 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-location-filter-form .auth-field,
+body.brand-body.app-shell-body .wms-location-range-form .auth-field,
+body.brand-body.app-shell-body .wms-location-purge-form .auth-field,
+body.brand-body.app-shell-body .wms-location-form-card .auth-field {
+    gap: 0.28rem;
+}
+
+body.brand-body.app-shell-body .wms-location-filter-form .auth-input,
+body.brand-body.app-shell-body .wms-location-range-form .auth-input,
+body.brand-body.app-shell-body .wms-location-purge-form .auth-input,
+body.brand-body.app-shell-body .wms-location-form-card .auth-input {
+    min-height: 2.35rem;
+}
+
+body.brand-body.app-shell-body .wms-stock-locations-page .helper-text,
+body.brand-body.app-shell-body .wms-location-form-card .helper-text {
+    color: #475569;
+    font-size: 0.72rem;
+    font-weight: 760;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-stock-locations-page .wms-filter-actions {
+    align-self: end;
+    justify-content: flex-start;
+}
+
+body.brand-body.app-shell-body .wms-location-tools,
+body.brand-body.app-shell-body .wms-danger-zone {
+    overflow: hidden;
+    gap: 0.62rem;
+}
+
+body.brand-body.app-shell-body .wms-location-tools .wms-section-head,
+body.brand-body.app-shell-body .wms-danger-zone .wms-section-head {
+    padding: 0.72rem 0.85rem 0;
+}
+
+body.brand-body.app-shell-body .wms-location-tools .wms-section-head p,
+body.brand-body.app-shell-body .wms-danger-zone .wms-section-head p {
+    margin-top: 0.12rem;
+    color: #475569;
+    font-size: 0.76rem;
+    font-weight: 720;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-danger-zone {
+    border-color: rgba(185, 28, 28, 0.34);
+    background: linear-gradient(180deg, #fffafa 0%, #fff5f5 100%);
+    box-shadow: 0 14px 34px rgba(127, 29, 29, 0.12);
+}
+
+body.brand-body.app-shell-body .wms-danger-zone-grid {
+    gap: 0.68rem;
+    padding: 0 0.85rem 0.85rem;
+}
+
+body.brand-body.app-shell-body .wms-danger-zone-action {
+    gap: 0.52rem;
+    padding: 0.72rem;
+    border-color: rgba(185, 28, 28, 0.24);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-danger-zone-action .button-secondary {
+    justify-self: start;
+}
+
+body.brand-body.app-shell-body .wms-location-form-card {
+    width: min(100%, 900px);
+    margin-inline: auto;
+    padding: 0.95rem;
+}
+
+body.brand-body.app-shell-body .wms-location-form-card .app-copy {
+    margin-bottom: 0.75rem;
+}
+
+body.brand-body.app-shell-body .wms-location-form-card .app-copy p {
+    max-width: 38rem;
+    color: #475569;
+    font-weight: 720;
+}
+
+body.brand-body.app-shell-body .wms-location-form {
+    display: grid;
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-location-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.62rem 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-location-form-grid .item-form-field--full {
+    grid-column: 1 / -1;
+}
+
+body.brand-body.app-shell-body .wms-location-active-toggle {
+    margin: 0;
+    padding: 0.58rem 0.65rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-location-form-actions {
+    justify-content: flex-end;
+    padding-top: 0.1rem;
+}
+
 @media (max-width: 1100px) {
     body.brand-body.app-shell-body .wms-relocation-header,
     body.brand-body.app-shell-body .wms-relocation-filter-form,
     body.brand-body.app-shell-body .wms-relocation-summary,
     body.brand-body.app-shell-body .wms-relocation-selected-grid,
+    body.brand-body.app-shell-body .wms-location-filter-form,
+    body.brand-body.app-shell-body .wms-location-range-form,
     body.brand-body.app-shell-body .wms-danger-zone-grid {
         grid-template-columns: 1fr;
     }
@@ -14330,6 +14468,26 @@ body.brand-body.app-shell-body .wms-danger-zone-action .button-secondary {
     body.brand-body.app-shell-body .wms-relocation-confirm {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    body.brand-body.app-shell-body .wms-stock-locations-page {
+        max-width: none;
+    }
+
+    body.brand-body.app-shell-body .wms-location-form-card {
+        width: 100%;
+    }
+
+    body.brand-body.app-shell-body .wms-location-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-location-form-actions,
+    body.brand-body.app-shell-body .wms-location-form-actions .button-primary,
+    body.brand-body.app-shell-body .wms-location-form-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-danger-zone-action .button-secondary {
+        width: 100%;
+        max-width: 100%;
     }
 
     body.brand-body.app-shell-body .wms-relocation-batch {

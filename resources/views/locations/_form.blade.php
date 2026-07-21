@@ -13,20 +13,20 @@
 @endphp
 <x-breadcrumbs :items="$breadcrumbs" />
 
-<div class="surface-card item-form-card entity-form compact-card">
+<div class="surface-card item-form-card entity-form compact-card wms-location-form-card">
     <div class="app-copy">
         <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
         <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar ubicacion' : 'Nueva ubicacion' }}</h2>
         <p>Codigo visible con estructura opcional por zona, pasillo, rack, nivel y posicion.</p>
     </div>
 
-    <form method="POST" action="{{ $isEditing ? route('locations.update', $location) : route('locations.store') }}" class="item-form">
+    <form method="POST" action="{{ $isEditing ? route('locations.update', $location) : route('locations.store') }}" class="item-form wms-location-form">
         @csrf
         @if ($isEditing)
             @method('PUT')
         @endif
 
-        <div class="form-grid">
+        <div class="form-grid wms-location-form-grid">
             <label class="auth-field">
                 <span>Almacen</span>
                 <select name="warehouse_id" class="auth-input" required>
@@ -112,19 +112,18 @@
             </label>
         </div>
 
-        <label class="toggle-field">
+        <label class="toggle-field wms-location-active-toggle">
             <input type="hidden" name="active" value="0">
             <input type="checkbox" name="active" value="1" @checked(old('active', $location->active ?? true))>
             <span>Ubicacion activa para asignacion operativa</span>
         </label>
 
-        <div class="item-form-actions action-buttons">
+        <div class="item-form-actions action-buttons wms-location-form-actions">
             <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
             <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear ubicacion' }}</button>
         </div>
     </form>
 </div>
-
 
 
 

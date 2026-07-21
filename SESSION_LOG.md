@@ -4,6 +4,63 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-21 - HOTFIX VISUAL UBICACIONES 3.1 + PRUEBA IMPORT STOCK 1
+
+**Contexto:** Equipo casa, ruta oficial `D:\dev\WMS_LARAVEL`, rama `main`. Se partio de `44aed85` (`feat: add controlled location purge and range creation`), remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y `git pull origin main` alineado.
+
+**Problema visual detectado:**
+- `/ubicaciones` habia quedado funcional, pero con demasiado aire entre paneles y campos, formularios muy extendidos, ayudas poco legibles y una zona peligrosa poco estructurada.
+- `/ubicaciones/crear` y `/ubicaciones/{id}/editar` usaban el formulario generico con ancho demasiado amplio para una pantalla WMS operativa.
+
+**Cambios de margenes/layout:**
+- Se acoto `/ubicaciones` a un ancho maximo operativo en desktop.
+- Filtros y formulario de rango usan grids compactos con anchuras razonables.
+- Crear rango queda como panel separado, compacto y con boton cerca del formulario.
+- Zona peligrosa queda diferenciada con fondo y borde de advertencia sobrios, formularios internos separados y botones dentro del contexto.
+- Textos de ayuda en ubicaciones tienen mayor contraste y peso.
+- Nueva/editar ubicacion usa tarjeta centrada con ancho razonable, grid de 2 columnas en desktop y 1 columna en movil.
+- No se cambiaron `name`, `action`, `method`, CSRF ni validaciones.
+
+**Pantallas ajustadas:**
+- `GET /ubicaciones`
+- `GET /ubicaciones/crear`
+- `GET /ubicaciones/{location}/editar`
+
+**Prueba import stock:**
+- No habia Excel real adjunto ni ficheros `.xlsx/.xls/.csv` en el repo/adjuntos accesibles, por lo que no se ejecuto preview real contra el archivo del propietario.
+- Cliente/importador real probado mediante tests: `EDELVIVES` con perfil `Stock Edelvives`, y `FRIESLAND` con importador estandar multihilo/multisheet.
+- Se valido por tests que `9`, `09` y `Calle 9` se canonicalizan a una sola ubicacion y que la reimportacion de Edelvives no duplica ubicaciones.
+- No se confirmo ninguna importacion local real contra datos de la base de casa.
+
+**Auditoria de ubicaciones local:**
+- `php artisan wms:locations:deduplicate --warehouse=38 --dry-run`: sin cambios; en la base local no hay ubicaciones para almacen `38`.
+- `php artisan wms:locations:audit --warehouse=38`: sin cambios; en la base local no hay ubicaciones para almacen `38`.
+- `php artisan wms:locations:audit`: solo lectura; 0 grupos duplicados, 0 faltantes, 0 extras, 2 partidas de stock, sin cambios.
+
+**Validaciones ejecutadas:**
+- Tests focalizados secuenciales:
+  - `php artisan test --filter=StockImport`: OK, 35 passed, 392 assertions.
+  - `php artisan test --filter=Location`: OK, 74 passed, 498 assertions.
+  - `php artisan test --filter=StockRelocation`: OK, 11 passed, 76 assertions.
+- Suite completa: `php artisan test`: OK, 679 passed, 3585 assertions.
+- Build: `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+**Control de alcance:**
+- No se ejecutaron purgas reales.
+- No se ejecuto ningun `--apply` de purga.
+- No se borro stock ni se tocaron datos.
+- No se uso `migrate:fresh`.
+- No se tocaron `.env`, secretos, `.claude/`, `vendor/`, `node_modules/`, Bookings, Google Calendar, PDFs ni facturacion diaria.
+
+**Commit / push:** Pendiente de cierre.
+
+**Pendientes:**
+- Para probar el Excel real del propietario hay que recibir el fichero y hacer primero preview en local. No confirmar si el preview muestra errores graves.
+- No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
+
+---
+
 ## 2026-07-21 - HOTFIX FUNCIONAL UBICACIONES 3 - Purga controlada y creacion masiva
 
 **Contexto:** Equipo casa, ruta oficial `D:\dev\WMS_LARAVEL`, rama `main`. Se partio de `f9d4cbe` (`docs: update session log after stock location push`), remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y `git pull --ff-only origin main` alineado.

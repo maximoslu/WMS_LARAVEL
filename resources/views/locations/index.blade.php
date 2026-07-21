@@ -64,7 +64,7 @@
         @endif
 
         <section class="surface-card compact-card wms-filter-panel wms-stock-filter-panel">
-            <form method="GET" action="{{ route('locations.index') }}" class="stock-filters compact-filters filters-compact wms-filter-grid wms-stock-filter-grid wms-stock-filter-grid--locations">
+            <form method="GET" action="{{ route('locations.index') }}" class="stock-filters compact-filters filters-compact wms-filter-grid wms-stock-filter-grid wms-stock-filter-grid--locations wms-location-filter-form">
                 <label class="auth-field">
                     <span>Almacen</span>
                     <select name="warehouse_id" class="auth-input">
@@ -123,7 +123,7 @@
                     </div>
                 </div>
 
-                <form method="POST" action="{{ route('locations.range.store') }}" class="stock-filters compact-filters filters-compact wms-filter-grid wms-stock-filter-grid">
+                <form method="POST" action="{{ route('locations.range.store') }}" class="stock-filters compact-filters filters-compact wms-filter-grid wms-stock-filter-grid wms-location-range-form">
                     @csrf
                     <label class="auth-field">
                         <span>Almacen</span>
@@ -194,7 +194,7 @@
                 </div>
 
                 <div class="wms-danger-zone-grid">
-                    <form method="POST" action="{{ route('locations.purge') }}" class="wms-danger-zone-action">
+                    <form method="POST" action="{{ route('locations.purge') }}" class="wms-danger-zone-action wms-location-purge-form">
                         @csrf
                         <input type="hidden" name="scope" value="warehouse">
                         <label class="auth-field">
@@ -219,7 +219,7 @@
                         <button type="submit" class="button-secondary compact-button btn-compact">Eliminar ubicaciones del almacen seleccionado</button>
                     </form>
 
-                    <form method="POST" action="{{ route('locations.purge') }}" class="wms-danger-zone-action">
+                    <form method="POST" action="{{ route('locations.purge') }}" class="wms-danger-zone-action wms-location-purge-form">
                         @csrf
                         <input type="hidden" name="scope" value="all">
                         <label class="auth-field">
