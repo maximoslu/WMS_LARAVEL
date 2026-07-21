@@ -4526,3 +4526,61 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
 
 ---
+
+## 2026-07-21 - VALIDACION POST-IMPORTACION REAL EDELVIVES
+
+**Contexto:** Equipo casa, ruta oficial `D:\dev\WMS_LARAVEL`, rama `main`. Se partio de `f9cfa0d` (`fix: polish location management layout and verify stock import`), remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y `git pull origin main` alineado.
+
+**Validacion manual reportada por el propietario:**
+- El propietario probo la importacion real desde UI en navegador.
+- Cliente: `EDELVIVES`.
+- Preview correcto.
+- Confirmacion de importacion ejecutada.
+- Mensaje observado: `Importacion completada para EDELVIVES. Filas importadas: 184.`
+- Stock observado tras importar: 184 registros.
+- Total visible observado: 1.052 pallets almacen.
+- No se duplicaron ubicaciones visuales ni reales.
+- El selector/listado de ubicaciones quedo limpio.
+
+**Validacion local de solo lectura:**
+- `php artisan migrate:status`: conexion DB correcta. En esta base local constan pendientes `2026_07_14_000001_default_goods_dispatches_to_own_truck`, `2026_07_15_000001_add_peaks_to_goods_receipt_lines_table` y `2026_07_16_000001_create_traceability_foundation_tables`.
+- `php artisan wms:locations:audit`: solo lectura; 0 grupos duplicados, 0 faltantes, 0 extras, 2 partidas de stock. Sin cambios.
+- `php artisan wms:locations:deduplicate --dry-run`: 0 grupos duplicados, 0 ubicaciones por crear. Sin cambios.
+- `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse=38 --dry-run`: no hay ubicaciones para esos filtros en la base local de casa. Sin cambios.
+- `php artisan wms:stock:clear-locations --dry-run`: 6 partidas afectables, 2 con `location_id`, 6 con `location_text`; desglose: EDELVIVES sin almacen vinculado 3, FRIESLAND/MAXIMO PRINCIPAL 2, FRIESLAND sin almacen vinculado 1. Sin cambios.
+- `php artisan wms:locations:purge --warehouse=38 --dry-run`: no se encontro almacen `38` en la base local de casa. Sin cambios.
+
+**Conteos locales consultados:**
+- Ubicaciones totales: 4.
+- Ubicaciones activas: 4.
+- Almacenes `38`/`NAVE 38`: 0 en esta base local.
+- Ubicaciones del almacen 38: 0 por no existir el almacen localmente.
+- Partidas EDELVIVES locales: 3 activas.
+- Partidas EDELVIVES con ubicacion: 0.
+- Partidas EDELVIVES sin ubicacion: 3.
+- Pallets almacen EDELVIVES locales: 4.00.
+- Duplicados exactos `warehouse_id + code`: 0.
+- No se pudo validar localmente `9`, `09`, `Calle 9`, `A`, `B`, `D`, `FONDO` o `SIN UBICACION` en almacen 38 porque ese almacen no existe en la base local de casa. La validacion de no duplicados del Excel real queda respaldada por la prueba manual del propietario y por los tests automatizados del importador.
+
+**Validaciones tecnicas ejecutadas:**
+- `php artisan test`: OK, 679 passed, 3585 assertions.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: limpio antes de documentar.
+
+**Control de alcance:**
+- No se ejecuto ningun `--apply`.
+- No se ejecutaron purgas reales.
+- No se reimporto Excel.
+- No se borro stock.
+- No se borraron ubicaciones.
+- No se modificaron datos durante esta validacion.
+- No se tocaron `.env`, secretos, `.claude/`, `vendor/`, `node_modules/`, Bookings, Google Calendar, PDFs ni facturacion diaria.
+
+**Commit / push:** Pendiente de cierre documental.
+
+**Pendientes:**
+- La base local de casa no refleja la importacion real de 184 filas observada por el propietario; si se quiere auditar exactamente esos 184 registros por consola, debe ejecutarse la misma bateria en el entorno/base donde se hizo esa importacion.
+- No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
+
+---
