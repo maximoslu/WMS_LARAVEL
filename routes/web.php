@@ -180,10 +180,10 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.relocations.store');
     Route::get('/stock/partidas/{stockPallet}/editar', [StockController::class, 'edit'])
-        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.batches.edit');
     Route::put('/stock/partidas/{stockPallet}', [StockController::class, 'update'])
-        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.batches.update');
     Route::get('/stock/importar', [StockImportController::class, 'index'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
@@ -212,6 +212,9 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/ubicaciones/{location}/activar-desactivar', [LocationController::class, 'toggleActive'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('locations.toggle-active');
+    Route::delete('/ubicaciones/{location}', [LocationController::class, 'destroy'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('locations.destroy');
     Route::get('/palets', ModulePlaceholderController::class)
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->defaults('module', 'pallets')

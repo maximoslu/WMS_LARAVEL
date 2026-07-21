@@ -2,70 +2,80 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Location;
+use App\Models\Role;
 use App\Models\StockPallet;
+use App\Services\Locations\LocationIntegrityService;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateStockPalletRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->canAccessRole(Role::ALMACEN) === true;
     }
 
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'lot' => $this->normalizeNullableText($this->input('lot')),
             'location_id' => $this->normalizeNullableInteger($this->input('location_id')),
-            'location_text' => $this->normalizeNullableText($this->input('location_text')),
-            'received_at' => $this->normalizeNullableText($this->input('received_at')),
-            'blocked_reason' => $this->normalizeNullableText($this->input('blocked_reason')),
-            'status' => (string) $this->input('status', StockPallet::STATUS_AVAILABLE),
         ]);
     }
 
     public function rules(): array
     {
         return [
-            'lot' => ['nullable', 'string', 'max:255'],
-            'quantity_units' => ['required', 'integer', 'min:0'],
-            'units_per_pallet' => ['required', 'integer', 'min:0'],
             'location_id' => ['nullable', 'exists:locations,id'],
-            'location_text' => ['nullable', 'string', 'max:255'],
-            'received_at' => ['nullable', 'date'],
-            'status' => ['required', Rule::in(StockPallet::statuses())],
-            'blocked_reason' => ['nullable', 'string', 'max:255'],
         ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function payload(): array
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $locationId = $this->locationId();
+
+                if ($locationId === null) {
+                    return;
+                }
+
+                $stockPallet = $this->route('stockPallet');
+                $location = Location::query()->with('warehouse')->find($locationId);
+
+                if (! $stockPallet instanceof StockPallet || ! $location instanceof Location) {
+                    return;
+                }
+
+                if (! $location->active || ! $location->warehouse?->active) {
+                    $validator->errors()->add('location_id', 'Selecciona una ubicacion activa.');
+
+                    return;
+                }
+
+                if ($location->warehouse->client_id !== null && $location->warehouse->client_id !== $stockPallet->client_id) {
+                    $validator->errors()->add('location_id', 'La ubicacion seleccionada no pertenece a este cliente.');
+
+                    return;
+                }
+
+                $canonicalIds = app(LocationIntegrityService::class)
+                    ->canonicalActiveLocationsForStock($stockPallet)
+                    ->pluck('id')
+                    ->all();
+
+                if (! in_array($location->id, $canonicalIds, true)) {
+                    $validator->errors()->add('location_id', 'Selecciona la ubicacion canonica activa.');
+                }
+            },
+        ];
+    }
+
+    public function locationId(): ?int
     {
         $locationId = $this->integer('location_id');
-        $status = (string) $this->string('status');
-        $payload = [
-            'lot' => $this->input('lot'),
-            'quantity_units' => $this->integer('quantity_units'),
-            'units_per_pallet' => $this->integer('units_per_pallet'),
-            'location_id' => $locationId > 0 ? $locationId : null,
-            'location_text' => $locationId > 0 ? null : $this->input('location_text'),
-            'received_at' => $this->input('received_at'),
-            'status' => $status,
-            'blocked_reason' => $status === StockPallet::STATUS_BLOCKED
-                ? $this->input('blocked_reason')
-                : null,
-            'full_pallets' => 0,
-            'peaks_count' => 0,
-        ];
 
-        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-            $payload['peak_'.$peakNumber] = 0;
-        }
-
-        return $payload;
+        return $locationId > 0 ? $locationId : null;
     }
 
     private function normalizeNullableInteger(mixed $value): ?int
@@ -75,12 +85,5 @@ class UpdateStockPalletRequest extends FormRequest
         }
 
         return is_numeric($value) ? (int) $value : null;
-    }
-
-    private function normalizeNullableText(mixed $value): ?string
-    {
-        $normalized = trim((string) $value);
-
-        return $normalized === '' ? null : $normalized;
     }
 }

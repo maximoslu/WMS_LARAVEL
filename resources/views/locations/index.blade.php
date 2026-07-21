@@ -11,6 +11,8 @@
         $visibleActiveLocations = $visibleLocations->where('active', true)->count();
         $visibleInactiveLocations = $locations->count() - $visibleActiveLocations;
         $visibleWarehouses = $visibleLocations->pluck('warehouse_id')->unique()->count();
+        $selectedWarehouse = $filters['warehouse_id'] ? $warehouses->firstWhere('id', $filters['warehouse_id']) : null;
+        $canDeleteLocations = auth()->user()->canAccessRole(\App\Models\Role::SUPERADMIN);
         $breadcrumbs = [
             ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
             ['label' => 'Stock'],
@@ -96,7 +98,9 @@
 
             <div class="wms-filter-summary" aria-label="Filtros aplicados">
                 @if ($filters['warehouse_id'])
-                    <span class="wms-filter-token">Almacen seleccionado</span>
+                    <span class="wms-filter-token">Mostrando ubicaciones de {{ $selectedWarehouse?->name ?? 'almacen seleccionado' }}</span>
+                @else
+                    <span class="wms-filter-token">Mostrando ubicaciones de todos los almacenes</span>
                 @endif
                 @if ($filters['search'])
                     <span class="wms-filter-token">Busqueda: {{ $filters['search'] }}</span>
@@ -172,6 +176,16 @@
                                                         <button type="submit" class="button-secondary compact-button btn-table">
                                                             {{ $location->active ? 'Desactivar' : 'Activar' }}
                                                         </button>
+                                                    </form>
+                                                @endif
+                                                @if ($canDeleteLocations)
+                                                    <form method="POST" action="{{ route('locations.destroy', $location) }}">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <input type="hidden" name="warehouse_id" value="{{ $filters['warehouse_id'] }}">
+                                                        <input type="hidden" name="search" value="{{ $filters['search'] }}">
+                                                        <input type="hidden" name="status" value="{{ $filters['status'] }}">
+                                                        <button type="submit" class="button-secondary compact-button btn-table">Eliminar</button>
                                                     </form>
                                                 @endif
                                             </div>

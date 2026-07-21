@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
+use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
 use Database\Seeders\ClientSeeder;
@@ -296,6 +298,7 @@ class WarehouseLocationManagementTest extends TestCase
             ->get(route('locations.index', ['warehouse_id' => $warehouse->id]))
             ->assertOk()
             ->assertSee('NAVE 38')
+            ->assertSee('Mostrando ubicaciones de NAVE 38')
             ->assertDontSee('value="'.$duplicateWarehouse->id.'"', false)
             ->getContent();
 
@@ -312,6 +315,82 @@ class WarehouseLocationManagementTest extends TestCase
             && $positions['11'] < $positions['A']
             && $positions['A'] < $positions['F']
         );
+    }
+
+    public function test_locations_index_explains_when_all_warehouses_are_visible(): void
+    {
+        $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create();
+        Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'A1',
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->get(route('locations.index'))
+            ->assertOk()
+            ->assertSee('Mostrando ubicaciones de todos los almacenes');
+    }
+
+    public function test_superadmin_can_delete_location_without_references(): void
+    {
+        $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create();
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'DEL-01',
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->delete(route('locations.destroy', $location))
+            ->assertRedirect(route('locations.index'));
+
+        $this->assertDatabaseMissing('locations', [
+            'id' => $location->id,
+        ]);
+    }
+
+    public function test_location_with_stock_references_cannot_be_deleted(): void
+    {
+        $this->seedBaseData();
+        $client = Client::factory()->create();
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+        ]);
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'KEEP-01',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->delete(route('locations.destroy', $location))
+            ->assertRedirect(route('locations.index'));
+
+        $this->assertDatabaseHas('locations', [
+            'id' => $location->id,
+        ]);
+    }
+
+    public function test_non_superadmin_cannot_delete_locations(): void
+    {
+        $this->seedBaseData();
+        $location = Location::factory()->create();
+
+        $this->actingAs($this->makeUserWithRole(Role::ADMINISTRACION))
+            ->delete(route('locations.destroy', $location))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('locations', [
+            'id' => $location->id,
+        ]);
     }
 
     private function seedBaseData(): void

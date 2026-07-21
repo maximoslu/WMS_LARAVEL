@@ -4378,3 +4378,46 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `fix: simplify booking approval flow and agenda duplicates`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+## 2026-07-21 - HOTFIX FUNCIONAL STOCK/UBICACIONES 2 - Reset seguro e importacion canonica
+
+**Contexto:** Equipo casa, ruta oficial `D:\dev\WMS_LARAVEL`, rama `main`. Se partio de `bb3d421` (`fix: simplify booking approval flow and agenda duplicates`), remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y `git pull --ff-only origin main` ya alineado.
+
+**Alcance realizado:**
+- Se reviso el modulo de stock/ubicaciones, importacion de stock y reubicacion.
+- Se anadio el comando `wms:stock:clear-locations` con `--dry-run` por defecto operativo y `--apply` explicito. Solo limpia `stock_pallets.location_id` y `stock_pallets.location_text`; no cambia cantidades, pallets, picos, unidades, lote, categoria, cliente ni articulo.
+- Se ejecuto dry-run local sin aplicar cambios: 6 partidas afectables, 2 con `location_id`, 6 con `location_text`; desglose visible por cliente/almacen. No se ejecuto `--apply`.
+- La pantalla directa de partida de stock pasa a ser solo "Editar ubicacion": roles `almacen`, `administracion` y `superadmin` pueden usarla; `cliente` sigue bloqueado. La validacion rechaza ubicaciones inactivas, incompatibles con el cliente o duplicadas no canonicas.
+- Los selects de ubicacion usan ubicaciones activas canonicas compatibles con el cliente y muestran etiquetas claras tipo `NAVE 38 - Calle 11`.
+- La importacion Edelvives reutiliza ubicaciones equivalentes `9`, `09`, `Calle 9` como una sola ubicacion canonica y normaliza el codigo del maestro cuando es seguro.
+- El listado de ubicaciones muestra claramente si esta filtrado por un almacen o por todos los almacenes.
+- Se anadio borrado de ubicaciones solo para `superadmin`, bloqueado si hay referencias en stock, entradas, articulos o movimientos; en esos casos se mantiene la opcion segura de desactivar.
+
+**Archivos modificados:**
+- `app/Console/Commands/ClearStockLocationsCommand.php`
+- `app/Http/Controllers/LocationController.php`
+- `app/Http/Controllers/StockController.php`
+- `app/Http/Requests/UpdateStockPalletRequest.php`
+- `app/Services/Locations/LocationIntegrityService.php`
+- `app/Services/Stock/StockExcelImportService.php`
+- `resources/views/locations/index.blade.php`
+- `resources/views/stock/edit.blade.php`
+- `resources/views/stock/index.blade.php`
+- `routes/web.php`
+- Tests feature de stock, reubicacion, importacion y ubicaciones.
+
+**Validaciones ejecutadas:**
+- `php artisan test tests\Feature\StockOverviewTest.php tests\Feature\StockRelocationTest.php tests\Feature\StockImportTest.php tests\Feature\WarehouseLocationManagementTest.php tests\Feature\ClearStockLocationsCommandTest.php` -> OK, 103 passed, 776 assertions.
+- `php artisan wms:stock:clear-locations --dry-run` -> OK, sin modificar datos.
+- `php -l` en comando/controlador/request/servicio tocados -> OK.
+- `php artisan test` -> OK, 665 passed, 3508 assertions.
+- `npm run build` -> OK.
+- `git diff --check` -> OK.
+- Diff completo revisado manualmente.
+
+**Commit / push:** Commit `fix: reset stock locations safely and canonicalize location options` creado en esta sesion. Push normal a `origin/main` pendiente en el momento de escribir esta entrada.
+
+**Pendientes:**
+- No se ha aplicado `wms:stock:clear-locations --apply`. Queda pendiente de orden explicita del responsable.
+- No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
+
+---

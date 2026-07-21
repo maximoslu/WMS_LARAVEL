@@ -877,7 +877,7 @@ class StockImportTest extends TestCase
         $this->assertSame('A', $secondStock->location_text);
     }
 
-    public function test_edelvives_import_reuses_legacy_zero_padded_location_without_creating_duplicate(): void
+    public function test_edelvives_import_reuses_legacy_zero_padded_location_as_canonical_without_creating_duplicate(): void
     {
         [, $edelvives] = $this->seedBaseData();
         Storage::fake('local');
@@ -917,9 +917,68 @@ class StockImportTest extends TestCase
         $this->assertDatabaseHas('stock_pallets', [
             'client_id' => $edelvives->id,
             'location_id' => $legacyLocationId,
-            'location_text' => '06',
+            'location_text' => '6',
             'quantity_units' => 1000,
         ]);
+        $this->assertDatabaseHas('locations', [
+            'id' => $legacyLocationId,
+            'code' => '6',
+        ]);
+    }
+
+    public function test_edelvives_import_canonicalizes_equivalent_numeric_locations(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $legacyLocationId = DB::table('locations')->insertGetId([
+            'warehouse_id' => $warehouse->id,
+            'code' => '09',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                $this->makeRealEdelvivesDataRow('9', 80, 'ED-LOC-9-A', 'Ubicacion 9 A', 1000, 1000, 1, 0, [], 1),
+                $this->makeRealEdelvivesDataRow('09', 80, 'ED-LOC-9-B', 'Ubicacion 9 B', 1000, 1000, 1, 0, [], 1),
+                $this->makeRealEdelvivesDataRow('Calle 9', 80, 'ED-LOC-9-C', 'Ubicacion 9 C', 1000, 1000, 1, 0, [], 1),
+            ]),
+        ]);
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $file,
+        ])->assertOk();
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+
+        $this->assertSame(1, Location::query()
+            ->where('warehouse_id', $warehouse->id)
+            ->whereIn('code', ['9', '09', 'Calle 9'])
+            ->count());
+        $this->assertSame(['9'], StockPallet::query()
+            ->where('client_id', $edelvives->id)
+            ->whereIn('item_id', Item::query()->where('client_id', $edelvives->id)->whereIn('sku', ['ED-LOC-9-A', 'ED-LOC-9-B', 'ED-LOC-9-C'])->pluck('id'))
+            ->pluck('location_text')
+            ->unique()
+            ->values()
+            ->all());
+        $this->assertSame([$legacyLocationId], StockPallet::query()
+            ->where('client_id', $edelvives->id)
+            ->whereIn('item_id', Item::query()->where('client_id', $edelvives->id)->whereIn('sku', ['ED-LOC-9-A', 'ED-LOC-9-B', 'ED-LOC-9-C'])->pluck('id'))
+            ->pluck('location_id')
+            ->unique()
+            ->values()
+            ->all());
     }
 
     public function test_edelvives_import_reuses_existing_sku_per_client_without_mixing_clients(): void

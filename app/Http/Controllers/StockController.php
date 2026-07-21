@@ -10,8 +10,8 @@ use App\Models\Role;
 use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
 use App\Services\Inventory\InventoryMovementService;
+use App\Services\Locations\LocationIntegrityService;
 use App\Services\Stock\StockExportService;
-use App\Support\Locations\LocationCode;
 use App\Support\Stock\StockOverviewBuilder;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +27,7 @@ class StockController extends Controller
         private readonly StockExportService $exportService,
         private readonly InventoryMovementService $movements,
         private readonly AuditLogService $audit,
+        private readonly LocationIntegrityService $locations,
     ) {}
 
     public function index(Request $request): View
@@ -101,56 +102,53 @@ class StockController extends Controller
 
     public function edit(Request $request, StockPallet $stockPallet): View
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403);
+        abort_unless($request->user()?->canAccessRole(Role::ALMACEN), 403);
 
         $stockPallet->loadMissing(['client', 'item', 'location.warehouse']);
 
         return view('stock.edit', [
             'stockPallet' => $stockPallet,
-            'locations' => LocationCode::applyNaturalOrder(
-                Location::query()
-                    ->where('active', true)
-                    ->with('warehouse')
-            )->get(),
+            'locations' => $this->locations->canonicalActiveLocationsForStock($stockPallet),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
 
     public function update(UpdateStockPalletRequest $request, StockPallet $stockPallet): RedirectResponse
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403);
+        abort_unless($request->user()?->canAccessRole(Role::ALMACEN), 403);
 
         DB::transaction(function () use ($request, $stockPallet): void {
             $correlationId = $this->audit->correlationId();
+            $stockPallet->loadMissing(['client', 'item', 'location.warehouse']);
             $before = $this->movements->snapshot($stockPallet);
-            $oldValues = $stockPallet->only([
-                'quantity_units', 'units_per_pallet', 'location_id', 'status', 'stock_category',
-                'blocked_reason', 'active', 'warehouse_pallets',
+            $oldValues = $stockPallet->only(['location_id', 'location_text']);
+            $location = $request->locationId() !== null
+                ? Location::query()->findOrFail($request->locationId())
+                : null;
+
+            DB::table('stock_pallets')->where('id', $stockPallet->id)->update([
+                'location_id' => $location?->id,
+                'location_text' => $location?->code,
+                'updated_at' => now(),
             ]);
-            $stockPallet->update($request->payload());
+
             $fresh = $stockPallet->fresh(['client', 'item', 'location.warehouse']);
             $after = $this->movements->snapshot($fresh);
-            $movementType = match (true) {
-                $before['location_id'] !== $after['location_id'] => InventoryMovement::TRANSFER,
-                $before['status'] !== StockPallet::STATUS_BLOCKED && $after['status'] === StockPallet::STATUS_BLOCKED => InventoryMovement::BLOCK,
-                $before['status'] === StockPallet::STATUS_BLOCKED && $after['status'] !== StockPallet::STATUS_BLOCKED => InventoryMovement::UNBLOCK,
-                default => InventoryMovement::MANUAL_ADJUSTMENT,
-            };
 
             $this->movements->record(
                 before: $before,
                 after: $after,
-                movementType: $movementType,
+                movementType: InventoryMovement::TRANSFER,
                 idempotencyKey: "stock-manual:{$stockPallet->id}:{$correlationId}",
                 correlationId: $correlationId,
                 source: $fresh,
                 user: $request->user(),
-                metadata: ['reason' => 'Edicion manual autorizada de partida de stock.'],
+                metadata: ['reason' => 'Edicion directa de ubicacion de partida de stock.'],
             );
             $this->audit->record(
-                event: 'stock_batch_updated',
+                event: 'stock_batch_location_updated',
                 module: 'stock',
-                description: 'Partida de stock actualizada manualmente.',
+                description: 'Ubicacion de partida de stock actualizada manualmente.',
                 auditable: $fresh,
                 user: $request->user(),
                 clientId: $fresh->client_id,
@@ -163,6 +161,6 @@ class StockController extends Controller
 
         return redirect()
             ->route('stock.index', ['client_id' => $stockPallet->client_id])
-            ->with('status', 'Partida de stock actualizada correctamente.');
+            ->with('status', 'Ubicacion de la partida actualizada correctamente.');
     }
 }

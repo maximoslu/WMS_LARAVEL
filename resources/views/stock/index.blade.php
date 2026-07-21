@@ -442,9 +442,9 @@
                                                 @foreach ($row['notes'] as $note)
                                                     <p class="stock-detail-note">Nota: {{ $note }}</p>
                                                 @endforeach
-                                                @if (auth()->user()?->isSuperAdmin() && $row['row_type'] === 'stock' && $row['item_id'])
+                                                @if (auth()->user()->canAccessRole(\App\Models\Role::ALMACEN) && $row['row_type'] === 'stock' && $row['item_id'])
                                                     <div class="action-buttons">
-                                                        <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Ver detalle</a>
+                                                        <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar ubicacion</a>
                                                     </div>
                                                 @endif
                                             </article>
@@ -586,9 +586,9 @@
                         <p class="users-table-email">Bloqueo: {{ $row['blocked_reason'] }}</p>
                     @endif
 
-                    @if (auth()->user()?->isSuperAdmin() && $row['row_type'] === 'stock' && $row['item_id'])
+                    @if (auth()->user()->canAccessRole(\App\Models\Role::ALMACEN) && $row['row_type'] === 'stock' && $row['item_id'])
                         <div class="item-form-actions action-buttons">
-                            <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Ver detalle</a>
+                            <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar ubicacion</a>
                         </div>
                     @endif
                 </details>

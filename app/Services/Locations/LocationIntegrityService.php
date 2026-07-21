@@ -4,6 +4,7 @@ namespace App\Services\Locations;
 
 use App\Models\Client;
 use App\Models\Location;
+use App\Models\StockPallet;
 use App\Models\Warehouse;
 use App\Support\Locations\LocationCode;
 use Illuminate\Database\Eloquent\Builder;
@@ -116,6 +117,26 @@ class LocationIntegrityService
                 ...LocationCode::naturalSortKey($location->code),
             ])
             ->values();
+    }
+
+    /** @return Collection<int, Location> */
+    public function canonicalActiveLocationsForStock(StockPallet $stockPallet): Collection
+    {
+        return $this->canonicalActiveLocations(
+            Location::query()
+                ->with('warehouse')
+                ->where('active', true)
+                ->whereHas('warehouse', function (Builder $query) use ($stockPallet): void {
+                    $query
+                        ->where('active', true)
+                        ->where(function (Builder $warehouseQuery) use ($stockPallet): void {
+                            $warehouseQuery
+                                ->whereNull('client_id')
+                                ->orWhere('client_id', $stockPallet->client_id);
+                        });
+                })
+                ->get()
+        );
     }
 
     /** @return list<string> */

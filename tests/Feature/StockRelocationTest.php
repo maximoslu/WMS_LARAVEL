@@ -175,7 +175,7 @@ class StockRelocationTest extends TestCase
     public function test_multiple_batches_require_selecting_a_specific_stock_batch(): void
     {
         [$client, $item, $firstStock] = $this->stockFixture(['lot' => 'LOTE-A']);
-        $secondLocation = $this->locationForClient($client, 'SRC-02');
+        $secondLocation = $this->locationForClient($client, 'SRC-EXTRA');
         $destination = $this->locationForClient($client, 'DEST-02');
         StockPallet::factory()->create([
             'client_id' => $client->id,

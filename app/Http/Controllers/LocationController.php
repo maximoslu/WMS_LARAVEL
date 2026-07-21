@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreLocationRequest;
 use App\Http\Requests\UpdateLocationRequest;
 use App\Models\Location;
+use App\Models\Role;
 use App\Models\Warehouse;
+use App\Services\Locations\LocationIntegrityService;
 use App\Services\Warehouses\WarehouseIntegrityService;
 use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
@@ -16,6 +18,10 @@ use Illuminate\View\View;
 
 class LocationController extends Controller
 {
+    public function __construct(
+        private readonly LocationIntegrityService $locations,
+    ) {}
+
     public function index(Request $request): View
     {
         $warehouseFilter = $request->integer('warehouse_id');
@@ -101,6 +107,25 @@ class LocationController extends Controller
             ->with('status', $location->active
                 ? 'Ubicacion activada correctamente.'
                 : 'Ubicacion desactivada correctamente.');
+    }
+
+    public function destroy(Request $request, Location $location): RedirectResponse
+    {
+        abort_unless($request->user()?->canAccessRole(Role::SUPERADMIN), 403);
+
+        $references = $this->locations->referenceCounts($location->id);
+
+        if (array_sum($references) > 0) {
+            return redirect()
+                ->route('locations.index', $request->only(['warehouse_id', 'search', 'status']))
+                ->with('status', 'No se puede borrar esta ubicacion porque tiene stock o movimientos asociados. Puedes desactivarla.');
+        }
+
+        $location->delete();
+
+        return redirect()
+            ->route('locations.index', $request->only(['warehouse_id', 'search', 'status']))
+            ->with('status', 'Ubicacion eliminada correctamente.');
     }
 
     /**

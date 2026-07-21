@@ -14,6 +14,7 @@ use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class StockOverviewTest extends TestCase
@@ -519,7 +520,7 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('SKU-CON-STOCK');
     }
 
-    public function test_superadmin_sees_edit_batch_action_and_can_open_edit_screen(): void
+    public function test_internal_roles_see_edit_location_action_and_can_open_edit_screen(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -539,70 +540,22 @@ class StockOverviewTest extends TestCase
             'full_pallets' => 1,
         ]);
 
-        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        foreach ([Role::ALMACEN, Role::ADMINISTRACION, Role::SUPERADMIN] as $role) {
+            $user = $this->makeUserWithRole($role);
 
-        $this->actingAs($user)
-            ->get(route('stock.index'))
-            ->assertOk()
-            ->assertSee(route('stock.batches.edit', $stockPallet));
+            $this->actingAs($user)
+                ->get(route('stock.index'))
+                ->assertOk()
+                ->assertSee(route('stock.batches.edit', $stockPallet))
+                ->assertSee('Editar ubicacion');
 
-        $this->actingAs($user)
-            ->get(route('stock.batches.edit', $stockPallet))
-            ->assertOk()
-            ->assertSee('Editar partida de stock')
-            ->assertSee('SKU-EDIT-STOCK');
-    }
-
-    public function test_administracion_does_not_see_edit_batch_action_and_cannot_access_edit_route(): void
-    {
-        [$client] = $this->seedBaseData();
-
-        $item = Item::factory()->create([
-            'client_id' => $client->id,
-            'sku' => 'SKU-NO-EDIT-ADMIN',
-        ]);
-
-        $stockPallet = StockPallet::factory()->create([
-            'client_id' => $client->id,
-            'item_id' => $item->id,
-        ]);
-
-        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
-
-        $this->actingAs($user)
-            ->get(route('stock.index'))
-            ->assertOk()
-            ->assertDontSee(route('stock.batches.edit', $stockPallet));
-
-        $this->actingAs($user)
-            ->get(route('stock.batches.edit', $stockPallet))
-            ->assertForbidden();
-    }
-
-    public function test_almacen_does_not_see_edit_batch_action_and_cannot_access_edit_route(): void
-    {
-        [$client] = $this->seedBaseData();
-
-        $item = Item::factory()->create([
-            'client_id' => $client->id,
-            'sku' => 'SKU-NO-EDIT-ALM',
-        ]);
-
-        $stockPallet = StockPallet::factory()->create([
-            'client_id' => $client->id,
-            'item_id' => $item->id,
-        ]);
-
-        $user = $this->makeUserWithRole(Role::ALMACEN);
-
-        $this->actingAs($user)
-            ->get(route('stock.index'))
-            ->assertOk()
-            ->assertDontSee(route('stock.batches.edit', $stockPallet));
-
-        $this->actingAs($user)
-            ->get(route('stock.batches.edit', $stockPallet))
-            ->assertForbidden();
+            $this->actingAs($user)
+                ->get(route('stock.batches.edit', $stockPallet))
+                ->assertOk()
+                ->assertSee('Editar ubicacion de partida')
+                ->assertSee('SKU-EDIT-STOCK')
+                ->assertSee('Esta pantalla solo cambia la ubicacion fisica.');
+        }
     }
 
     public function test_cliente_cannot_access_edit_stock_batch_route(): void
@@ -626,11 +579,95 @@ class StockOverviewTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_superadmin_can_update_stock_batch_and_keep_operational_stock_without_pallet_breakdown(): void
+    public function test_stock_batch_edit_location_select_hides_duplicate_locations(): void
+    {
+        [$client] = $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $canonicalLocation = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '11',
+            'active' => true,
+        ]);
+        $duplicateLocationId = DB::table('locations')->insertGetId([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'Calle 11',
+            'name' => 'Duplicada historica',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-LOC-DUP',
+        ]);
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+        ]);
+
+        $response = $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->get(route('stock.batches.edit', $stockPallet))
+            ->assertOk()
+            ->assertSee('value="'.$canonicalLocation->id.'"', false)
+            ->assertDontSee('value="'.$duplicateLocationId.'"', false);
+
+        $this->assertSame(1, substr_count($response->getContent(), 'NAVE 38 - Calle 11'));
+    }
+
+    public function test_stock_batch_update_rejects_duplicate_non_canonical_location(): void
+    {
+        [$client] = $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '14',
+            'active' => true,
+        ]);
+        $duplicateLocationId = DB::table('locations')->insertGetId([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'Calle 14',
+            'name' => 'Duplicada historica',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-LOC-POST',
+        ]);
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->from(route('stock.batches.edit', $stockPallet))
+            ->put(route('stock.batches.update', $stockPallet), [
+                'location_id' => $duplicateLocationId,
+            ])
+            ->assertRedirect(route('stock.batches.edit', $stockPallet))
+            ->assertSessionHasErrors('location_id');
+
+        $this->assertNull($stockPallet->fresh()->location_id);
+    }
+
+    public function test_internal_user_can_update_only_stock_batch_location(): void
     {
         [$client] = $this->seedBaseData();
 
-        $warehouse = Warehouse::factory()->create();
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => null,
+        ]);
         $location = Location::factory()->create([
             'warehouse_id' => $warehouse->id,
             'code' => 'C1-07',
@@ -650,9 +687,12 @@ class StockOverviewTest extends TestCase
             'quantity_units' => 1600,
             'units_per_pallet' => 800,
             'full_pallets' => 2,
+            'peaks_count' => 0,
+            'peak_1' => 0,
+            'status' => StockPallet::STATUS_AVAILABLE,
         ]);
 
-        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
 
         $this->actingAs($user)
             ->put(route('stock.batches.update', $stockPallet), [
@@ -662,18 +702,19 @@ class StockOverviewTest extends TestCase
                 'location_id' => $location->id,
                 'location_text' => '',
                 'received_at' => '2026-06-28',
-                'status' => StockPallet::STATUS_AVAILABLE,
+                'status' => StockPallet::STATUS_BLOCKED,
                 'blocked_reason' => '',
             ])
             ->assertRedirect(route('stock.index', ['client_id' => $client->id]));
 
         $stockPallet->refresh();
 
-        $this->assertSame('LOT-NEW', $stockPallet->lot);
-        $this->assertSame(1100, $stockPallet->quantity_units);
-        $this->assertSame(0, $stockPallet->units_per_pallet);
-        $this->assertSame(0, $stockPallet->full_pallets);
+        $this->assertSame('LOT-OLD', $stockPallet->lot);
+        $this->assertSame(1600, $stockPallet->quantity_units);
+        $this->assertSame(800, $stockPallet->units_per_pallet);
+        $this->assertSame(2, $stockPallet->full_pallets);
         $this->assertSame(0, $stockPallet->peaks_count);
+        $this->assertSame(StockPallet::STATUS_AVAILABLE, $stockPallet->status);
         $this->assertSame($location->id, $stockPallet->location_id);
         $this->assertSame('C1-07', $stockPallet->location_text);
     }

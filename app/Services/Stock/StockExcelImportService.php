@@ -2108,7 +2108,7 @@ class StockExcelImportService
             ->get()
             ->toBase()
             ->groupBy(fn (Location $location): string => LocationCode::normalize($location->code))
-            ->map(fn (Collection $group): Location => $group->first());
+            ->map(fn (Collection $group): Location => $this->canonicalImportLocation($group));
 
         foreach ($codes as $code) {
             $location = $locations->get($code);
@@ -2124,12 +2124,14 @@ class StockExcelImportService
                 $locations->put($code, $location);
             } else {
                 DB::table('locations')->where('id', $location->id)->update([
+                    'code' => $code,
                     'name' => 'Calle '.$code,
                     'aisle' => $code,
                     'active' => true,
                     'updated_at' => now(),
                 ]);
                 $location->forceFill([
+                    'code' => $code,
                     'name' => 'Calle '.$code,
                     'aisle' => $code,
                     'active' => true,
@@ -2140,6 +2142,32 @@ class StockExcelImportService
         return $locations
             ->filter(fn (Location $location, string $code): bool => $codes->contains($code))
             ->all();
+    }
+
+    /** @param Collection<int, Location> $group */
+    private function canonicalImportLocation(Collection $group): Location
+    {
+        $normalized = LocationCode::normalize($group->first()->code);
+
+        return $group
+            ->sortBy(function (Location $location) use ($normalized): array {
+                $stockReferences = DB::table('stock_pallets')->where('location_id', $location->id)->count();
+                $receiptReferences = DB::table('goods_receipt_lines')->where('location_id', $location->id)->count();
+                $itemReferences = DB::table('items')->where('default_location_id', $location->id)->count();
+                $movementReferences = DB::table('inventory_movements')
+                    ->where('location_id', $location->id)
+                    ->orWhere('from_location_id', $location->id)
+                    ->orWhere('to_location_id', $location->id)
+                    ->count();
+
+                return [
+                    $location->active ? 0 : 1,
+                    $location->code === $normalized ? 0 : 1,
+                    -($stockReferences + $receiptReferences + $itemReferences + $movementReferences),
+                    $location->id,
+                ];
+            })
+            ->first();
     }
 
     private function normalizeSku(string $value): string
