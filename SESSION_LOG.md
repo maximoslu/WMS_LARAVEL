@@ -4,6 +4,54 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-21 - HOTFIX FUNCIONAL UBICACIONES 3 - Purga controlada y creacion masiva
+
+**Contexto:** Equipo casa, ruta oficial `D:\dev\WMS_LARAVEL`, rama `main`. Se partio de `f9d4cbe` (`docs: update session log after stock location push`), remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y `git pull --ff-only origin main` alineado.
+
+**Alcance realizado:**
+- Se reviso el modulo de ubicaciones, stock, importacion, reubicacion, entradas, movimientos historicos y vistas relacionadas.
+- Se amplio la normalizacion de codigos para admitir rangos numericos grandes como `40000`.
+- El maestro de ubicaciones admite tipos operativos: `Calle`, `Pasillo`, `Estanteria`, `Muelle`, `Zona` y `Libre`.
+- Se anadio creacion masiva de rangos desde UI para roles internos desde `almacen`, con confirmacion obligatoria en rangos grandes.
+- Se anadio comando `wms:locations:create-range` con `--dry-run` por defecto y `--apply` explicito.
+- Se anadio purga controlada de catalogo de ubicaciones para `superadmin`, con confirmacion textual exacta.
+- Se anadio comando `wms:locations:purge` con `--dry-run` por defecto y `--apply` explicito.
+- La purga no borra stock, articulos, clientes, entradas, salidas, albaranes ni documentos.
+- La purga limpia referencias de ubicacion en `stock_pallets`, `items.default_location_id` y `goods_receipt_lines.location_id`; mantiene cantidades, pallets, picos, unidades, lote, categoria, cliente y articulo.
+- Los movimientos historicos de `inventory_movements` quedan intactos y se informan en el dry-run/resultado.
+- El listado `/ubicaciones` muestra solo ubicaciones de almacenes activos y aclara "todos los almacenes activos".
+- Las ubicaciones de almacenes inactivos quedan fuera del listado operativo.
+- Las etiquetas conservan el patron operativo `NAVE 38 - Calle X` para calles numericas/letras A-F y soportan ubicaciones libres/prefijadas.
+
+**Dry-runs locales ejecutados:**
+- `php artisan wms:locations:purge --warehouse=38 --dry-run` -> no modifica nada; en la base local de casa no existe almacen `38`.
+- `php artisan wms:locations:create-range --warehouse=38 --type=Calle --from=0 --to=20 --dry-run` -> no modifica nada; en la base local de casa no existe almacen `38`.
+- `php artisan wms:locations:purge --dry-run` -> OK, sin modificar datos: 4 ubicaciones, 2 partidas con `location_id`, 6 textos de ubicacion, 0 articulos, 0 lineas de entrada, 0 movimientos historicos; almacen local `MAX-01 / MAXIMO PRINCIPAL`.
+- `php artisan wms:locations:create-range --warehouse=MAX-01 --type=Calle --from=0 --to=20 --dry-run` -> OK, sin modificar datos: 21 creadas previstas, 0 existentes, 0 errores.
+
+**Validaciones ejecutadas antes del commit funcional:**
+- `php -l` en servicios, comandos y FormRequests nuevos -> OK.
+- Tests focalizados: `php artisan test tests\Feature\WarehouseLocationManagementTest.php tests\Feature\CreateLocationRangeCommandTest.php tests\Feature\PurgeLocationsCommandTest.php` -> OK, 30 passed, 144 assertions.
+- Regresiones revisadas: `php artisan test tests\Feature\AjaxSearchTest.php`, `php artisan test tests\Feature\StockRelocationTest.php`, `php artisan test tests\Feature\GoodsDispatchManagementTest.php --filter=test_internal_preparation_shows_destination_and_all_real_picking_locations` -> OK.
+- Suite completa: `php artisan test` -> OK, 679 passed, 3585 assertions.
+- Build: `npm run build` -> OK (`vite 7.3.5`, 55 modulos transformados).
+
+**Control de alcance:**
+- No se crearon migraciones.
+- No se uso `migrate:fresh`.
+- No se ejecuto ninguna purga real ni ningun `--apply` fuera de tests.
+- No se borraron datos locales.
+- No se modificaron cantidades, pallets, picos, unidades, lote, categoria, cliente ni articulo.
+- No se tocaron `.env`, secretos, `.claude/`, `vendor/`, `node_modules/`, Bookings, Google Calendar, facturacion diaria ni PDFs.
+
+**Commit / push:** Pendiente de crear al cierre de esta entrada.
+
+**Pendientes:**
+- No aplicar `wms:locations:purge --apply` ni creacion masiva real sin orden explicita del responsable.
+- No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
+
+---
+
 ## 2026-07-02 — Auditoría técnica integral (solo lectura) + definición de protocolo de trabajo
 
 **Contexto:** Primera sesión de trabajo con Claude Code en este proyecto. Se solicitó actuar como auditor técnico senior sin tocar código, para entender el estado real del proyecto antes de programar nada.

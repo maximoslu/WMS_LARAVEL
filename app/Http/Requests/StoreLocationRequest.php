@@ -4,7 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Location;
 use App\Models\Role;
-use App\Support\Locations\LocationCode;
+use App\Services\Locations\LocationCatalogService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -17,8 +17,12 @@ class StoreLocationRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $catalog = app(LocationCatalogService::class);
+        $type = $catalog->normalizeType($this->input('type'));
+
         $this->merge([
-            'code' => LocationCode::normalize($this->input('code')),
+            'type' => $type,
+            'code' => $catalog->normalizeCode($type, $this->input('code')),
             'name' => $this->normalizeNullableText($this->input('name')),
             'zone' => $this->normalizeNullableText($this->input('zone')),
             'aisle' => $this->normalizeNullableText($this->input('aisle')),
@@ -32,6 +36,7 @@ class StoreLocationRequest extends FormRequest
     {
         return [
             'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'type' => ['required', 'string'],
             'code' => ['required', 'string', 'max:80'],
             'name' => ['nullable', 'string', 'max:255'],
             'zone' => ['nullable', 'string', 'max:50'],
@@ -56,7 +61,7 @@ class StoreLocationRequest extends FormRequest
                 ->exists();
 
             if ($exists) {
-                $validator->errors()->add('code', 'Ya existe una ubicacion con el mismo codigo en este almacen.');
+                $validator->errors()->add('code', 'La ubicacion ya existe en este almacen.');
             }
         });
     }

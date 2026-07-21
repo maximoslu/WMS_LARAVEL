@@ -203,6 +203,12 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/ubicaciones', [LocationController::class, 'store'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.store');
+    Route::post('/ubicaciones/rango', [LocationController::class, 'storeRange'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('locations.range.store');
+    Route::post('/ubicaciones/purgar', [LocationController::class, 'purge'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('locations.purge');
     Route::get('/ubicaciones/{location}/editar', [LocationController::class, 'edit'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('locations.edit');

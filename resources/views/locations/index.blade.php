@@ -13,6 +13,7 @@
         $visibleWarehouses = $visibleLocations->pluck('warehouse_id')->unique()->count();
         $selectedWarehouse = $filters['warehouse_id'] ? $warehouses->firstWhere('id', $filters['warehouse_id']) : null;
         $canDeleteLocations = auth()->user()->canAccessRole(\App\Models\Role::SUPERADMIN);
+        $canPurgeLocations = auth()->user()->canAccessRole(\App\Models\Role::SUPERADMIN);
         $breadcrumbs = [
             ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
             ['label' => 'Stock'],
@@ -100,7 +101,7 @@
                 @if ($filters['warehouse_id'])
                     <span class="wms-filter-token">Mostrando ubicaciones de {{ $selectedWarehouse?->name ?? 'almacen seleccionado' }}</span>
                 @else
-                    <span class="wms-filter-token">Mostrando ubicaciones de todos los almacenes</span>
+                    <span class="wms-filter-token">Mostrando ubicaciones de todos los almacenes activos</span>
                 @endif
                 @if ($filters['search'])
                     <span class="wms-filter-token">Busqueda: {{ $filters['search'] }}</span>
@@ -112,6 +113,128 @@
                 } }}</span>
             </div>
         </section>
+
+        @if ($canManageLocations)
+            <section class="surface-card compact-card wms-location-tools">
+                <div class="wms-section-head">
+                    <div>
+                        <strong>Crear rango de ubicaciones</strong>
+                        <p>Crea calles o ubicaciones con prefijo sin duplicar las existentes.</p>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ route('locations.range.store') }}" class="stock-filters compact-filters filters-compact wms-filter-grid wms-stock-filter-grid">
+                    @csrf
+                    <label class="auth-field">
+                        <span>Almacen</span>
+                        <select name="warehouse_id" class="auth-input" required>
+                            <option value="">Selecciona almacen</option>
+                            @foreach ($warehouses as $warehouse)
+                                <option value="{{ $warehouse->id }}" @selected((string) old('warehouse_id', $filters['warehouse_id']) === (string) $warehouse->id)>
+                                    {{ $warehouse->code }} / {{ $warehouse->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('warehouse_id')
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </label>
+
+                    <label class="auth-field">
+                        <span>Tipo</span>
+                        <select name="type" class="auth-input" required>
+                            @foreach ($locationTypes as $typeValue => $typeLabel)
+                                <option value="{{ $typeValue }}" @selected(old('type', 'calle') === $typeValue)>{{ $typeLabel }}</option>
+                            @endforeach
+                        </select>
+                        @error('type')
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </label>
+
+                    <label class="auth-field">
+                        <span>Desde</span>
+                        <input type="number" name="from" value="{{ old('from') }}" min="0" class="auth-input" required>
+                        @error('from')
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </label>
+
+                    <label class="auth-field">
+                        <span>Hasta</span>
+                        <input type="number" name="to" value="{{ old('to') }}" min="0" class="auth-input" required>
+                        @error('to')
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </label>
+
+                    <label class="auth-field item-form-field--full">
+                        <span>Confirmacion para rangos grandes</span>
+                        <input type="text" name="range_confirmation" value="{{ old('range_confirmation') }}" class="auth-input" placeholder="CREAR RANGO o CREAR RANGO 40001">
+                        <small class="helper-text">Mas de 1000 ubicaciones requiere CREAR RANGO. Mas de 10000 requiere CREAR RANGO seguido del numero total.</small>
+                        @error('range_confirmation')
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </label>
+
+                    <div class="stock-filter-actions action-buttons page-actions-compact wms-filter-actions">
+                        <button type="submit" class="button-primary compact-button btn-compact">Crear rango</button>
+                    </div>
+                </form>
+            </section>
+        @endif
+
+        @if ($canPurgeLocations)
+            <section class="surface-card compact-card wms-danger-zone">
+                <div class="wms-section-head">
+                    <div>
+                        <strong>Zona peligrosa</strong>
+                        <p>No borra stock, articulos, clientes, entradas, salidas ni documentos. Deja el stock sin ubicacion y elimina el catalogo de ubicaciones seleccionado.</p>
+                    </div>
+                </div>
+
+                <div class="wms-danger-zone-grid">
+                    <form method="POST" action="{{ route('locations.purge') }}" class="wms-danger-zone-action">
+                        @csrf
+                        <input type="hidden" name="scope" value="warehouse">
+                        <label class="auth-field">
+                            <span>Almacen</span>
+                            <select name="warehouse_id" class="auth-input" required>
+                                <option value="">Selecciona almacen</option>
+                                @foreach ($warehouses as $warehouse)
+                                    <option value="{{ $warehouse->id }}" @selected((string) old('warehouse_id', $filters['warehouse_id']) === (string) $warehouse->id)>
+                                        {{ $warehouse->code }} / {{ $warehouse->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <label class="auth-field">
+                            <span>Confirmacion exacta</span>
+                            <input type="text" name="confirmation" class="auth-input" placeholder="ELIMINAR UBICACIONES 38" required>
+                            @error('confirmation')
+                                <small class="form-error">{{ $message }}</small>
+                            @enderror
+                        </label>
+                        <p class="helper-text">Esta accion no se puede deshacer salvo recreando ubicaciones o importando de nuevo.</p>
+                        <button type="submit" class="button-secondary compact-button btn-compact">Eliminar ubicaciones del almacen seleccionado</button>
+                    </form>
+
+                    <form method="POST" action="{{ route('locations.purge') }}" class="wms-danger-zone-action">
+                        @csrf
+                        <input type="hidden" name="scope" value="all">
+                        <label class="auth-field">
+                            <span>Confirmacion exacta</span>
+                            <input type="text" name="confirmation" class="auth-input" placeholder="ELIMINAR UBICACIONES" required>
+                            @error('confirmation')
+                                <small class="form-error">{{ $message }}</small>
+                            @enderror
+                        </label>
+                        <p class="helper-text">Elimina todo el catalogo de ubicaciones. Stock, cantidades, articulos, clientes, entradas, salidas y documentos permanecen.</p>
+                        <button type="submit" class="button-secondary compact-button btn-compact">Eliminar todas las ubicaciones</button>
+                    </form>
+                </div>
+            </section>
+        @endif
 
         @if ($locations->isEmpty())
             <article class="surface-card compact-card wms-empty-state wms-stock-empty">

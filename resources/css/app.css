@@ -14230,11 +14230,63 @@ body.brand-body.app-shell-body .wms-relocation-empty {
     font-weight: 800;
 }
 
+body.brand-body.app-shell-body .wms-location-tools,
+body.brand-body.app-shell-body .wms-danger-zone {
+    display: grid;
+    gap: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-location-tools .wms-section-head,
+body.brand-body.app-shell-body .wms-danger-zone .wms-section-head {
+    margin: 0;
+    padding: 0.82rem 0.92rem 0;
+}
+
+body.brand-body.app-shell-body .wms-location-tools .wms-section-head strong,
+body.brand-body.app-shell-body .wms-danger-zone .wms-section-head strong {
+    color: var(--ops-text);
+    font-size: 0.92rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-location-tools .wms-section-head p,
+body.brand-body.app-shell-body .wms-danger-zone .wms-section-head p {
+    color: var(--ops-muted);
+    font-size: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-danger-zone {
+    border-color: rgba(185, 28, 28, 0.28);
+    background: #fff8f8;
+}
+
+body.brand-body.app-shell-body .wms-danger-zone-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.82rem;
+    padding: 0 0.92rem 0.92rem;
+}
+
+body.brand-body.app-shell-body .wms-danger-zone-action {
+    display: grid;
+    gap: 0.62rem;
+    padding: 0.82rem;
+    border: 1px solid rgba(185, 28, 28, 0.2);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-danger-zone-action .button-secondary {
+    border-color: rgba(185, 28, 28, 0.28);
+    color: #8f1d1d;
+}
+
 @media (max-width: 1100px) {
     body.brand-body.app-shell-body .wms-relocation-header,
     body.brand-body.app-shell-body .wms-relocation-filter-form,
     body.brand-body.app-shell-body .wms-relocation-summary,
-    body.brand-body.app-shell-body .wms-relocation-selected-grid {
+    body.brand-body.app-shell-body .wms-relocation-selected-grid,
+    body.brand-body.app-shell-body .wms-danger-zone-grid {
         grid-template-columns: 1fr;
     }
 

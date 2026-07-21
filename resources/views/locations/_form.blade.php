@@ -1,5 +1,7 @@
 @php
     $isEditing = $location->exists;
+    $currentCode = \App\Support\Locations\LocationCode::normalize(old('code', $location->code));
+    $defaultType = ($currentCode !== '' && (ctype_digit($currentCode) || in_array($currentCode, range('A', 'F'), true))) ? 'calle' : 'libre';
     $breadcrumbs = [
 
 
@@ -36,6 +38,19 @@
                     @endforeach
                 </select>
                 @error('warehouse_id')
+                    <small class="form-error">{{ $message }}</small>
+                @enderror
+            </label>
+
+            <label class="auth-field">
+                <span>Tipo</span>
+                <select name="type" class="auth-input" required>
+                    @foreach ($locationTypes as $typeValue => $typeLabel)
+                        <option value="{{ $typeValue }}" @selected(old('type', $defaultType) === $typeValue)>{{ $typeLabel }}</option>
+                    @endforeach
+                </select>
+                <small class="helper-text">Usa Calle para codigos numericos. Usa Libre para FONDO, SIN UBICACION, PLAYA o textos propios.</small>
+                @error('type')
                     <small class="form-error">{{ $message }}</small>
                 @enderror
             </label>
@@ -109,7 +124,6 @@
         </div>
     </form>
 </div>
-
 
 
 

@@ -65,13 +65,22 @@ class Location extends Model
         $code = LocationCode::normalize($this->code);
         $warehouseName = trim((string) ($this->warehouse?->name ?: $this->warehouse?->code));
         $warehouseIdentity = LocationCode::normalize(($this->warehouse?->code ?? '').' '.$warehouseName);
+        $name = trim((string) $this->name);
+        $segment = $this->isStreetCode($code)
+            ? 'Calle '.$code
+            : ($name !== '' ? $name : 'Ubicacion '.$code);
 
         if (preg_match('/(^|\s)(NAVE\s*)?38($|\s)/u', $warehouseIdentity) === 1) {
-            return 'NAVE 38 - Calle '.$code;
+            return 'NAVE 38 - '.$segment;
         }
 
         return $warehouseName !== ''
-            ? $warehouseName.' - Ubicacion '.$code
-            : 'Ubicacion '.$code;
+            ? $warehouseName.' - '.$segment
+            : $segment;
+    }
+
+    private function isStreetCode(string $code): bool
+    {
+        return $code !== '' && (ctype_digit($code) || in_array($code, range('A', 'F'), true));
     }
 }
