@@ -23,5 +23,17 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (Illuminate\Http\Exceptions\PostTooLargeException $exception, Illuminate\Http\Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'El documento no puede superar los 50 MB.',
+                ], 413);
+            }
+
+            return back()
+                ->withInput($request->except('document'))
+                ->withErrors([
+                    'document' => 'El documento no puede superar los 50 MB.',
+                ]);
+        });
     })->create();

@@ -4169,3 +4169,112 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `fix: support numeric warehouse filter in location deduplication`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-21 - HOTFIX Entradas: documentos 50 MB, ubicaciones por cliente y auditoria 413 (PC trabajo)
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Commit inicial:** `e916df91d739bd701c07b870d72cc15c5a7f8ade`.
+**Objetivo:** auditar y corregir el flujo de Entradas relacionado con subida documental, selectores de ubicaciones/almacenes y deduplicacion segura.
+
+### Estado inicial y seguridad
+- `git fetch origin`: correcto.
+- `HEAD` y `origin/main`: coincidian en `e916df91d739bd701c07b870d72cc15c5a7f8ade`.
+- `git diff`: sin cambios iniciales.
+- `git diff --check`: OK.
+- Unico elemento ajeno detectado: `.claude/` sin seguimiento. No se inspecciono, modifico, preparo ni incluyo.
+- No se uso `migrate:fresh`, no se borraron datos, no se vaciaron tablas, no se ejecuto `--apply` ni se modifico produccion.
+
+### Diagnostico tecnico
+- El 413 observado en `https://wms.maximosl.com/entradas` se produce antes de Laravel cuando Nginx rechaza el cuerpo de la peticion. El repositorio no contiene la configuracion real de Nginx/PHP del sitio de Forge, por lo que la parte de infraestructura queda pendiente de aplicar en servidor.
+- En Laravel habia una incoherencia real: `StoreGoodsReceiptRequest` y `AttachGoodsReceiptDocumentRequest` permitian `webp` y limitaban a `max:10240` KB (10 MB), no al objetivo operativo PDF/JPG/JPEG/PNG y 50 MB.
+- El guardado de documentos se hacia dentro del flujo transaccional de base de datos, pero el filesystem no participa en rollback. En creacion podia quedar un fichero nuevo huerfano si fallaba la transaccion; en sustitucion podia borrarse el archivo anterior antes de confirmar la actualizacion.
+- El formulario de Entradas cargaba todas las ubicaciones activas canonicas y solo validaba `exists:locations,id`; no comprobaba que la ubicacion perteneciera a un almacen compatible con el cliente seleccionado.
+- Al cambiar cliente, el JavaScript limpiaba articulo, pero no limpiaba ubicacion.
+- En local no se reprodujeron duplicados fisicos de almacenes o ubicaciones para EDELVIVES/NAVE 38; la causa corregida en codigo es mezcla/filtrado insuficiente en el selector de Entradas.
+
+### Cambios realizados
+- Nueva clase comun `App\Support\GoodsReceipts\GoodsReceiptDocumentRules`:
+  - formatos: PDF, JPG, JPEG y PNG;
+  - maximo: 50 MB (`51200` KB);
+  - mensajes en espanol;
+  - texto de ayuda visible: `Formatos admitidos: PDF, JPG, JPEG o PNG. Tamaño máximo: 50 MB.`
+- Creacion, edicion y adjuntar/cambiar documento reutilizan la misma politica.
+- Se elimino `webp` del `accept` HTML y de la validacion.
+- Se anadio manejo amable de `PostTooLargeException` en `bootstrap/app.php` para los casos en que PHP/Laravel llegue a interceptar la subida.
+- Se reorganizo el almacenamiento documental:
+  - el archivo nuevo se elimina si falla la transaccion de base de datos;
+  - el archivo anterior solo se elimina despues de actualizar correctamente;
+  - adjuntar documento y auditoria quedan dentro de transaccion.
+- Se anadio metadato de clientes compatibles por ubicacion en las opciones del selector.
+- El JS de Entradas filtra ubicaciones por cliente y limpia la ubicacion al cambiar cliente.
+- La validacion del servidor rechaza ubicaciones de almacenes incompatibles con el cliente seleccionado.
+- No se crearon migraciones: ya existen indices unicos `warehouses(client_id, code)` y `locations(warehouse_id, code)`; el problema corregido estaba en validacion/filtrado de aplicacion y politica documental.
+
+### Dry-runs y auditoria local
+- `php artisan wms:warehouses:deduplicate --client=EDELVIVES --warehouse-code=38 --dry-run --no-interaction`:
+  - 1 almacen detectado: `GLOBAL | 38 | NAVE 38`;
+  - 54 ubicaciones;
+  - 178 partidas de stock asociadas;
+  - 0 grupos de ubicacion duplicada;
+  - 0 ubicaciones por crear;
+  - extras conservadas: `FONDO`, `SIN UBICACION`;
+  - sin cambios.
+- `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse=38 --dry-run --no-interaction`:
+  - 0 grupos duplicados;
+  - 0 ubicaciones por crear;
+  - sin cambios.
+- `php artisan wms:locations:audit --client=EDELVIVES --warehouse=38 --no-interaction`:
+  - auditoria solo lectura;
+  - faltantes: ninguna;
+  - extras conservadas: `FONDO`, `SIN UBICACION`;
+  - 178 partidas de stock;
+  - sin cambios.
+- Consulta local de Entradas:
+  - `confirmed=2`;
+  - `draft=3`;
+  - `lines_without_header=0`;
+  - `docs_without_lines=3` (compatible con borradores IA con documento y lineas pendientes).
+
+### Validaciones ejecutadas
+- `php -l` en archivos PHP modificados: OK.
+- `php artisan test tests\Feature\GoodsReceiptManagementTest.php --filter="document|location"`: **17 passed** (78 assertions).
+- `php artisan test tests\Feature\GoodsReceiptManagementTest.php`: **104 passed** (553 assertions).
+- `php artisan test tests\Feature\ClientGoodsReceiptDocumentTest.php`: **43 passed** (128 assertions).
+- `php artisan test tests\Feature\WarehouseDeduplicationCommandTest.php tests\Feature\LocationDeduplicationCommandTest.php`: **7 passed** (70 assertions).
+- `php artisan test`: **646 passed** (3401 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Produccion / Forge pendiente
+- No se accedio a Forge ni al VPS desde esta sesion.
+- No se modifico Nginx, PHP-FPM ni `.env` de produccion.
+- Para corregir el 413 real de Nginx hay que ajustar el sitio `wms.maximosl.com` en Forge:
+  1. Entrar en Forge.
+  2. Abrir el servidor del WMS.
+  3. Abrir el sitio `wms.maximosl.com`.
+  4. Ir a **Files** / **Edit Nginx Configuration**.
+  5. Hacer copia del contenido actual antes de tocarlo.
+  6. En el bloque `server` del sitio, anadir o ajustar: `client_max_body_size 64M;`.
+  7. Guardar.
+  8. Validar en servidor: `sudo nginx -t`.
+  9. Solo si la validacion es correcta: `sudo systemctl reload nginx`.
+  10. Revisar la version PHP real del sitio en Forge.
+  11. Ajustar PHP para ese sitio/version a:
+      - `upload_max_filesize = 50M`
+      - `post_max_size = 64M`
+  12. Reiniciar solo el PHP-FPM correcto si Forge no lo hace automaticamente.
+  13. No reiniciar el VPS completo.
+
+### Riesgos y notas
+- No se hicieron fusiones de almacenes ni ubicaciones.
+- No se modificaron datos reales.
+- La comprobacion visual autenticada local queda pendiente; se valido por codigo, tests focalizados, suite completa, build y dry-runs locales.
+- En produccion deben revisarse los selectores tras desplegar y tras ajustar Nginx/PHP, porque el 413 de Nginx no puede interceptarlo Laravel.
+
+### Cierre Git previsto
+- Commit previsto: `fix: validate entry uploads and filter receipt locations`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

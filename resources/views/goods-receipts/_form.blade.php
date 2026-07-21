@@ -1,5 +1,6 @@
 @php
     use App\Http\Requests\StoreGoodsReceiptRequest;
+    use App\Support\GoodsReceipts\GoodsReceiptDocumentRules;
 
     $isEditing = $receipt->exists;
     $breadcrumbs = [
@@ -80,11 +81,12 @@
 
                 <label class="auth-field item-form-field--full">
                     <span>Documento del proveedor / albaran</span>
-                    <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png,.webp" data-receipt-document-input>
+                    <input type="file" name="document" class="auth-input" accept=".pdf,.jpg,.jpeg,.png" data-receipt-document-input>
                     @error('document')
                         <small class="form-error">{{ $message }}</small>
                     @enderror
-                    <small class="helper-text">Adjunta el albaran en PDF o foto. Puedes crear la entrada manualmente o dejar que la IA proponga las lineas para revision.</small>
+                    <small class="helper-text">{{ GoodsReceiptDocumentRules::helperText() }}</small>
+                    <small class="helper-text">Puedes crear la entrada manualmente o dejar que la IA proponga las lineas para revision.</small>
                     @if ($receipt->document_original_name)
                         <small class="helper-text">Actual: {{ $receipt->document_original_name }}</small>
                     @endif

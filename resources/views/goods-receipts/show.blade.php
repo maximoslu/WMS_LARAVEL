@@ -269,7 +269,7 @@
 
                     <label class="button-secondary compact-button btn-compact goods-receipt-file-trigger">
                         {{ $hasDocument ? 'Cambiar archivo' : 'Adjuntar archivo' }}
-                        <input type="file" name="document" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        <input type="file" name="document" accept=".pdf,.jpg,.jpeg,.png">
                     </label>
                 </div>
             </div>
@@ -277,6 +277,7 @@
             @error('document')
                 <small class="form-error goods-receipt-document-error">{{ $message }}</small>
             @enderror
+            <small class="helper-text goods-receipt-document-error">{{ \App\Support\GoodsReceipts\GoodsReceiptDocumentRules::helperText() }}</small>
 
             <div class="goods-receipt-inline-state goods-receipt-inline-state--workbench">
                 <span>El stock no se aplica hasta confirmar entrada.</span>

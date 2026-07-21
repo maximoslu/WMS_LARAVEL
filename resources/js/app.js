@@ -1271,6 +1271,37 @@ const setupGoodsReceiptLines = () => {
         syncRowTotals(row);
     };
 
+    const optionMatchesClient = (option, clientId) => {
+        if (!clientId || option.value === '') {
+            return true;
+        }
+
+        const compatibleClients = (option.dataset.compatibleClients ?? '')
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean);
+
+        return compatibleClients.length === 0 || compatibleClients.includes(String(clientId));
+    };
+
+    const filterLocationField = (field, clearInvalid = false) => {
+        if (!(field instanceof HTMLSelectElement)) {
+            return;
+        }
+
+        const clientId = clientSelect.value ?? '';
+
+        Array.from(field.options).forEach((option) => {
+            option.hidden = !optionMatchesClient(option, clientId);
+        });
+
+        const selectedOption = field.selectedOptions.item(0);
+
+        if (clearInvalid && selectedOption && !optionMatchesClient(selectedOption, clientId)) {
+            field.value = '';
+        }
+    };
+
     const updateNewItemWarning = (row) => {
         const warning = row.querySelector('[data-line-new-item-warning]');
         const itemIdField = row.querySelector('[data-line-item-id]');
@@ -1532,6 +1563,7 @@ const setupGoodsReceiptLines = () => {
 
         row.dataset.rowBound = 'true';
         row.querySelector('[data-add-peak]')?.toggleAttribute('disabled', peakFields(row).length >= 10);
+        filterLocationField(locationField, true);
         syncRowTotals(row);
         updateNewItemWarning(row);
     };
@@ -1662,6 +1694,12 @@ const setupGoodsReceiptLines = () => {
 
             if (itemIdField?.value) {
                 itemIdField.value = '';
+            }
+
+            const locationField = row.querySelector('[data-line-location]');
+            if (locationField) {
+                locationField.value = '';
+                filterLocationField(locationField, true);
             }
 
             updateNewItemWarning(row);

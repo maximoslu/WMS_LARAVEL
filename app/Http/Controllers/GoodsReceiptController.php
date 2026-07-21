@@ -178,37 +178,44 @@ class GoodsReceiptController extends Controller
     {
         $validated = $request->validated();
         $expectsAiFlow = $request->expectsAiCreationFlow();
+        $documentPayload = $request->hasFile('document')
+            ? $this->documentStorage->store($request->file('document'))
+            : [];
 
-        $receipt = DB::transaction(function () use ($request, $validated): GoodsReceipt {
-            $receipt = GoodsReceipt::query()->create([
-                'client_id' => $validated['client_id'],
-                'supplier_id' => $validated['supplier_id'] ?? null,
-                'receipt_number' => $validated['receipt_number'] ?? null,
-                'external_document_number' => $validated['external_document_number'] ?? null,
-                'status' => GoodsReceipt::STATUS_DRAFT,
-                'received_at' => $validated['received_at'] ?? today()->toDateString(),
-                'notes' => $validated['notes'] ?? null,
-                'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
-                'created_by' => $request->user()->id,
-                ...($request->file('document') !== null
-                    ? $this->documentStorage->store($request->file('document'))
-                    : []),
-            ]);
+        try {
+            $receipt = DB::transaction(function () use ($request, $validated, $documentPayload): GoodsReceipt {
+                $receipt = GoodsReceipt::query()->create([
+                    'client_id' => $validated['client_id'],
+                    'supplier_id' => $validated['supplier_id'] ?? null,
+                    'receipt_number' => $validated['receipt_number'] ?? null,
+                    'external_document_number' => $validated['external_document_number'] ?? null,
+                    'status' => GoodsReceipt::STATUS_DRAFT,
+                    'received_at' => $validated['received_at'] ?? today()->toDateString(),
+                    'notes' => $validated['notes'] ?? null,
+                    'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
+                    'created_by' => $request->user()->id,
+                    ...$documentPayload,
+                ]);
 
-            $this->syncLines($receipt, $validated['lines']);
+                $this->syncLines($receipt, $validated['lines']);
 
-            $this->audit->record(
-                event: 'goods_receipt_created',
-                module: 'goods_receipts',
-                description: 'Entrada creada en borrador.',
-                auditable: $receipt,
-                user: $request->user(),
-                clientId: $receipt->client_id,
-                newValues: $receipt->only(['client_id', 'supplier_id', 'receipt_number', 'received_at', 'status']),
-            );
+                $this->audit->record(
+                    event: 'goods_receipt_created',
+                    module: 'goods_receipts',
+                    description: 'Entrada creada en borrador.',
+                    auditable: $receipt,
+                    user: $request->user(),
+                    clientId: $receipt->client_id,
+                    newValues: $receipt->only(['client_id', 'supplier_id', 'receipt_number', 'received_at', 'status']),
+                );
 
-            return $receipt;
-        });
+                return $receipt;
+            });
+        } catch (\Throwable $exception) {
+            $this->documentStorage->delete($documentPayload['document_path'] ?? null);
+
+            throw $exception;
+        }
 
         if ($receipt->document_path !== null) {
             $this->documentNotificationService->notifyDocumentAvailable($receipt);
@@ -264,9 +271,13 @@ class GoodsReceiptController extends Controller
             'stockPallets.location',
         ]);
 
+        $locations = $this->locationOptions();
+        $clients = Client::query()->where('active', true)->orderBy('name')->get();
+
         return view('goods-receipts.show', [
             'receipt' => $goodsReceipt,
-            'locations' => $this->locationOptions(),
+            'locations' => $locations,
+            'locationClientOptions' => $this->locationClientOptions($locations, $clients),
             'suppliers' => Supplier::query()
                 ->where('active', true)
                 ->where(function ($query) use ($goodsReceipt): void {
@@ -298,9 +309,13 @@ class GoodsReceiptController extends Controller
 
         $validated = $request->validated();
         $documentReplaced = $request->hasFile('document');
+        $previousDocumentPath = $goodsReceipt->document_path;
+        $documentPayload = $documentReplaced
+            ? $this->documentStorage->store($request->file('document'), $goodsReceipt)
+            : [];
 
         try {
-            DB::transaction(function () use ($request, $validated, $goodsReceipt): void {
+            DB::transaction(function () use ($request, $validated, $goodsReceipt, $documentPayload): void {
                 $correlationId = $this->audit->correlationId();
                 $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status']);
                 $mustReapplyStock = $goodsReceipt->isConfirmed() && $goodsReceipt->hasStockApplied();
@@ -319,11 +334,8 @@ class GoodsReceiptController extends Controller
                     'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
                 ];
 
-                if ($request->hasFile('document')) {
-                    $payload = [
-                        ...$payload,
-                        ...$this->documentStorage->store($request->file('document'), $goodsReceipt),
-                    ];
+                if ($documentPayload !== []) {
+                    $payload = [...$payload, ...$documentPayload];
                 }
 
                 $goodsReceipt->update($payload);
@@ -352,10 +364,20 @@ class GoodsReceiptController extends Controller
                 );
             });
         } catch (ValidationException $exception) {
+            $this->documentStorage->delete($documentPayload['document_path'] ?? null);
+
             return redirect()
                 ->route('goods-receipts.show', $goodsReceipt)
                 ->withErrors($exception->errors())
                 ->withInput();
+        } catch (\Throwable $exception) {
+            $this->documentStorage->delete($documentPayload['document_path'] ?? null);
+
+            throw $exception;
+        }
+
+        if ($documentReplaced) {
+            $this->documentStorage->delete($previousDocumentPath);
         }
 
         if ($documentReplaced) {
@@ -429,17 +451,30 @@ class GoodsReceiptController extends Controller
 
     public function attachDocument(AttachGoodsReceiptDocumentRequest $request, GoodsReceipt $goodsReceipt): RedirectResponse
     {
-        $goodsReceipt->update($this->documentStorage->store($request->file('document'), $goodsReceipt));
+        $previousDocumentPath = $goodsReceipt->document_path;
+        $documentPayload = $this->documentStorage->store($request->file('document'), $goodsReceipt);
 
-        $this->audit->record(
-            event: 'goods_receipt_document_attached',
-            module: 'goods_receipts',
-            description: 'Documento adjuntado a una entrada.',
-            auditable: $goodsReceipt,
-            user: $request->user(),
-            clientId: $goodsReceipt->client_id,
-            newValues: ['document_original_name' => $goodsReceipt->document_original_name],
-        );
+        try {
+            DB::transaction(function () use ($goodsReceipt, $documentPayload, $request): void {
+                $goodsReceipt->update($documentPayload);
+
+                $this->audit->record(
+                    event: 'goods_receipt_document_attached',
+                    module: 'goods_receipts',
+                    description: 'Documento adjuntado a una entrada.',
+                    auditable: $goodsReceipt,
+                    user: $request->user(),
+                    clientId: $goodsReceipt->client_id,
+                    newValues: ['document_original_name' => $goodsReceipt->document_original_name],
+                );
+            });
+        } catch (\Throwable $exception) {
+            $this->documentStorage->delete($documentPayload['document_path'] ?? null);
+
+            throw $exception;
+        }
+
+        $this->documentStorage->delete($previousDocumentPath);
 
         $this->documentNotificationService->notifyDocumentAvailable($goodsReceipt->fresh());
 
@@ -576,9 +611,10 @@ class GoodsReceiptController extends Controller
     {
         return [
             'receipt' => $receipt,
-            'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
+            'clients' => $clients = Client::query()->where('active', true)->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('active', true)->orderBy('name')->get(),
-            'locations' => $this->locationOptions(),
+            'locations' => $locations = $this->locationOptions(),
+            'locationClientOptions' => $this->locationClientOptions($locations, $clients),
             'lineValues' => $this->lineValues($request, $receipt),
             'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
@@ -589,8 +625,59 @@ class GoodsReceiptController extends Controller
     private function locationOptions(): Collection
     {
         return $this->locationIntegrityService->canonicalActiveLocations(
-            Location::query()->where('active', true)->with('warehouse')->get(),
+            Location::query()->where('active', true)->with('warehouse.client')->get(),
         );
+    }
+
+    /**
+     * @param  Collection<int, Location>  $locations
+     * @param  Collection<int, Client>  $clients
+     * @return array<int, list<int>>
+     */
+    private function locationClientOptions(Collection $locations, Collection $clients): array
+    {
+        $locationIds = $locations->pluck('id');
+
+        $stockClientIds = DB::table('stock_pallets')
+            ->whereIn('location_id', $locationIds)
+            ->select('location_id', 'client_id')
+            ->distinct()
+            ->get()
+            ->groupBy('location_id');
+        $itemClientIds = DB::table('items')
+            ->whereIn('default_location_id', $locationIds)
+            ->select('default_location_id as location_id', 'client_id')
+            ->distinct()
+            ->get()
+            ->groupBy('location_id');
+        $receiptClientIds = DB::table('goods_receipt_lines')
+            ->join('goods_receipts', 'goods_receipts.id', '=', 'goods_receipt_lines.goods_receipt_id')
+            ->whereIn('goods_receipt_lines.location_id', $locationIds)
+            ->select('goods_receipt_lines.location_id', 'goods_receipts.client_id')
+            ->distinct()
+            ->get()
+            ->groupBy('location_id');
+        $allClientIds = $clients->pluck('id')->map(fn (int $id): int => $id)->values()->all();
+
+        return $locations
+            ->mapWithKeys(function (Location $location) use ($stockClientIds, $itemClientIds, $receiptClientIds, $allClientIds): array {
+                if ($location->warehouse?->client_id !== null) {
+                    return [$location->id => [(int) $location->warehouse->client_id]];
+                }
+
+                $clientIds = collect()
+                    ->merge($stockClientIds->get($location->id, collect())->pluck('client_id'))
+                    ->merge($itemClientIds->get($location->id, collect())->pluck('client_id'))
+                    ->merge($receiptClientIds->get($location->id, collect())->pluck('client_id'))
+                    ->map(fn (mixed $id): int => (int) $id)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return [$location->id => $clientIds !== [] ? $clientIds : $allClientIds];
+            })
+            ->all();
     }
 
     /**

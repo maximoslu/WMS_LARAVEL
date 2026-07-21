@@ -13,6 +13,7 @@ use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractionResult;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractorInterface;
 use Database\Seeders\RoleSeeder;
@@ -184,6 +185,7 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('SKU, lote, cantidades y ubicacion.')
             ->assertSee('Crear borrador e interpretar con IA')
             ->assertSee('Cami&oacute;n propio', false)
+            ->assertSee('Formatos admitidos: PDF, JPG, JPEG o PNG. Tamaño máximo: 50 MB.')
             ->assertSee('Si vas a interpretar un albaran con IA, puedes dejar las lineas vacias.');
     }
 
@@ -229,6 +231,67 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertNotFalse($position2);
         $this->assertNotFalse($position10);
         $this->assertTrue($position1 < $position2 && $position2 < $position10);
+    }
+
+    public function test_goods_receipt_location_options_include_compatible_client_metadata(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create();
+        $otherClient = Client::factory()->create();
+        $warehouse = Warehouse::factory()->create(['client_id' => $client->id]);
+        $otherWarehouse = Warehouse::factory()->create(['client_id' => $otherClient->id]);
+        $location = Location::factory()->create(['warehouse_id' => $warehouse->id, 'code' => 'A-1']);
+        $otherLocation = Location::factory()->create(['warehouse_id' => $otherWarehouse->id, 'code' => 'B-1']);
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.create'))
+            ->assertOk()
+            ->assertSee('value="'.$location->id.'"', false)
+            ->assertSee('data-compatible-clients="'.$client->id.'"', false)
+            ->assertSee('value="'.$otherLocation->id.'"', false)
+            ->assertSee('data-compatible-clients="'.$otherClient->id.'"', false);
+    }
+
+    public function test_goods_receipt_rejects_location_from_another_client(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create();
+        $supplier = Supplier::factory()->create(['client_id' => $client->id]);
+        $otherClient = Client::factory()->create();
+        $otherWarehouse = Warehouse::factory()->create(['client_id' => $otherClient->id]);
+        $otherLocation = Location::factory()->create(['warehouse_id' => $otherWarehouse->id]);
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-LOC-OTHER',
+                'received_at' => '2026-07-21',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-LOC-OTHER',
+                        'description' => 'Ubicacion de otro cliente',
+                        'lot' => 'LOT-LOC',
+                        'quantity_units' => 100,
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 1,
+                        'pico_units' => '',
+                        'location_id' => $otherLocation->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors('lines.0.location_id');
+
+        $this->assertDatabaseMissing('goods_receipts', [
+            'receipt_number' => 'ALB-LOC-OTHER',
+        ]);
     }
 
     public function test_detalle_borrador_con_ia_desactivada_permite_edicion_manual_desde_la_misma_pantalla(): void
@@ -1465,6 +1528,162 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertNotNull($receipt->document_path);
         $this->assertSame('albaran.pdf', $receipt->document_original_name);
         Storage::disk('local')->assertExists($receipt->document_path);
+    }
+
+    public function test_can_create_goods_receipt_with_valid_jpg_document(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-JPG-001',
+                'received_at' => '2026-07-21',
+                'document' => UploadedFile::fake()->create('albaran.jpg', 51200, 'image/jpeg'),
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-JPG-001',
+                        'description' => 'Entrada con JPG',
+                        'lot' => 'LOT-JPG',
+                        'quantity_units' => 100,
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 1,
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-JPG-001')->firstOrFail();
+
+        $this->assertSame('albaran.jpg', $receipt->document_original_name);
+        Storage::disk('local')->assertExists($receipt->document_path);
+    }
+
+    public function test_goods_receipt_rejects_document_larger_than_50_mb_without_partial_entry(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-BIG-001',
+                'received_at' => '2026-07-21',
+                'document' => UploadedFile::fake()->create('albaran.pdf', 51201, 'application/pdf'),
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-BIG-001',
+                        'description' => 'Entrada con documento grande',
+                        'lot' => 'LOT-BIG',
+                        'quantity_units' => 100,
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 1,
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors([
+                'document' => 'El documento no puede superar los 50 MB.',
+            ]);
+
+        $this->assertDatabaseMissing('goods_receipts', ['receipt_number' => 'ALB-BIG-001']);
+        $this->assertSame([], Storage::disk('local')->allFiles('goods-receipts'));
+    }
+
+    public function test_goods_receipt_rejects_unsupported_document_type(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-WEBP-001',
+                'received_at' => '2026-07-21',
+                'document' => UploadedFile::fake()->create('albaran.webp', 50, 'image/webp'),
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-WEBP-001',
+                        'description' => 'Entrada con WEBP',
+                        'lot' => 'LOT-WEBP',
+                        'quantity_units' => 100,
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 1,
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors('document');
+
+        $this->assertDatabaseMissing('goods_receipts', ['receipt_number' => 'ALB-WEBP-001']);
+        $this->assertSame([], Storage::disk('local')->allFiles('goods-receipts'));
+    }
+
+    public function test_new_document_is_removed_if_receipt_transaction_fails(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+        $this->withoutExceptionHandling();
+
+        $this->mock(GoodsReceiptItemResolver::class, function ($mock): void {
+            $mock->shouldReceive('resolveForPayload')->andThrow(new RuntimeException('Fallo simulado al sincronizar lineas.'));
+        });
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        try {
+            $this->actingAs($user)
+                ->post(route('goods-receipts.store'), [
+                    'client_id' => $client->id,
+                    'supplier_id' => $supplier->id,
+                    'receipt_number' => 'ALB-TX-FAIL',
+                    'received_at' => '2026-07-21',
+                    'document' => UploadedFile::fake()->create('albaran.pdf', 50, 'application/pdf'),
+                    'lines' => [
+                        [
+                            'item_id' => '',
+                            'sku' => 'SKU-TX-FAIL',
+                            'description' => 'Entrada con fallo transaccional',
+                            'lot' => 'LOT-TX',
+                            'quantity_units' => 100,
+                            'units_per_pallet' => 100,
+                            'pallet_count' => 1,
+                            'pico_units' => '',
+                            'location_id' => $location->id,
+                        ],
+                    ],
+                ]);
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Fallo simulado al sincronizar lineas.', $exception->getMessage());
+        }
+
+        $this->assertDatabaseMissing('goods_receipts', ['receipt_number' => 'ALB-TX-FAIL']);
+        $this->assertSame([], Storage::disk('local')->allFiles('goods-receipts'));
     }
 
     public function test_attached_document_can_be_downloaded_only_by_internal_user(): void

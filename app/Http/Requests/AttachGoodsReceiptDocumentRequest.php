@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Role;
+use App\Support\GoodsReceipts\GoodsReceiptDocumentRules;
 use Illuminate\Foundation\Http\FormRequest;
 
 class AttachGoodsReceiptDocumentRequest extends FormRequest
@@ -15,7 +16,13 @@ class AttachGoodsReceiptDocumentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'document' => GoodsReceiptDocumentRules::rules(required: true),
         ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return GoodsReceiptDocumentRules::messages();
     }
 }

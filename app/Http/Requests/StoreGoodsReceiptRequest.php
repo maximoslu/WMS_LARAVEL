@@ -3,8 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\Role;
 use App\Models\Supplier;
+use App\Support\GoodsReceipts\GoodsReceiptDocumentRules;
 use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -115,7 +117,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             'received_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
             'camion_propio' => ['boolean'],
-            'document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'document' => GoodsReceiptDocumentRules::rules(),
             'lines' => $this->expectsAiCreationFlow()
                 ? ['present', 'array']
                 : ['required', 'array', 'min:1'],
@@ -170,6 +172,7 @@ class StoreGoodsReceiptRequest extends FormRequest
                 $palletCount = (int) ($line['pallet_count'] ?? 0);
                 $picoUnits = collect(range(1, 10))
                     ->sum(fn (int $number): int => (int) ($line['peak_'.$number] ?? 0));
+                $locationId = (int) ($line['location_id'] ?? 0);
 
                 if ($itemId > 0) {
                     $itemData = Item::query()
@@ -208,8 +211,18 @@ class StoreGoodsReceiptRequest extends FormRequest
                         $validator->errors()->add("lines.$index.quantity_units", 'La cantidad total debe coincidir con pallets completos y pico. Ajusta cantidad o paletizado.');
                     }
                 }
+
+                if ($locationId > 0 && ! $this->locationBelongsToClient($locationId, $clientId)) {
+                    $validator->errors()->add("lines.$index.location_id", 'La ubicacion debe pertenecer a un almacen compatible con el cliente seleccionado.');
+                }
             }
         });
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return GoodsReceiptDocumentRules::messages();
     }
 
     private function normalizeInteger(mixed $value): int
@@ -280,6 +293,33 @@ class StoreGoodsReceiptRequest extends FormRequest
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    private function locationBelongsToClient(int $locationId, int $clientId): bool
+    {
+        return Location::query()
+            ->whereKey($locationId)
+            ->whereHas('warehouse', function ($query) use ($clientId): void {
+                $query
+                    ->where('client_id', $clientId)
+                    ->orWhere(function ($query) use ($clientId): void {
+                        $query
+                            ->whereNull('client_id')
+                            ->where(function ($query) use ($clientId): void {
+                                $query
+                                    ->whereHas('locations.stockPallets', fn ($stockQuery) => $stockQuery->where('client_id', $clientId))
+                                    ->orWhereHas('locations.defaultItems', fn ($itemQuery) => $itemQuery->where('client_id', $clientId))
+                                    ->orWhereHas('locations.goodsReceiptLines.goodsReceipt', fn ($receiptQuery) => $receiptQuery->where('client_id', $clientId))
+                                    ->orWhere(function ($query): void {
+                                        $query
+                                            ->whereDoesntHave('locations.stockPallets')
+                                            ->whereDoesntHave('locations.defaultItems')
+                                            ->whereDoesntHave('locations.goodsReceiptLines');
+                                    });
+                            });
+                    });
+            })
+            ->exists();
     }
 
     public function expectsAiCreationFlow(): bool

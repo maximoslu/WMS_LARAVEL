@@ -13,8 +13,6 @@ class GoodsReceiptDocumentStorage
      */
     public function store(UploadedFile $document, ?GoodsReceipt $receipt = null): array
     {
-        $this->delete($receipt?->document_path);
-
         return [
             'document_path' => $document->store('goods-receipts', 'local'),
             'document_original_name' => $document->getClientOriginalName(),
