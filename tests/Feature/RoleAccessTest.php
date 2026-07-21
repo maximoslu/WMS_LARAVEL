@@ -304,7 +304,7 @@ class RoleAccessTest extends TestCase
         $user = $this->makeUserWithRole(Role::CLIENTE);
 
         $this->actingAs($user)
-            ->get(route('modules.backups'))
+            ->get(route('backups.index'))
             ->assertForbidden();
     }
 
@@ -330,7 +330,7 @@ class RoleAccessTest extends TestCase
             ->assertForbidden();
 
         $this->actingAs($user)
-            ->get(route('modules.backups'))
+            ->get(route('backups.index'))
             ->assertForbidden();
     }
 
@@ -359,7 +359,7 @@ class RoleAccessTest extends TestCase
             ->assertOk();
 
         $this->actingAs($user)
-            ->get(route('modules.backups'))
+            ->get(route('backups.index'))
             ->assertOk();
     }
 

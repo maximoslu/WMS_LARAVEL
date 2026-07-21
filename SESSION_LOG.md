@@ -4584,3 +4584,116 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
 
 ---
+
+## 2026-07-21 - FUNCIONAL BACKUPS 1 - Sistema de copias y snapshots diarios de stock
+
+**Contexto:** Equipo casa, ruta oficial `D:\dev\WMS_LARAVEL`, rama `main`. Se partio de `4fb5f8a` (`docs: record real Edelvives stock import validation`), remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y `git pull origin main` alineado.
+
+**Diagnostico previo:**
+- El modulo `Backups` existia solo como placeholder en navegacion y ruta `/backups`.
+- Hay una unica conexion de base de datos configurada por Laravel; en local se esta trabajando contra la base del `.env` local.
+- `ZipArchive` esta disponible en este equipo.
+- `mysqldump` no esta disponible en PATH local; por defecto se usa export estructurado seguro y comprimido.
+- El disco adecuado es `local`, que apunta a `storage/app/private`, fuera de `public`.
+- Los backups se guardan bajo `storage/app/private/backups`.
+- El scheduler real se define en `routes/console.php`; Forge debe tener cron activo con `php artisan schedule:run`.
+- El acceso se restringe con el patron existente `minimum.role:superadmin`.
+
+**Tablas clasificadas:**
+- Stock: `clients`, `items`, `stock_pallets`, `warehouses`, `locations`, `stock_imports`.
+- Movimientos: `inventory_movements`, `goods_receipt_lines`, `goods_dispatch_lines`, `goods_dispatch_line_allocations`, `stock_pallets`.
+- Operaciones: `merchandise_requests`, `merchandise_request_lines`, `goods_dispatches`, `goods_dispatch_lines`, `goods_dispatch_line_allocations`, `goods_receipts`, `goods_receipt_lines`, `bookings`, `daily_operation_days`, `daily_operation_lines`.
+- Documentos/storage: ficheros privados de `storage/app/private`, excluyendo `backups`.
+- Metadatos/auditoria: `backup_exports` y, si existe, `audit_logs`.
+
+**Cambios implementados:**
+- Se sustituyo el placeholder de `/backups` por un modulo real solo para `superadmin`.
+- Se creo la tabla `backup_exports` para metadatos, estado, scope, cliente, ruta privada, tamano, checksum, usuario creador, fechas y error controlado.
+- Se creo el modelo `BackupExport`.
+- Se creo `BackupController` con rutas `backups.index`, `backups.store`, `backups.download` y `backups.destroy`.
+- Se creo `StoreBackupRequest` para validar tipo y cliente cuando aplica.
+- Se creo `BackupService` para generar backups manuales y registrar auditoria basica.
+- Se creo `StockSnapshotService` para snapshots diarios por cliente y retencion.
+- Se anadio exclusion Git de `storage/app/private/backups`.
+- Se marco `Backups` como modulo `ready` en la navegacion.
+- Se anadio UI en espanol con panel de creacion manual, snapshots diarios, mensajes de seguridad y tabla de backups recientes.
+- Se anadio CSS especifico corporativo y responsive.
+
+**Tipos de backup disponibles:**
+- Sistema completo: ZIP con `manifest.json`, export estructurado de base de datos y `storage/app/private`, excluyendo `.env`, backups existentes, `vendor`, `node_modules`, public/cache/logs pesados.
+- Base de datos completa: export estructurado `json.gz` por tablas seguras; `mysqldump` queda deshabilitado por defecto para no incluir secretos.
+- Movimientos: export `json.gz` de tablas logisticas reales de movimientos y lineas relacionadas.
+- Operaciones: export `json.gz` de pedidos, salidas, entradas, bookings y operaciones diarias.
+- Stock completo: export `csv.gz` con campos logisticos de stock.
+- Stock por cliente: export `csv.gz` filtrado por cliente real.
+- Snapshot diario de stock por cliente: un `csv.gz` por cliente y dia.
+
+**Snapshots diarios y retencion:**
+- Ruta: `storage/app/private/backups/stock-snapshots/{CLIENT_CODE}/YYYY/MM/YYYY-MM-DD_stock_{CLIENT_CODE}.csv.gz`.
+- Retencion por defecto: 365 dias.
+- Un snapshot por cliente y dia; sin `--force` no duplica, con `--force` regenera.
+- `prune` tiene `--dry-run` por defecto y solo borra si se ejecuta con `--apply`.
+
+**Comandos creados:**
+- `php artisan wms:backups:create --type=stock --client=EDELVIVES`
+- `php artisan wms:backups:stock-snapshots --client=EDELVIVES --date=YYYY-MM-DD --force --dry-run`
+- `php artisan wms:backups:prune --days=365 --type=stock_snapshot_daily --dry-run`
+
+**Scheduler configurado:**
+- `wms:backups:stock-snapshots` diario a las 02:15.
+- `wms:backups:create --type=database` diario a las 02:30.
+- `wms:backups:prune --days=365 --type=stock_snapshot_daily --apply` diario a las 03:00.
+- Pendiente en Forge: verificar que el cron del scheduler ejecuta `php artisan schedule:run` y que hay espacio suficiente en disco.
+
+**Seguridad aplicada:**
+- Solo `superadmin` puede ver, generar, descargar o eliminar backups.
+- Administracion, almacen y cliente reciben 403.
+- Los backups se guardan fuera de `public`.
+- No se expone la ruta real de storage en UI.
+- La descarga sale por controlador autenticado.
+- Se bloquea path traversal (`..`) y solo se aceptan rutas bajo `backups/`.
+- `.env` no se incluye.
+- Columnas sensibles tipo password/token/secret se redactan en exports estructurados.
+- Se calcula checksum SHA-256 y tamano.
+- Se registra auditoria basica si la tabla `audit_logs` existe.
+
+**Validacion local:**
+- `php artisan migrate:status`: conexion DB correcta; seguian pendientes migraciones anteriores `2026_07_14_000001`, `2026_07_15_000001` y `2026_07_16_000001`.
+- Se aplico solo la migracion nueva con `php artisan migrate --path=database/migrations/2026_07_21_000001_create_backup_exports_table.php --no-interaction`.
+- `php artisan wms:backups:create --type=stock --dry-run`: OK, no genero archivo.
+- `php artisan wms:backups:stock-snapshots --dry-run`: OK, planifico EDELVIVES y FRIESLAND, no genero archivos.
+- `php artisan wms:backups:prune --days=365 --type=stock_snapshot_daily --dry-run`: OK, 0 antiguos, no borro nada.
+- `php artisan wms:backups:create --type=stock-client --client=EDELVIVES`: OK, genero `backup_stock_EDELVIVES.csv.gz` en ruta privada.
+- `php artisan wms:backups:stock-snapshots`: OK, genero 2 snapshots locales: EDELVIVES y FRIESLAND.
+- Se verifico que los gzip locales no contienen `.env`.
+
+**Tests anadidos/actualizados:**
+- Nuevo `tests/Feature/BackupModuleTest.php` con seguridad por roles, generacion manual, aislamiento de stock por cliente, descarga, path traversal, snapshots, no duplicacion, `--force`, retencion dry-run/apply en test, CLI y fallo controlado.
+- `tests/Feature/RoleAccessTest.php` actualizado a la ruta real `backups.index`.
+
+**Validaciones tecnicas ejecutadas:**
+- `php -l` en PHP nuevos/modificados: OK.
+- `php artisan test tests\Feature\BackupModuleTest.php tests\Feature\RoleAccessTest.php --filter="Backup|backups"`: OK, 26 passed, 76 assertions.
+- `php artisan test tests\Feature\BackupModuleTest.php tests\Feature\RoleAccessTest.php tests\Feature\NavigationRenderingTest.php tests\Feature\StockExportTest.php`: OK, 78 passed, 253 assertions.
+- `php artisan test`: OK, 704 passed, 3658 assertions.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+**Control de alcance:**
+- No se uso `migrate:fresh`.
+- No se borraron datos.
+- No se ejecutaron purgas.
+- No se ejecuto ningun flag `--apply` durante la sesion.
+- No se reimporto Excel.
+- No se tocaron `.env`, secretos, `.claude/`, `vendor/`, `node_modules/`, Bookings, Google Calendar, PDFs ni facturacion diaria.
+- No se guardo ningun backup en `public/`.
+
+**Commit / push:** Pendiente de cierre.
+
+**Pendientes:**
+- Verificar en Forge que `php artisan schedule:run` esta activo.
+- Revisar espacio en disco y politica operativa de retencion para backups diarios de base de datos.
+- Si se decide permitir dumps SQL restaurables completos con `mysqldump`, hacerlo solo con una politica de cifrado/secretos aprobada.
+- No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
+
+---

@@ -4,6 +4,7 @@ use App\Http\Controllers\AccessRequestController;
 use App\Http\Controllers\AjaxSearchController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\BackupController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\BookingController;
@@ -508,8 +509,16 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('audit.documents-cleanup.execute');
 
-    Route::get('/backups', ModulePlaceholderController::class)
+    Route::get('/backups', [BackupController::class, 'index'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
-        ->defaults('module', 'backups')
-        ->name('modules.backups');
+        ->name('backups.index');
+    Route::post('/backups', [BackupController::class, 'store'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('backups.store');
+    Route::get('/backups/{backup}/download', [BackupController::class, 'download'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('backups.download');
+    Route::delete('/backups/{backup}', [BackupController::class, 'destroy'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('backups.destroy');
 });

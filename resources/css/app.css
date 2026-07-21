@@ -11,6 +11,147 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+body.brand-body.app-shell-body .backups-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin-bottom: 1.25rem;
+}
+
+body.brand-body.app-shell-body .backups-header-facts {
+    display: grid;
+    gap: 0.45rem;
+    min-width: min(100%, 22rem);
+    color: #475569;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+body.brand-body.app-shell-body .backups-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+body.brand-body.app-shell-body .backup-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+body.brand-body.app-shell-body .backup-panel-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+body.brand-body.app-shell-body .backup-panel-header h3 {
+    margin: 0 0 0.25rem;
+    color: #1e293b;
+    font-size: 1.05rem;
+}
+
+body.brand-body.app-shell-body .backup-panel-header p {
+    margin: 0;
+    color: #64748b;
+}
+
+body.brand-body.app-shell-body .backup-form {
+    display: grid;
+    gap: 1rem;
+}
+
+body.brand-body.app-shell-body .backup-safety,
+body.brand-body.app-shell-body .backup-scheduler-note {
+    display: grid;
+    gap: 0.35rem;
+    border: 1px solid rgba(14, 116, 144, 0.18);
+    border-radius: 8px;
+    background: rgba(236, 254, 255, 0.62);
+    padding: 0.9rem 1rem;
+    color: #155e75;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+body.brand-body.app-shell-body .backup-scheduler-note {
+    background: rgba(248, 250, 252, 0.78);
+    color: #334155;
+}
+
+body.brand-body.app-shell-body .backup-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+body.brand-body.app-shell-body .backup-summary-grid div {
+    display: grid;
+    gap: 0.35rem;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.74);
+    padding: 0.95rem;
+}
+
+body.brand-body.app-shell-body .backup-summary-grid span {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .backup-summary-grid strong {
+    color: #1e293b;
+}
+
+body.brand-body.app-shell-body .backup-actions {
+    flex-wrap: nowrap;
+}
+
+body.brand-body.app-shell-body .backup-actions form {
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .backup-status--completed {
+    color: #166534;
+    background: #dcfce7;
+}
+
+body.brand-body.app-shell-body .backup-status--failed {
+    color: #991b1b;
+    background: #fee2e2;
+}
+
+body.brand-body.app-shell-body .backup-status--running,
+body.brand-body.app-shell-body .backup-status--pending {
+    color: #92400e;
+    background: #fef3c7;
+}
+
+@media (max-width: 900px) {
+    body.brand-body.app-shell-body .backups-header,
+    body.brand-body.app-shell-body .backups-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .backups-header {
+        display: grid;
+    }
+}
+
+@media (max-width: 640px) {
+    body.brand-body.app-shell-body .backup-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .backup-actions {
+        flex-wrap: wrap;
+    }
+}
+
 /* Traceability keeps dense operational data readable without decorative charts. */
 .traceability-nav {
     display: flex;

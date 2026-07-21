@@ -11,3 +11,15 @@ Artisan::command('inspire', function () {
 Schedule::command('wms:stock-alerts:evaluate --apply')
     ->dailyAt('06:00')
     ->withoutOverlapping();
+
+Schedule::command('wms:backups:stock-snapshots')
+    ->dailyAt('02:15')
+    ->withoutOverlapping();
+
+Schedule::command('wms:backups:create --type=database')
+    ->dailyAt('02:30')
+    ->withoutOverlapping();
+
+Schedule::command('wms:backups:prune --days=365 --type=stock_snapshot_daily --apply')
+    ->dailyAt('03:00')
+    ->withoutOverlapping();
