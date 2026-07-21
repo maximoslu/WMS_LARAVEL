@@ -4414,7 +4414,7 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - `git diff --check` -> OK.
 - Diff completo revisado manualmente.
 
-**Commit / push:** Commit `fix: reset stock locations safely and canonicalize location options` creado en esta sesion. Push normal a `origin/main` pendiente en el momento de escribir esta entrada.
+**Commit / push:** Commit `0155d9f` (`fix: reset stock locations safely and canonicalize location options`) creado en esta sesion y pusheado con push normal a `origin/main` (`bb3d421..0155d9f`).
 
 **Pendientes:**
 - No se ha aplicado `wms:stock:clear-locations --apply`. Queda pendiente de orden explicita del responsable.
