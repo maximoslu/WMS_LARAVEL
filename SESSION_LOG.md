@@ -4697,3 +4697,48 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se da por desplegado en produccion; el push a `main` puede disparar Forge, pero requiere verificacion real aparte.
 
 ---
+
+## 2026-07-22 - HOTFIX VISUAL BACKUPS 1 - Margenes y layout (07:20 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** compactar y pulir visualmente `/backups` para que el modulo se vea mas operativo, denso y alineado con el baseline WMS sin tocar logica funcional.
+
+### Problema visual detectado
+- Cabecera demasiado abierta y con hechos laterales poco integrados.
+- Panel `Crear copia manual` alto, con selector poco protagonista y boton demasiado ancho en desktop.
+- Panel de snapshots diarios con tarjetas y aviso excesivamente altos.
+- Tabla de backups recientes demasiado extendida en filas, acciones y separacion vertical.
+
+### Pantalla ajustada
+- `resources/views/backups/index.blade.php`.
+
+### Cambios aplicados
+- Se agruparon los hechos de cabecera en microtarjetas compactas: privado, retencion stock y acceso.
+- Se organizo el formulario manual en una fila de campos para desktop, con apilado responsive.
+- Se limito el boton `Generar backup` a un ancho operativo en desktop y ancho completo solo en movil.
+- Se redujeron paddings, gaps, alturas y tamano de textos en paneles, snapshots, avisos y tabla.
+- Se compactaron acciones `Descargar` / `Eliminar` y filas de backups recientes.
+- Se mantuvo el estado vacio existente, ahora dentro de una tabla mas densa.
+
+### Archivos modificados
+- `resources/views/backups/index.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Confirmaciones de alcance
+- No se toco logica de backups, servicios, comandos, scheduler, rutas, permisos, descargas, borrado, storage, migraciones ni modelo `BackupExport`.
+- No se cambiaron nombres de campos, actions, metodos, CSRF, selects ni valores de tipo de backup.
+- No se generaron ni borraron backups reales durante el ajuste visual.
+- No se toco `.env`, `public/build` ni `.claude/`.
+
+### Validaciones previstas de cierre
+- `php artisan test`.
+- `npm run build`.
+- `git diff --check`.
+- `git status --short --branch`.
+
+### Cierre Git previsto
+- Commit: `fix: polish backup management layout`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

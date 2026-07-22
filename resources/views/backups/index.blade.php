@@ -29,9 +29,9 @@
         </div>
 
         <div class="backups-header-facts">
-            <span>Privado: {{ $disk }}:/{{ $path }}</span>
-            <span>Retencion stock: {{ $retentionDays }} dias</span>
-            <span>Solo superadmin</span>
+            <span><strong>Privado</strong>{{ $disk }}:/{{ $path }}</span>
+            <span><strong>Retencion stock</strong>{{ $retentionDays }} dias</span>
+            <span><strong>Acceso</strong>Solo superadmin</span>
         </div>
     </section>
 
@@ -47,39 +47,43 @@
             <form method="POST" action="{{ route('backups.store') }}" class="backup-form" data-backup-form>
                 @csrf
 
-                <label class="form-field">
-                    <span>Tipo de copia</span>
-                    <select name="type" data-backup-type required>
-                        @foreach ($backupTypes as $type => $label)
-                            <option value="{{ $type }}" @selected(old('type') === $type)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                    @error('type')
-                        <small class="form-error">{{ $message }}</small>
-                    @enderror
-                </label>
+                <div class="backup-form-fields">
+                    <label class="form-field">
+                        <span>Tipo de copia</span>
+                        <select name="type" data-backup-type required>
+                            @foreach ($backupTypes as $type => $label)
+                                <option value="{{ $type }}" @selected(old('type') === $type)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        @error('type')
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </label>
 
-                <label class="form-field" data-backup-client-field>
-                    <span>Cliente</span>
-                    <select name="client_id">
-                        <option value="">Seleccionar cliente</option>
-                        @foreach ($clients as $client)
-                            <option value="{{ $client->id }}" @selected((string) old('client_id') === (string) $client->id)>
-                                {{ $client->name }} ({{ $client->code }})
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('client_id')
-                        <small class="form-error">{{ $message }}</small>
-                    @enderror
-                </label>
+                    <label class="form-field" data-backup-client-field>
+                        <span>Cliente</span>
+                        <select name="client_id">
+                            <option value="">Seleccionar cliente</option>
+                            @foreach ($clients as $client)
+                                <option value="{{ $client->id }}" @selected((string) old('client_id') === (string) $client->id)>
+                                    {{ $client->name }} ({{ $client->code }})
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('client_id')
+                            <small class="form-error">{{ $message }}</small>
+                        @enderror
+                    </label>
+                </div>
 
                 <div class="backup-safety">
                     <span>Los backups no incluyen .env ni secretos.</span>
                     <span>Los archivos se guardan fuera de public.</span>
                 </div>
 
-                <button type="submit" class="button-primary compact-button">Generar backup</button>
+                <div class="backup-form-actions">
+                    <button type="submit" class="button-primary compact-button">Generar backup</button>
+                </div>
             </form>
         </article>
 
@@ -117,7 +121,7 @@
         </article>
     </section>
 
-    <section class="surface-card compact-card backup-panel">
+    <section class="surface-card compact-card backup-panel backup-table-panel">
         <div class="backup-panel-header">
             <div>
                 <h3>Backups recientes</h3>
