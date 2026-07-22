@@ -185,6 +185,7 @@ class AjaxSearchTest extends TestCase
         $location = Location::factory()->create([
             'warehouse_id' => $warehouse->id,
             'code' => 'A1-TEST',
+            'name' => null,
         ]);
 
         $user = $this->makeUserWithRole(Role::ALMACEN);

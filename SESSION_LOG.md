@@ -4742,3 +4742,39 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `fix: polish backup management layout`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-22 - VALIDACION BACKUPS LOCAL + AJAX SEARCH (08:08 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** aplicar la migracion local pendiente de Backups, reprobar el modulo y diagnosticar el fallo de `AjaxSearchTest`.
+
+### Migracion local
+- Se ejecuto `php artisan migrate` solo en local.
+- La migracion `2026_07_21_000001_create_backup_exports_table` paso de `Pending` a `Ran`.
+- No se uso `migrate:fresh`, `db:wipe`, `migrate:refresh`, `migrate:reset` ni comandos destructivos.
+
+### Diagnostico AjaxSearchTest
+- El fallo venia de datos aleatorios de `LocationFactory`: el test esperaba el fallback `Ubicacion A1-TEST`, pero la factory podia crear `name` y entonces `Location::displayLabel()` mostraba ese nombre.
+- La busqueda AJAX por codigo funcionaba y devolvia `value=A1-TEST` y `meta=Codigo A1-TEST`.
+- Se ajusto solo el test para fijar `name => null` y probar de forma determinista el fallback esperado.
+- No se cambio el endpoint AJAX ni la normalizacion canonica de ubicaciones.
+
+### Backups validados
+- `php artisan test --filter=BackupModuleTest`: OK, 25 passed, 73 assertions.
+- `php artisan wms:backups:stock-snapshots --dry-run`: OK, 4 clientes planificados, no genero archivos.
+- `php artisan wms:backups:prune --dry-run`: OK, 0 antiguos, no borro archivos ni registros.
+- `php artisan wms:backups:create --type=stock-client --client=EDELVIVES`: OK, genero backup privado de prueba.
+- `php artisan wms:backups:create --type=stock`: OK, genero backup privado de prueba.
+- Se verifico que ambos gzip existian en `storage/app/private/backups`, no estaban en `public`, abrian correctamente y no contenian `.env` ni patrones evidentes de secretos.
+- El backup de EDELVIVES contenia EDELVIVES y no contenia FRIESLAND, CODEX_UI ni PRIETO.
+- Los dos backups de prueba fueron eliminados despues con el servicio de la aplicacion.
+
+### Alcance
+- No se toco produccion.
+- No se borro stock ni datos operativos.
+- No se ejecuto prune apply.
+- No se tocaron `.env` ni `.claude/`.
