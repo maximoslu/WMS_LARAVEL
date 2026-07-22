@@ -30,7 +30,7 @@ class MerchandiseLabelTest extends TestCase
                 ->get(route('labels.index'))
                 ->assertOk()
                 ->assertSee('Etiquetas')
-                ->assertSee('2 etiquetas por hoja');
+                ->assertSee('Etiquetas por hoja');
         }
     }
 
@@ -84,6 +84,30 @@ class MerchandiseLabelTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
+    }
+
+    public function test_pdf_view_uses_friesland_layout_fields_without_internal_metadata(): void
+    {
+        [$receipt] = $this->labelFixtures();
+
+        $html = view('labels.pdf', [
+            'labels' => app(MerchandiseLabelService::class)->forGoodsReceipt($receipt),
+            'origin' => 'Entrada '.$receipt->id,
+            'generatedAt' => now(),
+        ])->render();
+
+        $this->assertStringContainsString('FILM0419', $html);
+        $this->assertStringContainsString('LOTE:', $html);
+        $this->assertStringContainsString('471543', $html);
+        $this->assertStringContainsString('UNIDADES:', $html);
+        $this->assertStringContainsString('1.600', $html);
+        $this->assertStringContainsString('label-top', $html);
+        $this->assertStringContainsString('label-bottom', $html);
+        $this->assertStringNotContainsString('MAXIMO WMS - Etiqueta mercancia', $html);
+        $this->assertStringNotContainsString('Entrada:', $html);
+        $this->assertStringNotContainsString('Fecha:', $html);
+        $this->assertStringNotContainsString('entrada-linea:', $html);
+        $this->assertStringNotContainsString('stock:', $html);
     }
 
     public function test_stock_pallet_label_rules_cover_pallets_and_peak(): void

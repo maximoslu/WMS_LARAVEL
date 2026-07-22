@@ -4838,3 +4838,60 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `feat: add merchandise label generation`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-22 - HOTFIX VISUAL ETIQUETAS 1.1 - Formato Friesland y margenes (13:37 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** corregir visualmente `/etiquetas` y el PDF de etiquetas para alinearlo con el modelo real Friesland, sin tocar logica, rutas, permisos, stock ni entradas.
+
+### Problema detectado
+- La pantalla `/etiquetas` quedaba demasiado abierta: cabecera alta, paneles con mucho aire, listas recientes largas y poca densidad operativa.
+- El PDF anterior parecia una ficha corporativa: cabecera `MAXIMO WMS - Etiqueta mercancia`, tipo PALLET/PICO visible, metadatos de entrada, fecha, ubicacion y trazabilidad.
+- Ese formato no se parecia al modelo real Friesland aportado.
+
+### Referencia usada
+- Se uso el PDF real `storage/app/reference/ET_FRIESLAND.pdf`.
+- La referencia es A4 vertical, 1 pagina, 2 etiquetas por hoja.
+- Cada etiqueta prioriza una caja grande de articulo y cajas inferiores de LOTE y UNIDADES.
+
+### Cambios en `/etiquetas`
+- Se compacto la cabecera y se limitaron los margenes con un contenedor operativo.
+- Se ajustaron microtarjetas A4 / 2 etiquetas por hoja / usuarios internos / solo lectura.
+- Se compactaron los paneles Desde entrada y Desde stock.
+- Se convirtieron entradas recientes y stock reciente en filas densas con acciones `Generar etiquetas` y `Abrir`.
+- Se mantuvieron rutas, permisos y origenes de datos.
+
+### Cambios en PDF
+- Se sustituyo la ficha corporativa por una plantilla especifica Dompdf inspirada en Friesland.
+- Se quitaron cabecera WMS, cajas decorativas previas, metadatos largos y trazabilidad visible.
+- El PDF muestra ARTICULO, LOTE y UNIDADES como campos principales.
+- Se mantiene A4 vertical y dos etiquetas por hoja.
+- Si queda una etiqueta impar, la siguiente mitad queda limpia.
+- En entornos sin GD/Imagick, el logo se sustituye por una marca textual discreta para no romper Dompdf.
+
+### Alcance funcional
+- No se cambio la logica de generacion.
+- Se mantiene 1 etiqueta por pallet y 1 etiqueta por pico.
+- Se mantienen clientes bloqueados y usuarios internos autorizados.
+- No se modifico stock, entradas, backups, ubicaciones, `.env` ni `.claude/`.
+
+### Validacion visual local
+- `ET_FRIESLAND.pdf`: A4 real confirmado con Poppler.
+- Muestra local de 11 etiquetas: 6 paginas A4.
+- Ultima pagina impar: etiqueta superior visible y mitad inferior limpia.
+- Muestra local desde stock existente: generacion solo lectura.
+
+### Validaciones previstas de cierre
+- `php artisan test --filter=MerchandiseLabelTest`.
+- `php artisan test`.
+- `npm run build`.
+- `git diff --check`.
+- `git status --short --branch`.
+
+### Cierre Git previsto
+- Commit: `fix: align merchandise labels with Friesland template`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

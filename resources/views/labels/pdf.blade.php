@@ -5,7 +5,7 @@
     <style>
         @page {
             size: A4 portrait;
-            margin: 10mm 12mm;
+            margin: 0;
         }
 
         * {
@@ -14,173 +14,168 @@
 
         body {
             margin: 0;
-            color: #111827;
+            color: #000;
             font-family: DejaVu Sans, Arial, sans-serif;
-            font-size: 11px;
         }
 
-        .sheet {
-            position: relative;
-            height: 277mm;
+        .label-block {
+            width: 210mm;
+            height: 140mm;
+            page-break-inside: avoid;
+        }
+
+        .label-break {
             page-break-after: always;
         }
 
-        .sheet:last-child {
-            page-break-after: auto;
+        .label-pad {
+            height: 140mm;
+            padding: 7mm 7mm 0;
+            overflow: hidden;
         }
 
-        .label {
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 110mm;
-            padding: 7mm 12mm;
-            border: 1.4px solid #111827;
-            border-radius: 6px;
-            position: relative;
+        .article-table {
+            width: 196mm;
+            height: 68mm;
+            border: 1.6mm solid #000;
+            border-collapse: collapse;
+            text-align: center;
         }
 
-        .label + .label {
-            margin-top: 0;
+        .article-table td {
+            width: 196mm;
+            height: 68mm;
+            padding: 0 5mm;
+            text-align: center;
+            vertical-align: middle;
         }
 
-        .label-top-slot {
-            top: 0;
-        }
-
-        .label-bottom-slot {
-            top: 45mm;
-        }
-
-        .label-empty {
-            border-color: #d1d5db;
-        }
-
-        .label-top {
-            margin-bottom: 6mm;
-            padding-right: 46mm;
-        }
-
-        .label-top div {
+        .article-value {
             display: block;
+            font-size: 28mm;
+            font-weight: 700;
+            line-height: 1;
+            white-space: nowrap;
         }
 
-        .label-top .right {
-            position: absolute;
-            top: 7mm;
-            right: 12mm;
+        .article-value-medium {
+            font-size: 22mm;
+        }
+
+        .article-value-long {
+            font-size: 10mm;
+        }
+
+        .article-value-wrap {
+            font-size: 8mm;
+            line-height: 1.18;
+            white-space: normal;
+        }
+
+        .details-table {
+            width: 196mm;
+            margin-top: 3mm;
+            border-collapse: separate;
+            border-spacing: 3mm 0;
+        }
+
+        .detail-box {
+            width: 50%;
+            height: 33mm;
+            padding: 5mm 6mm 3mm;
+            border: 1.3mm solid #000;
+            border-radius: 6mm;
+            vertical-align: top;
+        }
+
+        .detail-label {
+            display: block;
+            margin-bottom: 4mm;
+            font-size: 6mm;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .detail-value {
+            display: block;
+            text-align: center;
+            font-size: 16mm;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .detail-value-units {
+            font-size: 23mm;
+            margin-top: -1mm;
+        }
+
+        .label-logo {
+            display: block;
+            width: 42mm;
+            height: auto;
+            margin: 3mm 8mm 0 auto;
+        }
+
+        .label-mark {
+            width: 42mm;
+            margin: 3mm 8mm 0 auto;
             text-align: right;
         }
 
-        .eyebrow {
-            color: #374151;
-            font-size: 10px;
-            text-transform: uppercase;
-        }
-
-        .client {
-            margin-top: 2mm;
-            font-size: 16px;
-            font-weight: 700;
-            letter-spacing: 0;
-        }
-
-        .type {
-            display: inline-block;
-            padding: 2mm 4mm;
-            border: 1px solid #111827;
-            font-size: 14px;
-            font-weight: 700;
-        }
-
-        .field {
-            margin-bottom: 5mm;
-        }
-
-        .field-label {
+        .label-logo-fallback {
             display: block;
-            margin-bottom: 1mm;
-            color: #111827;
-            font-size: 16px;
-            font-weight: 700;
-        }
-
-        .field-value {
-            display: block;
-            min-height: 10mm;
-            padding: 1mm 0;
-            border-bottom: 2px solid #111827;
-            font-size: 23px;
-            font-weight: 700;
-            line-height: 1.1;
-        }
-
-        .field-value.units {
-            font-size: 30px;
-        }
-
-        .meta {
-            margin-top: 5mm;
-            color: #374151;
-            font-size: 10px;
-        }
-
-        .meta span {
-            display: block;
-        }
-
-        .meta span:last-child {
-            margin-top: 1mm;
             text-align: right;
+            font-size: 3.2mm;
+            font-weight: 700;
+            line-height: 1.05;
         }
+
+        .label-logo-fallback small {
+            display: block;
+            font-size: 1.8mm;
+            font-weight: 700;
+        }
+
     </style>
 </head>
 <body>
-    @foreach ($labels->chunk(2) as $pair)
-        <section class="sheet">
-            @foreach ($pair as $label)
-                <article class="label {{ $loop->first ? 'label-top-slot' : 'label-bottom-slot' }}">
-                    <div class="label-top">
-                        <div>
-                            <span class="eyebrow">MAXIMO WMS - Etiqueta mercancia</span>
-                            <div class="client">{{ $label['client_name'] ?: $label['client_code'] }}</div>
-                        </div>
-                        <div class="right">
-                            <span class="type">{{ $label['type'] }}</span>
-                            <div class="eyebrow">{{ $label['number'] }}</div>
-                        </div>
-                    </div>
+    @php
+        $logoPath = public_path('brand/maximo-logo-horizontal.png');
+        $logoAvailable = file_exists($logoPath) && (extension_loaded('gd') || extension_loaded('imagick'));
+    @endphp
 
-                    <div class="field">
-                        <span class="field-label">ARTICULO</span>
-                        <span class="field-value">{{ $label['article'] }}</span>
-                    </div>
+    @foreach ($labels as $label)
+        @php($article = $label['sku'] ?: $label['article'])
+        @php($articleClass = strlen($article) > 34 ? 'article-value-wrap' : (strlen($article) > 18 ? 'article-value-long' : (strlen($article) > 10 ? 'article-value-medium' : '')))
+        <section class="label-block {{ $loop->iteration % 2 === 0 && ! $loop->last ? 'label-break' : '' }}">
+            <div class="label-pad {{ $loop->iteration % 2 === 1 ? 'label-top' : 'label-bottom' }}">
+                <table class="article-table" role="presentation">
+                    <tr>
+                        <td><span class="article-value {{ $articleClass }}">{{ $article }}</span></td>
+                    </tr>
+                </table>
 
-                    <div class="field">
-                        <span class="field-label">LOTE</span>
-                        <span class="field-value">{{ $label['lot'] }}</span>
-                    </div>
+                <table class="details-table" aria-label="Datos principales de etiqueta">
+                    <tr>
+                        <td class="detail-box">
+                            <span class="detail-label">LOTE:</span>
+                            <span class="detail-value">{{ $label['lot'] }}</span>
+                        </td>
+                        <td class="detail-box">
+                            <span class="detail-label">UNIDADES:</span>
+                            <span class="detail-value detail-value-units">{{ number_format((int) $label['units'], 0, ',', '.') }}</span>
+                        </td>
+                    </tr>
+                </table>
 
-                    <div class="field">
-                        <span class="field-label">UNIDADES</span>
-                        <span class="field-value units">{{ number_format((int) $label['units'], 0, ',', '.') }}</span>
-                    </div>
-
-                    <div class="meta">
-                        <span>
-                            Entrada: {{ $label['receipt_number'] ?: '-' }} · Fecha: {{ $label['received_at'] ?: '-' }}
-                            @if ($label['location'])
-                                · Ubicacion: {{ $label['location'] }}
-                            @endif
-                        </span>
-                        <span>{{ $label['traceability'] }}</span>
-                    </div>
-                </article>
-            @endforeach
-
-            @if ($pair->count() === 1)
-                <article class="label label-empty label-bottom-slot"></article>
-            @endif
+                <div class="label-mark">
+                    @if ($logoAvailable)
+                        <img src="{{ $logoPath }}" alt="Maximo Servicios Logisticos" class="label-logo">
+                    @else
+                        <span class="label-logo-fallback">MAXIMO<small>SERVICIOS LOGISTICOS</small></span>
+                    @endif
+                </div>
+            </div>
         </section>
     @endforeach
 </body>
