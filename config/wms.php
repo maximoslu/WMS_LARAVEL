@@ -173,6 +173,18 @@ return [
                     'active_patterns' => ['goods-receipts.*'],
                 ],
                 [
+                    'key' => 'labels',
+                    'route' => 'labels.index',
+                    'path' => '/etiquetas',
+                    'title' => 'Etiquetas',
+                    'icon' => 'receipts',
+                    'summary' => 'Genera etiquetas de mercancia por pallet, pico, lote y articulo.',
+                    'minimum_role' => 'almacen',
+                    'tag' => 'Trazabilidad',
+                    'status' => 'ready',
+                    'active_patterns' => ['labels.*'],
+                ],
+                [
                     'key' => 'mis-albaranes',
                     'route' => 'client-goods-receipts.index',
                     'path' => '/mis-albaranes',

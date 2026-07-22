@@ -31,6 +31,7 @@
                 @endif
                 <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Articulos</a>
                 <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Ubicaciones</a>
+                <a href="{{ route('labels.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Etiquetas</a>
                 @if (auth()->user()?->isSuperAdmin())
                     <a href="{{ route('stock.import') }}" class="button-primary compact-button btn-compact wms-action-primary">Importar stock</a>
                 @endif
@@ -444,6 +445,7 @@
                                                 @endforeach
                                                 @if (auth()->user()->canAccessRole(\App\Models\Role::ALMACEN) && $row['row_type'] === 'stock' && $row['item_id'])
                                                     <div class="action-buttons">
+                                                        <a href="{{ route('labels.stock-pallet', $row['id']) }}" target="_blank" rel="noopener noreferrer" class="button-secondary compact-button btn-compact">Sacar etiqueta</a>
                                                         <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar ubicacion</a>
                                                     </div>
                                                 @endif
@@ -588,6 +590,7 @@
 
                     @if (auth()->user()->canAccessRole(\App\Models\Role::ALMACEN) && $row['row_type'] === 'stock' && $row['item_id'])
                         <div class="item-form-actions action-buttons">
+                            <a href="{{ route('labels.stock-pallet', $row['id']) }}" target="_blank" rel="noopener noreferrer" class="button-secondary compact-button btn-compact">Sacar etiqueta</a>
                             <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar ubicacion</a>
                         </div>
                     @endif

@@ -17,6 +17,7 @@ use App\Http\Controllers\GoodsDispatchController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\GoogleCalendarOAuthController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\LabelController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MerchandiseRequestController;
 use App\Http\Controllers\ModulePlaceholderController;
@@ -288,6 +289,18 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/entradas/{goodsReceipt}/documento', [GoodsReceiptController::class, 'downloadDocument'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.document');
+    Route::get('/etiquetas', [LabelController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('labels.index');
+    Route::get('/etiquetas/entradas/{goodsReceipt}', [LabelController::class, 'goodsReceipt'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('labels.goods-receipt');
+    Route::get('/etiquetas/entradas/{goodsReceipt}/lineas/{line}', [LabelController::class, 'goodsReceiptLine'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('labels.goods-receipt-line');
+    Route::get('/etiquetas/stock/{stockPallet}', [LabelController::class, 'stockPallet'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('labels.stock-pallet');
     Route::delete('/entradas/{goodsReceipt}', [GoodsReceiptController::class, 'destroy'])
         ->middleware('minimum.role:'.Role::SUPERADMIN)
         ->name('goods-receipts.destroy');

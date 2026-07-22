@@ -18,6 +18,7 @@
         $hasDocument = filled($receipt->document_path);
         $canTriggerAi = $hasDocument && $aiEnabled && $isEditable;
         $canCreateSuppliers = auth()->user()?->canAccessRole(\App\Models\Role::ALMACEN) ?? false;
+        $canGenerateLabels = auth()->user()?->canAccessRole(\App\Models\Role::ALMACEN) ?? false;
         $aiStatus = $receipt->ai_status ?: \App\Models\GoodsReceipt::AI_STATUS_PENDING;
         $aiStatusTone = match (true) {
             ! $hasDocument => 'idle',
@@ -114,6 +115,9 @@
             <a href="{{ route('goods-receipts.index') }}" class="button-secondary compact-button btn-compact">Volver</a>
             @if ($hasDocument)
                 <a href="{{ route('goods-receipts.document', $receipt) }}" target="_blank" rel="noreferrer" class="button-secondary compact-button btn-compact">Ver documento</a>
+            @endif
+            @if ($canGenerateLabels && $receipt->lines->isNotEmpty())
+                <a href="{{ route('labels.goods-receipt', $receipt) }}" target="_blank" rel="noopener noreferrer" class="button-primary compact-button btn-compact">Generar etiquetas</a>
             @endif
             @if ($isEditable)
                 <a href="{{ route('goods-receipts.edit', $receipt) }}" class="button-secondary compact-button btn-compact">Editar</a>
@@ -390,6 +394,9 @@
                             <th>Pallets</th>
                             <th>Detalle picos</th>
                             <th>Ubicacion</th>
+                            @if ($canGenerateLabels)
+                                <th>Etiqueta</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -403,6 +410,11 @@
                                 <td>{{ number_format($line->pallet_count, 0, ',', '.') }}</td>
                                 <td>{{ collect($line->peakUnits())->map(fn (int $peak): string => number_format($peak, 0, ',', '.'))->implode(' + ') ?: '-' }}</td>
                                 <td>{{ $line->location?->code ?: 'Sin ubicacion' }}</td>
+                                @if ($canGenerateLabels)
+                                    <td>
+                                        <a href="{{ route('labels.goods-receipt-line', [$receipt, $line]) }}" target="_blank" rel="noopener noreferrer" class="button-secondary compact-button btn-table">Sacar etiqueta</a>
+                                    </td>
+                                @endif
                             </tr>
                         @endforeach
                     </tbody>
@@ -436,6 +448,9 @@
                             <th>Ubicacion</th>
                             <th>Fecha</th>
                             <th>Estado</th>
+                            @if ($canGenerateLabels)
+                                <th>Etiqueta</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -457,6 +472,11 @@
                                 <td>{{ $stockPallet->location?->code ?: ($stockPallet->location_text ?: 'Sin ubicacion') }}</td>
                                 <td>{{ optional($stockPallet->received_at)->format('d/m/Y') ?: '-' }}</td>
                                 <td>{{ $stockPallet->statusLabel() }}</td>
+                                @if ($canGenerateLabels)
+                                    <td>
+                                        <a href="{{ route('labels.stock-pallet', $stockPallet) }}" target="_blank" rel="noopener noreferrer" class="button-secondary compact-button btn-table">Sacar etiqueta</a>
+                                    </td>
+                                @endif
                             </tr>
                         @endforeach
                     </tbody>

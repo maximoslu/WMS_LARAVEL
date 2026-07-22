@@ -4778,3 +4778,63 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se borro stock ni datos operativos.
 - No se ejecuto prune apply.
 - No se tocaron `.env` ni `.claude/`.
+
+---
+
+## 2026-07-22 - FUNCIONAL ETIQUETAS 1 - Generacion de etiquetas por pallet y pico (09:01 +02:00)
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** crear generacion de etiquetas imprimibles para mercancia, con una etiqueta por pallet completo y una por pico, sin modificar stock ni datos operativos.
+
+### Referencia y diagnostico
+- El PDF de referencia `ET_FRIESLAND.pdf` no estaba disponible en el repositorio ni en adjuntos locales accesibles durante la sesion.
+- Se implemento el formato segun la descripcion operativa: A4, 2 etiquetas por hoja, campos principales ARTICULO, LOTE y UNIDADES.
+- El proyecto usa `barryvdh/laravel-dompdf`.
+- El patron existente de PDF usa `Pdf::loadView(...)->stream/download(...)`, como en albaranes de salida.
+- No hizo falta migracion: los PDFs se generan bajo demanda.
+
+### Rutas creadas
+- `GET /etiquetas` (`labels.index`).
+- `GET /etiquetas/entradas/{goodsReceipt}` (`labels.goods-receipt`).
+- `GET /etiquetas/entradas/{goodsReceipt}/lineas/{line}` (`labels.goods-receipt-line`).
+- `GET /etiquetas/stock/{stockPallet}` (`labels.stock-pallet`).
+
+### Implementacion
+- Nuevo `LabelController`.
+- Nuevo `MerchandiseLabelService`.
+- Nueva vista `resources/views/labels/index.blade.php`.
+- Nueva vista PDF `resources/views/labels/pdf.blade.php`.
+- Navegacion WMS actualizada con modulo `Etiquetas` para roles internos.
+- Boton `Generar etiquetas` en detalle de entrada.
+- Boton `Sacar etiqueta` por linea de entrada en lectura y por partida de stock.
+- Accion `Sacar etiqueta` desde Stock para usuarios internos.
+
+### Reglas de generacion
+- Pallets completos: una etiqueta por pallet, con unidades = `units_per_pallet`.
+- Picos: una etiqueta por cada pico real (`peak_1..peak_10` o `pico_units` en lineas de entrada).
+- Si faltan unidades por pallet o no hay unidades etiquetables, se devuelve error controlado.
+- El PDF es A4 con dos etiquetas por pagina.
+- Cada etiqueta incluye cliente, articulo, descripcion, lote, unidades, tipo, numero, entrada, fecha, ubicacion y trazabilidad.
+
+### Seguridad y alcance
+- Acceso limitado a `superadmin`, `administracion` y `almacen` mediante `minimum.role:almacen`.
+- Clientes bloqueados en pantalla y URLs directas.
+- Generar etiquetas no modifica cantidades, stock, entradas, salidas ni ubicaciones.
+- No se tocaron backups, Bookings, Google Calendar, `.env` ni `.claude/`.
+
+### Tests
+- Nuevo `tests/Feature/MerchandiseLabelTest.php`.
+- Cubre permisos, descarga PDF, etiquetas desde entrada, etiquetas desde linea, etiquetas desde stock, calculo 10 pallets + 1 pico, 6 pallets + pico, error controlado y no modificacion de stock.
+- Tests focalizados ejecutados: `183 passed, 930 assertions`.
+
+### Validaciones previstas de cierre
+- `php artisan test`.
+- `npm run build`.
+- `git diff --check`.
+- `git status --short --branch`.
+
+### Cierre Git previsto
+- Commit: `feat: add merchandise label generation`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

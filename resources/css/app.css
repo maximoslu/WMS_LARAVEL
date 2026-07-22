@@ -14742,9 +14742,95 @@ body.brand-body.app-shell-body .wms-location-form-actions {
         text-align: center;
     }
 
-    body.brand-body.app-shell-body .wms-relocation-batch-main strong,
-    body.brand-body.app-shell-body .wms-relocation-summary strong,
-    body.brand-body.app-shell-body .wms-relocation-selected-grid dd {
-        white-space: normal;
+body.brand-body.app-shell-body .wms-relocation-batch-main strong,
+body.brand-body.app-shell-body .wms-relocation-summary strong,
+body.brand-body.app-shell-body .wms-relocation-selected-grid dd {
+    white-space: normal;
+}
+}
+
+body.brand-body.app-shell-body .labels-header {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+body.brand-body.app-shell-body .labels-header-facts,
+body.brand-body.app-shell-body .labels-origin-grid,
+body.brand-body.app-shell-body .labels-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .labels-header-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: min(100%, 34rem);
+}
+
+body.brand-body.app-shell-body .labels-header-facts span,
+body.brand-body.app-shell-body .labels-origin-grid article {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.7rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: var(--ops-muted);
+    font-size: 0.78rem;
+}
+
+body.brand-body.app-shell-body .labels-header-facts strong,
+body.brand-body.app-shell-body .labels-origin-grid strong,
+body.brand-body.app-shell-body .labels-quick-list strong {
+    color: var(--ops-text);
+}
+
+body.brand-body.app-shell-body .labels-origin-grid,
+body.brand-body.app-shell-body .labels-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.brand-body.app-shell-body .labels-origin-grid article {
+    align-content: start;
+}
+
+body.brand-body.app-shell-body .labels-origin-grid a {
+    width: fit-content;
+    margin-top: 0.35rem;
+}
+
+body.brand-body.app-shell-body .labels-quick-list {
+    display: grid;
+    gap: 0.45rem;
+}
+
+body.brand-body.app-shell-body .labels-quick-list a {
+    display: grid;
+    gap: 0.08rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--ops-border);
+    color: inherit;
+    text-decoration: none;
+}
+
+body.brand-body.app-shell-body .labels-quick-list a:last-child {
+    border-bottom: 0;
+}
+
+body.brand-body.app-shell-body .labels-quick-list span {
+    color: var(--ops-muted);
+    font-size: 0.78rem;
+}
+
+@media (max-width: 900px) {
+    body.brand-body.app-shell-body .labels-header {
+        display: grid;
+    }
+
+    body.brand-body.app-shell-body .labels-header-facts,
+    body.brand-body.app-shell-body .labels-origin-grid,
+    body.brand-body.app-shell-body .labels-grid {
+        grid-template-columns: 1fr;
     }
 }
