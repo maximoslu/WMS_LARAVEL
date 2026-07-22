@@ -4895,3 +4895,75 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `fix: align merchandise labels with Friesland template`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-22 - FUNCIONAL STOCK 2 - Regularizacion manual superadmin
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Objetivo:** crear una seccion de Stock para que el superadmin pueda anadir o quitar stock manualmente, sin crear entradas, salidas ni albaranes y manteniendo trazabilidad completa.
+
+### Ruta creada
+- `GET /stock/regularizar` (`stock.adjustments.create`).
+- `POST /stock/regularizar` (`stock.adjustments.store`).
+- `GET /stock/partidas/{stockPallet}/regularizar` (`stock.adjustments.stock-pallet`) para abrir el formulario con partida preseleccionada.
+
+### Roles autorizados
+- Solo `superadmin` puede ver y ejecutar regularizaciones.
+- `administracion`, `almacen` y `cliente` quedan bloqueados por ruta y request.
+
+### Campos del formulario
+- Cliente.
+- Referencia / articulo.
+- Accion: anadir stock o quitar stock.
+- Modo: partida existente o nueva partida.
+- Partida existente.
+- Lote.
+- Ubicacion opcional.
+- Estado y categoria para nueva partida.
+- Pallets completos.
+- Unidades por pallet.
+- Unidades pico.
+- Nota interna opcional.
+- Checkbox de confirmacion manual.
+
+### Alta de stock
+- Sobre partida existente suma las unidades calculadas y conserva cliente, articulo, lote, ubicacion, estado y categoria.
+- En nueva partida crea `StockPallet` con cliente, articulo, lote, ubicacion, estado, categoria, cantidad, pallets y picos.
+- No crea `GoodsReceipt`, entrada ni albaran.
+
+### Baja de stock
+- Solo se permite sobre partida existente.
+- Resta las unidades calculadas.
+- No permite quitar mas stock del disponible.
+- No permite resultado negativo.
+- Si queda a cero, mantiene la partida activa con cantidad 0 y estado/categoria sin cambios.
+- No crea `GoodsDispatch`, salida ni albaran.
+
+### Registro y auditoria
+- Se reutiliza `InventoryMovement` con tipo `manual_adjustment` y origen `manual_superadmin_adjustment`.
+- Se registra snapshot antes/despues, delta de unidades, pallets, picos, cliente, articulo, lote, ubicacion, estado, categoria, usuario y metadata de regularizacion.
+- Se registra `AuditLog` con evento `stock_manual_adjustment_added` o `stock_manual_adjustment_removed`, IP anonimizada y user agent mediante el servicio de auditoria existente.
+
+### UI y navegacion
+- Nueva opcion `Regularizar` dentro de Stock visible solo para superadmin.
+- Boton compacto en cabecera de stock solo para superadmin.
+- Accion compacta por partida de stock solo para superadmin.
+- Pantalla compacta WMS con resumen, advertencia, confirmacion e historial reciente.
+
+### Tests
+- Nuevo `tests/Feature/StockAdjustmentTest.php`.
+- Cubre permisos, boton visible solo superadmin, alta sobre partida existente, nueva partida, baja hasta cero, validaciones, historial y no regresion de stock/reubicar/importar/entradas/salidas.
+- Tests focalizados ejecutados: `8 passed, 81 assertions`.
+
+### Validaciones previstas de cierre
+- `php artisan test`.
+- `npm run build`.
+- `git diff --check`.
+- `git status --short --branch`.
+
+### Cierre Git previsto
+- Commit: `feat: add superadmin stock adjustments`.
+- Push normal a `origin/main`, excluyendo `.claude/`.

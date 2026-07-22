@@ -14749,6 +14749,283 @@ body.brand-body.app-shell-body .wms-relocation-selected-grid dd {
 }
 }
 
+/* Funcional Stock 2: regularizacion manual de stock por superadmin. */
+body.brand-body.app-shell-body .wms-adjustment-page {
+    display: grid;
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-page > .alert {
+    margin: 0;
+    padding: 0.62rem 0.78rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-header {
+    grid-template-columns: minmax(0, 1.25fr) minmax(13rem, 0.9fr) auto;
+    gap: 0.82rem;
+    padding: 0.82rem 0.92rem;
+    align-items: center;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-title,
+body.brand-body.app-shell-body .wms-adjustment-safe-note {
+    display: grid;
+    gap: 0.14rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-title span,
+body.brand-body.app-shell-body .wms-adjustment-safe-note strong,
+body.brand-body.app-shell-body .wms-adjustment-summary span,
+body.brand-body.app-shell-body .wms-adjustment-selected-grid dt,
+body.brand-body.app-shell-body .wms-adjustment-history-row span {
+    color: var(--ops-muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    line-height: 1.1;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-title h2 {
+    margin: 0;
+    color: var(--ops-text);
+    font-size: 1.05rem;
+    font-weight: 900;
+    line-height: 1.16;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-title p,
+body.brand-body.app-shell-body .wms-adjustment-safe-note span,
+body.brand-body.app-shell-body .wms-adjustment-summary small,
+body.brand-body.app-shell-body .wms-adjustment-form-card .wms-section-head p,
+body.brand-body.app-shell-body .wms-adjustment-selected .wms-section-head p,
+body.brand-body.app-shell-body .wms-adjustment-history .wms-section-head p {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.73rem;
+    line-height: 1.3;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-safe-note,
+body.brand-body.app-shell-body .wms-adjustment-confirm {
+    padding: 0.58rem 0.66rem;
+    border: 1px solid rgba(15, 127, 147, 0.18);
+    border-radius: 8px;
+    background: #f4fafb;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-safe-note span {
+    color: var(--ops-text);
+    font-weight: 750;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-actions,
+body.brand-body.app-shell-body .wms-adjustment-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.42rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-picker,
+body.brand-body.app-shell-body .wms-adjustment-form-card,
+body.brand-body.app-shell-body .wms-adjustment-selected,
+body.brand-body.app-shell-body .wms-adjustment-history {
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-filter-form {
+    display: grid;
+    grid-template-columns: minmax(11rem, 0.8fr) minmax(16rem, 1.25fr) minmax(16rem, 1.15fr) auto;
+    gap: 0.68rem;
+    align-items: end;
+    padding: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-workflow {
+    display: grid;
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-summary > div {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.66rem 0.78rem;
+    border-right: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-adjustment-summary > div:last-child {
+    border-right: 0;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-summary strong,
+body.brand-body.app-shell-body .wms-adjustment-selected-grid dd,
+body.brand-body.app-shell-body .wms-adjustment-history-row strong {
+    overflow: hidden;
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-form-card .wms-section-head,
+body.brand-body.app-shell-body .wms-adjustment-selected .wms-section-head,
+body.brand-body.app-shell-body .wms-adjustment-history .wms-section-head {
+    margin: 0;
+    padding: 0.68rem 0.82rem;
+    border-bottom: 1px solid var(--ops-border);
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-form-card .wms-section-head strong,
+body.brand-body.app-shell-body .wms-adjustment-selected .wms-section-head strong,
+body.brand-body.app-shell-body .wms-adjustment-history .wms-section-head strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-form-grid,
+body.brand-body.app-shell-body .wms-adjustment-selected-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.56rem;
+    margin: 0;
+    padding: 0.72rem 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-form-grid .item-form-field--full {
+    grid-column: 1 / -1;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-selected-grid > div {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.58rem 0.62rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-selected-grid dd {
+    margin: 0;
+    white-space: normal;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-confirm {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.72rem;
+    margin: 0 0.82rem 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--ops-text);
+    font-size: 0.8rem;
+    font-weight: 850;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-check input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--brand-teal);
+}
+
+body.brand-body.app-shell-body .wms-adjustment-history-row {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, 0.9fr) minmax(7rem, 0.9fr) minmax(7rem, 0.9fr) minmax(7rem, 1fr) repeat(4, minmax(5rem, 0.7fr));
+    gap: 0.38rem;
+    align-items: center;
+    margin: 0.52rem 0.82rem;
+    padding: 0.58rem 0.62rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-history-row span {
+    overflow: hidden;
+    color: var(--ops-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-empty {
+    padding: 0.82rem;
+    color: var(--ops-muted);
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+    body.brand-body.app-shell-body .wms-adjustment-header,
+    body.brand-body.app-shell-body .wms-adjustment-filter-form,
+    body.brand-body.app-shell-body .wms-adjustment-summary,
+    body.brand-body.app-shell-body .wms-adjustment-form-grid,
+    body.brand-body.app-shell-body .wms-adjustment-selected-grid,
+    body.brand-body.app-shell-body .wms-adjustment-history-row {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-adjustment-actions,
+    body.brand-body.app-shell-body .wms-adjustment-filter-actions {
+        justify-content: flex-start;
+    }
+
+    body.brand-body.app-shell-body .wms-adjustment-summary > div {
+        border-right: 0;
+        border-bottom: 1px solid var(--ops-border);
+    }
+
+    body.brand-body.app-shell-body .wms-adjustment-summary > div:last-child {
+        border-bottom: 0;
+    }
+}
+
+@media (max-width: 767px) {
+    body.brand-body.app-shell-body .wms-adjustment-actions,
+    body.brand-body.app-shell-body .wms-adjustment-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-adjustment-filter-actions,
+    body.brand-body.app-shell-body .wms-adjustment-filter-actions .button-primary,
+    body.brand-body.app-shell-body .wms-adjustment-filter-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-adjustment-confirm,
+    body.brand-body.app-shell-body .wms-adjustment-confirm .button-primary {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    body.brand-body.app-shell-body .wms-adjustment-confirm {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.brand-body.app-shell-body .wms-adjustment-summary strong,
+    body.brand-body.app-shell-body .wms-adjustment-history-row span {
+        white-space: normal;
+    }
+}
+
 body.brand-body.app-shell-body .labels-workbench {
     display: grid;
     gap: 0.68rem;

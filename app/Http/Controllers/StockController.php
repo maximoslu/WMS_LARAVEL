@@ -50,6 +50,7 @@ class StockController extends Controller
         ]));
         $isClient = $user?->hasRole(Role::CLIENTE) === true;
         $canFilterClients = $user?->canAccessRole(Role::ALMACEN) === true;
+        $canAdjustStock = $user?->canAccessRole(Role::SUPERADMIN) === true;
         $exportClientId = $overview['filters']['client_id'];
 
         return view('stock.index', [
@@ -62,6 +63,7 @@ class StockController extends Controller
                 : collect(),
             'isClient' => $isClient,
             'canFilterClients' => $canFilterClients,
+            'canAdjustStock' => $canAdjustStock,
             'canExportStock' => $exportClientId !== null,
             'exportClientId' => $exportClientId,
             'pageTitle' => $isClient ? 'STOCK' : 'Stock actual',

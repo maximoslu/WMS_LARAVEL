@@ -24,6 +24,7 @@ use App\Http\Controllers\ModulePlaceholderController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockImportController;
 use App\Http\Controllers\StockRelocationController;
 use App\Http\Controllers\SupplierController;
@@ -181,6 +182,15 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/stock/reubicar', [StockRelocationController::class, 'store'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.relocations.store');
+    Route::get('/stock/regularizar', [StockAdjustmentController::class, 'create'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.adjustments.create');
+    Route::post('/stock/regularizar', [StockAdjustmentController::class, 'store'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.adjustments.store');
+    Route::get('/stock/partidas/{stockPallet}/regularizar', [StockAdjustmentController::class, 'stockPallet'])
+        ->middleware('minimum.role:'.Role::SUPERADMIN)
+        ->name('stock.adjustments.stock-pallet');
     Route::get('/stock/partidas/{stockPallet}/editar', [StockController::class, 'edit'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.batches.edit');

@@ -88,6 +88,18 @@ return [
                     'active_patterns' => ['stock.relocations.*'],
                 ],
                 [
+                    'key' => 'stock-adjustments',
+                    'route' => 'stock.adjustments.create',
+                    'path' => '/stock/regularizar',
+                    'title' => 'Regularizar',
+                    'icon' => 'audit',
+                    'summary' => 'Ajuste manual controlado de cantidades de stock con trazabilidad automatica.',
+                    'minimum_role' => 'superadmin',
+                    'tag' => 'Control',
+                    'status' => 'ready',
+                    'active_patterns' => ['stock.adjustments.*'],
+                ],
+                [
                     'key' => 'items',
                     'route' => 'items.index',
                     'path' => '/articulos',

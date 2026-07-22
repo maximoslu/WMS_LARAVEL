@@ -29,6 +29,9 @@
                 @if (auth()->user()->canAccessRole(\App\Models\Role::ALMACEN))
                     <a href="{{ route('stock.relocations.create', $exportClientId ? ['client_id' => $exportClientId] : []) }}" class="button-primary compact-button btn-compact wms-action-primary">Reubicar</a>
                 @endif
+                @if ($canAdjustStock)
+                    <a href="{{ route('stock.adjustments.create', $exportClientId ? ['client_id' => $exportClientId] : []) }}" class="button-primary compact-button btn-compact wms-action-primary">Regularizar</a>
+                @endif
                 <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Articulos</a>
                 <a href="{{ route('locations.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Ubicaciones</a>
                 <a href="{{ route('labels.index') }}" class="button-secondary compact-button btn-compact wms-action-secondary">Etiquetas</a>
@@ -447,6 +450,9 @@
                                                     <div class="action-buttons">
                                                         <a href="{{ route('labels.stock-pallet', $row['id']) }}" target="_blank" rel="noopener noreferrer" class="button-secondary compact-button btn-compact">Sacar etiqueta</a>
                                                         <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar ubicacion</a>
+                                                        @if ($canAdjustStock)
+                                                            <a href="{{ route('stock.adjustments.stock-pallet', $row['id']) }}" class="button-secondary compact-button btn-compact">Regularizar</a>
+                                                        @endif
                                                     </div>
                                                 @endif
                                             </article>
@@ -592,6 +598,9 @@
                         <div class="item-form-actions action-buttons">
                             <a href="{{ route('labels.stock-pallet', $row['id']) }}" target="_blank" rel="noopener noreferrer" class="button-secondary compact-button btn-compact">Sacar etiqueta</a>
                             <a href="{{ route('stock.batches.edit', $row['id']) }}" class="button-secondary compact-button btn-compact">Editar ubicacion</a>
+                            @if ($canAdjustStock)
+                                <a href="{{ route('stock.adjustments.stock-pallet', $row['id']) }}" class="button-secondary compact-button btn-compact">Regularizar</a>
+                            @endif
                         </div>
                     @endif
                 </details>
