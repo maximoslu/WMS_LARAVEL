@@ -3103,10 +3103,13 @@ body.brand-body.app-shell-body .app-topbar {
     gap: 1rem;
     width: 100%;
     min-height: 4.25rem;
-    padding: 0.9rem 1.15rem;
+    padding: 0.82rem 1.05rem;
     overflow: visible;
-    border: 1px solid rgba(24, 37, 50, 0.14);
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.1);
+    border: 1px solid rgba(24, 37, 50, 0.2);
+    border-top: 3px solid var(--brand-cyan);
+    background: #f8fafc;
+    box-shadow: 0 12px 24px rgba(7, 20, 29, 0.18);
+    backdrop-filter: none;
 }
 
 body.brand-body.app-shell-body .app-topbar-start,
@@ -3277,10 +3280,10 @@ body.brand-body.app-shell-body .app-menu-toggle {
     width: 2.35rem;
     height: 2.35rem;
     padding: 0;
-    border: 1px solid rgba(24, 37, 50, 0.16);
+    border: 1px solid #182532;
     border-radius: 7px;
-    background: #f7fafc;
-    color: var(--brand-slate-dark);
+    background: #182532;
+    color: #f8fafc;
     box-shadow: none;
 }
 
@@ -11748,268 +11751,762 @@ body.brand-body.app-shell-body .wms-booking-page .booking-row-actions {
     }
 }
 
-/* Fase 4E: dashboard operativo. */
-body.brand-body.app-shell-body .wms-dashboard-page {
+/* HOTFIX VISUAL DASHBOARD 2: centro de mando WMS. */
+body.brand-body.app-shell-body .ops-link-arrow,
+body.brand-body.app-shell-body .wms-command-arrow {
+    color: var(--ops-accent);
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+body.brand-body.app-shell-body .wms-command-dashboard {
     display: grid;
-    gap: 0.85rem;
+    gap: 0.78rem;
+    width: 100%;
+    max-width: 1480px;
+    margin: 0 auto;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-header-actions {
+body.brand-body.app-shell-body .wms-command-dashboard > .surface-card,
+body.brand-body.app-shell-body .wms-command-dashboard .wms-module-group,
+body.brand-body.app-shell-body .wms-command-dashboard .wms-attention-card,
+body.brand-body.app-shell-body .wms-command-dashboard .wms-command-agenda {
+    border-color: rgba(24, 37, 50, 0.18);
+    background: #ffffff;
+    box-shadow: 0 8px 18px rgba(7, 20, 29, 0.12);
+    backdrop-filter: none;
+}
+
+body.brand-body.app-shell-body .wms-command-dashboard > .wms-command-hero {
+    display: grid;
+    grid-template-columns: minmax(16rem, 0.78fr) minmax(0, 1.42fr);
     align-items: stretch;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-kpis {
-    grid-template-columns: repeat(3, minmax(5.3rem, auto));
-}
-
-body.brand-body.app-shell-body .wms-dashboard-kpis dd {
-    max-width: 9rem;
+    gap: 1rem;
     overflow: hidden;
-    font-size: 0.92rem;
+    padding: 1.05rem 1.1rem;
+    border-color: #12384a;
+    background: #12384a;
+}
+
+body.brand-body.app-shell-body .wms-command-hero-copy {
+    display: grid;
+    align-content: center;
+    gap: 0.28rem;
+    min-width: 0;
+    padding-right: 0.35rem;
+}
+
+body.brand-body.app-shell-body .wms-command-kicker,
+body.brand-body.app-shell-body .wms-command-eyebrow {
+    color: var(--ops-accent);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-command-kicker {
+    color: #62d1dc;
+}
+
+body.brand-body.app-shell-body .wms-command-hero h1 {
+    margin: 0;
+    color: #ffffff;
+    font-size: clamp(1.45rem, 2vw, 1.85rem);
+    line-height: 1.05;
+}
+
+body.brand-body.app-shell-body .wms-command-hero p {
+    max-width: 34rem;
+    margin: 0;
+    color: #d7e4ea;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-command-week {
+    margin-top: 0.22rem;
+    color: #8fb0bd;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+body.brand-body.app-shell-body .wms-command-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.48rem;
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .wms-command-kpis > div {
+    display: grid;
+    align-content: center;
+    gap: 0.12rem;
+    min-width: 0;
+    padding: 0.72rem 0.75rem;
+    border: 1px solid #365767;
+    border-radius: 7px;
+    background: #1a3b4a;
+}
+
+body.brand-body.app-shell-body .wms-command-kpis > div.has-alert {
+    border-color: #b88938;
+    background: #3b362d;
+}
+
+body.brand-body.app-shell-body .wms-command-kpis dt,
+body.brand-body.app-shell-body .wms-command-kpis span {
+    overflow: hidden;
+    color: #91adba;
+    font-size: 0.61rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-command-kpis dd {
+    overflow: hidden;
+    margin: 0;
+    color: #ffffff;
+    font-size: 1.12rem;
+    font-weight: 900;
+    line-height: 1.15;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-layout {
+body.brand-body.app-shell-body .wms-quick-panel {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.72fr);
-    align-items: start;
-    gap: 0.85rem;
+    gap: 0.6rem;
+    padding: 0.72rem 0.82rem 0.78rem;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-main {
+body.brand-body.app-shell-body .wms-command-section-heading,
+body.brand-body.app-shell-body .wms-command-block-title,
+body.brand-body.app-shell-body .wms-module-group-head,
+body.brand-body.app-shell-body .wms-command-agenda-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
     min-width: 0;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.85rem;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-section {
+body.brand-body.app-shell-body .wms-command-section-heading > div,
+body.brand-body.app-shell-body .wms-command-block-title > div,
+body.brand-body.app-shell-body .wms-module-group-head > div:first-child,
+body.brand-body.app-shell-body .wms-command-agenda-head > div {
     display: grid;
-    gap: 0.7rem;
-    padding: 0.78rem 0.85rem;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-section--operations {
-    grid-column: 1 / -1;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-section-head {
-    align-items: flex-start;
-    margin-bottom: 0;
-    padding-bottom: 0.58rem;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-section-head > div {
-    display: grid;
-    gap: 0.16rem;
+    gap: 0.1rem;
     min-width: 0;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-section-head p {
+body.brand-body.app-shell-body .wms-command-section-heading h2,
+body.brand-body.app-shell-body .wms-command-block-title h2,
+body.brand-body.app-shell-body .wms-command-agenda-head h2,
+body.brand-body.app-shell-body .wms-module-group-head h3 {
     margin: 0;
+    color: var(--ops-primary);
+    font-size: 0.93rem;
+    line-height: 1.2;
+}
+
+body.brand-body.app-shell-body .wms-command-section-heading > span {
     color: var(--ops-muted);
-    font-size: 0.72rem;
-    font-weight: 600;
-    line-height: 1.3;
+    font-size: 0.67rem;
+    font-weight: 800;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module-list {
-    gap: 0.38rem;
+body.brand-body.app-shell-body .wms-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.42rem;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module {
-    min-height: 3.2rem;
-    padding: 0.55rem 0.62rem;
+body.brand-body.app-shell-body .wms-quick-action {
+    display: flex;
+    align-items: center;
+    gap: 0.48rem;
+    min-width: 0;
+    min-height: 3.15rem;
+    padding: 0.5rem 0.55rem;
+    border: 1px solid var(--ops-border);
+    border-left: 3px solid var(--ops-accent);
+    border-radius: 7px;
+    background: #f8fafc;
+    color: var(--ops-text);
+    text-decoration: none;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module .module-link-body {
-    gap: 0.55rem;
+body.brand-body.app-shell-body .wms-quick-action:hover {
+    border-color: var(--ops-accent);
+    background: #eef6f8;
+    transform: translateY(-1px);
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module .module-link-icon {
-    flex: 0 0 1.55rem;
-    width: 1.55rem;
-    height: 1.55rem;
+body.brand-body.app-shell-body .wms-quick-action-icon,
+body.brand-body.app-shell-body .wms-attention-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1.75rem;
+    width: 1.75rem;
+    height: 1.75rem;
     border-radius: 6px;
-    background: #f3f6f8;
+    background: #e5f1f4;
     color: var(--ops-accent);
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module .module-link-icon-svg {
-    width: 0.9rem;
-    height: 0.9rem;
+body.brand-body.app-shell-body .wms-quick-action-icon .module-link-icon-svg,
+body.brand-body.app-shell-body .wms-attention-icon .module-link-icon-svg {
+    width: 0.95rem;
+    height: 0.95rem;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module .module-link-copy strong {
-    font-size: 0.8rem;
+body.brand-body.app-shell-body .wms-quick-action-copy {
+    display: grid;
+    flex: 1 1 auto;
+    gap: 0.05rem;
+    min-width: 0;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module .module-link-copy span {
-    display: -webkit-box;
+body.brand-body.app-shell-body .wms-quick-action-copy small {
     overflow: hidden;
     color: var(--ops-muted);
-    font-size: 0.68rem;
+    font-size: 0.59rem;
+    font-weight: 700;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-quick-action-copy strong {
+    overflow: hidden;
+    font-size: 0.76rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-command-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.42fr);
+    align-items: start;
+    gap: 0.78rem;
+}
+
+body.brand-body.app-shell-body .wms-command-modules,
+body.brand-body.app-shell-body .wms-command-rail {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-command-block-title {
+    min-height: 2.45rem;
+    padding: 0 0.1rem;
+}
+
+body.brand-body.app-shell-body .wms-command-block-title p {
+    max-width: 24rem;
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.67rem;
+    font-weight: 650;
+    line-height: 1.25;
+    text-align: right;
+}
+
+body.brand-body.app-shell-body .wms-module-groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+body.brand-body.app-shell-body .wms-module-group {
+    display: grid;
+    align-content: start;
+    gap: 0.58rem;
+    min-width: 0;
+    padding: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-module-group--operations {
+    grid-column: 1 / -1;
+}
+
+body.brand-body.app-shell-body .wms-module-group--operations .wms-module-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.brand-body.app-shell-body .wms-module-group-head {
+    align-items: flex-start;
+    padding: 0.02rem 0.08rem 0.55rem;
+    border-bottom: 2px solid #e3ebef;
+}
+
+body.brand-body.app-shell-body .wms-module-group-head h3 {
+    font-size: 0.98rem;
+}
+
+body.brand-body.app-shell-body .wms-module-group-head p {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 0.05rem 0 0;
+    color: var(--ops-muted);
+    font-size: 0.65rem;
     font-weight: 600;
-    line-height: 1.22;
+    line-height: 1.25;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-module .dashboard-module-status {
-    min-width: 6.8rem;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-section-foot {
+body.brand-body.app-shell-body .wms-module-group-counters {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
-    padding-top: 0.1rem;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-agenda {
-    position: sticky;
-    top: 0.85rem;
-    gap: 0;
-    overflow: hidden;
-    padding: 0;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-agenda-head {
-    margin: 0;
-    padding: 0.72rem 0.82rem;
-    background: #f8fafc;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-agenda-actions {
-    display: flex;
+    gap: 0.35rem;
     flex-wrap: wrap;
-    justify-content: flex-end;
+}
+
+body.brand-body.app-shell-body .wms-module-count,
+body.brand-body.app-shell-body .wms-attention-total,
+body.brand-body.app-shell-body .wms-agenda-day-label b {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.55rem;
+    height: 1.55rem;
+    padding: 0 0.4rem;
+    border-radius: 6px;
+    background: #e8eef2;
+    color: var(--ops-primary);
+    font-size: 0.68rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-pending-count,
+body.brand-body.app-shell-body .wms-attention-total.has-pending {
+    color: #765516;
+    border-color: #e5c47f;
+    background: #fff1cf;
+}
+
+body.brand-body.app-shell-body .wms-pending-count {
+    padding: 0.2rem 0.42rem;
+    border: 1px solid #e5c47f;
+    border-radius: 5px;
+    font-size: 0.59rem;
+    font-weight: 850;
+}
+
+body.brand-body.app-shell-body .wms-module-list {
     gap: 0.35rem;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-calendar-grid {
+body.brand-body.app-shell-body .wms-command-module {
+    min-height: 3.25rem;
+    padding: 0.5rem 0.55rem;
+    background: #ffffff;
+}
+
+body.brand-body.app-shell-body .wms-command-module .module-link-body {
+    gap: 0.52rem;
+}
+
+body.brand-body.app-shell-body .wms-command-module .module-link-icon {
+    flex: 0 0 1.7rem;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 6px;
+    background: #edf3f6;
+    color: var(--ops-accent);
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .wms-command-module .module-link-icon-svg {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+
+body.brand-body.app-shell-body .wms-command-module .module-link-copy strong {
+    font-size: 0.76rem;
+}
+
+body.brand-body.app-shell-body .wms-command-module .module-link-copy span {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--ops-muted);
+    font-size: 0.62rem;
+    font-weight: 600;
+    line-height: 1.18;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+body.brand-body.app-shell-body .wms-command-module-meta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+}
+
+body.brand-body.app-shell-body .wms-command-module .dashboard-module-pending {
+    min-width: 1.4rem;
+    padding-inline: 0.35rem;
+}
+
+body.brand-body.app-shell-body .wms-attention-card,
+body.brand-body.app-shell-body .wms-command-agenda {
+    overflow: hidden;
+}
+
+body.brand-body.app-shell-body .wms-attention-card {
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.75rem;
+    border-top: 3px solid #b88938;
+}
+
+body.brand-body.app-shell-body .wms-attention-empty {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem;
+    border: 1px solid #cfe3d8;
+    border-radius: 7px;
+    background: #edf7f1;
+}
+
+body.brand-body.app-shell-body .wms-attention-empty > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 1.7rem;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 6px;
+    background: #16684d;
+    color: #ffffff;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-attention-empty div,
+body.brand-body.app-shell-body .wms-attention-list a > span:nth-child(2) {
+    display: grid;
+    gap: 0.08rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-attention-empty strong,
+body.brand-body.app-shell-body .wms-attention-list strong {
+    color: var(--ops-text);
+    font-size: 0.74rem;
+}
+
+body.brand-body.app-shell-body .wms-attention-empty p,
+body.brand-body.app-shell-body .wms-attention-list small {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.62rem;
+    font-weight: 650;
+}
+
+body.brand-body.app-shell-body .wms-attention-list {
+    display: grid;
+    gap: 0.35rem;
+}
+
+body.brand-body.app-shell-body .wms-attention-list a {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.52rem;
+    padding: 0.5rem;
+    border: 1px solid #ead7aa;
+    border-radius: 7px;
+    background: #fffaf0;
+    color: inherit;
+    text-decoration: none;
+}
+
+body.brand-body.app-shell-body .wms-attention-list a:hover {
+    border-color: #b88938;
+}
+
+body.brand-body.app-shell-body .wms-attention-list b {
+    color: #765516;
+    font-size: 0.8rem;
+}
+
+body.brand-body.app-shell-body .wms-attention-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ops-primary);
+    font-size: 0.67rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+body.brand-body.app-shell-body .wms-attention-link:hover {
+    color: var(--ops-accent);
+}
+
+body.brand-body.app-shell-body .wms-command-agenda {
+    padding: 0;
+    border-top: 3px solid var(--ops-accent);
+}
+
+body.brand-body.app-shell-body .wms-command-agenda-head {
+    align-items: flex-start;
+    padding: 0.72rem 0.75rem 0.62rem;
+    background: #f8fafc;
+}
+
+body.brand-body.app-shell-body .wms-command-agenda-head p {
+    margin: 0;
+    color: var(--ops-muted);
+    font-size: 0.64rem;
+    font-weight: 700;
+}
+
+body.brand-body.app-shell-body .wms-command-agenda-head .dashboard-notifications-link {
+    min-width: auto;
+    min-height: 2rem;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.68rem;
+}
+
+body.brand-body.app-shell-body .wms-agenda-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.75rem;
+    border-top: 1px solid var(--ops-border);
+    border-bottom: 1px solid var(--ops-border);
+    background: #edf3f6;
+}
+
+body.brand-body.app-shell-body .wms-agenda-summary span {
+    padding: 0.22rem 0.42rem;
+    border: 1px solid #c7d5dd;
+    border-radius: 5px;
+    background: #ffffff;
+    color: var(--ops-muted);
+    font-size: 0.61rem;
+    font-weight: 750;
+}
+
+body.brand-body.app-shell-body .wms-agenda-summary strong {
+    color: var(--ops-primary);
+}
+
+body.brand-body.app-shell-body .wms-agenda-days {
+    display: grid;
     grid-template-columns: 1fr;
     gap: 0;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-day {
-    min-height: 0;
-    gap: 0.45rem;
-    padding: 0.62rem 0.78rem;
+body.brand-body.app-shell-body .wms-agenda-day {
+    display: grid;
+    grid-template-columns: 4.4rem minmax(0, 1fr);
+    gap: 0.55rem;
+    min-height: 2.75rem;
+    padding: 0.45rem 0.6rem;
     border: 0;
-    border-top: 1px solid var(--ops-border);
+    border-bottom: 1px solid var(--ops-border);
     border-radius: 0;
     background: #ffffff;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-day.has-activity {
-    background: #fbfdff;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-day-head {
-    align-items: center;
-    padding-bottom: 0;
+body.brand-body.app-shell-body .wms-agenda-day:last-child {
     border-bottom: 0;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-day-head > div {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.35rem;
+body.brand-body.app-shell-body .wms-agenda-day.has-activity {
+    box-shadow: inset 3px 0 0 var(--ops-accent);
+    background: #f7fbfc;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-day-head strong {
-    color: var(--ops-text);
-    font-size: 0.78rem;
+body.brand-body.app-shell-body .wms-agenda-day-label {
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: 0.02rem;
+    padding-top: 0.12rem;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-day-head span {
+body.brand-body.app-shell-body .wms-agenda-day-label strong {
+    color: var(--ops-primary);
     font-size: 0.7rem;
+    text-transform: uppercase;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-day .dashboard-booking-day-empty {
-    padding: 0.42rem 0;
-    border: 0;
+body.brand-body.app-shell-body .wms-agenda-day-label span {
     color: var(--ops-muted);
-    background: transparent;
-    font-size: 0.72rem;
+    font-size: 0.61rem;
     font-weight: 700;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-day .dashboard-booking-day-list {
-    gap: 0.42rem;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-booking,
-body.brand-body.app-shell-body .wms-dashboard-google-event {
-    gap: 0.18rem;
-    padding: 0.5rem 0.55rem;
-    border-radius: 7px;
-    box-shadow: none;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-booking-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.4rem;
-}
-
-body.brand-body.app-shell-body .wms-dashboard-booking-top .wms-status-chip {
-    padding: 0.2rem 0.38rem;
+body.brand-body.app-shell-body .wms-agenda-day-label b {
+    min-width: 1.2rem;
+    height: 1.2rem;
+    margin-top: 0.16rem;
+    padding: 0 0.25rem;
+    background: #dcecf0;
+    color: var(--ops-accent);
     font-size: 0.58rem;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-booking strong,
-body.brand-body.app-shell-body .wms-dashboard-google-event strong {
-    font-size: 0.76rem;
+body.brand-body.app-shell-body .wms-agenda-day-content {
+    min-width: 0;
 }
 
-body.brand-body.app-shell-body .wms-dashboard-booking span,
-body.brand-body.app-shell-body .wms-dashboard-google-event span {
+body.brand-body.app-shell-body .wms-agenda-day .dashboard-booking-day-empty {
+    display: flex;
+    align-items: center;
+    min-height: 1.75rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #8796a2;
+    font-size: 0.61rem;
+    font-weight: 700;
+}
+
+body.brand-body.app-shell-body .wms-agenda-items {
+    display: grid;
+    gap: 0.32rem;
+}
+
+body.brand-body.app-shell-body .wms-agenda-booking,
+body.brand-body.app-shell-body .wms-agenda-google {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.42rem 0.48rem;
+    border-radius: 6px;
+    box-shadow: none;
+}
+
+body.brand-body.app-shell-body .wms-agenda-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-agenda-item-top strong {
+    overflow: hidden;
+    color: var(--ops-text);
     font-size: 0.68rem;
-    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-@media (max-width: 1180px) {
-    body.brand-body.app-shell-body .wms-dashboard-layout,
-    body.brand-body.app-shell-body .wms-dashboard-grid {
+body.brand-body.app-shell-body .wms-agenda-booking > span:not(.wms-agenda-item-top),
+body.brand-body.app-shell-body .wms-agenda-google > span:not(.wms-agenda-item-top),
+body.brand-body.app-shell-body .wms-agenda-booking small,
+body.brand-body.app-shell-body .wms-agenda-google small {
+    overflow: hidden;
+    color: var(--ops-muted);
+    font-size: 0.59rem;
+    font-weight: 650;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-agenda-item-top .wms-status-chip,
+body.brand-body.app-shell-body .wms-agenda-item-top .wms-calendar-source {
+    flex: 0 0 auto;
+    padding: 0.12rem 0.3rem;
+    font-size: 0.51rem;
+}
+
+@media (max-width: 1240px) {
+    body.brand-body.app-shell-body .wms-command-layout {
         grid-template-columns: 1fr;
     }
 
-    body.brand-body.app-shell-body .wms-dashboard-agenda {
-        position: static;
+    body.brand-body.app-shell-body .wms-command-rail {
+        grid-template-columns: minmax(15rem, 0.7fr) minmax(0, 1.3fr);
+        align-items: start;
+    }
+}
+
+@media (max-width: 960px) {
+    body.brand-body.app-shell-body .wms-command-dashboard > .wms-command-hero {
+        grid-template-columns: 1fr;
     }
 
-    body.brand-body.app-shell-body .wms-dashboard-calendar-grid {
+    body.brand-body.app-shell-body .wms-command-rail {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-quick-actions {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
 @media (max-width: 767px) {
-    body.brand-body.app-shell-body .wms-dashboard-kpis,
-    body.brand-body.app-shell-body .wms-dashboard-calendar-grid {
+    body.brand-body.app-shell-body .wms-command-dashboard > .wms-command-hero {
+        padding: 0.85rem;
+    }
+
+    body.brand-body.app-shell-body .wms-command-kpis,
+    body.brand-body.app-shell-body .wms-module-groups,
+    body.brand-body.app-shell-body .wms-module-group--operations .wms-module-list {
         grid-template-columns: 1fr;
     }
 
-    body.brand-body.app-shell-body .wms-dashboard-module,
-    body.brand-body.app-shell-body .wms-dashboard-module .module-link-body,
-    body.brand-body.app-shell-body .wms-dashboard-module .dashboard-module-status {
-        align-items: flex-start;
+    body.brand-body.app-shell-body .wms-module-group--operations {
+        grid-column: auto;
     }
 
-    body.brand-body.app-shell-body .wms-dashboard-module {
+    body.brand-body.app-shell-body .wms-command-block-title,
+    body.brand-body.app-shell-body .wms-command-agenda-head {
+        align-items: flex-start;
         flex-direction: column;
     }
 
-    body.brand-body.app-shell-body .wms-dashboard-module .dashboard-module-status,
-    body.brand-body.app-shell-body .wms-dashboard-agenda-actions,
-    body.brand-body.app-shell-body .wms-dashboard-agenda-actions .dashboard-notifications-link {
+    body.brand-body.app-shell-body .wms-command-block-title p {
+        max-width: none;
+        text-align: left;
+    }
+
+    body.brand-body.app-shell-body .wms-command-agenda-head .dashboard-notifications-link {
         width: 100%;
-        justify-content: flex-start;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 520px) {
+    body.brand-body.app-shell-body .wms-command-kpis,
+    body.brand-body.app-shell-body .wms-quick-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .wms-command-module .module-link-copy span {
+        display: none;
+    }
+
+    body.brand-body.app-shell-body .wms-command-module {
+        min-height: 2.75rem;
+    }
+}
+
+@media (max-width: 390px) {
+    body.brand-body.app-shell-body .wms-quick-actions {
+        grid-template-columns: 1fr;
     }
 }
 

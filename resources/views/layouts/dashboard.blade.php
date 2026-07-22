@@ -91,9 +91,12 @@
                                             </span>
                                         </span>
                                         <span class="ops-link-meta">
-                                            <span class="ops-status badge-compact {{ $child['status'] === 'ready' ? 'ops-status--ready' : 'ops-status--placeholder' }}">
-                                                {{ $child['status_label'] }}
-                                            </span>
+                                            @if ($child['status'] !== 'ready')
+                                                <span class="ops-status badge-compact ops-status--placeholder">
+                                                    {{ $child['status_label'] }}
+                                                </span>
+                                            @endif
+                                            <span class="ops-link-arrow" aria-hidden="true">→</span>
                                         </span>
                                     </a>
                                 @endforeach

@@ -4967,3 +4967,86 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 ### Cierre Git previsto
 - Commit: `feat: add superadmin stock adjustments`.
 - Push normal a `origin/main`, excluyendo `.claude/`.
+
+---
+
+## 2026-07-22 - HOTFIX VISUAL DASHBOARD 2 - Centro de mando WMS (22:19 +02:00)
+
+**Equipo:** PC casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Punto de partida:** `2b9bec8 feat: add superadmin stock adjustments`, sincronizado con `origin/main`.
+
+### Problema detectado
+- El dashboard seguia pareciendo una lista de enlaces: cabecera blanca con poca jerarquia, exceso de texto plano, estados `Disponible` repetidos y poca lectura operativa inmediata.
+- La agenda quedaba separada en una columna larga, con demasiado peso para los dias vacios y poco contraste entre actividad y ausencia de actividad.
+- No existia una franja clara de acciones frecuentes ni un bloque compacto que concentrase los avisos pendientes ya disponibles.
+- La topbar y el drawer funcionaban correctamente, pero visualmente resultaban ligeros y repetian estados sin aportar contexto.
+
+### Objetivo visual
+- Convertir `/dashboard` en un centro de mando WMS/ERP compacto, con resumen ejecutivo, acceso rapido, monitor de pendientes, modulos agrupados por areas y agenda semanal integrada.
+- Mantener interfaz en espanol, prioridad de escritorio y comportamiento usable en tablet y movil, sin introducir logica de negocio ni consultas nuevas.
+
+### Diagnostico de datos y alcance
+- El dashboard recibe `navigationSections` filtradas por rol, `pending_count` calculado desde notificaciones no leidas, rol actual, total de modulos visibles y siete dias de agenda.
+- La agenda disponible incluye bookings WMS activos y, para roles internos autorizados, eventos Google ya deduplicados.
+- No llegan al dashboard contadores independientes de stock, entradas o alertas; el nuevo monitor usa exclusivamente los pendientes ya existentes por modulo.
+- Los cuatro grupos siguen procediendo de `config/wms.php`: Stock, Operaciones, Gestion y Sistema. No se cambio su orden, contenido, permiso, ruta ni configuracion.
+
+### Cambios en cabecera
+- Nueva cabecera operativa solida `Centro de mando WMS`, con titulo, descripcion breve y semana visible.
+- Cuatro micro KPIs: rol, pendientes, actividades de agenda semanal y modulos activos segun permisos.
+- Mayor contraste, menos altura desperdiciada y distribucion responsive sin desbordamiento horizontal.
+
+### Cambios en acciones rapidas
+- Nueva franja de acciones filtrada por los modulos visibles del usuario y por rutas existentes.
+- Accesos a Pedidos, Nueva entrada, Stock, Reubicar, Regularizar, Etiquetas, Backups y Agenda cuando el rol correspondiente puede verlos.
+- Para cliente, Pedidos mantiene la ruta de nueva solicitud ya definida por la navegacion; no se inventaron rutas ni permisos.
+
+### Cambios en modulos
+- Se conservaron todos los modulos y se agruparon visualmente por Stock, Operaciones, Gestion y Sistema.
+- Cada area muestra descripcion corta, contador de modulos y pendiente agregado solo cuando existe.
+- Las filas son mas densas, con icono, titulo, resumen limitado y acceso claro.
+- Se retiro el estado repetido `Disponible` del dashboard y del drawer; los estados no operativos siguen mostrandose cuando aportan informacion.
+
+### Cambios en agenda
+- Agenda semanal integrada en el rail operativo junto al monitor de avisos.
+- Resumen alineado de bookings y eventos Google, boton `Abrir agenda`, dias compactos y `Sin actividad` discreto.
+- Los dias con actividad tienen realce visual; los bookings mantienen referencia, cliente, tipo, pallets y badge de estado, y los eventos Google conservan titulo, horario y ubicacion.
+- Se mantuvieron los siete dias, la visibilidad por cliente, la deduplicacion Google/WMS y todos los enlaces existentes.
+
+### Cambios en topbar y menu
+- Topbar mas solida mediante fondo opaco, borde corporativo y sombra contenida; el boton de menu gana contraste.
+- El drawer conserva apertura, cierre, rutas, permisos y estructura JavaScript.
+- Los estados `Disponible` del drawer se sustituyeron por una flecha discreta; los estados distintos de `ready` siguen visibles.
+
+### Archivos modificados
+- `resources/views/dashboard/index.blade.php`.
+- `resources/views/layouts/dashboard.blade.php`.
+- `resources/css/app.css`.
+- `SESSION_LOG.md`.
+
+### Alcance funcional y seguridad
+- No se tocaron controladores, modelos, rutas, `config/wms.php`, migraciones, permisos, stock, backups, etiquetas, regularizaciones, importadores, albaranes, PDFs ni Google Calendar funcional.
+- No se anadieron consultas ni contadores; solo se presentan datos ya disponibles.
+- No se tocaron `.env`, `.claude/`, datos locales ni produccion.
+- No se uso `migrate:fresh`, `db:wipe`, borrado de datos, `git add .`, force push ni comandos destructivos.
+
+### Validacion visual local
+- Dashboard renderizado con un arnes temporal de solo lectura y usuario superadmin local; el arnes se elimino despues y no dejo archivos en el repositorio.
+- Escritorio validado a 1265 px: 8 acciones, 4 areas, 21 modulos, 7 dias y sin overflow horizontal.
+- Tablet validada a 768 px y movil a 390 px: grids adaptados, topbar usable, agenda apilada y sin overflow horizontal.
+- Se verificaron cabecera, acciones, agrupacion de modulos, monitor sin pendientes, agenda vacia y footer.
+- La navegacion autenticada real por `/stock`, `/entradas`, `/bookings`, `/backups`, `/etiquetas` y `/stock/regularizar` no se recorrio en navegador porque la sesion del navegador local no estaba autenticada; esas rutas y regresiones quedaron cubiertas por la suite completa.
+
+### Validaciones
+- Pruebas focalizadas de dashboard, roles, notificaciones, bookings, Google Calendar y albaranes: **152 passed** (611 assertions) tras corregir el unico ajuste de nombre de dia detectado.
+- `php artisan test`: **724 passed** (3798 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `git status --short --branch`: solo los cuatro archivos autorizados modificados antes del commit.
+
+### Cierre Git
+- Commit: `fix: redesign dashboard command center`.
+- Push normal a `origin/main` al finalizar, sin force push.
+- `.claude/` permanece fuera de Git.
