@@ -47,21 +47,10 @@ class ProcessGoodsDispatchStatusChangedJob implements ShouldQueue
 
         try {
             if (
-                in_array($this->currentStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)
+                $this->currentStatus === MerchandiseRequest::STATUS_COMPLETED
                 && $dispatch->delivery_note_sent_at === null
             ) {
                 $notificationService->sendDeliveryNoteToClient($dispatch, $this->currentStatus);
-
-                if ($this->currentStatus === MerchandiseRequest::STATUS_COMPLETED) {
-                    return;
-                }
-            }
-
-            if ($this->currentStatus !== MerchandiseRequest::STATUS_SENT) {
-                $notificationService->deliverStatusChangedNotification(
-                    $dispatch->merchandiseRequest,
-                    $this->previousRequestStatus
-                );
             }
         } catch (Throwable $exception) {
             Log::warning('Fallo al procesar cambio de estado de salida.', [

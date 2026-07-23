@@ -4,6 +4,81 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-23 - FUNCIONAL PEDIDOS 2 - Reducir comunicaciones a creacion y cierre
+
+**Equipo:** PC trabajo / portatil.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+
+**Estado inicial Git:**
+- Se leyo este `SESSION_LOG.md` antes de modificar codigo.
+- `git status --short --branch`: `main` local estaba inicialmente un commit por detras de `origin/main`, con `.claude/` sin trackear.
+- Ultimo commit local inicial: `2b9bec82 feat: add superadmin stock adjustments`.
+- Tras `git fetch origin main`, `origin/main` estaba en `76d6319e fix: redesign dashboard command center`.
+- Se ejecuto `git pull --ff-only origin main` antes de tocar codigo y `main` quedo alineada con `origin/main`.
+
+**Inspeccion realizada antes de editar:**
+- Se revisaron `app/Notifications`, `app/Jobs`, servicios de notificacion, controladores de pedidos/salidas/albaranes y busquedas de `notify()`, `Notification::route()`, `Mail::`, `dispatch()` y jobs `ShouldQueue`.
+- No se detectaron observers, listeners ni eventos de dominio conectados al flujo de pedidos/salidas/albaranes.
+- El ruido estaba concentrado en `MerchandiseRequestNotificationService`, jobs de estado de pedido, confirmacion de carga y estado de salida.
+
+**Causa del ruido detectado:**
+- La creacion del pedido notificaba correctamente.
+- Generar salida desde pedido cambiaba a `preparing` y encolaba comunicaciones de cambio de estado.
+- Confirmar carga encolaba notificacion interna de carga real.
+- Pasar la salida a `sent` enviaba el albaran al cliente.
+- Pasar posteriormente a `completed` podia generar otra comunicacion de estado si el albaran ya estaba marcado como enviado.
+
+**Cambio funcional aplicado:**
+- El flujo de pedidos queda reducido a dos hitos:
+  - Creacion del pedido.
+  - Pedido completado con albaran.
+- Los cambios a `preparing`, confirmacion de carga, generacion de salida y cambio a `sent` ya no encolan ni crean notificaciones/correos.
+- `ProcessGoodsDispatchStatusChangedJob` solo envia comunicaciones si el estado actual es `completed` y `delivery_note_sent_at` esta vacio.
+- `delivery_note_sent_at` queda como barrera de idempotencia del hito final para evitar duplicados por reintentos o doble cierre.
+- Los jobs antiguos de estado de pedido y confirmacion de carga se conservan por compatibilidad con colas ya en vuelo, pero sus entregas quedan en no-op.
+
+**Destinatarios y contenido:**
+- Se mantiene la seleccion interna existente: usuarios activos `almacen`, `administracion` y `superadmin`.
+- Para cliente, si el pedido lo creo un usuario con rol `cliente`, se notifica a ese usuario; si lo creo un usuario interno en nombre del cliente, se notifican los usuarios cliente activos del cliente del pedido.
+- Creacion empresa: `Nuevo pedido de {cliente}`.
+- Creacion cliente: `Tu pedido {codigo} se ha registrado correctamente`.
+- Cierre empresa: `Pedido {codigo} de {cliente} completado`.
+- Cierre cliente: `Tu pedido {codigo} ha sido completado. El albaran esta disponible.`
+- El albaran de salida sigue adjunto al correo final del cliente y la ruta PDF sigue disponible como antes.
+
+**Archivos modificados:**
+- `app/Services/MerchandiseRequests/MerchandiseRequestNotificationService.php`.
+- `app/Jobs/ProcessGoodsDispatchStatusChangedJob.php`.
+- `app/Notifications/InternalGoodsDispatchCompletedNotification.php`.
+- `app/Notifications/InternalMerchandiseRequestSubmittedNotification.php`.
+- `app/Notifications/CustomerMerchandiseRequestSubmittedNotification.php`.
+- `app/Notifications/CustomerDispatchDeliveryNoteNotification.php`.
+- `tests/Feature/MerchandiseRequestNotificationTest.php`.
+- `tests/Feature/GoodsDispatchManagementTest.php`.
+- `SESSION_LOG.md`.
+
+**Tests y validaciones ejecutadas:**
+- `php -l` en los PHP modificados: OK.
+- Tests focalizados de comunicaciones de pedidos/salidas: OK, 18 passed, 85 assertions.
+- `php artisan test`: OK, 723 passed, 3811 assertions.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- Revision manual con `rg`: solo quedan activos `notifySubmitted` para creacion y el job final `ProcessGoodsDispatchStatusChangedJob` condicionado a `completed`; los jobs antiguos intermedios no se despachan desde el servicio.
+
+**Control de alcance:**
+- No se crearon migraciones.
+- No se uso `migrate:fresh`.
+- No se borraron datos ni historico de notificaciones.
+- No se cambio logica de stock, carga, roles, permisos, estados ni generacion del albaran.
+- No se tocaron `.env`, secretos, `.claude/`, `vendor/` ni `node_modules/`.
+
+**Commit / push previsto:**
+- Commit: `fix: reduce order notifications to creation and completion`.
+- Push normal a `origin/main`, sin force push y excluyendo `.claude/`.
+
+---
+
 ## 2026-07-21 - HOTFIX VISUAL UBICACIONES 3.1 + PRUEBA IMPORT STOCK 1
 
 **Contexto:** Equipo casa, ruta oficial `D:\dev\WMS_LARAVEL`, rama `main`. Se partio de `44aed85` (`feat: add controlled location purge and range creation`), remoto `origin https://github.com/maximoslu/WMS_LARAVEL.git`, arbol limpio y `git pull origin main` alineado.

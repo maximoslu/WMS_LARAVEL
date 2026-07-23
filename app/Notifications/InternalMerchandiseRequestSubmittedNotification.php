@@ -41,9 +41,9 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             ->implode('; ');
 
         return (new MailMessage)
-            ->subject('Pedido de '.$clientLabel.' - '.$request->referenceCode())
-            ->greeting('Nueva solicitud pendiente')
-            ->line('Se ha registrado una nueva solicitud de mercancia en el SGA.')
+            ->subject('Nuevo pedido de '.$clientLabel)
+            ->greeting('Nuevo pedido de '.$clientLabel)
+            ->line('El cliente ha realizado un pedido.')
             ->line('Solicitud: '.$request->referenceCode())
             ->line('Cliente: '.$request->client?->name)
             ->line('Solicitante: '.$request->requestedBy?->name ?? 'Sin usuario')
@@ -60,10 +60,10 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
         $request = $this->merchandiseRequest;
 
         return [
-            'type' => 'nueva_solicitud_mercancia',
-            'title' => 'Nueva solicitud de mercancia',
+            'type' => 'pedido_creado_empresa',
+            'title' => 'Nuevo pedido de '.($request->client?->name ?? 'cliente'),
             'body' => sprintf(
-                '%s ha registrado %s con %d pallets.',
+                '%s ha realizado %s con %d pallets.',
                 $request->client?->name ?? 'Un cliente',
                 $request->referenceCode(),
                 $request->requestedPalletsCount()

@@ -2,18 +2,15 @@
 
 namespace App\Services\MerchandiseRequests;
 
-use App\Jobs\ProcessGoodsDispatchLoadingConfirmedNotificationsJob;
 use App\Jobs\ProcessGoodsDispatchStatusChangedJob;
-use App\Jobs\ProcessMerchandiseRequestStatusChangedJob;
 use App\Jobs\ProcessMerchandiseRequestSubmittedNotificationsJob;
 use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\CustomerDispatchDeliveryNoteNotification;
-use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
 use App\Notifications\CustomerMerchandiseRequestSubmittedNotification;
-use App\Notifications\InternalGoodsDispatchLoadingConfirmedNotification;
+use App\Notifications\InternalGoodsDispatchCompletedNotification;
 use App\Notifications\InternalMerchandiseRequestSubmittedNotification;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
@@ -30,56 +27,35 @@ class MerchandiseRequestNotificationService
 
     public function deliverSubmittedNotifications(MerchandiseRequest $merchandiseRequest): void
     {
-        $merchandiseRequest->loadMissing(['client', 'requestedBy', 'lines.item']);
+        $merchandiseRequest->loadMissing(['client.users.role', 'requestedBy.role', 'lines.item']);
 
-        if ($merchandiseRequest->requestedBy !== null && $this->hasValidEmail($merchandiseRequest->requestedBy)) {
-            $merchandiseRequest->requestedBy->notify(
-                new CustomerMerchandiseRequestSubmittedNotification($merchandiseRequest)
-            );
+        foreach ($this->clientRecipients($merchandiseRequest) as $recipient) {
+            $recipient->notify(new CustomerMerchandiseRequestSubmittedNotification($merchandiseRequest));
         }
 
         $this->notifyInternalUsers(
-            new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['database']),
-            new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['mail'])
+            new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['database', 'mail'])
         );
     }
 
     public function notifyStatusChanged(MerchandiseRequest $merchandiseRequest, string $previousStatus): void
     {
-        ProcessMerchandiseRequestStatusChangedJob::dispatch($merchandiseRequest->id, $previousStatus)->afterResponse();
+        // Los cambios intermedios de pedido ya no generan comunicaciones.
     }
 
     public function deliverStatusChangedNotification(MerchandiseRequest $merchandiseRequest, string $previousStatus): void
     {
-        $merchandiseRequest->loadMissing(['client', 'requestedBy', 'lines.item', 'client.users.role']);
-
-        if ($previousStatus === $merchandiseRequest->status) {
-            return;
-        }
-
-        $recipients = $this->clientRecipients($merchandiseRequest);
-
-        foreach ($recipients as $recipient) {
-            $recipient->notify(
-                new CustomerMerchandiseRequestStatusChangedNotification($merchandiseRequest, $previousStatus)
-            );
-        }
+        // Compatibilidad con jobs antiguos ya encolados: no deben emitir nada.
     }
 
     public function notifyLoadingConfirmed(GoodsDispatch $dispatch, User $confirmedBy): void
     {
-        ProcessGoodsDispatchLoadingConfirmedNotificationsJob::dispatch($dispatch->id, $confirmedBy->id)->afterResponse();
+        // La confirmacion de carga es operativa, no un hito de comunicacion.
     }
 
     public function deliverLoadingConfirmedNotifications(GoodsDispatch $dispatch, User $confirmedBy): void
     {
-        $dispatch->loadMissing(['client', 'lines.item', 'merchandiseRequest']);
-
-        $this->notifyInternalUsers(
-            new InternalGoodsDispatchLoadingConfirmedNotification($dispatch, $confirmedBy, ['database']),
-            null,
-            $confirmedBy
-        );
+        // Compatibilidad con jobs antiguos ya encolados: no deben emitir nada.
     }
 
     public function notifyDispatchStatusChanged(
@@ -87,6 +63,10 @@ class MerchandiseRequestNotificationService
         string $previousRequestStatus,
         string $currentStatus,
     ): void {
+        if ($currentStatus !== MerchandiseRequest::STATUS_COMPLETED) {
+            return;
+        }
+
         ProcessGoodsDispatchStatusChangedJob::dispatch(
             $dispatch->id,
             $dispatch->merchandise_request_id,
@@ -97,6 +77,10 @@ class MerchandiseRequestNotificationService
 
     public function sendDeliveryNoteToClient(GoodsDispatch $dispatch, string $currentStatus): ?string
     {
+        if ($dispatch->delivery_note_sent_at !== null) {
+            return null;
+        }
+
         $dispatch->loadMissing([
             'client',
             'lines.item',
@@ -127,6 +111,10 @@ class MerchandiseRequestNotificationService
             throw $exception;
         }
 
+        $this->notifyInternalUsers(
+            new InternalGoodsDispatchCompletedNotification($dispatch, $merchandiseRequest, ['database', 'mail'])
+        );
+
         $recipients = $this->clientRecipients($merchandiseRequest);
         $validEmailRecipients = $recipients
             ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
@@ -139,17 +127,7 @@ class MerchandiseRequestNotificationService
                 $merchandiseRequest,
                 $pdfContent,
                 $currentStatus,
-                ['database'],
-            ));
-        }
-
-        foreach ($validEmailRecipients as $recipient) {
-            $recipient->notify(new CustomerDispatchDeliveryNoteNotification(
-                $dispatch,
-                $merchandiseRequest,
-                $pdfContent,
-                $currentStatus,
-                ['mail'],
+                $this->hasValidEmail($recipient) ? ['database', 'mail'] : ['database'],
             ));
         }
 
@@ -163,6 +141,10 @@ class MerchandiseRequestNotificationService
             ));
         }
 
+        $dispatch->forceFill([
+            'delivery_note_sent_at' => now(),
+        ])->saveQuietly();
+
         if ($validEmailRecipients->isEmpty() && $additionalEmails->isEmpty()) {
             Log::warning('No se ha enviado email de albaran porque el cliente no tiene email valido.', [
                 'dispatch_id' => $dispatch->id,
@@ -171,10 +153,6 @@ class MerchandiseRequestNotificationService
 
             return 'No se ha enviado email porque el cliente no tiene email configurado.';
         }
-
-        $dispatch->forceFill([
-            'delivery_note_sent_at' => now(),
-        ])->saveQuietly();
 
         return null;
     }
@@ -205,7 +183,7 @@ class MerchandiseRequestNotificationService
      */
     private function clientRecipients(MerchandiseRequest $merchandiseRequest): Collection
     {
-        if ($merchandiseRequest->requestedBy !== null) {
+        if ($merchandiseRequest->requestedBy !== null && $merchandiseRequest->requestedBy->hasRole(Role::CLIENTE)) {
             return collect([$merchandiseRequest->requestedBy]);
         }
 
@@ -233,7 +211,7 @@ class MerchandiseRequestNotificationService
             ->values();
     }
 
-    private function notifyInternalUsers(object $databaseNotification, ?object $mailNotification, ?User $excludeUser = null): void
+    private function notifyInternalUsers(object $notification, ?User $excludeUser = null): void
     {
         $recipients = $this->internalRecipients()
             ->reject(fn (User $recipient): bool => $excludeUser !== null && $recipient->id === $excludeUser->id)
@@ -244,14 +222,7 @@ class MerchandiseRequestNotificationService
         }
 
         foreach ($recipients as $recipient) {
-            $recipient->notify($databaseNotification);
-        }
-
-        if ($mailNotification !== null) {
-            $recipients
-                ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
-                ->unique(fn (User $recipient) => mb_strtolower((string) $recipient->email))
-                ->each(fn (User $recipient) => $recipient->notify($mailNotification));
+            $recipient->notify($notification);
         }
     }
 

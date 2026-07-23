@@ -13,11 +13,18 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
 
     public function __construct(
         private readonly MerchandiseRequest $merchandiseRequest,
+        private readonly array $channels = ['database', 'mail'],
     ) {}
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return array_values(array_filter($this->channels, function (string $channel) use ($notifiable): bool {
+            if ($channel === 'mail') {
+                return filter_var($notifiable->email ?? null, FILTER_VALIDATE_EMAIL) !== false;
+            }
+
+            return $channel === 'database';
+        }));
     }
 
     public function toMail(object $notifiable): MailMessage
@@ -32,9 +39,9 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             ->all();
 
         return (new MailMessage)
-            ->subject('Confirmacion de solicitud de mercancia '.$request->referenceCode())
-            ->greeting('Solicitud registrada correctamente')
-            ->line('Hemos recibido tu solicitud de mercancia y ya esta registrada en el SGA.')
+            ->subject('Tu pedido '.$request->referenceCode().' se ha registrado correctamente')
+            ->greeting('Pedido registrado correctamente')
+            ->line('Tu pedido '.$request->referenceCode().' se ha registrado correctamente.')
             ->line('Referencia: '.$request->referenceCode())
             ->line('Fecha de solicitud: '.$request->submittedAt()?->format('d/m/Y H:i'))
             ->line('Estado inicial: '.$request->statusLabel())
@@ -42,5 +49,21 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             ->line('Lineas solicitadas:')
             ->line(implode(PHP_EOL, $lines))
             ->action('Ver solicitud', route('merchandise-requests.show', $request));
+    }
+
+    public function toArray(object $notifiable): array
+    {
+        $request = $this->merchandiseRequest;
+
+        return [
+            'type' => 'pedido_creado_cliente',
+            'title' => 'Pedido registrado correctamente',
+            'body' => 'Tu pedido '.$request->referenceCode().' se ha registrado correctamente.',
+            'url' => route('merchandise-requests.show', $request),
+            'reference' => $request->referenceCode(),
+            'status' => $request->status,
+            'status_label' => $request->statusLabel(),
+            'submitted_at' => $request->submittedAt()?->toDateTimeString(),
+        ];
     }
 }

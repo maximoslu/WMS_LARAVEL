@@ -51,10 +51,9 @@ class CustomerDispatchDeliveryNoteNotification extends Notification
             ->implode('; ');
 
         $message = (new MailMessage)
-            ->subject('Albaran de salida de tu pedido')
-            ->greeting($this->currentStatus === MerchandiseRequest::STATUS_COMPLETED
-                ? 'Tu pedido ha quedado completado'
-                : 'Tu pedido ha sido enviado')
+            ->subject('Tu pedido '.$this->merchandiseRequest->referenceCode().' ha sido completado')
+            ->greeting('Tu pedido ha sido completado')
+            ->line('Tu pedido '.$this->merchandiseRequest->referenceCode().' ha sido completado. El albaran esta disponible.')
             ->line('Adjuntamos el albaran definitivo de salida.')
             ->line('Solicitud: '.$this->merchandiseRequest->referenceCode())
             ->line('Salida: '.$dispatch->dispatchNumber())
@@ -77,10 +76,9 @@ class CustomerDispatchDeliveryNoteNotification extends Notification
     {
         return [
             'type' => 'albaran_salida',
-            'title' => 'Albaran de salida disponible',
+            'title' => 'Pedido '.$this->merchandiseRequest->referenceCode().' completado',
             'body' => sprintf(
-                'El albaran %s ya esta disponible para %s.',
-                $this->dispatch->dispatchNumber(),
+                'Tu pedido %s ha sido completado. El albaran esta disponible.',
                 $this->merchandiseRequest->referenceCode()
             ),
             'url' => route('merchandise-requests.show', $this->merchandiseRequest),

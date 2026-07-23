@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\ProcessGoodsDispatchLoadingConfirmedNotificationsJob;
 use App\Jobs\ProcessGoodsDispatchStatusChangedJob;
 use App\Models\Client;
 use App\Models\ClientDispatchEmailRecipient;
@@ -17,8 +16,6 @@ use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Notifications\CustomerDispatchDeliveryNoteNotification;
-use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
-use App\Notifications\InternalGoodsDispatchLoadingConfirmedNotification;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Services\Stock\StockExportService;
 use App\Support\Stock\StockOverviewBuilder;
@@ -1487,14 +1484,10 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame($almacen->id, $line->confirmed_by);
         $this->assertNotNull($line->confirmed_at);
         $this->assertSame('Se confirma la carga completa.', $line->loading_notes);
-        Bus::assertDispatchedAfterResponse(
-            ProcessGoodsDispatchLoadingConfirmedNotificationsJob::class,
-            fn (ProcessGoodsDispatchLoadingConfirmedNotificationsJob $job): bool => $job->goodsDispatchId === $dispatch->id
-                && $job->confirmedByUserId === $almacen->id
-        );
+        Bus::assertNotDispatched(ProcessGoodsDispatchStatusChangedJob::class);
     }
 
-    public function test_confirmar_carga_real_no_envia_email_y_no_notifica_al_actor(): void
+    public function test_confirmar_carga_real_no_envia_notificaciones_ni_email(): void
     {
         Notification::fake();
         $this->seedBaseData();
@@ -1503,7 +1496,7 @@ class GoodsDispatchManagementTest extends TestCase
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
         $cliente->update(['email' => 'cliente@friesland.test']);
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
-        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $this->makeUserWithRole(Role::ADMINISTRACION);
         $dispatch = GoodsDispatch::factory()->create([
             'client_id' => $client->id,
             'status' => GoodsDispatch::STATUS_PREPARING,
@@ -1516,15 +1509,9 @@ class GoodsDispatchManagementTest extends TestCase
             'confirmed_by' => $almacen->id,
         ]);
 
-        (new ProcessGoodsDispatchLoadingConfirmedNotificationsJob($dispatch->id, $almacen->id))
-            ->handle(app(MerchandiseRequestNotificationService::class));
+        app(MerchandiseRequestNotificationService::class)->deliverLoadingConfirmedNotifications($dispatch, $almacen);
 
-        Notification::assertNotSentTo($almacen, InternalGoodsDispatchLoadingConfirmedNotification::class);
-        Notification::assertSentTo($administracion, InternalGoodsDispatchLoadingConfirmedNotification::class, fn ($notification, array $channels): bool => $channels === ['database']);
-        Notification::assertNotSentTo($administracion, InternalGoodsDispatchLoadingConfirmedNotification::class, fn ($notification, array $channels): bool => $channels === ['mail']);
-        Notification::assertNotSentTo($cliente, InternalGoodsDispatchLoadingConfirmedNotification::class);
-        Notification::assertNotSentTo($cliente, CustomerDispatchDeliveryNoteNotification::class);
-        Notification::assertNotSentTo($cliente, CustomerMerchandiseRequestStatusChangedNotification::class);
+        Notification::assertNothingSent();
     }
 
     public function test_confirming_loading_can_add_extra_reference_lines(): void
@@ -1674,8 +1661,8 @@ class GoodsDispatchManagementTest extends TestCase
         (new ProcessGoodsDispatchStatusChangedJob(
             $dispatch->id,
             $merchandiseRequest->id,
-            MerchandiseRequest::STATUS_PREPARING,
-            GoodsDispatch::STATUS_SENT
+            MerchandiseRequest::STATUS_SENT,
+            GoodsDispatch::STATUS_COMPLETED
         ))->handle(app(MerchandiseRequestNotificationService::class));
 
         Notification::assertSentTo($cliente, CustomerDispatchDeliveryNoteNotification::class);
@@ -1688,7 +1675,7 @@ class GoodsDispatchManagementTest extends TestCase
         );
     }
 
-    public function test_sent_dispatch_sends_delivery_note_once_and_stores_delivery_note_sent_at(): void
+    public function test_sent_dispatch_does_not_queue_delivery_note_communication(): void
     {
         Bus::fake();
         $this->seedBaseData();
@@ -1732,14 +1719,11 @@ class GoodsDispatchManagementTest extends TestCase
             ])
             ->assertRedirect(route('dispatches.show', $dispatch));
 
-        Bus::assertDispatchedAfterResponse(
-            ProcessGoodsDispatchStatusChangedJob::class,
-            fn (ProcessGoodsDispatchStatusChangedJob $job): bool => $job->goodsDispatchId === $dispatch->id
-                && $job->currentStatus === GoodsDispatch::STATUS_SENT
-        );
+        Bus::assertNotDispatched(ProcessGoodsDispatchStatusChangedJob::class);
+        $this->assertNull($dispatch->fresh()->delivery_note_sent_at);
     }
 
-    public function test_completed_status_does_not_duplicate_delivery_note_when_it_was_already_sent(): void
+    public function test_completed_status_does_not_duplicate_delivery_note_when_final_hito_was_already_sent(): void
     {
         Notification::fake();
         $this->seedBaseData();
@@ -1780,8 +1764,8 @@ class GoodsDispatchManagementTest extends TestCase
             GoodsDispatch::STATUS_COMPLETED
         ))->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentTo($cliente, CustomerMerchandiseRequestStatusChangedNotification::class);
         Notification::assertNotSentTo($cliente, CustomerDispatchDeliveryNoteNotification::class);
+        Notification::assertNothingSent();
     }
 
     public function test_albaran_view_shows_loaded_quantities_and_delivery_address(): void
