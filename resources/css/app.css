@@ -2015,6 +2015,15 @@ body.brand-body.app-shell-body .stock-summary.stock-summary--single {
     letter-spacing: -0.05em;
 }
 
+.stock-summary-action-card {
+    align-content: center;
+    justify-items: start;
+}
+
+.stock-summary-action-card [data-stock-export-trigger] {
+    width: 100%;
+}
+
 .stock-filters {
     display: grid;
     gap: 1rem;

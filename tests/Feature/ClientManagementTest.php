@@ -46,6 +46,89 @@ class ClientManagementTest extends TestCase
         ]);
     }
 
+    public function test_storage_occupancy_visibility_defaults_true_for_new_clients(): void
+    {
+        $client = Client::factory()->create([
+            'name' => 'Cliente Ocupacion',
+            'code' => 'OCUPACION',
+        ]);
+
+        $this->assertTrue($client->fresh()->show_storage_occupancy_to_client);
+    }
+
+    public function test_friesland_seed_keeps_storage_occupancy_visibility_disabled(): void
+    {
+        $this->seedBaseData();
+
+        $friesland = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $edelvives = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+
+        $this->assertFalse($friesland->show_storage_occupancy_to_client);
+        $this->assertTrue($edelvives->show_storage_occupancy_to_client);
+    }
+
+    public function test_client_form_allows_enabling_storage_occupancy_visibility(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
+            ->put(route('clients.update', $client), [
+                'name' => $client->name,
+                'code' => $client->code,
+                'delivery_address' => $client->delivery_address,
+                'delivery_postal_code' => $client->delivery_postal_code,
+                'delivery_city' => $client->delivery_city,
+                'delivery_province' => $client->delivery_province,
+                'delivery_country' => $client->delivery_country,
+                'active' => 1,
+                'show_storage_occupancy_to_client' => 1,
+            ])
+            ->assertRedirect(route('clients.index'));
+
+        $this->assertTrue($client->fresh()->show_storage_occupancy_to_client);
+    }
+
+    public function test_client_form_saves_disabled_storage_occupancy_when_checkbox_is_not_sent(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
+            ->put(route('clients.update', $client), [
+                'name' => $client->name,
+                'code' => $client->code,
+                'delivery_address' => $client->delivery_address,
+                'delivery_postal_code' => $client->delivery_postal_code,
+                'delivery_city' => $client->delivery_city,
+                'delivery_province' => $client->delivery_province,
+                'delivery_country' => $client->delivery_country,
+                'active' => 1,
+            ])
+            ->assertRedirect(route('clients.index'));
+
+        $this->assertFalse($client->fresh()->show_storage_occupancy_to_client);
+    }
+
+    public function test_client_form_renders_storage_occupancy_checkbox(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
+            ->get(route('clients.edit', $client))
+            ->assertOk()
+            ->assertSeeText('Mostrar ocupacion de almacen al cliente')
+            ->assertSeeText('Permite que los usuarios de este cliente vean el total de huecos utilizados en el almacen.')
+            ->assertSee('name="show_storage_occupancy_to_client"', false);
+    }
+
     public function test_se_puede_anadir_email_adicional_valido_a_cliente(): void
     {
         $this->seedBaseData();

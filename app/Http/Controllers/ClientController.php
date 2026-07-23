@@ -65,7 +65,7 @@ class ClientController extends Controller
     public function store(StoreClientRequest $request, AuditLogService $audit): RedirectResponse
     {
         DB::transaction(function () use ($request, $audit): void {
-            $client = Client::query()->create($this->payload($request->validated()));
+            $client = Client::query()->create($this->payload($request->validated(), defaultStorageOccupancyVisibility: true));
             $audit->record(
                 event: 'client_created',
                 module: 'clients',
@@ -200,7 +200,7 @@ class ClientController extends Controller
     {
         $old = $client->toArray();
         DB::transaction(function () use ($request, $client, $audit, $old): void {
-            $client->update($this->payload($request->validated()));
+            $client->update($this->payload($request->validated(), defaultStorageOccupancyVisibility: false));
             $audit->record(event: 'client_updated', module: 'clients', description: 'Cliente actualizado.', auditable: $client, user: $request->user(), clientId: $client->id, oldValues: $old, newValues: $client->fresh()->toArray());
         });
 
@@ -228,7 +228,7 @@ class ClientController extends Controller
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    private function payload(array $validated): array
+    private function payload(array $validated, bool $defaultStorageOccupancyVisibility): array
     {
         return [
             'name' => $validated['name'],
@@ -239,6 +239,7 @@ class ClientController extends Controller
             'delivery_province' => $validated['delivery_province'] ?? null,
             'delivery_country' => $validated['delivery_country'] ?? null,
             'active' => (bool) ($validated['active'] ?? false),
+            'show_storage_occupancy_to_client' => (bool) ($validated['show_storage_occupancy_to_client'] ?? $defaultStorageOccupancyVisibility),
         ];
     }
 }

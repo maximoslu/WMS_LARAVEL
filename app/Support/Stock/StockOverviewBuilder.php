@@ -43,6 +43,7 @@ class StockOverviewBuilder
                 'total_logistic_units' => (int) ((clone $summaryQuery)->sum(DB::raw('full_pallets + peaks_count'))),
                 'total_warehouse_pallets' => (float) ((clone $summaryQuery)->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'))),
                 'total_physical_pallets' => (float) ((clone $physicalSummaryQuery)->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'))),
+                'occupied_storage_locations' => $this->countOccupiedStorageLocations(clone $summaryQuery),
                 'batches_with_peaks' => (clone $summaryQuery)->where('peaks_count', '>', 0)->count(),
             ],
         ];
@@ -170,6 +171,24 @@ class StockOverviewBuilder
                 fn (Builder $query) => $query->where('client_id', $filters['client_id']),
                 fn (Builder $query) => $query->whereRaw('1 = 0')
             );
+    }
+
+    private function countOccupiedStorageLocations(Builder $query): int
+    {
+        return $query
+            ->get(['location_id', 'location_text'])
+            ->map(function (StockPallet $pallet): ?string {
+                if ($pallet->location_id !== null) {
+                    return 'id:'.$pallet->location_id;
+                }
+
+                $locationText = trim((string) $pallet->location_text);
+
+                return $locationText !== '' ? 'text:'.mb_strtoupper($locationText) : null;
+            })
+            ->filter()
+            ->unique()
+            ->count();
     }
 
     /**

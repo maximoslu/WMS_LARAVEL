@@ -21,6 +21,7 @@ class ClientFactory extends Factory
             'name' => $name,
             'code' => Str::upper(Str::slug($name, '_')),
             'active' => true,
+            'show_storage_occupancy_to_client' => true,
         ];
     }
 

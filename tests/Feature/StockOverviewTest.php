@@ -438,6 +438,129 @@ class StockOverviewTest extends TestCase
         $this->assertSame(['SKU-FILTRO-A'], $overview['rows']->pluck('sku')->all());
     }
 
+    public function test_cliente_con_ocupacion_activada_ve_total_de_huecos_usados(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $edelvives->update(['show_storage_occupancy_to_client' => true]);
+        $locationA = Location::factory()->create(['code' => 'HUECO-ED-01']);
+        $locationB = Location::factory()->create(['code' => 'HUECO-ED-02']);
+        $item = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'ED-HUECOS']);
+
+        foreach ([$locationA, $locationB] as $location) {
+            StockPallet::factory()->create([
+                'client_id' => $edelvives->id,
+                'item_id' => $item->id,
+                'location_id' => $location->id,
+                'location_text' => $location->code,
+                'quantity_units' => 100,
+                'units_per_pallet' => 100,
+                'full_pallets' => 1,
+            ]);
+        }
+        $this->makeItemWithStock($friesland, 'FR-NO-AFECTA', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $edelvives))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Palés almacenados')
+            ->assertSeeText('Huecos usados')
+            ->assertSeeText('Total de ubicaciones ocupadas')
+            ->assertSee('data-storage-occupancy-summary', false)
+            ->assertSeeText('2')
+            ->assertSee('HUECO-ED-01')
+            ->assertSee('HUECO-ED-02');
+    }
+
+    public function test_cliente_con_ocupacion_desactivada_no_ve_huecos_ni_ubicaciones_pero_si_pales_y_descarga(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $friesland->update(['show_storage_occupancy_to_client' => false]);
+        $location = Location::factory()->create(['code' => 'HUECO-SECRETO-01']);
+        $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-PALES-VISIBLES']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'quantity_units' => 300,
+            'units_per_pallet' => 100,
+            'full_pallets' => 3,
+            'warehouse_pallets' => 3,
+        ]);
+        $this->makeItemWithStock($friesland, '_OCULTO-HUECOS', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $friesland))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Palés almacenados')
+            ->assertSeeText('Stock físico total')
+            ->assertSee('FR-PALES-VISIBLES')
+            ->assertSee('Descargar')
+            ->assertSee('data-stock-export-trigger', false)
+            ->assertDontSeeText('Huecos usados')
+            ->assertDontSeeText('Total de ubicaciones ocupadas')
+            ->assertDontSee('data-storage-occupancy-summary', false)
+            ->assertDontSee('HUECO-SECRETO-01')
+            ->assertDontSeeText('Ubicacion')
+            ->assertDontSee('_OCULTO-HUECOS');
+    }
+
+    public function test_superadmin_administracion_y_almacen_siguen_viendo_huecos_aunque_cliente_los_oculte(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $friesland->update(['show_storage_occupancy_to_client' => false]);
+        $location = Location::factory()->create(['code' => 'HUECO-INTERNO-01']);
+        $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-HUECO-INTERNO']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'quantity_units' => 100,
+        ]);
+
+        foreach ([Role::SUPERADMIN, Role::ADMINISTRACION, Role::ALMACEN] as $roleSlug) {
+            $this->actingAs($this->makeUserWithRole($roleSlug))
+                ->get(route('stock.index', ['client_id' => $friesland->id]))
+                ->assertOk()
+                ->assertSeeText('Huecos usados')
+                ->assertSee('data-storage-occupancy-summary', false)
+                ->assertSee('HUECO-INTERNO-01');
+        }
+    }
+
+    public function test_cliente_no_puede_forzar_ocupacion_con_parametros_de_url(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $friesland->update(['show_storage_occupancy_to_client' => false]);
+        $location = Location::factory()->create(['code' => 'HUECO-FORZADO-01']);
+        $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-FORZADO']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'quantity_units' => 100,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $friesland))
+            ->get(route('stock.index', [
+                'show_storage_occupancy_to_client' => 1,
+                'canSeeStorageOccupancy' => 1,
+                'location' => 'HUECO-FORZADO-01',
+                'location_id' => $location->id,
+            ]))
+            ->assertOk()
+            ->assertSee('FR-FORZADO')
+            ->assertDontSeeText('Huecos usados')
+            ->assertDontSee('HUECO-FORZADO-01')
+            ->assertDontSee('data-storage-occupancy-summary', false);
+    }
+
     public function test_cliente_cannot_force_other_client_with_query_string(): void
     {
         [$friesland, $edelvives] = $this->seedBaseData();
@@ -1167,6 +1290,7 @@ class StockOverviewTest extends TestCase
     public function test_cliente_ve_una_linea_por_referencia_y_lote_con_partidas_en_detalle(): void
     {
         [$client] = $this->seedBaseData();
+        $client->update(['show_storage_occupancy_to_client' => true]);
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SKU-AGRUPADO',

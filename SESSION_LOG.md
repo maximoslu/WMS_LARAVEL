@@ -5185,3 +5185,94 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocó producción, `.env`, credenciales ni migraciones.
 - No se usó `migrate:fresh`, `db:wipe`, force push ni comandos destructivos.
 - `.claude/` permanece fuera de Git.
+
+## 2026-07-23 - FUNCIONAL CLIENTES - Visibilidad configurable de ocupación (13:28 +02:00)
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `12406315 fix: align client stock total with warehouse pallets`, sincronizado con `origin/main`.
+
+### Petición
+- FRIESLAND no debe ver el total de huecos/ubicaciones ocupadas en su espacio de stock.
+- No crear una excepción fija por nombre en la vista; debe ser configuración de ficha de cliente.
+- Mantener visible `Palés almacenados`.
+- Mantener visible y operativo el botón `Descargar` y el modal Excel/PDF/CSV.
+- Mantener reglas actuales de exportación: ocultar referencias `_`, ocultar `misc/VARIOS` y no mezclar clientes.
+
+### Inspección previa
+- Se leyó `SESSION_LOG.md`.
+- `git status --short --branch`: `main...origin/main` con `.claude/` sin trackear.
+- `git log -1 --oneline`: `12406315 fix: align client stock total with warehouse pallets`.
+- `git fetch origin main` y `git pull --ff-only origin main`: rama ya actualizada.
+- El botón `Descargar` estaba dentro de la misma tarjeta Blade del resumen de stock en `resources/views/stock/index.blade.php`.
+- Los exports de stock ya estaban limitados a columnas mínimas (`SKU`, `DESCRIPCIÓN`, `LOTE`, `CANTIDAD`, `PALÉS TOTALES`) en `StockExportService` y `stock.export-pdf`; no incluían ocupación.
+
+### Cambio de datos
+- Nueva migración aditiva: `show_storage_occupancy_to_client` en `clients`.
+- Tipo booleano, `NOT NULL`, default `true`.
+- Migración local ejecutada con `php artisan migrate`; no se usó `migrate:fresh`.
+- La migración apaga la opción para el cliente existente FRIESLAND si existe, de forma idempotente y sin tocar otros clientes.
+- `ClientSeeder` deja FRIESLAND con la opción apagada y EDELVIVES encendida.
+- `ClientFactory` crea clientes nuevos con la opción encendida.
+
+### Ficha de cliente
+- Añadido checkbox `Mostrar ocupacion de almacen al cliente`.
+- Texto de ayuda: permite que usuarios cliente vean el total de huecos utilizados en el almacén.
+- Requests de alta/edición validan el nuevo booleano.
+- En alta, si el campo no llega, prevalece el default encendido.
+- En edición, checkbox no enviado guarda `false`, siguiendo el patrón de `active`.
+
+### Stock cliente
+- `StockOverviewBuilder` calcula `occupied_storage_locations` de forma centralizada.
+- `StockController` calcula `canSeeStorageOccupancy` como:
+  - usuarios internos: siempre `true`;
+  - usuario cliente: valor de `client.show_storage_occupancy_to_client`.
+- En `stock.index`, la tarjeta `Huecos usados` se renderiza solo cuando el usuario puede verla.
+- El botón `Descargar` y el modal se separaron visual y estructuralmente de esa tarjeta, para que ocultar ocupación no elimine la descarga.
+- Si cliente no puede ver ocupación, tampoco se renderizan ubicaciones en detalle/móvil ni ubicaciones asociadas a picos, evitando que deduzca el total.
+- `Palés almacenados` permanece visible para FRIESLAND.
+
+### Descargas
+- No se cambió la lógica de exportación ni importación.
+- Excel, CSV y PDF siguen usando `StockExportService` y la visibilidad actual:
+  - excluyen referencias con SKU `_`;
+  - excluyen categoría `misc/VARIOS`;
+  - fuerzan el cliente autenticado aunque se manipule `client_id`.
+- Las descargas no incluyen ocupación, huecos ni ubicaciones.
+
+### Tests añadidos/actualizados
+- Campo con default `true`.
+- FRIESLAND queda inicialmente con ocupación apagada y EDELVIVES encendida.
+- Ficha de cliente permite activar/desactivar la opción.
+- Checkbox no enviado guarda `false`.
+- Cliente con opción activada ve `Huecos usados`.
+- Cliente con opción desactivada no ve etiqueta, tarjeta, dato, ubicaciones ni HTML de ocupación, pero sí palés y descarga.
+- Superadmin, administración y almacén siguen viendo ocupación aunque el cliente la oculte.
+- Cliente no puede forzar ocupación por parámetros de URL.
+- Configuración de un cliente no afecta a otro.
+- FRIESLAND con ocupación apagada conserva modal Excel/PDF/CSV y exports sin huecos ni internos.
+
+### Validación manual local
+- FRIESLAND quedó con `show_storage_occupancy_to_client = false`.
+- Render cliente FRIESLAND:
+  - `Palés almacenados`: visible.
+  - `Huecos usados`: no renderizado.
+  - `Descargar`: visible.
+- Render superadmin filtrando FRIESLAND:
+  - `Huecos usados`: visible.
+  - `Pallets almacen`: visible.
+- En la base local importada, FRIESLAND mantiene `2338` palés físicos.
+
+### Validaciones
+- `php artisan test --filter=Client`: **203 passed** (817 assertions).
+- `php artisan test --filter=StockOverview`: **53 passed** (310 assertions).
+- `php artisan test --filter=StockExport`: **21 passed** (88 assertions).
+- `php artisan test`: **736 passed** (3912 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 módulos transformados).
+- `git diff --check`: OK.
+
+### Alcance y seguridad
+- No se tocó producción, `.env`, secretos, importador, reglas de stock físico ni reglas de referencias internas.
+- No se usó `migrate:fresh`, `db:wipe`, borrados ni force push.
+- `.claude/` permanece fuera de Git.

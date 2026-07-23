@@ -46,8 +46,8 @@
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
 
-    <section class="stock-summary stock-summary--single" aria-label="Resumen de stock">
-        <article class="surface-card stock-summary-card kpi-card kpi-compact{{ $canExportStock ? ' stock-summary-card--with-action' : '' }}">
+    <section class="stock-summary" aria-label="Resumen de stock">
+        <article class="surface-card stock-summary-card kpi-card kpi-compact">
             @if ($isClient)
                 @php
                     $clientPhysicalPallets = (float) ($summary['total_physical_pallets'] ?? $summary['total_warehouse_pallets'] ?? $summary['total_logistic_units'] ?? 0);
@@ -67,8 +67,20 @@
                     <small>Total visible</small>
                 </div>
             @endif
+        </article>
 
-            @if ($canExportStock)
+        @if ($canSeeStorageOccupancy)
+            <article class="surface-card stock-summary-card kpi-card kpi-compact" data-storage-occupancy-summary>
+                <div class="stock-summary-card-main">
+                    <strong>Huecos usados</strong>
+                    <span>{{ number_format($summary['occupied_storage_locations'] ?? 0, 0, ',', '.') }}</span>
+                    <small>Total de ubicaciones ocupadas</small>
+                </div>
+            </article>
+        @endif
+
+        @if ($canExportStock)
+            <article class="surface-card stock-summary-card stock-summary-action-card kpi-compact">
                 <button
                     type="button"
                     class="button-secondary compact-button btn-compact wms-action-secondary"
@@ -76,8 +88,8 @@
                 >
                     Descargar
                 </button>
-            @endif
-        </article>
+            </article>
+        @endif
     </section>
 
     @if ($canExportStock)
@@ -421,8 +433,10 @@
                                                         <div><dt>Pallets almacen</dt><dd>{{ number_format($row['warehouse_pallets'], 2, ',', '.') }}</dd></div>
                                                         <div><dt>Picos total</dt><dd>{{ number_format($row['peaks_count'], 0, ',', '.') }}</dd></div>
                                                     @endif
-                                                    <div><dt>Ubicacion</dt><dd>{{ $row['location_label'] }}</dd></div>
-                                                    <div><dt>Ubicacion por defecto</dt><dd>{{ $row['default_location_label'] }}</dd></div>
+                                                    @if ($canSeeStorageOccupancy)
+                                                        <div><dt>Ubicacion</dt><dd>{{ $row['location_label'] }}</dd></div>
+                                                        <div><dt>Ubicacion por defecto</dt><dd>{{ $row['default_location_label'] }}</dd></div>
+                                                    @endif
                                                 </dl>
                                             </article>
 
@@ -469,7 +483,7 @@
                                                 <strong>Detalle de picos</strong>
                                                 <div class="stock-client-peak-list">
                                                     @foreach ($row['peak_details'] as $peak)
-                                                        <span>{{ $peak['label'] }}: <strong>{{ number_format($peak['units'], 0, ',', '.') }} uds</strong>@if ($peak['location']) &middot; {{ $peak['location'] }}@endif</span>
+                                                        <span>{{ $peak['label'] }}: <strong>{{ number_format($peak['units'], 0, ',', '.') }} uds</strong>@if ($canSeeStorageOccupancy && $peak['location']) &middot; {{ $peak['location'] }}@endif</span>
                                                     @endforeach
                                                 </div>
                                             </article>
@@ -542,10 +556,12 @@
                             <span>Entrada</span>
                             <strong>{{ $row['received_at'] ?? '-' }}</strong>
                         </div>
-                        <div>
-                            <span>Ubicacion</span>
-                            <strong>{{ $row['location_label'] }}</strong>
-                        </div>
+                        @if ($canSeeStorageOccupancy)
+                            <div>
+                                <span>Ubicacion</span>
+                                <strong>{{ $row['location_label'] }}</strong>
+                            </div>
+                        @endif
                         @if ($isClient)
                             <div>
                                 <span>Cantidad</span>

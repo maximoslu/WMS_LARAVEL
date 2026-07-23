@@ -28,6 +28,7 @@ class UpdateClientRequest extends FormRequest
             'delivery_province' => ['nullable', 'string', 'max:120'],
             'delivery_country' => ['nullable', 'string', 'max:120'],
             'active' => ['nullable', 'boolean'],
+            'show_storage_occupancy_to_client' => ['nullable', 'boolean'],
         ];
     }
 }

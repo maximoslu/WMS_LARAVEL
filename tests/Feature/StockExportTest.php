@@ -43,7 +43,7 @@ class StockExportTest extends TestCase
             ->assertDontSee('Usa el buscador para localizar');
     }
 
-    public function test_stock_cliente_muestra_pales_totales_con_boton_descargar_integrado(): void
+    public function test_stock_cliente_muestra_pales_totales_y_boton_descargar_separado(): void
     {
         [$edelvives] = $this->seedClients();
         $user = $this->makeUserWithRole(Role::CLIENTE, $edelvives);
@@ -55,11 +55,79 @@ class StockExportTest extends TestCase
 
         $content = $response->getContent();
 
-        $this->assertMatchesRegularExpression(
-            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Palés almacenados.*?data-stock-export-trigger.*?<\/article>/s',
-            $content
-        );
+        $this->assertStringContainsString('data-stock-export-trigger', $content);
+        $this->assertMatchesRegularExpression('/Palés almacenados.*?data-stock-export-trigger/s', $content);
         $this->assertStringNotContainsString('stock-summary-toolbar', $content);
+    }
+
+    public function test_friesland_sin_ocupacion_mantiene_descarga_modal_y_export_sin_huecos_ni_internos(): void
+    {
+        [, $friesland] = $this->seedClients();
+        $user = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $location = Location::factory()->create(['code' => 'HUECO-DESCARGA-01']);
+        $visible = $this->createStockRow($friesland, 'FR-DESCARGA', 'Visible descarga', 'LOTE-FR', 300);
+        $visible->update([
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'full_pallets' => 3,
+            'warehouse_pallets' => 3,
+        ]);
+        $internalItem = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => '_FR-INTERNO-DESCARGA',
+            'description' => 'Interno descarga',
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $internalItem->id,
+            'quantity_units' => 50,
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+
+        $index = $this->actingAs($user)->get(route('stock.index'));
+        $index->assertOk();
+        $index->assertSeeText('Palés almacenados');
+        $index->assertDontSeeText('Huecos usados');
+        $index->assertDontSeeText('Total de ubicaciones ocupadas');
+        $index->assertSee('Descargar');
+        $index->assertSee('data-stock-export-trigger', false);
+        $index->assertSee('>Excel<', false);
+        $index->assertSee('>PDF<', false);
+        $index->assertSee('>CSV<', false);
+
+        $xlsx = $this->actingAs($user)->get(route('stock.export', ['format' => 'xlsx']));
+        $xlsx->assertOk();
+        $xlsxRows = [];
+        $reader = new XlsxReader;
+        $reader->open($xlsx->baseResponse->getFile()->getPathname());
+        foreach ($reader->getSheetIterator() as $sheet) {
+            foreach ($sheet->getRowIterator() as $row) {
+                $xlsxRows[] = $row->toArray();
+            }
+        }
+        $reader->close();
+        $xlsxFlat = collect($xlsxRows)->flatten()->implode('|');
+        $this->assertStringContainsString('FR-DESCARGA', $xlsxFlat);
+        $this->assertStringNotContainsStringIgnoringCase('hueco', $xlsxFlat);
+        $this->assertStringNotContainsStringIgnoringCase('ubicacion', $xlsxFlat);
+        $this->assertStringNotContainsString('_FR-INTERNO-DESCARGA', $xlsxFlat);
+        $this->assertStringNotContainsString('Interno descarga', $xlsxFlat);
+
+        $csv = $this->actingAs($user)->get(route('stock.export', ['format' => 'csv']));
+        $csv->assertOk();
+        $csvContent = file_get_contents($csv->baseResponse->getFile()->getPathname());
+        $this->assertStringContainsString('FR-DESCARGA', $csvContent);
+        $this->assertStringNotContainsStringIgnoringCase('hueco', $csvContent);
+        $this->assertStringNotContainsStringIgnoringCase('ubicacion', $csvContent);
+        $this->assertStringNotContainsString('_FR-INTERNO-DESCARGA', $csvContent);
+        $this->assertStringNotContainsString('Interno descarga', $csvContent);
+
+        $pdf = $this->actingAs($user)->get(route('stock.export', ['format' => 'pdf']));
+        $pdf->assertOk();
+        $pdf->assertHeader('content-type', 'application/pdf');
+        $this->assertStringNotContainsStringIgnoringCase('hueco', $pdf->getContent());
+        $this->assertStringNotContainsString('_FR-INTERNO-DESCARGA', $pdf->getContent());
     }
 
     public function test_modal_de_descarga_muestra_los_tres_formatos_y_cancelar(): void

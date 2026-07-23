@@ -21,12 +21,14 @@ class Client extends Model
         'delivery_province',
         'delivery_country',
         'active',
+        'show_storage_occupancy_to_client',
     ];
 
     protected function casts(): array
     {
         return [
             'active' => 'boolean',
+            'show_storage_occupancy_to_client' => 'boolean',
         ];
     }
 

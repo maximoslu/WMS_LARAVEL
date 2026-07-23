@@ -90,6 +90,15 @@
             <span>Cliente activo para operativa y asignacion de usuarios</span>
         </label>
 
+        <label class="toggle-field">
+            <input type="hidden" name="show_storage_occupancy_to_client" value="0">
+            <input type="checkbox" name="show_storage_occupancy_to_client" value="1" @checked(old('show_storage_occupancy_to_client', $client->show_storage_occupancy_to_client ?? true))>
+            <span>
+                Mostrar ocupacion de almacen al cliente
+                <small class="helper-text">Permite que los usuarios de este cliente vean el total de huecos utilizados en el almacen.</small>
+            </span>
+        </label>
+
         <div class="item-form-actions action-buttons">
             <a href="{{ route('clients.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
             <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear cliente' }}</button>
@@ -264,6 +273,5 @@
         @endif
     </div>
 @endif
-
 
 
