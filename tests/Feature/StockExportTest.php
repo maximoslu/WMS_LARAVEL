@@ -87,7 +87,9 @@ class StockExportTest extends TestCase
 
         $index = $this->actingAs($user)->get(route('stock.index'));
         $index->assertOk();
-        $index->assertSeeText('Palés almacenados');
+        $index->assertDontSeeText('Palés almacenados');
+        $index->assertDontSeeText('Stock físico total');
+        $index->assertDontSee('data-stock-total-summary', false);
         $index->assertDontSeeText('Huecos usados');
         $index->assertDontSeeText('Total de ubicaciones ocupadas');
         $index->assertSee('Descargar');

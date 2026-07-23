@@ -53,6 +53,7 @@ class StockController extends Controller
         $canFilterClients = $user?->canAccessRole(Role::ALMACEN) === true;
         $canAdjustStock = $user?->canAccessRole(Role::SUPERADMIN) === true;
         $canSeeStorageOccupancy = ! $isClient || (bool) ($user?->client?->show_storage_occupancy_to_client ?? false);
+        $canSeeStockTotal = ! $isClient || (bool) ($user?->client?->show_stock_total_to_client ?? false);
         $exportClientId = $overview['filters']['client_id'];
 
         return view('stock.index', [
@@ -67,6 +68,7 @@ class StockController extends Controller
             'canFilterClients' => $canFilterClients,
             'canAdjustStock' => $canAdjustStock,
             'canSeeStorageOccupancy' => $canSeeStorageOccupancy,
+            'canSeeStockTotal' => $canSeeStockTotal,
             'canExportStock' => $exportClientId !== null,
             'exportClientId' => $exportClientId,
             'pageTitle' => $isClient ? 'STOCK' : 'Stock actual',

@@ -5276,3 +5276,82 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocó producción, `.env`, secretos, importador, reglas de stock físico ni reglas de referencias internas.
 - No se usó `migrate:fresh`, `db:wipe`, borrados ni force push.
 - `.claude/` permanece fuera de Git.
+
+## 2026-07-23 - HOTFIX STOCK FRIESLAND - Ocultar total global cliente (15:29 +02:00)
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `ab67ebd feat: configure client visibility of storage occupancy`, sincronizado con `origin/main`.
+
+### Problema corregido
+- La configuración anterior ocultaba `Huecos usados`, pero el perfil cliente FRIESLAND seguía viendo el KPI global:
+  - `Palés almacenados`.
+  - `2.338`.
+  - `Stock físico total`.
+- Ese total global de palés es un dato distinto de la ocupación/huecos, así que no debía reutilizarse `show_storage_occupancy_to_client`.
+
+### Cambio de datos
+- Nueva migración aditiva: `show_stock_total_to_client` en `clients`.
+- Booleano, `NOT NULL`, default `true`.
+- FRIESLAND queda en `false` si existe; la migración es segura e idempotente y no toca otros clientes.
+- `Client` añade fillable/cast.
+- `ClientSeeder` deja FRIESLAND con total global apagado y EDELVIVES encendido.
+- `ClientFactory` crea clientes nuevos con total global visible por defecto.
+
+### Ficha de cliente
+- Nuevo checkbox independiente:
+  - Etiqueta: `Mostrar total global de stock al cliente`.
+  - Ayuda: `Permite que los usuarios de este cliente vean el total global de palés almacenados.`
+- Validado en `StoreClientRequest` y `UpdateClientRequest`.
+- Guardado correcto con true/false, incluyendo checkbox no enviado.
+
+### Stock cliente
+- `StockController` calcula `canSeeStockTotal`:
+  - internos: siempre `true`;
+  - cliente: `user.client.show_stock_total_to_client`.
+- `resources/views/stock/index.blade.php` solo renderiza la tarjeta del total global cuando `canSeeStockTotal` es true.
+- Si está apagado no se renderiza `Palés almacenados`, `Stock físico total`, la cifra `2.338`, `data-stock-total-summary` ni espacio reservado.
+- El botón `Descargar`, el modal Excel/PDF/CSV, filtros y tabla quedan independientes y visibles.
+- No se tocó el cálculo de `warehouse_pallets`, importador, datos de stock ni reglas de referencias internas.
+
+### Comprobación manual local
+- FRIESLAND local:
+  - `show_stock_total_to_client = false`.
+  - `show_storage_occupancy_to_client = false`.
+  - El cálculo sigue dando `total_physical_pallets = 2338`.
+- Render cliente FRIESLAND:
+  - Sin tarjeta de total global.
+  - Sin `Palés almacenados`.
+  - Sin `2.338`.
+  - Con `Descargar`.
+  - Con modal Excel/PDF/CSV.
+  - Con filtros y tabla.
+- Render superadmin filtrando FRIESLAND:
+  - Con tarjeta de total global.
+  - Con `2.338`.
+  - Con `Descargar`.
+
+### Tests
+- Cliente con `show_stock_total_to_client=true` ve el KPI y cifra.
+- Cliente con `show_stock_total_to_client=false` no ve título, subtítulo, cifra ni tarjeta.
+- FRIESLAND no ve `2.338`, pero conserva descarga, modal, filtros y tabla.
+- Superadmin, administración y almacén siguen viendo el total aunque el cliente lo oculte.
+- Configuración de un cliente no afecta a otro.
+- Parámetros de URL no fuerzan el KPI.
+- Referencias internas `_` y `misc/VARIOS` siguen ocultas.
+- Exportaciones siguen sin incluir KPI/resumen global.
+
+### Validaciones
+- `php artisan migrate`: OK.
+- `php artisan test --filter=Client`: **208 passed** (879 assertions).
+- `php artisan test --filter=StockOverview`: **58 passed** (364 assertions).
+- `php artisan test --filter=StockExport`: **21 passed** (90 assertions).
+- `php artisan test`: **741 passed** (3976 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 módulos transformados).
+- `git diff --check`: OK.
+
+### Alcance y seguridad
+- No se tocó producción, `.env`, secretos, importador, cálculos de stock físico ni datos de stock.
+- No se usó `migrate:fresh`, `db:wipe`, borrados ni force push.
+- `.claude/` permanece fuera de Git.

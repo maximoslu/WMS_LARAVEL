@@ -99,6 +99,15 @@
             </span>
         </label>
 
+        <label class="toggle-field">
+            <input type="hidden" name="show_stock_total_to_client" value="0">
+            <input type="checkbox" name="show_stock_total_to_client" value="1" @checked(old('show_stock_total_to_client', $client->show_stock_total_to_client ?? true))>
+            <span>
+                Mostrar total global de stock al cliente
+                <small class="helper-text">Permite que los usuarios de este cliente vean el total global de palés almacenados.</small>
+            </span>
+        </label>
+
         <div class="item-form-actions action-buttons">
             <a href="{{ route('clients.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
             <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear cliente' }}</button>
@@ -273,5 +282,4 @@
         @endif
     </div>
 @endif
-
 

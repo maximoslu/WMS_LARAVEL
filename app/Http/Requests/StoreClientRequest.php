@@ -25,6 +25,7 @@ class StoreClientRequest extends FormRequest
             'delivery_country' => ['nullable', 'string', 'max:120'],
             'active' => ['nullable', 'boolean'],
             'show_storage_occupancy_to_client' => ['nullable', 'boolean'],
+            'show_stock_total_to_client' => ['nullable', 'boolean'],
         ];
     }
 }

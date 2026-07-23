@@ -22,6 +22,7 @@ class Client extends Model
         'delivery_country',
         'active',
         'show_storage_occupancy_to_client',
+        'show_stock_total_to_client',
     ];
 
     protected function casts(): array
@@ -29,6 +30,7 @@ class Client extends Model
         return [
             'active' => 'boolean',
             'show_storage_occupancy_to_client' => 'boolean',
+            'show_stock_total_to_client' => 'boolean',
         ];
     }
 

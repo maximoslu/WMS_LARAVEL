@@ -258,6 +258,7 @@ class StockOverviewTest extends TestCase
     public function test_cliente_ve_kpi_fisico_total_pero_no_metricas_internas_de_almacen(): void
     {
         [$friesland] = $this->seedBaseData();
+        $friesland->update(['show_stock_total_to_client' => true]);
 
         $this->makeItemWithStock($friesland, 'CAJA0030', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
 
@@ -304,6 +305,7 @@ class StockOverviewTest extends TestCase
     public function test_kpi_fisico_cliente_suma_internos_pero_tabla_y_export_los_ocultan(): void
     {
         [$friesland] = $this->seedBaseData();
+        $friesland->update(['show_stock_total_to_client' => true]);
 
         $this->makeItemWithStock($friesland, 'VIS-INUSE-1', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
         $this->makeItemWithStock($friesland, 'VIS-BLOCK', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
@@ -438,6 +440,131 @@ class StockOverviewTest extends TestCase
         $this->assertSame(['SKU-FILTRO-A'], $overview['rows']->pluck('sku')->all());
     }
 
+    public function test_cliente_con_total_global_activado_ve_pales_almacenados_y_su_cifra(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+
+        $edelvives->update(['show_stock_total_to_client' => true]);
+        $item = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'ED-TOTAL-ACTIVO']);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $item->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 12,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $edelvives))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Palés almacenados')
+            ->assertSeeText('Stock físico total')
+            ->assertSeeText('12')
+            ->assertSee('data-stock-total-summary', false)
+            ->assertSee('Descargar');
+    }
+
+    public function test_cliente_con_total_global_desactivado_no_recibe_kpi_ni_cifra_total(): void
+    {
+        [, $edelvives] = $this->seedBaseData();
+
+        $edelvives->update(['show_stock_total_to_client' => false]);
+        $item = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'ED-TOTAL-OCULTO']);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $item->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 27,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $edelvives))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertDontSeeText('Palés almacenados')
+            ->assertDontSeeText('Stock físico total')
+            ->assertDontSeeText('27')
+            ->assertDontSee('data-stock-total-summary', false)
+            ->assertSee('ED-TOTAL-OCULTO')
+            ->assertSee('Descargar')
+            ->assertSee('data-stock-export-trigger', false);
+    }
+
+    public function test_cliente_friesland_no_ve_total_global_2338_pero_mantiene_tabla_filtros_y_descarga(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $friesland->update(['show_stock_total_to_client' => false]);
+        $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-SIN-TOTAL']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-FR-SIN-TOTAL',
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 2338,
+        ]);
+        $this->makeItemWithStock($friesland, '_FR-TOTAL-INTERNO', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $friesland))
+            ->get(route('stock.index', ['show_stock_total_to_client' => 1, 'canSeeStockTotal' => 1]))
+            ->assertOk()
+            ->assertDontSeeText('Palés almacenados')
+            ->assertDontSeeText('Stock físico total')
+            ->assertDontSeeText('2.338')
+            ->assertDontSee('data-stock-total-summary', false)
+            ->assertSee('Descargar')
+            ->assertSee('data-stock-export-trigger', false)
+            ->assertSee('Descargar stock')
+            ->assertSee('>Excel<', false)
+            ->assertSee('>PDF<', false)
+            ->assertSee('>CSV<', false)
+            ->assertSee('SKU, descripcion o referencia')
+            ->assertSee('Estado de stock')
+            ->assertSee('stock-table--client', false)
+            ->assertSee('FR-SIN-TOTAL')
+            ->assertSee('LOT-FR-SIN-TOTAL')
+            ->assertDontSee('_FR-TOTAL-INTERNO');
+    }
+
+    public function test_configuracion_de_total_global_de_un_cliente_no_afecta_a_otro(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $friesland->update(['show_stock_total_to_client' => false]);
+        $edelvives->update(['show_stock_total_to_client' => true]);
+        $frItem = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-TOTAL-AISLADO']);
+        $edItem = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'ED-TOTAL-AISLADO']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frItem->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 17,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 29,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $friesland))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertDontSeeText('Palés almacenados')
+            ->assertDontSee('data-stock-total-summary', false)
+            ->assertSee('FR-TOTAL-AISLADO');
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $edelvives))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Palés almacenados')
+            ->assertSeeText('29')
+            ->assertSee('ED-TOTAL-AISLADO');
+    }
+
     public function test_cliente_con_ocupacion_activada_ve_total_de_huecos_usados(): void
     {
         [$friesland, $edelvives] = $this->seedBaseData();
@@ -476,7 +603,10 @@ class StockOverviewTest extends TestCase
     {
         [$friesland] = $this->seedBaseData();
 
-        $friesland->update(['show_storage_occupancy_to_client' => false]);
+        $friesland->update([
+            'show_storage_occupancy_to_client' => false,
+            'show_stock_total_to_client' => true,
+        ]);
         $location = Location::factory()->create(['code' => 'HUECO-SECRETO-01']);
         $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-PALES-VISIBLES']);
         StockPallet::factory()->create([
@@ -529,6 +659,31 @@ class StockOverviewTest extends TestCase
                 ->assertSeeText('Huecos usados')
                 ->assertSee('data-storage-occupancy-summary', false)
                 ->assertSee('HUECO-INTERNO-01');
+        }
+    }
+
+    public function test_roles_internos_siguen_viendo_total_global_aunque_cliente_lo_oculte(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $friesland->update(['show_stock_total_to_client' => false]);
+        $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-TOTAL-INTERNO']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $item->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 2338,
+        ]);
+
+        foreach ([Role::SUPERADMIN, Role::ADMINISTRACION, Role::ALMACEN] as $roleSlug) {
+            $this->actingAs($this->makeUserWithRole($roleSlug))
+                ->get(route('stock.index', ['client_id' => $friesland->id]))
+                ->assertOk()
+                ->assertSeeText('Pallets almacen')
+                ->assertSeeText('2.338,00')
+                ->assertSee('data-stock-total-summary', false)
+                ->assertSee('Descargar');
         }
     }
 
@@ -1247,6 +1402,7 @@ class StockOverviewTest extends TestCase
     public function test_cliente_ve_total_de_pales_como_completos_mas_picos_y_su_detalle(): void
     {
         [$client] = $this->seedBaseData();
+        $client->update(['show_stock_total_to_client' => true]);
 
         $item = Item::factory()->create([
             'client_id' => $client->id,

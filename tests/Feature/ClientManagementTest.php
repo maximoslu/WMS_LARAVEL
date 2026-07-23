@@ -54,6 +54,7 @@ class ClientManagementTest extends TestCase
         ]);
 
         $this->assertTrue($client->fresh()->show_storage_occupancy_to_client);
+        $this->assertTrue($client->fresh()->show_stock_total_to_client);
     }
 
     public function test_friesland_seed_keeps_storage_occupancy_visibility_disabled(): void
@@ -64,7 +65,9 @@ class ClientManagementTest extends TestCase
         $edelvives = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
 
         $this->assertFalse($friesland->show_storage_occupancy_to_client);
+        $this->assertFalse($friesland->show_stock_total_to_client);
         $this->assertTrue($edelvives->show_storage_occupancy_to_client);
+        $this->assertTrue($edelvives->show_stock_total_to_client);
     }
 
     public function test_client_form_allows_enabling_storage_occupancy_visibility(): void
@@ -85,10 +88,12 @@ class ClientManagementTest extends TestCase
                 'delivery_country' => $client->delivery_country,
                 'active' => 1,
                 'show_storage_occupancy_to_client' => 1,
+                'show_stock_total_to_client' => 1,
             ])
             ->assertRedirect(route('clients.index'));
 
         $this->assertTrue($client->fresh()->show_storage_occupancy_to_client);
+        $this->assertTrue($client->fresh()->show_stock_total_to_client);
     }
 
     public function test_client_form_saves_disabled_storage_occupancy_when_checkbox_is_not_sent(): void
@@ -112,6 +117,7 @@ class ClientManagementTest extends TestCase
             ->assertRedirect(route('clients.index'));
 
         $this->assertFalse($client->fresh()->show_storage_occupancy_to_client);
+        $this->assertFalse($client->fresh()->show_stock_total_to_client);
     }
 
     public function test_client_form_renders_storage_occupancy_checkbox(): void
@@ -126,7 +132,10 @@ class ClientManagementTest extends TestCase
             ->assertOk()
             ->assertSeeText('Mostrar ocupacion de almacen al cliente')
             ->assertSeeText('Permite que los usuarios de este cliente vean el total de huecos utilizados en el almacen.')
-            ->assertSee('name="show_storage_occupancy_to_client"', false);
+            ->assertSeeText('Mostrar total global de stock al cliente')
+            ->assertSeeText('Permite que los usuarios de este cliente vean el total global de palés almacenados.')
+            ->assertSee('name="show_storage_occupancy_to_client"', false)
+            ->assertSee('name="show_stock_total_to_client"', false);
     }
 
     public function test_se_puede_anadir_email_adicional_valido_a_cliente(): void

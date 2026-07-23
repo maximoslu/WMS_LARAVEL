@@ -18,7 +18,7 @@ class ClientSeeder extends Seeder
     }
 
     /**
-     * @return array<int, array{name: string, code: string, active: bool, show_storage_occupancy_to_client: bool}>
+     * @return array<int, array{name: string, code: string, active: bool, show_storage_occupancy_to_client: bool, show_stock_total_to_client: bool}>
      */
     public function defaults(): array
     {
@@ -28,12 +28,14 @@ class ClientSeeder extends Seeder
                 'code' => 'FRIESLAND',
                 'active' => true,
                 'show_storage_occupancy_to_client' => false,
+                'show_stock_total_to_client' => false,
             ],
             [
                 'name' => 'EDELVIVES',
                 'code' => 'EDELVIVES',
                 'active' => true,
                 'show_storage_occupancy_to_client' => true,
+                'show_stock_total_to_client' => true,
             ],
         ];
     }

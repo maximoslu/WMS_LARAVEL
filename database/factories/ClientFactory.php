@@ -22,6 +22,7 @@ class ClientFactory extends Factory
             'code' => Str::upper(Str::slug($name, '_')),
             'active' => true,
             'show_storage_occupancy_to_client' => true,
+            'show_stock_total_to_client' => true,
         ];
     }
 

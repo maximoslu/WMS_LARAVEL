@@ -47,27 +47,29 @@
     @endif
 
     <section class="stock-summary" aria-label="Resumen de stock">
-        <article class="surface-card stock-summary-card kpi-card kpi-compact">
-            @if ($isClient)
-                @php
-                    $clientPhysicalPallets = (float) ($summary['total_physical_pallets'] ?? $summary['total_warehouse_pallets'] ?? $summary['total_logistic_units'] ?? 0);
-                    $clientPhysicalPalletsFormatted = abs($clientPhysicalPallets - round($clientPhysicalPallets)) < 0.00001
-                        ? number_format($clientPhysicalPallets, 0, ',', '.')
-                        : number_format($clientPhysicalPallets, 2, ',', '.');
-                @endphp
-                <div class="stock-summary-card-main">
-                    <strong>Palés almacenados</strong>
-                    <span>{{ $clientPhysicalPalletsFormatted }}</span>
-                    <small>Stock físico total</small>
-                </div>
-            @else
-                <div class="stock-summary-card-main">
-                    <strong>Pallets almacen</strong>
-                    <span>{{ number_format($summary['total_warehouse_pallets'] ?? $summary['total_logistic_units'], 2, ',', '.') }}</span>
-                    <small>Total visible</small>
-                </div>
-            @endif
-        </article>
+        @if ($canSeeStockTotal)
+            <article class="surface-card stock-summary-card kpi-card kpi-compact" data-stock-total-summary>
+                @if ($isClient)
+                    @php
+                        $clientPhysicalPallets = (float) ($summary['total_physical_pallets'] ?? $summary['total_warehouse_pallets'] ?? $summary['total_logistic_units'] ?? 0);
+                        $clientPhysicalPalletsFormatted = abs($clientPhysicalPallets - round($clientPhysicalPallets)) < 0.00001
+                            ? number_format($clientPhysicalPallets, 0, ',', '.')
+                            : number_format($clientPhysicalPallets, 2, ',', '.');
+                    @endphp
+                    <div class="stock-summary-card-main">
+                        <strong>Palés almacenados</strong>
+                        <span>{{ $clientPhysicalPalletsFormatted }}</span>
+                        <small>Stock físico total</small>
+                    </div>
+                @else
+                    <div class="stock-summary-card-main">
+                        <strong>Pallets almacen</strong>
+                        <span>{{ number_format($summary['total_warehouse_pallets'] ?? $summary['total_logistic_units'], 2, ',', '.') }}</span>
+                        <small>Total visible</small>
+                    </div>
+                @endif
+            </article>
+        @endif
 
         @if ($canSeeStorageOccupancy)
             <article class="surface-card stock-summary-card kpi-card kpi-compact" data-storage-occupancy-summary>
