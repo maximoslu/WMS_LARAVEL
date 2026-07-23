@@ -49,10 +49,16 @@
     <section class="stock-summary stock-summary--single" aria-label="Resumen de stock">
         <article class="surface-card stock-summary-card kpi-card kpi-compact{{ $canExportStock ? ' stock-summary-card--with-action' : '' }}">
             @if ($isClient)
+                @php
+                    $clientPhysicalPallets = (float) ($summary['total_physical_pallets'] ?? $summary['total_warehouse_pallets'] ?? $summary['total_logistic_units'] ?? 0);
+                    $clientPhysicalPalletsFormatted = abs($clientPhysicalPallets - round($clientPhysicalPallets)) < 0.00001
+                        ? number_format($clientPhysicalPallets, 0, ',', '.')
+                        : number_format($clientPhysicalPallets, 2, ',', '.');
+                @endphp
                 <div class="stock-summary-card-main">
-                    <strong>Palés totales</strong>
-                    <span>{{ number_format($summary['total_logistic_units'], 0, ',', '.') }}</span>
-                    <small>Palés completos + picos</small>
+                    <strong>Palés almacenados</strong>
+                    <span>{{ $clientPhysicalPalletsFormatted }}</span>
+                    <small>Stock físico total</small>
                 </div>
             @else
                 <div class="stock-summary-card-main">

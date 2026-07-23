@@ -50,13 +50,13 @@ class StockExportTest extends TestCase
 
         $response = $this->actingAs($user)->get(route('stock.index'));
         $response->assertOk();
-        $response->assertSeeText('Palés totales');
-        $response->assertSeeText('Palés completos + picos');
+        $response->assertSeeText('Palés almacenados');
+        $response->assertSeeText('Stock físico total');
 
         $content = $response->getContent();
 
         $this->assertMatchesRegularExpression(
-            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Palés totales.*?data-stock-export-trigger.*?<\/article>/s',
+            '/<article[^>]*stock-summary-card--with-action[^>]*>.*?Palés almacenados.*?data-stock-export-trigger.*?<\/article>/s',
             $content
         );
         $this->assertStringNotContainsString('stock-summary-toolbar', $content);

@@ -195,7 +195,21 @@ class StockOverviewTest extends TestCase
         [$friesland, $edelvives] = $this->seedBaseData();
 
         // Visibles para el cliente: EN USO, BLOQUEADO y OBSOLETO (no son internos).
-        $this->makeItemWithStock($friesland, 'CAJA0030', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $item = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => 'CAJA0030',
+            'description' => 'Caja visible',
+            'units_per_pallet' => 100,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $item->id,
+            'quantity_units' => 700,
+            'units_per_pallet' => 100,
+            'full_pallets' => 7,
+            'peaks_count' => 0,
+            'warehouse_pallets' => 10,
+        ]);
         $this->makeItemWithStock($friesland, 'CRYOVAC6', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
         $this->makeItemWithStock($friesland, 'CAJA0077', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
         $this->makeItemWithStock($friesland, 'ET0336', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
@@ -241,7 +255,7 @@ class StockOverviewTest extends TestCase
             ->assertSeeText('Pallets almacen');
     }
 
-    public function test_cliente_ve_total_operativo_pero_no_metricas_internas_de_almacen(): void
+    public function test_cliente_ve_kpi_fisico_total_pero_no_metricas_internas_de_almacen(): void
     {
         [$friesland] = $this->seedBaseData();
 
@@ -252,7 +266,10 @@ class StockOverviewTest extends TestCase
             ->assertOk()
             ->assertSee('CAJA0030')
             ->assertDontSeeText('Pallets almacen')
-            ->assertSeeText('Palés totales')
+            ->assertSeeText('Palés almacenados')
+            ->assertSeeText('Stock físico total')
+            ->assertSeeText('10')
+            ->assertDontSeeText('Palés completos + picos')
             ->assertSeeText('Uds/palé')
             ->assertSeeText('Picos');
 
@@ -284,30 +301,141 @@ class StockOverviewTest extends TestCase
         $this->assertNotContains('_FILM0519', $skus);
     }
 
-    public function test_tarjeta_resumen_cliente_usa_la_misma_visibilidad_que_la_tabla(): void
+    public function test_kpi_fisico_cliente_suma_internos_pero_tabla_y_export_los_ocultan(): void
     {
         [$friesland] = $this->seedBaseData();
 
-        // 4 visibles no internas (2 EN USO, 1 BLOQUEADO, 1 OBSOLETO).
         $this->makeItemWithStock($friesland, 'VIS-INUSE-1', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
-        $this->makeItemWithStock($friesland, 'VIS-INUSE-2', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
         $this->makeItemWithStock($friesland, 'VIS-BLOCK', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
         $this->makeItemWithStock($friesland, 'VIS-OBS', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
-        // 2 internas ocultas (categoria misc y SKU "_").
         $this->makeItemWithStock($friesland, '_HIDDEN-MISC', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
         $this->makeItemWithStock($friesland, '_HIDDEN-USCORE', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
 
         $client = $this->makeUserWithRole(Role::CLIENTE, $friesland);
         $overview = app(StockOverviewBuilder::class)->build($client, []);
 
-        // La tarjeta resumen (references_with_stock) cuenta solo las 4 visibles no internas...
-        $this->assertSame(4, $overview['summary']['references_with_stock']);
-        // ...igual que la tabla (rows): misma visibilidad, ninguna query distinta.
-        $this->assertCount(4, $overview['rows']);
+        $this->assertSame(3, $overview['summary']['references_with_stock']);
+        $this->assertSame(5.0, $overview['summary']['total_physical_pallets']);
+        $this->assertSame(3.0, $overview['summary']['total_warehouse_pallets']);
+        $this->assertCount(3, $overview['rows']);
         $this->assertSame(
-            ['VIS-BLOCK', 'VIS-INUSE-1', 'VIS-INUSE-2', 'VIS-OBS'],
+            ['VIS-BLOCK', 'VIS-INUSE-1', 'VIS-OBS'],
             collect($overview['rows'])->pluck('sku')->sort()->values()->all(),
         );
+
+        $exportSkus = app(StockExportService::class)->rows($friesland->id)->pluck('sku')->all();
+        $this->assertContains('VIS-INUSE-1', $exportSkus);
+        $this->assertNotContains('_HIDDEN-MISC', $exportSkus);
+        $this->assertNotContains('_HIDDEN-USCORE', $exportSkus);
+
+        $this->actingAs($client)
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSeeText('Palés almacenados')
+            ->assertSeeText('5')
+            ->assertSee('VIS-INUSE-1')
+            ->assertDontSee('_HIDDEN-MISC')
+            ->assertDontSee('_HIDDEN-USCORE')
+            ->assertDontSee('VARIOS');
+    }
+
+    public function test_cliente_y_superadmin_comparten_total_fisico_para_el_mismo_cliente(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $visible = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'VISIBLE-FISICO']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $visible->id,
+            'quantity_units' => 700,
+            'full_pallets' => 7,
+            'peaks_count' => 0,
+            'warehouse_pallets' => 10,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+        ]);
+        $internal = Item::factory()->create([
+            'client_id' => $friesland->id,
+            'sku' => '_INTERNO-FISICO',
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $internal->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'peaks_count' => 0,
+            'warehouse_pallets' => 2,
+            'stock_category' => StockPallet::CATEGORY_MISC,
+        ]);
+
+        $clientOverview = app(StockOverviewBuilder::class)->build($this->makeUserWithRole(Role::CLIENTE, $friesland), []);
+        $superadminOverview = app(StockOverviewBuilder::class)->build($this->makeUserWithRole(Role::SUPERADMIN), [
+            'client_id' => $friesland->id,
+        ]);
+
+        $this->assertSame(12.0, $clientOverview['summary']['total_physical_pallets']);
+        $this->assertSame(12.0, $superadminOverview['summary']['total_warehouse_pallets']);
+    }
+
+    public function test_cliente_no_puede_sumar_stock_de_otro_cliente_manipulando_client_id(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $frItem = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-KPI-SAFE']);
+        $edItem = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'ED-KPI-HIDDEN']);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frItem->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 3,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edItem->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 50,
+        ]);
+
+        $overview = app(StockOverviewBuilder::class)->build($this->makeUserWithRole(Role::CLIENTE, $friesland), [
+            'client_id' => $edelvives->id,
+        ]);
+
+        $this->assertSame(3.0, $overview['summary']['total_physical_pallets']);
+        $this->assertSame($friesland->id, $overview['filters']['client_id']);
+        $this->assertSame(['FR-KPI-SAFE'], $overview['rows']->pluck('sku')->all());
+    }
+
+    public function test_filtros_y_paginacion_no_reducen_kpi_fisico_total_del_cliente(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        foreach ([
+            ['SKU-FILTRO-A', 'LOT-A', 3],
+            ['SKU-FILTRO-B', 'LOT-B', 4],
+            ['SKU-FILTRO-C', 'LOT-C', 5],
+        ] as [$sku, $lot, $warehousePallets]) {
+            $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => $sku]);
+            StockPallet::factory()->create([
+                'client_id' => $friesland->id,
+                'item_id' => $item->id,
+                'lot' => $lot,
+                'quantity_units' => 100,
+                'full_pallets' => 1,
+                'warehouse_pallets' => $warehousePallets,
+            ]);
+        }
+
+        $overview = app(StockOverviewBuilder::class)->build($this->makeUserWithRole(Role::CLIENTE, $friesland), [
+            'search' => 'SKU-FILTRO-A',
+            'lot' => 'LOT-A',
+            'per_page' => 25,
+        ]);
+
+        $this->assertSame(12.0, $overview['summary']['total_physical_pallets']);
+        $this->assertSame(3.0, $overview['summary']['total_warehouse_pallets']);
+        $this->assertSame(['SKU-FILTRO-A'], $overview['rows']->pluck('sku')->all());
     }
 
     public function test_cliente_cannot_force_other_client_with_query_string(): void
@@ -1019,8 +1147,8 @@ class StockOverviewTest extends TestCase
         $this->actingAs($user)
             ->get(route('stock.index'))
             ->assertOk()
-            ->assertSeeText('Palés totales')
-            ->assertSeeText('Palés completos + picos')
+            ->assertSeeText('Palés almacenados')
+            ->assertSeeText('Stock físico total')
             ->assertSeeText('LOTE-TOTAL-8')
             ->assertSeeText('7 completos')
             ->assertSeeText('1 pico')
@@ -1032,6 +1160,7 @@ class StockOverviewTest extends TestCase
         $overview = app(StockOverviewBuilder::class)->build($user, []);
 
         $this->assertSame(8, $overview['summary']['total_logistic_units']);
+        $this->assertSame(8.0, $overview['summary']['total_physical_pallets']);
         $this->assertSame(8, $overview['rows']->first()['total_pallets']);
     }
 

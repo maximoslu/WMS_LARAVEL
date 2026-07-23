@@ -14,7 +14,7 @@ class StockOverviewBuilder
 {
     /**
      * @param  array<string, mixed>  $filters
-     * @return array{filters: array<string, mixed>, rows: Collection<int, array<string, mixed>>, paginator: LengthAwarePaginator, summary: array<string, int>}
+     * @return array{filters: array<string, mixed>, rows: Collection<int, array<string, mixed>>, paginator: LengthAwarePaginator, summary: array<string, int|float>}
      */
     public function build(User $user, array $filters = []): array
     {
@@ -26,6 +26,9 @@ class StockOverviewBuilder
         };
         $rows = collect($paginator->items());
         $summaryQuery = $this->stockQuery($normalizedFilters);
+        $physicalSummaryQuery = $normalizedFilters['is_client']
+            ? $this->clientPhysicalStockQuery($normalizedFilters)
+            : clone $summaryQuery;
 
         return [
             'filters' => $normalizedFilters,
@@ -39,6 +42,7 @@ class StockOverviewBuilder
                 'total_peaks' => (int) (clone $summaryQuery)->sum('peaks_count'),
                 'total_logistic_units' => (int) ((clone $summaryQuery)->sum(DB::raw('full_pallets + peaks_count'))),
                 'total_warehouse_pallets' => (float) ((clone $summaryQuery)->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'))),
+                'total_physical_pallets' => (float) ((clone $physicalSummaryQuery)->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'))),
                 'batches_with_peaks' => (clone $summaryQuery)->where('peaks_count', '>', 0)->count(),
             ],
         ];
@@ -141,6 +145,31 @@ class StockOverviewBuilder
             ->orderBy('received_at')
             ->orderBy('lot')
             ->orderBy('id');
+    }
+
+    /**
+     * Total fisico global del cliente: no usa filtros visuales ni oculta stock interno,
+     * porque el KPI cliente debe representar todos los pales almacenados para su cliente.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function clientPhysicalStockQuery(array $filters): Builder
+    {
+        return StockPallet::query()
+            ->where('active', true)
+            ->whereHas('item')
+            ->where(function (Builder $query): void {
+                $query
+                    ->where('quantity_units', '>', 0)
+                    ->orWhere('full_pallets', '>', 0)
+                    ->orWhere('peaks_count', '>', 0)
+                    ->orWhere('warehouse_pallets', '>', 0);
+            })
+            ->when(
+                $filters['client_id'] !== null,
+                fn (Builder $query) => $query->where('client_id', $filters['client_id']),
+                fn (Builder $query) => $query->whereRaw('1 = 0')
+            );
     }
 
     /**

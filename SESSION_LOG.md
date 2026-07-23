@@ -5125,3 +5125,63 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Commit: `fix: redesign dashboard command center`.
 - Push normal a `origin/main` al finalizar, sin force push.
 - `.claude/` permanece fuera de Git.
+
+## 2026-07-23 - HOTFIX STOCK FRIESLAND KPI físico cliente (12:56 +02:00)
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `8c43fd6e fix: reduce order notifications to creation and completion`, sincronizado con `origin/main`.
+
+### Petición
+- Revisar el descuadre de stock Friesland tras importar el Excel real: superadmin mostraba 2.338 pallets físicos, cliente mostraba un total inferior.
+- Mantener ocultas para cliente las referencias internas (`stock_category = misc` o SKU empezando por `_`) en tabla, búsqueda, export y detalle.
+- Corregir solo el KPI cliente para que represente todo el stock físico de su cliente usando `warehouse_pallets` con prioridad.
+- No modificar el importador salvo que el diagnóstico demostrase que la importación era incorrecta.
+
+### Diagnóstico local
+- Estado inicial local: rama `main` actualizada con `origin/main`; `.claude/` seguía sin trackear.
+- La base local no tenía stock activo de Friesland antes de la prueba, así que se importó localmente el Excel real más reciente encontrado: `C:\Users\jorge\Downloads\STOCK_FRIESLAND (1).xlsx`, modificado el 2026-07-23 12:36.
+- Resultado de importación local: `total_warehouse_pallets = 2338`, `total_logistic_units = 2322`, `internal_warehouse_pallets = 78`, `excluded_rows = 5`, `internal_references_detected = 7`.
+- SQL posterior a la importación:
+  - Stock físico total activo Friesland: `2338`.
+  - Stock físico visible para cliente: `2260`.
+  - Stock operativo visible (`full_pallets + peaks_count`): `2244`.
+  - Stock físico oculto interno: `78`.
+  - Diferencia visible por métrica (`warehouse_pallets` frente a completos+picos): `16`.
+  - Desglose local del descuadre: `78 + 16 = 94`.
+- Con el Excel local disponible no se reprodujo exactamente el dato reportado de 2.250/88; esta copia reproduce 2.338 físico y un KPI cliente antiguo equivalente a 2.244. El problema funcional queda confirmado igualmente: el KPI cliente usaba métrica operativa visible en vez de stock físico total.
+
+### Filas internas ocultas detectadas
+- `_CAJA057` lote `827060010`: 1 palé físico.
+- `_CAJA057` lote `NO LOTE`: 1 palé físico.
+- `_CERQUILLOS` lote `NO LOTE`: 7 palés físicos.
+- `_PALLET AMER` lote `NO LOTE`: 60 palés físicos.
+- `_SIN_ID` lote `NO LOTE`: 9 palés físicos.
+- Total interno oculto: 78 palés físicos.
+
+### Cambio aplicado
+- `StockOverviewBuilder` calcula ahora `total_physical_pallets` para usuarios cliente con una query separada, limitada siempre al cliente autenticado, sin filtros visuales y sin ocultar referencias internas.
+- La tabla, búsqueda, export y visibilidad de referencias internas siguen usando la query existente con `hide_internal`.
+- La vista de stock cliente muestra el KPI como `Palés almacenados` / `Stock físico total`, formateando enteros sin decimales y decimales cuando existan.
+- Roles internos mantienen el KPI `Pallets almacen` basado en `total_warehouse_pallets`.
+- No se modificó `StockExcelImportService` ni la lógica de importación.
+
+### Tests añadidos/actualizados
+- Cobertura para que el KPI físico cliente sume stock interno oculto mientras tabla y export lo excluyen.
+- Cobertura para que cliente y superadmin compartan el mismo total físico al mirar el mismo cliente.
+- Cobertura contra manipulación de `client_id` en filtros de cliente.
+- Cobertura para que filtros y paginación no reduzcan el KPI físico total del cliente.
+- Actualizaciones de copy esperado en stock/export de cliente.
+
+### Validaciones
+- `php artisan test --filter=StockOverview`: **49 passed** (273 assertions).
+- `php artisan test --filter=StockImport`: **35 passed** (392 assertions).
+- `php artisan test`: **726 passed** (3835 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 módulos transformados).
+- `git diff --check`: OK.
+
+### Alcance y seguridad
+- No se tocó producción, `.env`, credenciales ni migraciones.
+- No se usó `migrate:fresh`, `db:wipe`, force push ni comandos destructivos.
+- `.claude/` permanece fuera de Git.
