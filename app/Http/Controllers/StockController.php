@@ -45,6 +45,7 @@ class StockController extends Controller
             'per_page',
             'stock_state',
             'batch_status',
+            'stock_category',
             'location',
             'location_id',
         ]));

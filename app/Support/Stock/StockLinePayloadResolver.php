@@ -77,7 +77,11 @@ class StockLinePayloadResolver
             ->when($activeOnly, fn ($query) => $query
                 ->where('active', true)
                 ->where('status', StockPallet::STATUS_AVAILABLE)
-                ->whereNotIn('stock_category', [StockPallet::CATEGORY_BLOCKED, StockPallet::CATEGORY_OBSOLETE]))
+                ->whereNotIn('stock_category', [
+                    StockPallet::CATEGORY_BLOCKED,
+                    StockPallet::CATEGORY_OBSOLETE,
+                    StockPallet::CATEGORY_MISC,
+                ]))
             ->whereIn('id', $stockPalletIds)
             ->get()
             ->keyBy('id');

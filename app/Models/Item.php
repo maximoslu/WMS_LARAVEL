@@ -141,7 +141,7 @@ class Item extends Model
     public static function stockCategoryOptions(): array
     {
         return [
-            self::CATEGORY_IN_USE => 'EN USO',
+            self::CATEGORY_IN_USE => 'ACTIVO',
             self::CATEGORY_BLOCKED => 'BLOQUEADO',
             self::CATEGORY_OBSOLETE => 'OBSOLETO',
             self::CATEGORY_MISC => 'VARIOS',
@@ -150,7 +150,7 @@ class Item extends Model
 
     public static function stockCategoryLabelFor(?string $stockCategory): string
     {
-        return self::stockCategoryOptions()[$stockCategory ?? ''] ?? 'EN USO';
+        return self::stockCategoryOptions()[$stockCategory ?? ''] ?? 'ACTIVO';
     }
 
     public function statusLabel(): string

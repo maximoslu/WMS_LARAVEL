@@ -2097,20 +2097,33 @@ body.brand-body.app-shell-body .stock-summary.stock-summary--single {
 }
 
 .stock-row--obsolete td {
-    background: rgba(231, 196, 86, 0.16);
+    background: rgba(139, 92, 246, 0.12);
 }
 
 .stock-row--obsolete:hover td {
-    background: rgba(231, 196, 86, 0.22);
+    background: rgba(139, 92, 246, 0.17);
+}
+
+.stock-row--misc td {
+    background: rgba(245, 158, 11, 0.14);
+}
+
+.stock-row--misc:hover td {
+    background: rgba(245, 158, 11, 0.2);
 }
 
 .stock-row--blocked td:first-child,
-.stock-row--obsolete td:first-child {
+.stock-row--obsolete td:first-child,
+.stock-row--misc td:first-child {
     box-shadow: inset 4px 0 0 rgba(137, 42, 42, 0.18);
 }
 
 .stock-row--obsolete td:first-child {
-    box-shadow: inset 4px 0 0 rgba(168, 135, 28, 0.22);
+    box-shadow: inset 4px 0 0 rgba(109, 40, 217, 0.22);
+}
+
+.stock-row--misc td:first-child {
+    box-shadow: inset 4px 0 0 rgba(180, 83, 9, 0.24);
 }
 
 .stock-cell-main {
@@ -2170,8 +2183,13 @@ body.brand-body.app-shell-body .stock-summary.stock-summary--single {
 }
 
 .stock-mobile-card--obsolete {
-    background: linear-gradient(180deg, rgba(255, 251, 238, 0.98), rgba(255, 254, 248, 0.98));
-    border-color: rgba(196, 161, 53, 0.24);
+    background: linear-gradient(180deg, rgba(245, 243, 255, 0.98), rgba(250, 248, 255, 0.98));
+    border-color: rgba(139, 92, 246, 0.24);
+}
+
+.stock-mobile-card--misc {
+    background: linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 253, 244, 0.98));
+    border-color: rgba(245, 158, 11, 0.26);
 }
 
 .stock-mobile-metrics {
@@ -2361,15 +2379,21 @@ body.brand-body.app-shell-body .stock-summary.stock-summary--single {
 }
 
 .batch-status-badge--blocked {
-    background: #fff3d6;
-    color: #8a4b00;
-    border: 1px solid rgba(138, 75, 0, 0.14);
+    background: #f5dede;
+    color: #8f2020;
+    border: 1px solid rgba(143, 32, 32, 0.14);
 }
 
 .batch-status-badge--obsolete {
-    background: #e3e8ed;
-    color: #314353;
-    border: 1px solid rgba(49, 67, 83, 0.14);
+    background: #ede9fe;
+    color: #5b21b6;
+    border: 1px solid rgba(91, 33, 182, 0.14);
+}
+
+.batch-status-badge--misc {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid rgba(146, 64, 14, 0.16);
 }
 
 .pagination-card nav {
@@ -7734,13 +7758,18 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
 }
 
 .stock-client-state--blocked {
-    color: #85530d;
-    background: rgba(214, 145, 35, 0.13);
+    color: #8f2020;
+    background: rgba(214, 97, 97, 0.13);
 }
 
 .stock-client-state--obsolete {
-    color: #704453;
-    background: rgba(137, 78, 98, 0.11);
+    color: #5b21b6;
+    background: rgba(139, 92, 246, 0.13);
+}
+
+.stock-client-state--misc {
+    color: #92400e;
+    background: rgba(245, 158, 11, 0.16);
 }
 
 .stock-detail-panel--client {

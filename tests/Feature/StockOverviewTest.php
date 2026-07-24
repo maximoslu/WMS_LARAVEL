@@ -133,7 +133,7 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('name="client_id"', false);
     }
 
-    public function test_cliente_no_ve_referencias_varios_pero_si_bloqueadas_y_obsoletas(): void
+    public function test_cliente_ve_referencias_varios_bloqueadas_y_obsoletas(): void
     {
         [$client] = $this->seedBaseData();
 
@@ -186,15 +186,17 @@ class StockOverviewTest extends TestCase
             ->assertOk()
             ->assertSee('SKU-BLOCKED-CLIENT')
             ->assertSee('SKU-OBSOLETE-CLIENT')
-            ->assertDontSee('_INTERNAL-CLIENT')
-            ->assertDontSee('VARIOS');
+            ->assertSee('_INTERNAL-CLIENT')
+            ->assertSee('BLOQUEADO')
+            ->assertSee('OBSOLETO')
+            ->assertSee('VARIOS');
     }
 
-    public function test_cliente_friesland_ve_en_uso_bloqueado_obsoleto_y_oculta_internos(): void
+    public function test_cliente_friesland_ve_activo_bloqueado_obsoleto_varios_y_sku_interno(): void
     {
         [$friesland, $edelvives] = $this->seedBaseData();
 
-        // Visibles para el cliente: EN USO, BLOQUEADO y OBSOLETO (no son internos).
+        // Visibles para el cliente: ACTIVO, BLOQUEADO, OBSOLETO y VARIOS.
         $item = Item::factory()->create([
             'client_id' => $friesland->id,
             'sku' => 'CAJA0030',
@@ -213,9 +215,8 @@ class StockOverviewTest extends TestCase
         $this->makeItemWithStock($friesland, 'CRYOVAC6', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
         $this->makeItemWithStock($friesland, 'CAJA0077', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
         $this->makeItemWithStock($friesland, 'ET0336', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
-        // Ocultos para el cliente: categoria VARIOS y referencias que empiezan por "_".
         $this->makeItemWithStock($friesland, '_CAJA057', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
-        // Caso fuga: SKU con "_" pero mal categorizado como EN USO. Debe ocultarse igualmente.
+        // Caso defensivo: SKU con "_" mal categorizado se muestra en pantalla, pero no se exporta.
         $this->makeItemWithStock($friesland, '_FILM0519', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
         // Stock de otro cliente: nunca visible.
         $this->makeItemWithStock($edelvives, 'ED-OTHER-CLIENT', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
@@ -229,10 +230,57 @@ class StockOverviewTest extends TestCase
             ->assertSee('CRYOVAC6')
             ->assertSee('CAJA0077')
             ->assertSee('ET0336')
-            ->assertDontSee('_CAJA057')
-            ->assertDontSee('_FILM0519')
+            ->assertSee('_CAJA057')
+            ->assertSee('_FILM0519')
             ->assertDontSee('ED-OTHER-CLIENT')
-            ->assertDontSee('VARIOS');
+            ->assertSee('ACTIVO')
+            ->assertSee('BLOQUEADO')
+            ->assertSee('OBSOLETO')
+            ->assertSee('VARIOS');
+    }
+
+    public function test_cliente_puede_filtrar_por_clasificacion_sin_salir_de_su_stock(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+
+        $this->makeItemWithStock($friesland, 'FR-ACTIVO-FILTRO', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'FR-VARIOS-FILTRO', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($edelvives, 'ED-VARIOS-FILTRO', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $friesland))
+            ->get(route('stock.index', [
+                'stock_category' => StockPallet::CATEGORY_MISC,
+                'client_id' => $edelvives->id,
+            ]))
+            ->assertOk()
+            ->assertSee('name="stock_category"', false)
+            ->assertSee('FR-VARIOS-FILTRO')
+            ->assertSee('VARIOS')
+            ->assertDontSee('FR-ACTIVO-FILTRO')
+            ->assertDontSee('ED-VARIOS-FILTRO')
+            ->assertDontSee('name="client_id"', false);
+    }
+
+    public function test_clasificaciones_renderizan_etiqueta_y_clase_visual_para_cliente(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $this->makeItemWithStock($friesland, 'FR-ACTIVO-CLASE', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'FR-BLOCK-CLASE', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
+        $this->makeItemWithStock($friesland, 'FR-OBS-CLASE', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
+        $this->makeItemWithStock($friesland, 'FR-MISC-CLASE', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+
+        $this->actingAs($this->makeUserWithRole(Role::CLIENTE, $friesland))
+            ->get(route('stock.index'))
+            ->assertOk()
+            ->assertSee('stock-client-state--in-use', false)
+            ->assertSee('stock-client-state--blocked', false)
+            ->assertSee('stock-client-state--obsolete', false)
+            ->assertSee('stock-client-state--misc', false)
+            ->assertSee('ACTIVO')
+            ->assertSee('BLOQUEADO')
+            ->assertSee('OBSOLETO')
+            ->assertSee('VARIOS');
     }
 
     public function test_superadmin_ve_internos_varios_y_columnas_logisticas(): void
@@ -253,6 +301,30 @@ class StockOverviewTest extends TestCase
             ->assertSee('_FILM0519')
             ->assertSee('VARIOS')
             ->assertSeeText('Pallets almacen');
+    }
+
+    public function test_roles_internos_ven_las_cuatro_clasificaciones(): void
+    {
+        [$friesland] = $this->seedBaseData();
+
+        $this->makeItemWithStock($friesland, 'FR-IN-ACTIVO', Item::STATUS_ACTIVE, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE);
+        $this->makeItemWithStock($friesland, 'FR-IN-BLOCK', Item::STATUS_BLOCKED, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED);
+        $this->makeItemWithStock($friesland, 'FR-IN-OBS', Item::STATUS_OBSOLETE, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE);
+        $this->makeItemWithStock($friesland, 'FR-IN-MISC', Item::STATUS_ACTIVE, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE);
+
+        foreach ([Role::SUPERADMIN, Role::ADMINISTRACION, Role::ALMACEN] as $roleSlug) {
+            $this->actingAs($this->makeUserWithRole($roleSlug))
+                ->get(route('stock.index', ['client_id' => $friesland->id]))
+                ->assertOk()
+                ->assertSee('FR-IN-ACTIVO')
+                ->assertSee('FR-IN-BLOCK')
+                ->assertSee('FR-IN-OBS')
+                ->assertSee('FR-IN-MISC')
+                ->assertSee('ACTIVO')
+                ->assertSee('BLOQUEADO')
+                ->assertSee('OBSOLETO')
+                ->assertSee('VARIOS');
+        }
     }
 
     public function test_cliente_ve_kpi_fisico_total_pero_no_metricas_internas_de_almacen(): void
@@ -280,7 +352,7 @@ class StockOverviewTest extends TestCase
             ->assertSeeText('Pallets almacen');
     }
 
-    public function test_export_cliente_usa_misma_visibilidad_que_la_tabla(): void
+    public function test_export_cliente_usa_stock_oficial_no_la_visibilidad_de_tabla(): void
     {
         [$friesland] = $this->seedBaseData();
 
@@ -293,16 +365,16 @@ class StockOverviewTest extends TestCase
         $rows = app(StockExportService::class)->rows($friesland->id);
         $skus = $rows->pluck('sku')->all();
 
-        // El export incluye lo mismo que ve el cliente en la tabla: EN USO, BLOQUEADO y OBSOLETO.
+        // El export oficial incluye ACTIVO y BLOQUEADO.
         $this->assertContains('CAJA0030', $skus);
         $this->assertContains('CAJA0077', $skus);
-        $this->assertContains('ET0336', $skus);
-        // Y excluye lo interno: VARIOS y referencias "_" (aunque esten mal categorizadas).
+        // Y excluye OBSOLETO, VARIOS y referencias "_" (aunque esten mal categorizadas).
+        $this->assertNotContains('ET0336', $skus);
         $this->assertNotContains('_CAJA057', $skus);
         $this->assertNotContains('_FILM0519', $skus);
     }
 
-    public function test_kpi_fisico_cliente_suma_internos_pero_tabla_y_export_los_ocultan(): void
+    public function test_kpi_fisico_cliente_suma_todo_tabla_muestra_todo_y_export_oficial_excluye_no_oficial(): void
     {
         [$friesland] = $this->seedBaseData();
         $friesland->update(['show_stock_total_to_client' => true]);
@@ -316,17 +388,19 @@ class StockOverviewTest extends TestCase
         $client = $this->makeUserWithRole(Role::CLIENTE, $friesland);
         $overview = app(StockOverviewBuilder::class)->build($client, []);
 
-        $this->assertSame(3, $overview['summary']['references_with_stock']);
+        $this->assertSame(5, $overview['summary']['references_with_stock']);
         $this->assertSame(5.0, $overview['summary']['total_physical_pallets']);
-        $this->assertSame(3.0, $overview['summary']['total_warehouse_pallets']);
-        $this->assertCount(3, $overview['rows']);
+        $this->assertSame(5.0, $overview['summary']['total_warehouse_pallets']);
+        $this->assertCount(5, $overview['rows']);
         $this->assertSame(
-            ['VIS-BLOCK', 'VIS-INUSE-1', 'VIS-OBS'],
+            ['VIS-BLOCK', 'VIS-INUSE-1', 'VIS-OBS', '_HIDDEN-MISC', '_HIDDEN-USCORE'],
             collect($overview['rows'])->pluck('sku')->sort()->values()->all(),
         );
 
         $exportSkus = app(StockExportService::class)->rows($friesland->id)->pluck('sku')->all();
         $this->assertContains('VIS-INUSE-1', $exportSkus);
+        $this->assertContains('VIS-BLOCK', $exportSkus);
+        $this->assertNotContains('VIS-OBS', $exportSkus);
         $this->assertNotContains('_HIDDEN-MISC', $exportSkus);
         $this->assertNotContains('_HIDDEN-USCORE', $exportSkus);
 
@@ -336,9 +410,9 @@ class StockOverviewTest extends TestCase
             ->assertSeeText('Palés almacenados')
             ->assertSeeText('5')
             ->assertSee('VIS-INUSE-1')
-            ->assertDontSee('_HIDDEN-MISC')
-            ->assertDontSee('_HIDDEN-USCORE')
-            ->assertDontSee('VARIOS');
+            ->assertSee('_HIDDEN-MISC')
+            ->assertSee('_HIDDEN-USCORE')
+            ->assertSee('VARIOS');
     }
 
     public function test_cliente_y_superadmin_comparten_total_fisico_para_el_mismo_cliente(): void
@@ -483,7 +557,6 @@ class StockOverviewTest extends TestCase
             ->assertOk()
             ->assertDontSeeText('Palés almacenados')
             ->assertDontSeeText('Stock físico total')
-            ->assertDontSeeText('27')
             ->assertDontSee('data-stock-total-summary', false)
             ->assertSee('ED-TOTAL-OCULTO')
             ->assertSee('Descargar')
@@ -524,7 +597,8 @@ class StockOverviewTest extends TestCase
             ->assertSee('stock-table--client', false)
             ->assertSee('FR-SIN-TOTAL')
             ->assertSee('LOT-FR-SIN-TOTAL')
-            ->assertDontSee('_FR-TOTAL-INTERNO');
+            ->assertSee('_FR-TOTAL-INTERNO')
+            ->assertSee('VARIOS');
     }
 
     public function test_configuracion_de_total_global_de_un_cliente_no_afecta_a_otro(): void
@@ -634,7 +708,7 @@ class StockOverviewTest extends TestCase
             ->assertDontSee('data-storage-occupancy-summary', false)
             ->assertDontSee('HUECO-SECRETO-01')
             ->assertDontSeeText('Ubicacion')
-            ->assertDontSee('_OCULTO-HUECOS');
+            ->assertSee('_OCULTO-HUECOS');
     }
 
     public function test_superadmin_administracion_y_almacen_siguen_viendo_huecos_aunque_cliente_los_oculte(): void
@@ -1661,6 +1735,7 @@ class StockOverviewTest extends TestCase
             'client_id' => $client->id,
             'item_id' => $item->id,
             'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_OBSOLETE,
             'quantity_units' => 300,
             'units_per_pallet' => 300,
             'full_pallets' => 1,

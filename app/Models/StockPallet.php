@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\Stock\StockBatchCalculator;
 use Database\Factories\StockPalletFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -274,6 +275,27 @@ class StockPallet extends Model
     public function stockCategoryLabel(): string
     {
         return self::stockCategoryLabelFor($this->stock_category);
+    }
+
+    public function scopeWithPhysicalStock(Builder $query): Builder
+    {
+        return $query
+            ->where('active', true)
+            ->where(function (Builder $query): void {
+                $query
+                    ->where('quantity_units', '>', 0)
+                    ->orWhere('full_pallets', '>', 0)
+                    ->orWhere('peaks_count', '>', 0)
+                    ->orWhere('warehouse_pallets', '>', 0);
+            });
+    }
+
+    public function scopeOfficial(Builder $query): Builder
+    {
+        return $query
+            ->withPhysicalStock()
+            ->whereIn('stock_category', [self::CATEGORY_IN_USE, self::CATEGORY_BLOCKED])
+            ->whereHas('item', fn (Builder $itemQuery) => $itemQuery->whereRaw("SUBSTR(sku, 1, 1) <> '_'"));
     }
 
     /**

@@ -298,6 +298,49 @@ class StockImportTest extends TestCase
         $this->assertSame(1.33, (float) $miscStock->warehouse_pallets);
     }
 
+    public function test_friesland_import_keeps_stock_category_per_batch_when_same_sku_appears_in_multiple_sheets(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'GENERAL' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-SAME-SKU', 'Mismo SKU activo', 'LOT-ACT', 1000, 100, 10],
+            ],
+            'BLOQUEADO' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-SAME-SKU', 'Mismo SKU bloqueado', 'LOT-BLK', 500, 100, 5],
+            ],
+            'OBSOLETO' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-SAME-SKU', 'Mismo SKU obsoleto', 'LOT-OBS', 300, 100, 3],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ])->assertOk();
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect(route('stock.index', ['client_id' => $friesland->id]));
+
+        $categoriesByLot = StockPallet::query()
+            ->where('client_id', $friesland->id)
+            ->whereHas('item', fn ($query) => $query->where('sku', 'FR-SAME-SKU'))
+            ->pluck('stock_category', 'lot')
+            ->all();
+
+        $this->assertSame(StockPallet::CATEGORY_IN_USE, $categoriesByLot['LOT-ACT']);
+        $this->assertSame(StockPallet::CATEGORY_BLOCKED, $categoriesByLot['LOT-BLK']);
+        $this->assertSame(StockPallet::CATEGORY_OBSOLETE, $categoriesByLot['LOT-OBS']);
+    }
+
     public function test_bobinas_with_zero_units_but_declared_pallets_preserves_logistic_stock(): void
     {
         [$friesland] = $this->seedBaseData();

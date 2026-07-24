@@ -10,9 +10,9 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 **Equipo:** PC trabajo.
 **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
 **Rama:** `main`.
-**HEAD verificado antes de esta actualizacion documental:** `8d61d2c0015dcd188bf0c4ca45d64c2f359069b3`.
-**Sincronizacion:** `HEAD` y `origin/main` coinciden en `8d61d2c0015dcd188bf0c4ca45d64c2f359069b3`.
-**Ultimo commit funcional confirmado:** `8d61d2c fix: hide stock total for configured clients`.
+**HEAD verificado al inicio de la sesion actual:** `05dd0c34b555c6fb7e6743a428c42a3601899df7`.
+**Sincronizacion inicial:** `HEAD` y `origin/main` coincidian en `05dd0c34b555c6fb7e6743a428c42a3601899df7`.
+**Ultimo commit funcional confirmado antes de esta sesion:** `8d61d2c fix: hide stock total for configured clients`.
 
 ### Resumen ejecutivo
 
@@ -45,15 +45,16 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 5. **Configuracion final FRIESLAND**:
    - `show_storage_occupancy_to_client = false`.
    - `show_stock_total_to_client = false`.
-   - Tabla y export ocultan referencias `_` y categoria `misc/VARIOS`.
-   - `BLOQUEADO` y `OBSOLETO` siguen visibles.
+   - La tabla muestra ACTIVO, BLOQUEADO, OBSOLETO y VARIOS, incluidas referencias `_`, siempre dentro del cliente.
+   - Las descargas oficiales excluyen OBSOLETO, VARIOS y referencias `_`.
+   - `BLOQUEADO` forma parte del stock oficial descargable.
    - Nunca se mezcla stock de otros clientes.
 
 6. **Estado de validacion registrado**:
-   - Ultima suite completa reportada: `741 passed`, `3976 assertions`.
+   - Ultima suite completa reportada: `747 passed`, `4064 assertions`.
    - `npm run build`: OK.
-   - `git diff --check`: OK.
-   - Estas cifras proceden de la entrada detallada del cambio `8d61d2c`.
+   - `git diff --check`: OK en esta sesion.
+   - Estas cifras proceden de la entrada detallada de separacion de stock fisico/oficial.
 
 7. **Produccion / Forge**:
    - Estar en `origin/main` no implica por si solo que este desplegado en produccion.
@@ -63,6 +64,112 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 ### Nota sobre `.claude/`
 
 `.claude/` fuera de Git significa unicamente que la carpeta local de configuracion de Claude Code no se versiona. No significa que se omitan del `SESSION_LOG.md` los trabajos realizados por Claude o Codex.
+
+---
+
+## 2026-07-24 - STOCK FRIESLAND - Separar stock fisico y stock oficial
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+
+### Estado inicial
+- Se leyo `SESSION_LOG.md` completo antes de modificar codigo (`5420` lineas en ese momento).
+- `git status --short --branch`: `main...origin/main`, con `.claude/` sin seguimiento.
+- `git log -1 --oneline`: `05dd0c34 docs: add consolidated current project status`.
+- Tras `git fetch origin main`, `HEAD` y `origin/main` coincidian en `05dd0c34b555c6fb7e6743a428c42a3601899df7`.
+- El ultimo commit funcional confirmado seguia siendo `8d61d2c fix: hide stock total for configured clients`.
+
+### Diagnostico de reglas anteriores
+- El importador de Friesland ya reconocia `GENERAL`, `STOCK`, `BOBINAS`, `ETIQUETAS`, `BLOQUEADO`, `OBSOLETO` y `VARIOS`.
+- La importacion ya clasificaba `_` como `misc/VARIOS`, ignoraba filas `***`, no convertia formulas Excel en cantidades falsas y conservaba `warehouse_pallets` con decimales.
+- La tabla cliente seguia usando la regla anterior de ocultar `misc/VARIOS` y SKU `_`.
+- Las descargas reutilizaban esa visibilidad antigua de tabla, por lo que no existia una frontera explicita entre stock fisico y stock oficial.
+- `DailyOperationTotalsService::stockBaseForClient()` excluia obsoletos, por lo que OBSOLETO no contaba para la base de almacenaje/facturacion.
+
+### Regla de negocio aplicada
+- Stock fisico total: ACTIVO + BLOQUEADO + OBSOLETO + VARIOS.
+- Stock oficial descargable: ACTIVO + BLOQUEADO.
+- OBSOLETO y VARIOS se ven en pantalla, pero no entran en descargas oficiales.
+- SKU que empieza por `_` se muestra en pantalla como VARIOS si pertenece al cliente, pero nunca entra en descarga oficial.
+- BLOQUEADO se mantiene visible, cuenta fisicamente y forma parte del stock oficial, aunque no se habilita para picking normal.
+
+### Cambios tecnicos
+- `StockPallet` centraliza `scopeWithPhysicalStock()` y `scopeOfficial()`.
+- `StockOverviewBuilder` usa stock fisico para pantalla/KPIs internos y `official()` para exportaciones.
+- La agrupacion cliente conserva la clasificacion por partida, evitando mezclar categorias si un SKU aparece en varias situaciones.
+- El filtro `stock_category` queda disponible tambien para cliente, siempre limitado a su `client_id`.
+- `Item::stockCategoryOptions()` muestra `ACTIVO` en lugar de `EN USO` sin migrar valores internos.
+- `DailyOperationTotalsService` cuenta todas las partidas activas con stock fisico positivo mediante `warehouse_pallets` si existe.
+- `StockLinePayloadResolver` mantiene restricciones operativas de picking y excluye tambien VARIOS.
+- PDF/XLSX se presentan como stock oficial; CSV mantiene formato tabular sin nota adicional.
+
+### Reglas por pestana Friesland
+- `GENERAL`, `STOCK`, `BOBINAS` y `ETIQUETAS`: ACTIVO por defecto.
+- `BLOQUEADO`: BLOQUEADO, visible, oficial, fisico y facturable.
+- `OBSOLETO`: OBSOLETO, visible, excluido de descarga oficial, fisico y facturable.
+- `VARIOS`: VARIOS, visible, excluido de descarga oficial, fisico y facturable.
+- SKU `_`: VARIOS defensivo aunque aparezca en otra pestana.
+- Filas `***`: ignoradas, sin stock ni partidas fantasma.
+
+### Colores y etiquetas
+- ACTIVO: verde/teal suave.
+- BLOQUEADO: rojo suave.
+- OBSOLETO: violeta suave.
+- VARIOS: ambar suave.
+- Todas las filas muestran texto de clasificacion; no dependen solo del color.
+
+### Excel real Friesland
+- Fichero usado solo en previsualizacion/parsing, sin confirmar importacion ni modificar datos: `C:\Users\jorge\Downloads\STOCK_FRIESLAND (1).xlsx` (`2026-07-23 12:36`).
+- Hojas procesadas: `GENERAL`, `BOBINAS`, `ETIQUETAS`, `BLOQUEADO`, `OBSOLETO`, `VARIOS`.
+- Errores fatales: `0`; errores de fila: `0`.
+- Filas validas con stock: `299`.
+- Stock fisico total: `2.338` pales.
+- Stock oficial: `2.188` pales (`2.178` ACTIVO + `10` BLOQUEADO).
+- OBSOLETO: `72` pales.
+- VARIOS: `78` pales.
+- Partidas por categoria: ACTIVO `146`, BLOQUEADO `4`, OBSOLETO `10`, VARIOS `5`.
+- Referencias unicas por categoria: ACTIVO `109`, BLOQUEADO `4`, OBSOLETO `10`, VARIOS `4`.
+- Referencias internas `_` detectadas: `7`; partidas internas con stock: `5`.
+
+### Tests y validaciones
+- `php -l` en PHP modificados: OK.
+- `php artisan test --filter=StockImport`: `36 passed`, `398 assertions`.
+- `php artisan test --filter=StockOverview`: `61 passed`, `414 assertions`.
+- `php artisan test --filter=StockExport`: `22 passed`, `117 assertions`.
+- `php artisan test --filter=DailyOperations`: `21 passed`, `134 assertions`.
+- `php artisan test --filter=Billing`: `3 passed`, `32 assertions`.
+- `php artisan test`: `747 passed`, `4064 assertions`.
+- `php artisan test --filter=test_cliente_friesland_ve_activo_bloqueado_obsoleto_varios_y_sku_interno`: `1 passed`, `12 assertions`.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK; Git mostro un aviso informativo CRLF/LF en `tests/Feature/DailyOperationsTest.php`.
+
+### Archivos modificados
+- `app/Models/StockPallet.php`.
+- `app/Models/Item.php`.
+- `app/Support/Stock/StockOverviewBuilder.php`.
+- `app/Support/Stock/StockLinePayloadResolver.php`.
+- `app/Services/Stock/StockExportService.php`.
+- `app/Services/DailyOperations/DailyOperationTotalsService.php`.
+- `app/Http/Controllers/StockController.php`.
+- `resources/views/stock/index.blade.php`.
+- `resources/views/stock/export-pdf.blade.php`.
+- `resources/css/app.css`.
+- `tests/Feature/StockImportTest.php`.
+- `tests/Feature/StockOverviewTest.php`.
+- `tests/Feature/StockExportTest.php`.
+- `tests/Feature/DailyOperationsTest.php`.
+- `SESSION_LOG.md`.
+
+### Alcance y pendientes
+- No se crearon migraciones.
+- No se ejecuto `migrate:fresh`, `db:wipe` ni borrado de datos.
+- No se confirmo importacion real del Excel de Friesland.
+- No se tocaron tarifas, permisos, autenticacion, notificaciones, bookings, Google Calendar, `.env`, `vendor`, `node_modules` ni `.claude/`.
+- Pendiente validar visualmente en produccion tras deploy: cliente FRIESLAND ve cuatro clasificaciones y mantiene ocultos total global/huecos; superadmin ve fisico completo y descarga solo oficial.
+- Estar en `origin/main` no implica despliegue en Forge.
+
+**Commit / push previsto:** `feat: separate physical and official Friesland stock`, push normal a `origin/main` sin force push.
 
 ---
 

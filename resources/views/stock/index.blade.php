@@ -234,17 +234,17 @@
                 </select>
             </label>
 
-            @unless ($isClient)
-                <label class="auth-field">
-                    <span>Categoria</span>
-                    <select name="stock_category" class="auth-input">
-                        <option value="all" @selected(($filters['stock_category'] ?? 'all') === 'all')>Todas</option>
-                        @foreach (\App\Models\StockPallet::stockCategoryOptions() as $category => $label)
-                            <option value="{{ $category }}" @selected(($filters['stock_category'] ?? 'all') === $category)>{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </label>
+            <label class="auth-field">
+                <span>Clasificacion</span>
+                <select name="stock_category" class="auth-input">
+                    <option value="all" @selected(($filters['stock_category'] ?? 'all') === 'all')>Todas</option>
+                    @foreach (\App\Models\StockPallet::stockCategoryOptions() as $category => $label)
+                        <option value="{{ $category }}" @selected(($filters['stock_category'] ?? 'all') === $category)>{{ $label }}</option>
+                    @endforeach
+                </select>
+            </label>
 
+            @unless ($isClient)
                 <div class="auth-field">
                     <span>Ubicacion</span>
                     <div

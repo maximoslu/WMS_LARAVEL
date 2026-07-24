@@ -39,7 +39,7 @@ class StockExportService
 
         $writer = new XlsxWriter;
         $writer->openToFile($tempPath);
-        $writer->getCurrentSheet()->setName('STOCK');
+        $writer->getCurrentSheet()->setName('STOCK OFICIAL');
         $writer->getCurrentSheet()->setColumnWidth(18, 1);
         $writer->getCurrentSheet()->setColumnWidth(42, 2);
         $writer->getCurrentSheet()->setColumnWidth(16, 3);

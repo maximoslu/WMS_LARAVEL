@@ -50,43 +50,37 @@ class StockOverviewBuilder
     }
 
     /**
-     * Aggregated rows for client-facing exports (Excel/CSV/PDF): one row per
-     * SKU + lot combination, summing quantity across locations/pallets, using
-     * the same visibility criteria (active, non-zero, all batch statuses) as
-     * the main stock listing's default view.
+     * Aggregated rows for official exports (Excel/CSV/PDF): one row per SKU + lot
+     * combination, summing quantity across locations/pallets. Official stock is
+     * ACTIVO + BLOQUEADO and defensively excludes OBSOLETO, VARIOS and SKU "_".
      *
      * @return Collection<int, array{sku: string, description: string, lot: string, quantity: int, total_pallets: int}>
      */
     public function exportRows(int $clientId): Collection
     {
-        $filters = [
-            'client_id' => $clientId,
-            'item_id' => null,
-            'search' => '',
-            'lot' => '',
-            'location' => '',
-            'location_id' => null,
-            'batch_status' => 'all',
-            'stock_category' => 'all',
-            'hide_internal' => true,
-            'only_peaks' => false,
-        ];
-
-        return $this->stockQuery($filters)
+        return StockPallet::query()
+            ->with(['item'])
+            ->where('client_id', $clientId)
+            ->whereHas('item')
+            ->official()
+            ->orderBy('received_at')
+            ->orderBy('lot')
+            ->orderBy('id')
             ->get()
             ->groupBy(fn (StockPallet $pallet): string => $pallet->item_id.'|'.($pallet->lot ?? ''))
             ->map(function (Collection $group): array {
                 $first = $group->first();
                 $item = $first->item;
+                $totalPallets = (float) $group->sum(
+                    fn (StockPallet $pallet): float => (float) ($pallet->warehouse_pallets ?? ((int) $pallet->full_pallets + (int) $pallet->peaks_count))
+                );
 
                 return [
                     'sku' => $item?->sku ?? 'Sin SKU',
                     'description' => $item?->description ?? 'Sin descripcion',
                     'lot' => $first->lot ?: 'SIN LOTE',
                     'quantity' => (int) $group->sum('quantity_units'),
-                    'total_pallets' => (int) $group->sum(
-                        fn (StockPallet $pallet): int => (int) $pallet->full_pallets + (int) $pallet->peaks_count
-                    ),
+                    'total_pallets' => abs($totalPallets - round($totalPallets)) < 0.00001 ? (int) round($totalPallets) : $totalPallets,
                 ];
             })
             ->sortBy([['sku', 'asc'], ['lot', 'asc']])
@@ -110,15 +104,8 @@ class StockOverviewBuilder
                 'item.defaultLocation.warehouse',
                 'location.warehouse',
             ])
-            ->where('active', true)
+            ->withPhysicalStock()
             ->whereHas('item')
-            ->where(function (Builder $query): void {
-                $query
-                    ->where('quantity_units', '>', 0)
-                    ->orWhere('full_pallets', '>', 0)
-                    ->orWhere('peaks_count', '>', 0)
-                    ->orWhere('warehouse_pallets', '>', 0);
-            })
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
             ->when($filters['item_id'] !== null, fn (Builder $query) => $query->where('item_id', $filters['item_id']))
             ->when($filters['search'] !== '', function (Builder $query) use ($filters): void {
@@ -141,7 +128,6 @@ class StockOverviewBuilder
             })
             ->when($filters['batch_status'] !== 'all', fn (Builder $query) => $query->where('status', $filters['batch_status']))
             ->when(($filters['stock_category'] ?? 'all') !== 'all', fn (Builder $query) => $query->where('stock_category', $filters['stock_category']))
-            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $this->hideInternalStock($query))
             ->when($filters['only_peaks'], fn (Builder $query) => $query->where('peaks_count', '>', 0))
             ->orderBy('received_at')
             ->orderBy('lot')
@@ -157,15 +143,8 @@ class StockOverviewBuilder
     private function clientPhysicalStockQuery(array $filters): Builder
     {
         return StockPallet::query()
-            ->where('active', true)
+            ->withPhysicalStock()
             ->whereHas('item')
-            ->where(function (Builder $query): void {
-                $query
-                    ->where('quantity_units', '>', 0)
-                    ->orWhere('full_pallets', '>', 0)
-                    ->orWhere('peaks_count', '>', 0)
-                    ->orWhere('warehouse_pallets', '>', 0);
-            })
             ->when(
                 $filters['client_id'] !== null,
                 fn (Builder $query) => $query->where('client_id', $filters['client_id']),
@@ -192,30 +171,6 @@ class StockOverviewBuilder
     }
 
     /**
-     * Regla unica de "stock interno" que el cliente no debe ver: categoria VARIOS (misc)
-     * o referencias cuyo SKU empieza por "_". Los estados BLOQUEADO y OBSOLETO NO son
-     * internos y deben seguir siendo visibles para el cliente. Se aplica sobre la partida
-     * de stock (stock_pallets) y su articulo relacionado (items.sku).
-     */
-    private function hideInternalStock(Builder $query): Builder
-    {
-        return $query
-            ->where('stock_category', '!=', StockPallet::CATEGORY_MISC)
-            ->whereHas('item', fn (Builder $itemQuery) => $itemQuery->whereRaw("SUBSTR(sku, 1, 1) <> '_'"));
-    }
-
-    /**
-     * Misma regla de "stock interno" aplicada directamente sobre el maestro de articulos
-     * (items), usada por el listado de referencias sin stock.
-     */
-    private function hideInternalItems(Builder $query): Builder
-    {
-        return $query
-            ->where('stock_category', '!=', Item::CATEGORY_MISC)
-            ->whereRaw("SUBSTR(sku, 1, 1) <> '_'");
-    }
-
-    /**
      * @param  array<string, mixed>  $filters
      */
     private function withoutStockQuery(array $filters): Builder
@@ -224,7 +179,6 @@ class StockOverviewBuilder
             ->with(['client', 'defaultLocation.warehouse'])
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
             ->when(($filters['stock_category'] ?? 'all') !== 'all', fn (Builder $query) => $query->where('stock_category', $filters['stock_category']))
-            ->when((bool) ($filters['hide_internal'] ?? false), fn (Builder $query) => $this->hideInternalItems($query))
             ->when($filters['search'] !== '', function (Builder $query) use ($filters): void {
                 $query->where(function (Builder $query) use ($filters): void {
                     $query
@@ -276,16 +230,13 @@ class StockOverviewBuilder
             'batch_status' => in_array((string) ($filters['batch_status'] ?? 'all'), ['all', ...StockPallet::statuses()], true)
                 ? (string) ($filters['batch_status'] ?? 'all')
                 : 'all',
-            'stock_category' => $isClient
-                ? 'all'
-                : (in_array((string) ($filters['stock_category'] ?? 'all'), ['all', ...StockPallet::stockCategories()], true)
-                    ? (string) ($filters['stock_category'] ?? 'all')
-                    : 'all'),
+            'stock_category' => in_array((string) ($filters['stock_category'] ?? 'all'), ['all', ...StockPallet::stockCategories()], true)
+                ? (string) ($filters['stock_category'] ?? 'all')
+                : 'all',
             'stock_state' => in_array($stockState, ['with_stock', 'without_stock', 'all'], true)
                 ? $stockState
                 : 'with_stock',
             'is_client' => $isClient,
-            'hide_internal' => $isClient || filter_var($filters['hide_internal'] ?? false, FILTER_VALIDATE_BOOL),
         ];
     }
 
@@ -477,28 +428,40 @@ class StockOverviewBuilder
             return 'misc';
         }
 
-        if ($batchStatus === StockPallet::STATUS_BLOCKED) {
+        if ($stockCategory === StockPallet::CATEGORY_BLOCKED) {
             return 'blocked';
         }
 
-        if ($batchStatus === StockPallet::STATUS_OBSOLETE || $itemStatus === Item::STATUS_OBSOLETE) {
+        if ($stockCategory === StockPallet::CATEGORY_OBSOLETE) {
             return 'obsolete';
         }
 
-        return 'normal';
+        return match ($batchStatus) {
+            StockPallet::STATUS_BLOCKED => 'blocked',
+            StockPallet::STATUS_OBSOLETE => 'obsolete',
+            default => 'normal',
+        };
     }
 
     private function clientStatus(?string $itemStatus, ?string $batchStatus, ?string $stockCategory): string
     {
-        if ($batchStatus === StockPallet::STATUS_OBSOLETE || $itemStatus === Item::STATUS_OBSOLETE || $stockCategory === StockPallet::CATEGORY_OBSOLETE) {
+        if ($stockCategory === StockPallet::CATEGORY_MISC) {
+            return 'misc';
+        }
+
+        if ($stockCategory === StockPallet::CATEGORY_OBSOLETE) {
             return 'obsolete';
         }
 
-        if ($batchStatus === StockPallet::STATUS_BLOCKED || $itemStatus === Item::STATUS_BLOCKED || $stockCategory === StockPallet::CATEGORY_BLOCKED) {
+        if ($stockCategory === StockPallet::CATEGORY_BLOCKED) {
             return 'blocked';
         }
 
-        return 'in-use';
+        return match ($batchStatus) {
+            StockPallet::STATUS_BLOCKED => 'blocked',
+            StockPallet::STATUS_OBSOLETE => 'obsolete',
+            default => 'in-use',
+        };
     }
 
     private function clientStatusLabel(?string $itemStatus, ?string $batchStatus, ?string $stockCategory): string
@@ -506,7 +469,8 @@ class StockOverviewBuilder
         return match ($this->clientStatus($itemStatus, $batchStatus, $stockCategory)) {
             'obsolete' => 'OBSOLETO',
             'blocked' => 'BLOQUEADO',
-            default => 'EN USO',
+            'misc' => 'VARIOS',
+            default => 'ACTIVO',
         };
     }
 
@@ -630,7 +594,7 @@ class StockOverviewBuilder
         $stockRows = $this->stockQuery($filters)
             ->get()
             ->map(fn (StockPallet $pallet): array => $this->buildStockRow($pallet))
-            ->groupBy(fn (array $row): string => $row['item_id'].'|'.($row['lot'] ?? ''))
+            ->groupBy(fn (array $row): string => $row['item_id'].'|'.($row['lot'] ?? '').'|'.$row['stock_category'])
             ->map(fn (Collection $group): array => $this->aggregateClientRows($group));
 
         $rows = $includeWithoutStock
@@ -670,6 +634,7 @@ class StockOverviewBuilder
             ->sortByDesc(fn (array $row): int => match ($row['client_status']) {
                 'obsolete' => 3,
                 'blocked' => 2,
+                'misc' => 1,
                 default => 1,
             })
             ->first();
@@ -679,7 +644,7 @@ class StockOverviewBuilder
         $blockedReasons = $rows->pluck('blocked_reason')->filter()->unique()->values();
 
         return array_replace($first, [
-            'id' => 'client-'.$first['item_id'].'-'.substr(sha1((string) $first['lot']), 0, 10),
+            'id' => 'client-'.$first['item_id'].'-'.substr(sha1(($first['lot'] ?? '').'|'.$first['stock_category']), 0, 10),
             'quantity_units' => (int) $rows->sum('quantity_units'),
             'full_pallets' => (int) $rows->sum('full_pallets'),
             'peaks_count' => (int) $rows->sum('peaks_count'),

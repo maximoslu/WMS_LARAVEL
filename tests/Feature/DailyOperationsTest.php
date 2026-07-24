@@ -412,10 +412,10 @@ class DailyOperationsTest extends TestCase
 
         $otherDay->refresh();
 
-        $this->assertSame(2033, $day->opening_pallets);
-        $this->assertSame(2044, $day->stored_pallets_today);
+        $this->assertSame(2172, $day->opening_pallets);
+        $this->assertSame(2183, $day->stored_pallets_today);
         $this->assertSame(33, $day->moved_pallets_today);
-        $this->assertSame(2022, $day->expected_pallets_tomorrow);
+        $this->assertSame(2161, $day->expected_pallets_tomorrow);
         $this->assertSame(500, $otherDay->opening_pallets);
 
         $this->assertSame(11, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
@@ -423,6 +423,38 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(10, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
         $this->assertSame(3, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+    }
+
+    public function test_stock_fisico_para_ocupacion_y_facturacion_incluye_las_cuatro_categorias_y_export_oficial_solo_dos(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'Friesland']);
+
+        $this->createStockPallet($client, 10, StockPallet::STATUS_AVAILABLE, null, StockPallet::CATEGORY_IN_USE);
+        $this->createStockPallet($client, 5, StockPallet::STATUS_BLOCKED, null, StockPallet::CATEGORY_BLOCKED);
+        $this->createStockPallet($client, 3, StockPallet::STATUS_OBSOLETE, null, StockPallet::CATEGORY_OBSOLETE);
+        $this->createStockPallet($client, 2, StockPallet::STATUS_AVAILABLE, null, StockPallet::CATEGORY_MISC);
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.day.upsert'), [
+                'client_id' => $client->id,
+                'operation_date' => '2026-07-24',
+                'notes' => 'Base fisica',
+            ])
+            ->assertRedirect();
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-24')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $officialRows = app(\App\Services\Stock\StockExportService::class)->rows($client->id);
+
+        $this->assertSame(20, $day->opening_pallets);
+        $this->assertSame(20, $day->stored_pallets_today);
+        $this->assertSame(15.0, (float) $officialRows->sum('total_pallets'));
+        $this->assertSame(2, $officialRows->count());
     }
 
     public function test_stock_base_counts_full_pallets_and_picos_for_edelvives_billing(): void
@@ -927,20 +959,34 @@ class DailyOperationsTest extends TestCase
         }
     }
 
-    private function createStockPallet(Client $client, int $fullPallets, string $status, ?Item $item = null): void
+    private function createStockPallet(
+        Client $client,
+        int $fullPallets,
+        string $status,
+        ?Item $item = null,
+        string $stockCategory = StockPallet::CATEGORY_IN_USE,
+    ): void
     {
         $item ??= Item::factory()->create([
             'client_id' => $client->id,
             'units_per_pallet' => 1,
+            'stock_category' => $stockCategory,
+            'status' => match ($stockCategory) {
+                StockPallet::CATEGORY_BLOCKED => Item::STATUS_BLOCKED,
+                StockPallet::CATEGORY_OBSOLETE => Item::STATUS_OBSOLETE,
+                default => Item::STATUS_ACTIVE,
+            },
         ]);
 
         StockPallet::factory()->create([
             'client_id' => $client->id,
             'item_id' => $item->id,
             'status' => $status,
+            'stock_category' => $stockCategory,
             'quantity_units' => max(0, $fullPallets),
             'units_per_pallet' => 1,
             'full_pallets' => max(0, $fullPallets),
+            'warehouse_pallets' => max(0, $fullPallets),
             'peaks_count' => 0,
             'peak_1' => 0,
             'active' => true,

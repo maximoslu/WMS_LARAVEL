@@ -4,7 +4,6 @@ namespace App\Services\DailyOperations;
 
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
-use App\Models\Item;
 use App\Models\StockPallet;
 use Illuminate\Support\Facades\DB;
 
@@ -56,15 +55,8 @@ class DailyOperationTotalsService
     {
         return (int) StockPallet::query()
             ->where('client_id', $clientId)
-            ->where('active', true)
-            ->where('status', '!=', StockPallet::STATUS_OBSOLETE)
-            ->whereHas('item', fn ($query) => $query->where('status', '!=', Item::STATUS_OBSOLETE))
-            ->where(function ($query): void {
-                $query
-                    ->where('quantity_units', '>', 0)
-                    ->orWhere('full_pallets', '>', 0)
-                    ->orWhere('peaks_count', '>', 0);
-            })
-            ->sum(DB::raw('COALESCE(full_pallets, 0) + COALESCE(peaks_count, 0)'));
+            ->whereHas('item')
+            ->withPhysicalStock()
+            ->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'));
     }
 }

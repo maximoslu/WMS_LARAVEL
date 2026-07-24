@@ -356,6 +356,68 @@ class StockExportTest extends TestCase
         $this->assertStringNotContainsString('Interno export', $content);
     }
 
+    public function test_descargas_oficiales_incluyen_activo_bloqueado_y_excluyen_obsoleto_varios_y_sku_interno(): void
+    {
+        [, $friesland] = $this->seedClients();
+        $clientUser = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $this->createStockRow($friesland, 'FR-ACTIVO-OFICIAL', 'Activo oficial', 'LOT-A', 100, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE, 10);
+        $this->createStockRow($friesland, 'FR-BLOQUEADO-OFICIAL', 'Bloqueado oficial', 'LOT-B', 50, StockPallet::CATEGORY_BLOCKED, StockPallet::STATUS_BLOCKED, 5);
+        $this->createStockRow($friesland, 'FR-OBSOLETO-NO', 'Obsoleto no oficial', 'LOT-O', 30, StockPallet::CATEGORY_OBSOLETE, StockPallet::STATUS_OBSOLETE, 3);
+        $this->createStockRow($friesland, 'FR-VARIOS-NO', 'Varios no oficial', 'LOT-V', 20, StockPallet::CATEGORY_MISC, StockPallet::STATUS_AVAILABLE, 2);
+        $this->createStockRow($friesland, '_FR-MAL-CATEGORIZADO', 'Interno defensivo', 'LOT-I', 10, StockPallet::CATEGORY_IN_USE, StockPallet::STATUS_AVAILABLE, 1);
+
+        $index = $this->actingAs($clientUser)->get(route('stock.index'));
+        $index->assertOk()
+            ->assertSee('FR-ACTIVO-OFICIAL')
+            ->assertSee('FR-BLOQUEADO-OFICIAL')
+            ->assertSee('FR-OBSOLETO-NO')
+            ->assertSee('FR-VARIOS-NO')
+            ->assertSee('_FR-MAL-CATEGORIZADO');
+
+        $csv = $this->actingAs($clientUser)->get(route('stock.export', ['format' => 'csv']));
+        $csv->assertOk();
+        $csvContent = file_get_contents($csv->baseResponse->getFile()->getPathname());
+        $this->assertStringContainsString('FR-ACTIVO-OFICIAL', $csvContent);
+        $this->assertStringContainsString('FR-BLOQUEADO-OFICIAL', $csvContent);
+        $this->assertStringNotContainsString('FR-OBSOLETO-NO', $csvContent);
+        $this->assertStringNotContainsString('FR-VARIOS-NO', $csvContent);
+        $this->assertStringNotContainsString('_FR-MAL-CATEGORIZADO', $csvContent);
+        $this->assertSame(15.0, (float) app(\App\Services\Stock\StockExportService::class)->rows($friesland->id)->sum('total_pallets'));
+
+        $xlsx = $this->actingAs($clientUser)->get(route('stock.export', ['format' => 'xlsx']));
+        $xlsx->assertOk();
+        $xlsxRows = [];
+        $reader = new XlsxReader;
+        $reader->open($xlsx->baseResponse->getFile()->getPathname());
+        foreach ($reader->getSheetIterator() as $sheet) {
+            $this->assertSame('STOCK OFICIAL', $sheet->getName());
+            foreach ($sheet->getRowIterator() as $row) {
+                $xlsxRows[] = $row->toArray();
+            }
+        }
+        $reader->close();
+        $xlsxFlat = collect($xlsxRows)->flatten()->implode('|');
+        $this->assertStringContainsString('FR-ACTIVO-OFICIAL', $xlsxFlat);
+        $this->assertStringContainsString('FR-BLOQUEADO-OFICIAL', $xlsxFlat);
+        $this->assertStringNotContainsString('FR-OBSOLETO-NO', $xlsxFlat);
+        $this->assertStringNotContainsString('FR-VARIOS-NO', $xlsxFlat);
+        $this->assertStringNotContainsString('_FR-MAL-CATEGORIZADO', $xlsxFlat);
+
+        $pdfRows = app(\App\Services\Stock\StockExportService::class)->rows($friesland->id);
+        $pdfHtml = view('stock.export-pdf', [
+            'client' => $friesland,
+            'rows' => $pdfRows,
+            'generatedAt' => now(),
+        ])->render();
+        $this->assertStringContainsString('STOCK OFICIAL', $pdfHtml);
+        $this->assertStringContainsString('ACTIVA y BLOQUEADA', $pdfHtml);
+        $this->assertStringContainsString('FR-ACTIVO-OFICIAL', $pdfHtml);
+        $this->assertStringContainsString('FR-BLOQUEADO-OFICIAL', $pdfHtml);
+        $this->assertStringNotContainsString('FR-OBSOLETO-NO', $pdfHtml);
+        $this->assertStringNotContainsString('FR-VARIOS-NO', $pdfHtml);
+        $this->assertStringNotContainsString('_FR-MAL-CATEGORIZADO', $pdfHtml);
+    }
+
     public function test_cliente_edelvives_no_puede_descargar_stock_friesland(): void
     {
         [$edelvives, $friesland] = $this->seedClients();
@@ -471,13 +533,28 @@ class StockExportTest extends TestCase
         ]);
     }
 
-    private function createStockRow(Client $client, string $sku, string $description, ?string $lot, int $quantity): StockPallet
+    private function createStockRow(
+        Client $client,
+        string $sku,
+        string $description,
+        ?string $lot,
+        int $quantity,
+        string $stockCategory = StockPallet::CATEGORY_IN_USE,
+        string $status = StockPallet::STATUS_AVAILABLE,
+        ?float $warehousePallets = null,
+    ): StockPallet
     {
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => $sku,
             'description' => $description,
             'units_per_pallet' => 100,
+            'stock_category' => $stockCategory,
+            'status' => match ($stockCategory) {
+                StockPallet::CATEGORY_BLOCKED => Item::STATUS_BLOCKED,
+                StockPallet::CATEGORY_OBSOLETE => Item::STATUS_OBSOLETE,
+                default => Item::STATUS_ACTIVE,
+            },
         ]);
 
         return StockPallet::factory()->create([
@@ -486,6 +563,9 @@ class StockExportTest extends TestCase
             'lot' => $lot,
             'units_per_pallet' => 100,
             'quantity_units' => $quantity,
+            'stock_category' => $stockCategory,
+            'status' => $status,
+            'warehouse_pallets' => $warehousePallets,
         ]);
     }
 }

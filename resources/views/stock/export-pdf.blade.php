@@ -2,7 +2,7 @@
 <html lang="es">
     <head>
         <meta charset="utf-8">
-        <title>Stock {{ $client->name }}</title>
+        <title>Stock oficial {{ $client->name }}</title>
         <style>
             body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #13222e; }
             h1 { font-size: 18px; margin: 0 0 4px; text-transform: uppercase; }
@@ -14,8 +14,8 @@
         </style>
     </head>
     <body>
-        <h1>STOCK {{ mb_strtoupper($client->name) }}</h1>
-        <p class="meta">Generado el {{ $generatedAt->format('d/m/Y H:i') }}</p>
+        <h1>STOCK OFICIAL {{ mb_strtoupper($client->name) }}</h1>
+        <p class="meta">Generado el {{ $generatedAt->format('d/m/Y H:i') }}. Incluye mercancia ACTIVA y BLOQUEADA.</p>
 
         <table>
             <thead>
