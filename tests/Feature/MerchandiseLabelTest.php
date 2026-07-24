@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Labels\MerchandiseLabelService;
 use Database\Seeders\RoleSeeder;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -103,11 +104,105 @@ class MerchandiseLabelTest extends TestCase
         $this->assertStringContainsString('1.600', $html);
         $this->assertStringContainsString('label-top', $html);
         $this->assertStringContainsString('label-bottom', $html);
+        $this->assertSame(6, substr_count($html, 'class="label-page'));
+        $this->assertSame(12, substr_count($html, 'class="label-slot'));
         $this->assertStringNotContainsString('MAXIMO WMS - Etiqueta mercancia', $html);
         $this->assertStringNotContainsString('Entrada:', $html);
         $this->assertStringNotContainsString('Fecha:', $html);
         $this->assertStringNotContainsString('entrada-linea:', $html);
         $this->assertStringNotContainsString('stock:', $html);
+    }
+
+    public function test_pdf_layout_keeps_two_fixed_slots_per_a4_page(): void
+    {
+        foreach ([1, 2, 3, 4] as $count) {
+            $labels = collect(range(1, $count))
+                ->map(fn (int $number): array => $this->labelPayload(
+                    sku: 'SKU'.$number,
+                    lot: 'LOT'.$number,
+                    units: 1000,
+                    number: 'Pallet '.$number,
+                ));
+
+            $html = $this->renderLabelsHtml($labels);
+
+            $this->assertSame((int) ceil($count / 2), substr_count($html, 'class="label-page'));
+            $this->assertSame((int) ceil($count / 2) * 2, substr_count($html, 'class="label-slot'));
+            $this->assertSame($count, substr_count($html, '<div class="label-content">'));
+            $this->assertSame((int) ceil($count / 2), $this->renderLabelsPdfPageCount($labels));
+        }
+    }
+
+    public function test_no_lot_labels_fit_two_per_a4_page(): void
+    {
+        $labels = collect([
+            $this->labelPayload(sku: '149677', lot: 'SIN LOTE', units: 5000, number: 'Pallet 1 de 2'),
+            $this->labelPayload(sku: '149677', lot: 'SIN LOTE', units: 5000, number: 'Pallet 2 de 2'),
+        ]);
+
+        $html = $this->renderLabelsHtml($labels);
+
+        $this->assertSame(1, substr_count($html, 'class="label-page'));
+        $this->assertSame(2, substr_count($html, 'class="label-content"'));
+        $this->assertStringContainsString('149677', $html);
+        $this->assertStringContainsString('SIN LOTE', $html);
+        $this->assertStringContainsString('5.000', $html);
+        $this->assertSame(1, $this->renderLabelsPdfPageCount($labels));
+    }
+
+    public function test_lot_labels_fit_two_per_a4_page_with_the_same_structure(): void
+    {
+        $labels = collect([
+            $this->labelPayload(sku: '11', lot: 'LL6E704', units: 1000, number: 'Pallet 1 de 2'),
+            $this->labelPayload(sku: '11', lot: 'LL6E704', units: 1000, number: 'Pallet 2 de 2'),
+        ]);
+
+        $html = $this->renderLabelsHtml($labels);
+
+        $this->assertSame(1, substr_count($html, 'class="label-page'));
+        $this->assertSame(2, substr_count($html, 'class="label-content"'));
+        $this->assertSame(2, substr_count($html, 'LL6E704'));
+        $this->assertSame(1, $this->renderLabelsPdfPageCount($labels));
+    }
+
+    public function test_mixed_lot_and_no_lot_labels_share_one_a4_page(): void
+    {
+        $labels = collect([
+            $this->labelPayload(sku: '149677', lot: 'SIN LOTE', units: 5000, number: 'Pallet 1'),
+            $this->labelPayload(sku: '11', lot: 'LL6E704', units: 1000, number: 'Pallet 2'),
+        ]);
+
+        $html = $this->renderLabelsHtml($labels);
+
+        $this->assertSame(1, substr_count($html, 'class="label-page'));
+        $this->assertSame(2, substr_count($html, 'class="label-content"'));
+        $this->assertStringContainsString('SIN LOTE', $html);
+        $this->assertStringContainsString('LL6E704', $html);
+        $this->assertSame(1, $this->renderLabelsPdfPageCount($labels));
+    }
+
+    public function test_long_label_content_stays_inside_two_label_page(): void
+    {
+        $labels = collect([
+            $this->labelPayload(
+                sku: 'REFERENCIA-LARGA-149677-FRIESLAND-SIN-LOTE',
+                lot: 'SIN LOTE',
+                units: 123456789,
+                number: 'Pallet 1',
+            ),
+            $this->labelPayload(
+                sku: 'REFERENCIA-LARGA-LL6E704-CON-LOTE-SEGUNDA-ETIQUETA',
+                lot: 'LL6E704-LOTE-LARGO-CONTROLADO',
+                units: 987654321,
+                number: 'Pallet 2',
+            ),
+        ]);
+
+        $html = $this->renderLabelsHtml($labels);
+
+        $this->assertSame(1, substr_count($html, 'class="label-page'));
+        $this->assertSame(2, substr_count($html, 'class="article-value article-value-wrap"'));
+        $this->assertSame(1, $this->renderLabelsPdfPageCount($labels));
     }
 
     public function test_stock_pallet_label_rules_cover_pallets_and_peak(): void
@@ -284,5 +379,53 @@ class MerchandiseLabelTest extends TestCase
             'client_id' => $client?->id,
             'active' => true,
         ]);
+    }
+
+    private function renderLabelsHtml($labels): string
+    {
+        return view('labels.pdf', [
+            'labels' => collect($labels),
+            'origin' => 'Test labels',
+            'generatedAt' => now(),
+        ])->render();
+    }
+
+    private function renderLabelsPdfPageCount($labels): int
+    {
+        $output = Pdf::loadView('labels.pdf', [
+            'labels' => collect($labels),
+            'origin' => 'Test labels',
+            'generatedAt' => now(),
+        ])->setPaper('a4')->output();
+
+        preg_match_all('/\/Type\s*\/Page(?!s)\b/', $output, $matches);
+
+        return count($matches[0]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function labelPayload(
+        string $sku,
+        string $lot,
+        int $units,
+        string $number,
+    ): array {
+        return [
+            'client_name' => 'FRIESLAND',
+            'client_code' => 'FRIESLAND',
+            'sku' => $sku,
+            'description' => 'Producto de prueba',
+            'article' => $sku.' - Producto de prueba',
+            'lot' => $lot,
+            'units' => $units,
+            'type' => 'PALLET',
+            'number' => $number,
+            'receipt_number' => 'GR-TEST',
+            'received_at' => '24/07/2026',
+            'location' => 'A1',
+            'traceability' => 'test:'.$sku.':'.$number,
+        ];
     }
 }

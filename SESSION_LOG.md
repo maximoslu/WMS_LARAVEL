@@ -67,6 +67,71 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-24 - HOTFIX ETIQUETAS - Dos etiquetas por A4 sin cortes
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `6acaed31 feat: separate physical and official Friesland stock`, sincronizado con `origin/main`.
+
+### Problema corregido
+- En PDFs de etiquetas de mercancia, el caso sin lote `149677` / `SIN LOTE` / `5.000` quedaba con una sola etiqueta por A4 aunque habia dos etiquetas imprimibles.
+- En el caso con lote `11` / `LL6E704` / `1.000`, dos etiquetas entraban en una hoja, pero la segunda quedaba desalineada y los bordes/logo podian invadir zonas de corte.
+- La causa fue la combinacion de Dompdf con bloques de etiqueta en flujo normal, tablas con tipografia grande y dimensiones `mm` con padding/bordes. Dompdf no aplicaba el `box-sizing` de forma fiable y empujaba o partia la segunda etiqueta.
+- Al agrupar con `chunk(2)` tambien se detecto un riesgo real: los chunks conservaban claves originales, por lo que paginas posteriores podian quedar vacias si se accedia con `get(0)`/`get(1)`.
+
+### Cambio aplicado
+- `resources/views/labels/pdf.blade.php` agrupa explicitamente las etiquetas en paginas con `$labels->chunk(2)` y normaliza cada pagina con `values()`.
+- Cada pagina logica contiene dos ranuras fijas: superior e inferior, colocadas por coordenadas dentro del A4.
+- Cada etiqueta usa una unica estructura para lote, sin lote, primera/segunda etiqueta y paginas posteriores.
+- Articulo, lote, unidades y marca se colocan dentro de cajas absolutas controladas, evitando que el contenido cambie la altura de la etiqueta.
+- Se mantiene `@page { size: A4 portrait; margin: 0; }` y dos etiquetas como maximo por pagina.
+- No se cambio `LabelController`, `MerchandiseLabelService`, rutas, calculo de etiquetas, stock, entradas, cantidades ni importadores.
+
+### Reglas validadas
+- 1 etiqueta: 1 pagina, etiqueta superior y hueco inferior vacio.
+- 2 etiquetas: 1 pagina, dos etiquetas completas.
+- 3 etiquetas: 2 paginas, patron `2 + 1`.
+- 4 etiquetas: 2 paginas, patron `2 + 2`.
+- Sin lote `149677` / `SIN LOTE` / `5.000`: dos etiquetas en una pagina.
+- Con lote `11` / `LL6E704` / `1.000`: dos etiquetas en una pagina con la misma estructura.
+- Lote y sin lote mezclados: comparten pagina.
+- Referencias/lotes/cantidades largas no anaden paginas extra.
+
+### Validacion visual local
+- PDFs temporales generados en `tmp/pdfs/` para `1`, `2`, `3`, `4`, sin lote, con lote y mixto.
+- Conteo de paginas validado con `pypdf` del runtime de Codex:
+  - `labels-1.pdf`: 1 pagina.
+  - `labels-2.pdf`: 1 pagina.
+  - `labels-3.pdf`: 2 paginas.
+  - `labels-4.pdf`: 2 paginas.
+  - `labels-no-lot-149677.pdf`: 1 pagina.
+  - `labels-lot-11.pdf`: 1 pagina.
+  - `labels-mixed.pdf`: 1 pagina.
+- Render PNG con `pdftoppm.exe` real del runtime Poppler.
+- Inspeccion visual:
+  - `149677 / SIN LOTE / 5.000`: dos etiquetas completas en una hoja, sin media hoja perdida.
+  - `11 / LL6E704 / 1.000`: dos etiquetas completas, alineadas y sin solapes.
+  - `3` etiquetas: primera pagina con dos etiquetas y segunda pagina con etiqueta superior y mitad inferior vacia.
+
+### Tests y validaciones
+- `php -l` en PHP relacionados y test modificado: OK.
+- `php artisan test --filter=Label`: `19 passed`, `100 assertions`.
+- `php artisan test --filter=GoodsReceipt`: `147 passed`, `681 assertions`.
+- `php artisan test`: `752 passed`, `4100 assertions`.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Alcance y seguridad
+- No se ejecutaron migraciones.
+- No se uso `migrate:fresh`, `db:wipe`, borrado de datos ni force push.
+- No se tocaron `.env`, secretos, `.claude/`, importadores, stock, entradas/salidas, permisos, botones ni rutas.
+- Los PDFs/PNGs de `tmp/` son artefactos locales de comprobacion y no forman parte del commit.
+
+**Commit / push previsto:** `fix: align two labels per A4 page`, push normal a `origin/main` sin force push.
+
+---
+
 ## 2026-07-24 - STOCK FRIESLAND - Separar stock fisico y stock oficial
 
 **Equipo:** PC trabajo.

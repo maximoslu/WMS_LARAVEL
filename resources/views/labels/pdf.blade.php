@@ -18,24 +18,46 @@
             font-family: DejaVu Sans, Arial, sans-serif;
         }
 
-        .label-block {
+        .label-page {
+            position: relative;
             width: 210mm;
-            height: 140mm;
-            page-break-inside: avoid;
+            height: 280mm;
+            overflow: hidden;
         }
 
-        .label-break {
+        .label-page-break {
             page-break-after: always;
         }
 
-        .label-pad {
+        .label-slot {
+            position: absolute;
+            left: 0;
+            width: 210mm;
             height: 140mm;
-            padding: 7mm 7mm 0;
+            overflow: hidden;
+        }
+
+        .label-top {
+            top: 0;
+        }
+
+        .label-bottom {
+            top: 140mm;
+        }
+
+        .label-content {
+            position: relative;
+            width: 196mm;
+            height: 126mm;
+            margin: 7mm;
             overflow: hidden;
         }
 
         .article-table {
-            width: 196mm;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
             height: 68mm;
             border: 1.6mm solid #000;
             border-collapse: collapse;
@@ -43,7 +65,7 @@
         }
 
         .article-table td {
-            width: 196mm;
+            width: 100%;
             height: 68mm;
             padding: 0 5mm;
             text-align: center;
@@ -72,20 +94,31 @@
             white-space: normal;
         }
 
-        .details-table {
-            width: 196mm;
-            margin-top: 3mm;
-            border-collapse: separate;
-            border-spacing: 3mm 0;
+        .details-row {
+            position: absolute;
+            top: 72mm;
+            left: 0;
+            width: 100%;
+            height: 42mm;
         }
 
         .detail-box {
-            width: 50%;
-            height: 33mm;
+            position: absolute;
+            top: 0;
+            width: 80mm;
+            height: 42mm;
             padding: 5mm 6mm 3mm;
             border: 1.3mm solid #000;
             border-radius: 6mm;
-            vertical-align: top;
+            overflow: hidden;
+        }
+
+        .detail-box-lot {
+            left: 3mm;
+        }
+
+        .detail-box-units {
+            right: 3mm;
         }
 
         .detail-label {
@@ -99,7 +132,7 @@
         .detail-value {
             display: block;
             text-align: center;
-            font-size: 16mm;
+            font-size: 14mm;
             font-weight: 700;
             line-height: 1;
         }
@@ -113,13 +146,16 @@
             display: block;
             width: 42mm;
             height: auto;
-            margin: 3mm 8mm 0 auto;
         }
 
         .label-mark {
+            position: absolute;
+            right: 8mm;
+            bottom: 1mm;
             width: 42mm;
-            margin: 3mm 8mm 0 auto;
+            height: 10mm;
             text-align: right;
+            overflow: hidden;
         }
 
         .label-logo-fallback {
@@ -144,39 +180,45 @@
         $logoAvailable = file_exists($logoPath) && (extension_loaded('gd') || extension_loaded('imagick'));
     @endphp
 
-    @foreach ($labels as $label)
-        @php($article = $label['sku'] ?: $label['article'])
-        @php($articleClass = strlen($article) > 34 ? 'article-value-wrap' : (strlen($article) > 18 ? 'article-value-long' : (strlen($article) > 10 ? 'article-value-medium' : '')))
-        <section class="label-block {{ $loop->iteration % 2 === 0 && ! $loop->last ? 'label-break' : '' }}">
-            <div class="label-pad {{ $loop->iteration % 2 === 1 ? 'label-top' : 'label-bottom' }}">
-                <table class="article-table" role="presentation">
-                    <tr>
-                        <td><span class="article-value {{ $articleClass }}">{{ $article }}</span></td>
-                    </tr>
-                </table>
+    @foreach ($labels->chunk(2) as $pageLabels)
+        @php($pageLabels = $pageLabels->values())
+        <div class="label-page {{ ! $loop->last ? 'label-page-break' : '' }}">
+            @foreach ([0, 1] as $slotIndex)
+                @php($label = $pageLabels->get($slotIndex))
+                <div class="label-slot {{ $slotIndex === 0 ? 'label-top' : 'label-bottom' }}">
+                    @if ($label)
+                        @php($article = $label['sku'] ?: $label['article'])
+                        @php($articleClass = strlen($article) > 34 ? 'article-value-wrap' : (strlen($article) > 18 ? 'article-value-long' : (strlen($article) > 10 ? 'article-value-medium' : '')))
+                        <div class="label-content">
+                            <table class="article-table" role="presentation">
+                                <tr>
+                                    <td><span class="article-value {{ $articleClass }}">{{ $article }}</span></td>
+                                </tr>
+                            </table>
 
-                <table class="details-table" aria-label="Datos principales de etiqueta">
-                    <tr>
-                        <td class="detail-box">
-                            <span class="detail-label">LOTE:</span>
-                            <span class="detail-value">{{ $label['lot'] }}</span>
-                        </td>
-                        <td class="detail-box">
-                            <span class="detail-label">UNIDADES:</span>
-                            <span class="detail-value detail-value-units">{{ number_format((int) $label['units'], 0, ',', '.') }}</span>
-                        </td>
-                    </tr>
-                </table>
+                            <div class="details-row" aria-label="Datos principales de etiqueta">
+                                <div class="detail-box detail-box-lot">
+                                    <span class="detail-label">LOTE:</span>
+                                    <span class="detail-value">{{ $label['lot'] }}</span>
+                                </div>
+                                <div class="detail-box detail-box-units">
+                                    <span class="detail-label">UNIDADES:</span>
+                                    <span class="detail-value detail-value-units">{{ number_format((int) $label['units'], 0, ',', '.') }}</span>
+                                </div>
+                            </div>
 
-                <div class="label-mark">
-                    @if ($logoAvailable)
-                        <img src="{{ $logoPath }}" alt="Maximo Servicios Logisticos" class="label-logo">
-                    @else
-                        <span class="label-logo-fallback">MAXIMO<small>SERVICIOS LOGISTICOS</small></span>
+                            <div class="label-mark">
+                                @if ($logoAvailable)
+                                    <img src="{{ $logoPath }}" alt="Maximo Servicios Logisticos" class="label-logo">
+                                @else
+                                    <span class="label-logo-fallback">MAXIMO<small>SERVICIOS LOGISTICOS</small></span>
+                                @endif
+                            </div>
+                        </div>
                     @endif
                 </div>
-            </div>
-        </section>
+            @endforeach
+        </div>
     @endforeach
 </body>
 </html>
