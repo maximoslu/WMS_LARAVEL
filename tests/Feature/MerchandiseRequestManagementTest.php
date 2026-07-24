@@ -327,6 +327,115 @@ class MerchandiseRequestManagementTest extends TestCase
         ]);
     }
 
+    public function test_client_with_required_units_enabled_can_create_request_with_need_per_line(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'NEED-001',
+            'units_per_pallet' => 6000,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 2,
+                        'required_units' => 10000,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 2,
+            'requested_units' => 12000,
+            'required_units' => 10000,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSeeText('Necesidad a cubrir: 10.000 uds.');
+    }
+
+    public function test_client_without_required_units_enabled_cannot_force_need_by_payload(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'NO-NEED-001',
+            'units_per_pallet' => 1000,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.create'))
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 1,
+                        'required_units' => 10000,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.create'))
+            ->assertSessionHasErrors('lines.line_1.required_units');
+
+        $this->assertDatabaseMissing('merchandise_requests', [
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+        ]);
+    }
+
+    public function test_required_units_rejects_zero_negative_decimal_and_text_values(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'NEED-INVALID',
+            'units_per_pallet' => 1000,
+        ]);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        foreach ([0, -1, '10.5', 'texto'] as $requiredUnits) {
+            $this->actingAs($cliente)
+                ->from(route('merchandise-requests.create'))
+                ->post(route('merchandise-requests.store'), [
+                    'lines' => [
+                        'line_1' => [
+                            'item_id' => $item->id,
+                            'line_type' => 'pallet',
+                            'quantity' => 1,
+                            'required_units' => $requiredUnits,
+                        ],
+                    ],
+                ])
+                ->assertRedirect(route('merchandise-requests.create'))
+                ->assertSessionHasErrors('lines.line_1.required_units');
+        }
+
+        $this->assertSame(0, MerchandiseRequest::query()->count());
+    }
+
     public function test_cliente_crea_pedido_solo_para_si_mismo_aunque_envie_client_id(): void
     {
         Bus::fake();

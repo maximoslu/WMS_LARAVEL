@@ -23,6 +23,8 @@ class Client extends Model
         'active',
         'show_storage_occupancy_to_client',
         'show_stock_total_to_client',
+        'send_order_preparation_pdf_to_client',
+        'allow_order_line_required_units',
     ];
 
     protected function casts(): array
@@ -31,6 +33,8 @@ class Client extends Model
             'active' => 'boolean',
             'show_storage_occupancy_to_client' => 'boolean',
             'show_stock_total_to_client' => 'boolean',
+            'send_order_preparation_pdf_to_client' => 'boolean',
+            'allow_order_line_required_units' => 'boolean',
         ];
     }
 

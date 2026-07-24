@@ -184,6 +184,7 @@
                     $lineKey = $dispatchLine ? 'line_'.$dispatchLine->id : null;
                     $requestedUnits = $dispatchLine?->requestedUnitsTotal() ?? (int) ($line->requested_units ?? 0);
                     $loadedUnits = $dispatchLine?->loadedUnitsTotal() ?? 0;
+                    $requiredUnits = $line->requiredUnits();
                     $lineStockOptions = collect($stockOptionsByItem[$line->item_id] ?? []);
                     $lineAllocations = $dispatchLine?->allocations ?? collect();
 
@@ -229,11 +230,16 @@
                             : $dispatchLine->loadingStatus();
                         $stateLabel = $dispatchLine->loadingStatusLabel();
                     }
-                    $unitDifference = $loadedUnits - $requestedUnits;
+                    $coverageTargetUnits = $requiredUnits ?? $requestedUnits;
+                    $unitDifference = $loadedUnits - $coverageTargetUnits;
                     $differenceLabel = $unitDifference > 0 ? 'Exceso operativo' : 'Pendiente';
+                    if ($requiredUnits !== null && $loadedUnits >= $requiredUnits) {
+                        $stateClass = $loadedUnits > $requiredUnits ? 'superior' : 'ok';
+                        $stateLabel = $loadedUnits > $requiredUnits ? 'Exceso operativo' : 'Cubierta';
+                    }
                 @endphp
 
-                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
+                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-required-units="{{ $requiredUnits ?? '' }}" data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
                     <header class="warehouse-prep-line-head">
                         <div>
                             <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
@@ -267,6 +273,12 @@
                                     <dt>Unidades solicitadas</dt>
                                     <dd>{{ number_format($requestedUnits, 0, ',', '.') }} uds</dd>
                                 </div>
+                                @if ($requiredUnits !== null)
+                                    <div>
+                                        <dt>Necesidad a cubrir</dt>
+                                        <dd>{{ number_format($requiredUnits, 0, ',', '.') }} uds</dd>
+                                    </div>
+                                @endif
                                 <div>
                                     <dt>Cargado</dt>
                                     <dd><span data-loaded-units>{{ number_format($loadedUnits, 0, ',', '.') }}</span> uds</dd>

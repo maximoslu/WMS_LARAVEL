@@ -26,7 +26,7 @@ class ProcessMerchandiseRequestSubmittedNotificationsJob implements ShouldQueue
     public function handle(MerchandiseRequestNotificationService $notificationService): void
     {
         $merchandiseRequest = MerchandiseRequest::query()
-            ->with(['client', 'requestedBy', 'lines.item'])
+            ->with(['client', 'requestedBy.role', 'lines.item'])
             ->find($this->merchandiseRequestId);
 
         if ($merchandiseRequest === null) {

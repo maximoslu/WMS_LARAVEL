@@ -344,6 +344,9 @@
 
                         <div class="wms-line-card-meta">
                             <span>Solicitado {{ $line->requestedQuantityLabel() }}</span>
+                            @if ($line->requiredUnitsLabel())
+                                <span>{{ $line->requiredUnitsLabel() }}</span>
+                            @endif
                             <span>{{ $line->unitsLabel() }}</span>
                             <span>{{ $line->lot ? 'Lote '.$line->lot : 'Sin lote' }}</span>
                         </div>
@@ -600,6 +603,10 @@
 
                     <div class="wms-line-card-meta">
                         <span>Solicitado {{ $line->requestedQuantityLabel() }}</span>
+                        @if ($line->requiredUnitsLabel())
+                            <span>{{ $line->requiredUnitsLabel() }}</span>
+                            <span>{{ $line->requiredUnitsCoverageLabel() }}</span>
+                        @endif
                         <span>Cargado {{ $line->loadedQuantityLabel() }}</span>
                         <span>{{ $line->unitsLabel() }}</span>
                         <span>{{ $line->lot ? 'Lote '.$line->lot : 'Sin lote' }}</span>

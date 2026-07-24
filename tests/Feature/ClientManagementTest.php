@@ -138,6 +138,63 @@ class ClientManagementTest extends TestCase
             ->assertSee('name="show_stock_total_to_client"', false);
     }
 
+    public function test_edelvives_seed_enables_order_preparation_pdf_and_required_units_preferences(): void
+    {
+        $this->seedBaseData();
+
+        $friesland = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $edelvives = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+
+        $this->assertFalse($friesland->send_order_preparation_pdf_to_client);
+        $this->assertFalse($friesland->allow_order_line_required_units);
+        $this->assertTrue($edelvives->send_order_preparation_pdf_to_client);
+        $this->assertTrue($edelvives->allow_order_line_required_units);
+    }
+
+    public function test_client_form_saves_order_preparation_pdf_and_required_units_preferences_independently(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
+            ->put(route('clients.update', $client), [
+                'name' => $client->name,
+                'code' => $client->code,
+                'delivery_address' => $client->delivery_address,
+                'delivery_postal_code' => $client->delivery_postal_code,
+                'delivery_city' => $client->delivery_city,
+                'delivery_province' => $client->delivery_province,
+                'delivery_country' => $client->delivery_country,
+                'active' => 1,
+                'send_order_preparation_pdf_to_client' => 1,
+                'allow_order_line_required_units' => 0,
+            ])
+            ->assertRedirect(route('clients.index'));
+
+        $freshClient = $client->fresh();
+
+        $this->assertTrue($freshClient->send_order_preparation_pdf_to_client);
+        $this->assertFalse($freshClient->allow_order_line_required_units);
+    }
+
+    public function test_client_form_renders_order_preparation_pdf_and_required_units_checkboxes(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $this->actingAs($administracion)
+            ->get(route('clients.edit', $client))
+            ->assertOk()
+            ->assertSeeText('Enviar preparaci')
+            ->assertSeeText('Permitir necesidad a cubrir')
+            ->assertSee('name="send_order_preparation_pdf_to_client"', false)
+            ->assertSee('name="allow_order_line_required_units"', false);
+    }
+
     public function test_se_puede_anadir_email_adicional_valido_a_cliente(): void
     {
         $this->seedBaseData();

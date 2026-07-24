@@ -152,6 +152,9 @@ class StockVariantCatalog
                 $variant['destination_location'] = trim((string) ($payload['destination_location'] ?? '')) !== ''
                     ? trim((string) $payload['destination_location'])
                     : null;
+                $variant['required_units'] = is_numeric((string) ($payload['required_units'] ?? null))
+                    ? (int) $payload['required_units']
+                    : null;
 
                 return $variant;
             })

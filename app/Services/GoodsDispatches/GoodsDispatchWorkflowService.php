@@ -215,7 +215,7 @@ class GoodsDispatchWorkflowService
                 ->whereKey($dispatch->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $lockedDispatch->load(['client', 'merchandiseRequest', 'lines.item']);
+            $lockedDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.sourceRequestLine', 'lines.allocations']);
 
             if ($lockedDispatch->status === $newStatus) {
                 return ['changed' => false, 'previous_request_status' => null];
@@ -410,7 +410,7 @@ class GoodsDispatchWorkflowService
 
     public function ensureDeliveryNoteCanBeGenerated(GoodsDispatch $dispatch): void
     {
-        $dispatch->loadMissing(['client', 'lines', 'merchandiseRequest']);
+        $dispatch->loadMissing(['client', 'lines.sourceRequestLine', 'lines.allocations', 'merchandiseRequest']);
 
         if (! $dispatch->hasConfirmedLoading()) {
             throw ValidationException::withMessages([
@@ -430,6 +430,32 @@ class GoodsDispatchWorkflowService
             ]);
         }
 
+        $this->ensureRequiredUnitsCovered($dispatch, 'dispatch');
+    }
+
+    public function ensureRequiredUnitsCovered(GoodsDispatch $dispatch, string $field = 'dispatch'): void
+    {
+        $dispatch->loadMissing(['lines.sourceRequestLine', 'lines.allocations']);
+
+        $messages = $dispatch->lines
+            ->filter(function (GoodsDispatchLine $line): bool {
+                $requiredUnits = $line->requiredUnits();
+
+                return $requiredUnits !== null && $line->loadedUnitsTotal() < $requiredUnits;
+            })
+            ->map(function (GoodsDispatchLine $line): string {
+                return 'No se puede confirmar la carga. La referencia '.$line->sku
+                    .' necesita cubrir al menos '.number_format((int) $line->requiredUnits(), 0, ',', '.')
+                    .' unidades y solo se han cargado '.number_format($line->loadedUnitsTotal(), 0, ',', '.').'.';
+            })
+            ->values()
+            ->all();
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages([
+                $field => implode(' ', $messages),
+            ]);
+        }
     }
 
     private function guardStatusTransition(GoodsDispatch $dispatch, string $newStatus): void

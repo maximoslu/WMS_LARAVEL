@@ -22,20 +22,48 @@ class MerchandiseRequestNotificationService
 {
     public function notifySubmitted(MerchandiseRequest $merchandiseRequest): void
     {
-        ProcessMerchandiseRequestSubmittedNotificationsJob::dispatch($merchandiseRequest->id)->afterResponse();
+        ProcessMerchandiseRequestSubmittedNotificationsJob::dispatch($merchandiseRequest->id)->afterCommit()->afterResponse();
     }
 
     public function deliverSubmittedNotifications(MerchandiseRequest $merchandiseRequest): void
     {
-        $merchandiseRequest->loadMissing(['client.users.role', 'requestedBy.role', 'lines.item']);
+        $merchandiseRequest->loadMissing([
+            'client.users.role',
+            'requestedBy.role',
+            'lines.item',
+            'lines.stockPallet.location.warehouse',
+            'dispatch.lines.stockPallet.location.warehouse',
+            'dispatch.lines.allocations.stockPallet.location.warehouse',
+            'dispatch.lines.sourceRequestLine',
+        ]);
+
+        $preparationPdfContent = $this->shouldAttachPreparationPdfToClient($merchandiseRequest)
+            ? Pdf::loadView('merchandise-requests.preparation-pdf', [
+                'merchandiseRequest' => $merchandiseRequest,
+            ])->output()
+            : null;
+        $preparationPdfName = $preparationPdfContent !== null
+            ? 'preparacion-pedido-'.$merchandiseRequest->referenceCode().'.pdf'
+            : null;
 
         foreach ($this->clientRecipients($merchandiseRequest) as $recipient) {
-            $recipient->notify(new CustomerMerchandiseRequestSubmittedNotification($merchandiseRequest));
+            $recipient->notify(new CustomerMerchandiseRequestSubmittedNotification(
+                $merchandiseRequest,
+                ['database', 'mail'],
+                $preparationPdfContent,
+                $preparationPdfName,
+            ));
         }
 
         $this->notifyInternalUsers(
             new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['database', 'mail'])
         );
+    }
+
+    private function shouldAttachPreparationPdfToClient(MerchandiseRequest $merchandiseRequest): bool
+    {
+        return (bool) $merchandiseRequest->client?->send_order_preparation_pdf_to_client
+            && $merchandiseRequest->requestedBy?->hasRole(Role::CLIENTE);
     }
 
     public function notifyStatusChanged(MerchandiseRequest $merchandiseRequest, string $previousStatus): void
@@ -85,6 +113,7 @@ class MerchandiseRequestNotificationService
             'client',
             'lines.item',
             'lines.allocations',
+            'lines.sourceRequestLine',
             'merchandiseRequest.client',
             'merchandiseRequest.requestedBy',
             'merchandiseRequest.lines.item',

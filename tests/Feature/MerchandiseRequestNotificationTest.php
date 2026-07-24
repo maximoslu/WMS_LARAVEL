@@ -92,6 +92,59 @@ class MerchandiseRequestNotificationTest extends TestCase
         }
     }
 
+    public function test_customer_creation_email_attaches_preparation_pdf_when_client_preference_is_enabled(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $merchandiseRequest = $this->createMerchandiseRequestWithLine($client, $cliente, requiredUnits: 10000);
+
+        (new ProcessMerchandiseRequestSubmittedNotificationsJob($merchandiseRequest->id))
+            ->handle(app(MerchandiseRequestNotificationService::class));
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestSubmittedNotification::class,
+            function ($notification, array $channels) use ($cliente, $merchandiseRequest): bool {
+                $mail = $notification->toMail($cliente);
+
+                return $channels === ['database', 'mail']
+                    && $mail instanceof MailMessage
+                    && count($mail->rawAttachments) === 1
+                    && $mail->rawAttachments[0]['name'] === 'preparacion-pedido-'.$merchandiseRequest->referenceCode().'.pdf'
+                    && $mail->rawAttachments[0]['options']['mime'] === 'application/pdf';
+            }
+        );
+    }
+
+    public function test_customer_creation_email_does_not_attach_preparation_pdf_when_internal_user_creates_order(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $internalCreator = $this->makeUserWithRole(Role::ALMACEN);
+        $merchandiseRequest = $this->createMerchandiseRequestWithLine($client, $internalCreator, requiredUnits: 10000);
+
+        (new ProcessMerchandiseRequestSubmittedNotificationsJob($merchandiseRequest->id))
+            ->handle(app(MerchandiseRequestNotificationService::class));
+
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestSubmittedNotification::class,
+            function ($notification, array $channels) use ($cliente): bool {
+                $mail = $notification->toMail($cliente);
+
+                return $channels === ['database', 'mail']
+                    && $mail instanceof MailMessage
+                    && count($mail->rawAttachments) === 0;
+            }
+        );
+    }
+
     public function test_internal_user_creating_order_for_client_uses_the_same_customer_recipients(): void
     {
         Bus::fake();
@@ -307,7 +360,7 @@ class MerchandiseRequestNotificationTest extends TestCase
         ]);
     }
 
-    private function createMerchandiseRequestWithLine(Client $client, User $cliente): MerchandiseRequest
+    private function createMerchandiseRequestWithLine(Client $client, User $cliente, ?int $requiredUnits = null): MerchandiseRequest
     {
         $item = Item::factory()->create([
             'client_id' => $client->id,
@@ -326,6 +379,7 @@ class MerchandiseRequestNotificationTest extends TestCase
             'units_per_pallet' => 40,
             'requested_pallets' => 1,
             'requested_units' => 40,
+            'required_units' => $requiredUnits,
         ]);
 
         return $merchandiseRequest->fresh(['client', 'requestedBy', 'lines.item']);

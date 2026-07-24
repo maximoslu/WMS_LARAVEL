@@ -69,6 +69,7 @@
             data-merchandise-request-form
             data-search-endpoint="{{ $searchEndpoint }}"
             data-client-id="{{ $client?->id }}"
+            data-allow-required-units="{{ $allowRequiredUnits ? '1' : '0' }}"
         >
             @csrf
             @if ($canChooseClient)
@@ -142,11 +143,14 @@
                     </div>
                 </div>
 
-                <div class="merchandise-request-line-table-head" aria-hidden="true">
+                <div @class(['merchandise-request-line-table-head', 'merchandise-request-line-table-head--required' => $allowRequiredUnits]) aria-hidden="true">
                     <span>Línea</span>
                     <span>Referencia</span>
                     <span>Pallets</span>
                     <span>Picos</span>
+                    @if ($allowRequiredUnits)
+                        <span>Necesidad</span>
+                    @endif
                     <span>Ubicación destino</span>
                     <span></span>
                 </div>

@@ -23,6 +23,8 @@ class ClientFactory extends Factory
             'active' => true,
             'show_storage_occupancy_to_client' => true,
             'show_stock_total_to_client' => true,
+            'send_order_preparation_pdf_to_client' => false,
+            'allow_order_line_required_units' => false,
         ];
     }
 

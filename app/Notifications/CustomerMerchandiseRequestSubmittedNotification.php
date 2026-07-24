@@ -14,6 +14,8 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
     public function __construct(
         private readonly MerchandiseRequest $merchandiseRequest,
         private readonly array $channels = ['database', 'mail'],
+        private readonly ?string $preparationPdfContent = null,
+        private readonly ?string $preparationPdfName = null,
     ) {}
 
     public function via(object $notifiable): array
@@ -38,7 +40,7 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             ))
             ->all();
 
-        return (new MailMessage)
+        $message = (new MailMessage)
             ->subject('Tu pedido '.$request->referenceCode().' se ha registrado correctamente')
             ->greeting('Pedido registrado correctamente')
             ->line('Tu pedido '.$request->referenceCode().' se ha registrado correctamente.')
@@ -49,6 +51,14 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             ->line('Lineas solicitadas:')
             ->line(implode(PHP_EOL, $lines))
             ->action('Ver solicitud', route('merchandise-requests.show', $request));
+
+        if ($this->preparationPdfContent !== null && $this->preparationPdfName !== null) {
+            $message->attachData($this->preparationPdfContent, $this->preparationPdfName, [
+                'mime' => 'application/pdf',
+            ]);
+        }
+
+        return $message;
     }
 
     public function toArray(object $notifiable): array

@@ -67,6 +67,78 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-24 - FEATURE EDELVIVES - PDF de preparacion al cliente y necesidad a cubrir
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `668f3d9c fix: align two labels per A4 page`, sincronizado con `origin/main`.
+
+### Objetivo
+- Configurar por cliente si el correo de alta de pedido al cliente adjunta el PDF de preparacion.
+- Permitir, tambien por cliente, capturar una necesidad minima de unidades por linea de pedido.
+- Activar ambas preferencias inicialmente para EDELVIVES sin condicionar la vista por nombre fijo.
+- Mantener sin cambios las comunicaciones intermedias: no se notifican preparacion, carga, `sent` ni estados intermedios.
+
+### Cambios aplicados
+- Migracion `2026_07_24_000001_add_edelvives_order_preferences_to_clients.php`:
+  - `clients.send_order_preparation_pdf_to_client`, booleano `false` por defecto.
+  - `clients.allow_order_line_required_units`, booleano `false` por defecto.
+  - EDELVIVES queda en `true` para ambos campos.
+- Migracion `2026_07_24_000002_add_required_units_to_merchandise_request_lines.php`:
+  - `merchandise_request_lines.required_units`, `unsignedBigInteger` nullable.
+- `Client` incluye fillable/casts de las dos preferencias nuevas.
+- Ficha de cliente permite crear/editar ambas opciones con checkbox y hidden `0`.
+- `ClientSeeder` y `ClientFactory` actualizados:
+  - FRIESLAND mantiene ambas opciones nuevas en `false`.
+  - EDELVIVES queda con `send_order_preparation_pdf_to_client = true` y `allow_order_line_required_units = true`.
+- Formulario de pedido:
+  - Si el cliente lo permite, cada linea muestra la necesidad opcional con unidad `uds.` y placeholder `Ej.: 10000`.
+  - El valor se mantiene por linea y se conserva al volver de validacion.
+  - Si el cliente no lo permite, el campo no se renderiza y el servidor prohibe payload forzado.
+- Detalle de pedido, pantalla de preparacion/carga, PDF de preparacion y albaran muestran la necesidad cuando existe.
+- La pantalla de preparacion calcula Pendiente/Cubierta/Exceso operativo contra unidades reales cargadas (`loadedUnitsTotal()`), no contra pallets + picos.
+- `GoodsDispatchWorkflowService` centraliza la validacion de cobertura minima antes de enviar, completar o generar albaran.
+- Se permite exceso operativo por composicion de pallets: necesidad `10.000` con `2 x 6.000 = 12.000` es valida.
+
+### Comunicaciones y PDF
+- `CustomerMerchandiseRequestSubmittedNotification` admite adjunto opcional en memoria mediante `attachData`.
+- `MerchandiseRequestNotificationService` reutiliza la misma Blade `merchandise-requests.preparation-pdf`.
+- El adjunto se llama `preparacion-pedido-{CODIGO}.pdf`.
+- Solo se adjunta cuando:
+  - el pedido fue creado por un usuario `cliente`;
+  - el cliente tiene `send_order_preparation_pdf_to_client = true`.
+- Si un usuario interno crea el pedido para EDELVIVES, se mantiene el correo existente al cliente sin adjunto de preparacion.
+- No se crean ficheros temporales ni se anaden comunicaciones nuevas.
+
+### Reglas verificadas
+- EDELVIVES puede crear pedido con necesidad a cubrir `10.000 uds` por linea.
+- FRIESLAND no puede forzar `required_units` mediante payload si la preferencia esta desactivada.
+- Valores `0`, negativos, decimales y texto se rechazan.
+- Carga `6.000 + 3.000 = 9.000` bloquea el cierre cuando la necesidad es `10.000`.
+- Carga `2 x 6.000 = 12.000` permite cerrar por exceso operativo necesario.
+- Los documentos renderizan la necesidad sin modificar stock.
+- No cambia el importador, datos de stock, aislamiento por cliente, configuracion Friesland previa, etiquetas, reservas ni integracion Google Calendar.
+
+### Validacion local
+- `php artisan migrate`: OK.
+- `php -l` en todos los PHP modificados: OK.
+- `php artisan test --filter=Client`: OK.
+- `php artisan test --filter=MerchandiseRequest`: OK.
+- `php artisan test --filter=Notification`: OK.
+- `php artisan test --filter=GoodsDispatch`: OK.
+- `php artisan test --filter=DeliveryNote`: OK.
+- `php artisan test`: `763 passed`, `4159 assertions`.
+- `npm run build`: OK.
+- `git diff --check`: OK.
+
+### Produccion / Forge
+- No se ha tocado produccion desde esta sesion.
+- Al desplegar en Forge, ejecutar `php artisan migrate --force`.
+- Validacion pendiente en produccion con usuario cliente EDELVIVES y usuario interno.
+
+---
+
 ## 2026-07-24 - HOTFIX ETIQUETAS - Dos etiquetas por A4 sin cortes
 
 **Equipo:** PC trabajo.

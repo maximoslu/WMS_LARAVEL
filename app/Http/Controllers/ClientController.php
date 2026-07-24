@@ -69,6 +69,8 @@ class ClientController extends Controller
                 $request->validated(),
                 defaultStorageOccupancyVisibility: true,
                 defaultStockTotalVisibility: true,
+                defaultSendOrderPreparationPdf: false,
+                defaultAllowOrderLineRequiredUnits: false,
             ));
             $audit->record(
                 event: 'client_created',
@@ -208,6 +210,8 @@ class ClientController extends Controller
                 $request->validated(),
                 defaultStorageOccupancyVisibility: false,
                 defaultStockTotalVisibility: false,
+                defaultSendOrderPreparationPdf: false,
+                defaultAllowOrderLineRequiredUnits: false,
             ));
             $audit->record(event: 'client_updated', module: 'clients', description: 'Cliente actualizado.', auditable: $client, user: $request->user(), clientId: $client->id, oldValues: $old, newValues: $client->fresh()->toArray());
         });
@@ -236,7 +240,13 @@ class ClientController extends Controller
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>
      */
-    private function payload(array $validated, bool $defaultStorageOccupancyVisibility, bool $defaultStockTotalVisibility): array
+    private function payload(
+        array $validated,
+        bool $defaultStorageOccupancyVisibility,
+        bool $defaultStockTotalVisibility,
+        bool $defaultSendOrderPreparationPdf,
+        bool $defaultAllowOrderLineRequiredUnits,
+    ): array
     {
         return [
             'name' => $validated['name'],
@@ -249,6 +259,8 @@ class ClientController extends Controller
             'active' => (bool) ($validated['active'] ?? false),
             'show_storage_occupancy_to_client' => (bool) ($validated['show_storage_occupancy_to_client'] ?? $defaultStorageOccupancyVisibility),
             'show_stock_total_to_client' => (bool) ($validated['show_stock_total_to_client'] ?? $defaultStockTotalVisibility),
+            'send_order_preparation_pdf_to_client' => (bool) ($validated['send_order_preparation_pdf_to_client'] ?? $defaultSendOrderPreparationPdf),
+            'allow_order_line_required_units' => (bool) ($validated['allow_order_line_required_units'] ?? $defaultAllowOrderLineRequiredUnits),
         ];
     }
 }

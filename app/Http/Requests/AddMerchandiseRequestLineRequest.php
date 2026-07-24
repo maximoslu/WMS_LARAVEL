@@ -24,10 +24,11 @@ class AddMerchandiseRequestLineRequest extends FormRequest
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
-     *     requested_pallets:int,
-     *     requested_peaks:int,
-     *     requested_units:int
-     * }> | null
+ *     requested_pallets:int,
+ *     requested_peaks:int,
+  *     requested_units:int,
+  *     required_units:int|null
+  * }> | null
      */
     private ?array $resolvedLines = null;
 
@@ -65,6 +66,7 @@ class AddMerchandiseRequestLineRequest extends FormRequest
                         'destination_location' => trim((string) ($payload['destination_location'] ?? '')) !== ''
                             ? trim((string) $payload['destination_location'])
                             : null,
+                        'required_units' => ($payload['required_units'] ?? '') === '' ? null : ($payload['required_units'] ?? null),
                     ];
                 })
                 ->all(),
@@ -81,6 +83,9 @@ class AddMerchandiseRequestLineRequest extends FormRequest
             'lines.*.stock_peak_index' => ['nullable', 'integer', 'min:1'],
             'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
             'lines.*.destination_location' => ['nullable', 'string', 'max:255'],
+            'lines.*.required_units' => $this->allowsRequiredUnits()
+                ? ['nullable', 'integer', 'min:1', 'max:9223372036854775807']
+                : ['prohibited'],
         ];
     }
 
@@ -112,10 +117,11 @@ class AddMerchandiseRequestLineRequest extends FormRequest
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
-     *     requested_pallets:int,
-     *     requested_peaks:int,
-     *     requested_units:int
-     * }>
+ *     requested_pallets:int,
+ *     requested_peaks:int,
+  *     requested_units:int,
+  *     required_units:int|null
+  * }>
      */
     public function validatedLines(): array
     {
@@ -131,6 +137,9 @@ class AddMerchandiseRequestLineRequest extends FormRequest
         $this->resolvedLines = collect($resolved['lines'])
             ->map(function (array $line, int $index) use ($submittedLines): array {
                 $line['destination_location'] = $submittedLines->get($index)['destination_location'] ?? null;
+                $line['required_units'] = $this->allowsRequiredUnits()
+                    ? ($submittedLines->get($index)['required_units'] ?? null)
+                    : null;
 
                 return $line;
             })
@@ -147,6 +156,14 @@ class AddMerchandiseRequestLineRequest extends FormRequest
         return $merchandiseRequest instanceof MerchandiseRequest
             ? (int) $merchandiseRequest->client_id
             : 0;
+    }
+
+    public function allowsRequiredUnits(): bool
+    {
+        $merchandiseRequest = $this->route('merchandiseRequest');
+
+        return $merchandiseRequest instanceof MerchandiseRequest
+            && (bool) $merchandiseRequest->client?->allow_order_line_required_units;
     }
 
     /**

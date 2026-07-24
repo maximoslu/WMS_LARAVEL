@@ -723,6 +723,7 @@ const setupMerchandiseRequestBuilder = () => {
     const addButton = form.querySelector('[data-request-add-selected]');
     const submitButton = form.querySelector('[data-request-submit]');
     const preview = form.querySelector('[data-request-selection-preview]');
+    const allowRequiredUnits = form.dataset.allowRequiredUnits === '1';
     const initialItems = parseJsonNode('[data-request-selected-items]', form);
     const cache = new Map(initialItems.map((item) => [String(item.variant_key ?? item.id), item]));
     const lines = new Map(initialItems
@@ -750,6 +751,7 @@ const setupMerchandiseRequestBuilder = () => {
                 `<input type="hidden" name="lines[${key}][stock_peak_index]" value="${escapeHtml(item.stock_peak_index ?? '')}">`,
                 `<input type="hidden" name="lines[${key}][quantity]" value="${escapeHtml(item.selected_quantity)}">`,
                 `<input type="hidden" name="lines[${key}][destination_location]" value="${escapeHtml(item.destination_location ?? '')}">`,
+                allowRequiredUnits ? `<input type="hidden" name="lines[${key}][required_units]" value="${escapeHtml(item.required_units ?? '')}">` : '',
             ].join('');
         }).join('');
     };
@@ -792,9 +794,19 @@ const setupMerchandiseRequestBuilder = () => {
             const peakValue = line.line_type === 'peak' ? line.selected_quantity : 0;
             const location = line.location_text ? ` · Ubicación ${line.location_text}` : '';
             const destinationLocation = line.destination_location ?? '';
+            const requiredUnits = line.required_units ?? '';
+            const requiredUnitsMarkup = allowRequiredUnits ? `
+                <label class="auth-field merchandise-request-line-quantity">
+                    <span>Necesidad</span>
+                    <div class="wms-unit-input">
+                        <input type="number" min="1" step="1" value="${escapeHtml(requiredUnits)}" class="auth-input merchandise-request-summary-input" placeholder="Ej.: 10000" data-request-summary-required-units data-line-key="${key}">
+                        <small>uds.</small>
+                    </div>
+                </label>
+            ` : '';
 
             return `
-            <article class="merchandise-request-line-row">
+            <article class="merchandise-request-line-row${allowRequiredUnits ? ' merchandise-request-line-row--required' : ''}">
                 <span class="merchandise-request-line-number">Línea ${index + 1}</span>
                 <div class="merchandise-request-line-ref">
                     <strong>${escapeHtml(line.sku)}</strong>
@@ -809,6 +821,7 @@ const setupMerchandiseRequestBuilder = () => {
                     <span>Picos</span>
                     <input type="number" min="1" step="1" ${line.line_type === 'peak' ? maxAttribute : 'disabled'} value="${escapeHtml(peakValue)}" class="auth-input merchandise-request-summary-input" ${line.line_type === 'peak' ? `data-request-summary-quantity data-line-key="${key}"` : ''}>
                 </label>
+                ${requiredUnitsMarkup}
                 <label class="auth-field merchandise-request-line-destination">
                     <span>Ubicación destino</span>
                     <input type="text" maxlength="255" value="${escapeHtml(destinationLocation)}" class="auth-input" placeholder="Opcional" data-request-summary-destination data-line-key="${key}">
@@ -890,6 +903,24 @@ const setupMerchandiseRequestBuilder = () => {
                 lines.set(lineKey, {
                     ...item,
                     destination_location: destinationInput.value.trim(),
+                });
+                syncHiddenInputs();
+            }
+
+            return;
+        }
+
+        const requiredUnitsInput = event.target.closest('[data-request-summary-required-units]');
+
+        if (requiredUnitsInput) {
+            const lineKey = String(requiredUnitsInput.dataset.lineKey ?? '');
+            const item = lines.get(lineKey);
+            const requiredUnits = parsePositiveInteger(requiredUnitsInput.value);
+
+            if (item) {
+                lines.set(lineKey, {
+                    ...item,
+                    required_units: Number.isFinite(requiredUnits) && requiredUnits > 0 ? requiredUnits : '',
                 });
                 syncHiddenInputs();
             }
@@ -2155,7 +2186,9 @@ const setupWarehouseRequestAllocations = () => {
         }
 
         const requestedUnits = parsePositiveInteger(line.dataset.requestedUnits);
-        const differenceUnits = totalUnits - requestedUnits;
+        const requiredUnits = parsePositiveInteger(line.dataset.requiredUnits);
+        const coverageTargetUnits = Number.isFinite(requiredUnits) && requiredUnits > 0 ? requiredUnits : requestedUnits;
+        const differenceUnits = totalUnits - coverageTargetUnits;
         const loadedPalletsField = line.querySelector('[data-line-loaded-pallets]');
         const loadedPartialUnitsField = line.querySelector('[data-line-loaded-partial-units]');
         const loadedUnitsNode = line.querySelector('[data-loaded-units]');
@@ -2192,7 +2225,18 @@ const setupWarehouseRequestAllocations = () => {
                 'warehouse-load-state--ok',
             );
 
-            if (totalUnits === 0) {
+            if (Number.isFinite(requiredUnits) && requiredUnits > 0) {
+                if (totalUnits < requiredUnits) {
+                    stateNode.textContent = totalUnits === 0 ? 'Pendiente' : 'Pendiente';
+                    stateNode.classList.add(totalUnits === 0 ? 'warehouse-load-state--pending' : 'warehouse-load-state--partial');
+                } else if (totalUnits === requiredUnits) {
+                    stateNode.textContent = 'Cubierta';
+                    stateNode.classList.add('warehouse-load-state--ok');
+                } else {
+                    stateNode.textContent = 'Exceso operativo';
+                    stateNode.classList.add('warehouse-load-state--superior');
+                }
+            } else if (totalUnits === 0) {
                 stateNode.textContent = 'Sin preparar';
                 stateNode.classList.add('warehouse-load-state--pending');
             } else if (totalUnits === requestedUnits) {

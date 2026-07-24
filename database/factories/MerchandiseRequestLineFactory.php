@@ -29,6 +29,7 @@ class MerchandiseRequestLineFactory extends Factory
             'requested_pallets' => fake()->numberBetween(1, 12),
             'requested_peaks' => 0,
             'requested_units' => fake()->numberBetween(1, 12000),
+            'required_units' => null,
             'prepared_pallets' => null,
             'prepared_peaks' => null,
             'prepared_units' => null,

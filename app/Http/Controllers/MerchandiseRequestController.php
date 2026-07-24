@@ -134,6 +134,7 @@ class MerchandiseRequestController extends Controller
             'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
             'canChooseClient' => $canChooseClient,
             'selectedClientId' => $selectedClient?->id,
+            'allowRequiredUnits' => (bool) ($selectedClient?->allow_order_line_required_units ?? false),
             'searchEndpoint' => route('merchandise-requests.items.search'),
             'contractualWindowWarning' => $scheduleService->preSubmissionWarning(),
             'pendingRequests' => $pendingRequests,
@@ -204,6 +205,7 @@ class MerchandiseRequestController extends Controller
                     'requested_pallets' => $line['requested_pallets'],
                     'requested_peaks' => $line['requested_peaks'],
                     'requested_units' => $line['requested_units'],
+                    'required_units' => $line['required_units'],
                 ]);
             }
 
@@ -322,6 +324,7 @@ class MerchandiseRequestController extends Controller
                     'requested_pallets' => $line['requested_pallets'],
                     'requested_peaks' => $line['requested_peaks'],
                     'requested_units' => $line['requested_units'],
+                    'required_units' => $line['required_units'],
                 ]);
 
                 $createdLines->push($createdLine);

@@ -216,6 +216,7 @@
                     data-merchandise-request-form
                     data-search-endpoint="{{ $searchEndpoint }}"
                     data-client-id="{{ $merchandiseRequest->client_id }}"
+                    data-allow-required-units="{{ $merchandiseRequest->client?->allow_order_line_required_units ? '1' : '0' }}"
                 >
                     @csrf
 
@@ -279,11 +280,14 @@
                     <div class="merchandise-request-hidden-inputs" data-request-hidden-inputs></div>
                     <script type="application/json" data-request-selected-items>@json($selectedItems)</script>
 
-                    <div class="merchandise-request-line-table-head wms-add-order-line-table-head" aria-hidden="true">
+                    <div @class(['merchandise-request-line-table-head', 'wms-add-order-line-table-head', 'merchandise-request-line-table-head--required' => $merchandiseRequest->client?->allow_order_line_required_units]) aria-hidden="true">
                         <span>Línea</span>
                         <span>Referencia</span>
                         <span>Pallets</span>
                         <span>Picos</span>
+                        @if ($merchandiseRequest->client?->allow_order_line_required_units)
+                            <span>Necesidad</span>
+                        @endif
                         <span>Ubicación destino</span>
                         <span></span>
                     </div>
@@ -311,6 +315,7 @@
                             <th>Lote</th>
                             <th>Ubicación destino</th>
                             <th>Cantidad</th>
+                            <th>Necesidad</th>
                             <th>Uds/pallet</th>
                             <th>Tipo</th>
                             @unless ($isClient)
@@ -364,6 +369,7 @@
                                 <td>{{ $line->lot ?: 'Sin lote' }}</td>
                                 <td>{{ $line->destination_location ?: '-' }}</td>
                                 <td>{{ $line->requestedQuantityLabel() }}</td>
+                                <td>{{ $line->requiredUnitsLabel() ?? '—' }}</td>
                                 <td>{{ $line->unitsLabel() }}</td>
                                 <td><span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span></td>
                                 @unless ($isClient)

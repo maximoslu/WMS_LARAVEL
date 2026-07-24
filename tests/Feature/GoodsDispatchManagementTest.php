@@ -2825,12 +2825,187 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(MerchandiseRequest::STATUS_SENT, $merchandiseRequest->fresh()->status);
     }
 
+    public function test_required_units_blocks_finalizing_when_loaded_units_do_not_cover_need(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        [$client, $almacen, $merchandiseRequest, $dispatch, $line, $stock] = $this->createDispatchWithRequiredUnits();
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.requests.show', $merchandiseRequest))
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'camion_propio' => '0',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 3000,
+                        'allocations' => [
+                            [
+                                'stock_pallet_id' => $stock->id,
+                                'loaded_pallets' => 1,
+                                'loaded_partial_units' => 3000,
+                            ],
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertSessionHasErrors('dispatch');
+
+        $this->assertSame($client->id, $dispatch->fresh()->client_id);
+        $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->fresh()->status);
+        $this->assertSame(18000, $stock->fresh()->quantity_units);
+    }
+
+    public function test_required_units_allows_exact_or_operational_overage_when_need_is_covered(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        [, $almacen, $merchandiseRequest, $dispatch, $line, $stock] = $this->createDispatchWithRequiredUnits();
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'camion_propio' => '0',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 2,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [
+                            [
+                                'stock_pallet_id' => $stock->id,
+                                'loaded_pallets' => 2,
+                                'loaded_partial_units' => 0,
+                            ],
+                        ],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $dispatch->fresh()->status);
+        $this->assertSame(MerchandiseRequest::STATUS_SENT, $merchandiseRequest->fresh()->status);
+        $this->assertSame(6000, $stock->fresh()->quantity_units);
+    }
+
+    public function test_required_units_are_visible_in_preparation_and_delivery_documents(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        [, $almacen, $merchandiseRequest, $dispatch, $line, $stock] = $this->createDispatchWithRequiredUnits();
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSeeText('Necesidad a cubrir')
+            ->assertSeeText('10.000 uds');
+
+        $preparationHtml = view('merchandise-requests.preparation-pdf', [
+            'merchandiseRequest' => $merchandiseRequest->fresh([
+                'client',
+                'requestedBy',
+                'lines.item',
+                'lines.stockPallet.location.warehouse',
+                'dispatch.lines.sourceRequestLine',
+                'dispatch.lines.allocations',
+            ]),
+        ])->render();
+
+        $this->assertStringContainsString('10.000 uds.', $preparationHtml);
+
+        $line->update([
+            'loaded_pallets' => 2,
+            'confirmed_at' => now(),
+        ]);
+        $dispatch->update([
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+
+        $deliveryHtml = view('dispatches.delivery-note-pdf', [
+            'dispatch' => $dispatch->fresh(['client', 'lines.sourceRequestLine', 'lines.allocations']),
+        ])->render();
+
+        $this->assertStringContainsString('Necesidad a cubrir: 10.000 uds.', $deliveryHtml);
+        $this->assertSame(18000, $stock->fresh()->quantity_units, 'Rendering documents must not change stock.');
+    }
+
     private function seedBaseData(): void
     {
         $this->seed([
             RoleSeeder::class,
             ClientSeeder::class,
         ]);
+    }
+
+    private function createDispatchWithRequiredUnits(): array
+    {
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'REQ-UNITS-001',
+            'units_per_pallet' => 6000,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOTE-REQ',
+            'units_per_pallet' => 6000,
+            'quantity_units' => 18000,
+            'full_pallets' => 3,
+            'warehouse_pallets' => 3,
+            'peak_1' => 0,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'line_type' => 'pallet',
+            'lot' => $stock->lot,
+            'units_per_pallet' => 6000,
+            'requested_pallets' => 2,
+            'requested_units' => 12000,
+            'required_units' => 10000,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'type' => GoodsDispatch::TYPE_REQUEST,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'source_request_line_id' => $requestLine->id,
+            'line_type' => 'pallet',
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'lot' => $stock->lot,
+            'units_per_pallet' => 6000,
+            'requested_pallets' => 2,
+            'requested_units' => 12000,
+            'loaded_pallets' => null,
+            'loaded_partial_units' => null,
+        ]);
+
+        return [$client, $almacen, $merchandiseRequest, $dispatch, $line, $stock];
     }
 
     private function makeUserWithRole(string $roleSlug, ?Client $client = null): User

@@ -108,6 +108,24 @@
             </span>
         </label>
 
+        <label class="toggle-field">
+            <input type="hidden" name="send_order_preparation_pdf_to_client" value="0">
+            <input type="checkbox" name="send_order_preparation_pdf_to_client" value="1" @checked(old('send_order_preparation_pdf_to_client', $client->send_order_preparation_pdf_to_client ?? false))>
+            <span>
+                Enviar preparaciÃ³n del pedido al cliente
+                <small class="helper-text">Adjunta el PDF de preparaciÃ³n al correo que recibe el cliente al registrar un pedido.</small>
+            </span>
+        </label>
+
+        <label class="toggle-field">
+            <input type="hidden" name="allow_order_line_required_units" value="0">
+            <input type="checkbox" name="allow_order_line_required_units" value="1" @checked(old('allow_order_line_required_units', $client->allow_order_line_required_units ?? false))>
+            <span>
+                Permitir necesidad a cubrir en las lÃ­neas del pedido
+                <small class="helper-text">Permite que el cliente indique opcionalmente la cantidad mÃ­nima de unidades que necesita recibir.</small>
+            </span>
+        </label>
+
         <div class="item-form-actions action-buttons">
             <a href="{{ route('clients.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
             <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear cliente' }}</button>
@@ -282,4 +300,3 @@
         @endif
     </div>
 @endif
-

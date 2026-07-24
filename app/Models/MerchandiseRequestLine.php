@@ -24,6 +24,7 @@ class MerchandiseRequestLine extends Model
         'requested_pallets',
         'requested_peaks',
         'requested_units',
+        'required_units',
         'prepared_pallets',
         'prepared_peaks',
         'prepared_units',
@@ -36,6 +37,7 @@ class MerchandiseRequestLine extends Model
             'stock_pallet_id' => 'integer',
             'stock_peak_index' => 'integer',
             'requested_units' => 'integer',
+            'required_units' => 'integer',
             'units_per_pallet' => 'integer',
             'units_per_peak' => 'integer',
             'requested_pallets' => 'integer',
@@ -109,6 +111,22 @@ class MerchandiseRequestLine extends Model
         $quantity = $this->requestedQuantity();
 
         return number_format($quantity, 0, ',', '.').' '.WmsLineType::quantityLabel($this->lineType(), $quantity);
+    }
+
+    public function requiredUnits(): ?int
+    {
+        $requiredUnits = (int) ($this->required_units ?? 0);
+
+        return $requiredUnits > 0 ? $requiredUnits : null;
+    }
+
+    public function requiredUnitsLabel(): ?string
+    {
+        $requiredUnits = $this->requiredUnits();
+
+        return $requiredUnits === null
+            ? null
+            : 'Necesidad a cubrir: '.number_format($requiredUnits, 0, ',', '.').' uds.';
     }
 
     public function unitsLabel(): string

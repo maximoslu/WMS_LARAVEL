@@ -119,7 +119,12 @@
                 @foreach ($deliveredLines as $line)
                     <tr>
                         <td class="col-sku"><strong>{{ $line->sku }}</strong></td>
-                        <td class="col-description description">{{ $line->deliveryNoteDescription() }}</td>
+                        <td class="col-description description">
+                            {{ $line->deliveryNoteDescription() }}
+                            @if ($line->requiredUnitsLabel())
+                                <br><small>{{ $line->requiredUnitsLabel() }}</small>
+                            @endif
+                        </td>
                         <td class="col-lot">{{ $line->lot ?: 'Sin lote' }}</td>
                         <td class="col-delivered">{{ $line->loadedQuantityLabel() }}</td>
                         <td class="col-quantity number">{{ number_format($line->loadedUnitsTotal(), 0, ',', '.') }} uds</td>

@@ -247,6 +247,53 @@ class GoodsDispatchLine extends Model
         return $this->requestedUnitsTotal() !== $this->loadedUnitsTotal();
     }
 
+    public function requiredUnits(): ?int
+    {
+        $requiredUnits = (int) ($this->sourceRequestLine?->required_units ?? 0);
+
+        return $requiredUnits > 0 ? $requiredUnits : null;
+    }
+
+    public function requiredUnitsLabel(): ?string
+    {
+        $requiredUnits = $this->requiredUnits();
+
+        return $requiredUnits === null
+            ? null
+            : 'Necesidad a cubrir: '.number_format($requiredUnits, 0, ',', '.').' uds.';
+    }
+
+    public function requiredUnitsCoverageStatus(): ?string
+    {
+        $requiredUnits = $this->requiredUnits();
+
+        if ($requiredUnits === null) {
+            return null;
+        }
+
+        $loadedUnits = $this->loadedUnitsTotal();
+
+        if ($loadedUnits < $requiredUnits) {
+            return 'pending';
+        }
+
+        if ($loadedUnits > $requiredUnits) {
+            return 'over';
+        }
+
+        return 'covered';
+    }
+
+    public function requiredUnitsCoverageLabel(): ?string
+    {
+        return match ($this->requiredUnitsCoverageStatus()) {
+            'pending' => 'Pendiente',
+            'covered' => 'Cubierta',
+            'over' => 'Exceso operativo',
+            default => null,
+        };
+    }
+
     public function loadingStatus(): string
     {
         $loadedUnits = $this->loadedUnitsTotal();

@@ -318,7 +318,7 @@ class GoodsDispatchController extends Controller
         GoodsDispatchWorkflowService $workflowService,
         AuditLogService $audit,
     ) {
-        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet', 'lines.allocations']);
+        $goodsDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.stockPallet', 'lines.allocations', 'lines.sourceRequestLine']);
 
         abort_unless(
             in_array($goodsDispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true),

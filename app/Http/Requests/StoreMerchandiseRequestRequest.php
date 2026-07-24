@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Client;
 use App\Models\Role;
 use App\Support\Stock\StockLinePayloadResolver;
 use App\Support\WmsLineType;
@@ -29,10 +30,11 @@ class StoreMerchandiseRequestRequest extends FormRequest
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
-     *     requested_pallets:int,
-     *     requested_peaks:int,
-     *     requested_units:int
-     * }> | null
+ *     requested_pallets:int,
+ *     requested_peaks:int,
+  *     requested_units:int,
+  *     required_units:int|null
+  * }> | null
      */
     private ?array $resolvedLines = null;
 
@@ -93,6 +95,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
                         'destination_location' => trim((string) ($payload['destination_location'] ?? '')) !== ''
                             ? trim((string) $payload['destination_location'])
                             : null,
+                        'required_units' => ($payload['required_units'] ?? '') === '' ? null : ($payload['required_units'] ?? null),
                     ];
                 })
                 ->all(),
@@ -116,6 +119,9 @@ class StoreMerchandiseRequestRequest extends FormRequest
             'lines.*.stock_peak_index' => ['nullable', 'integer', 'min:1'],
             'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
             'lines.*.destination_location' => ['nullable', 'string', 'max:255'],
+            'lines.*.required_units' => $this->allowsRequiredUnits()
+                ? ['nullable', 'integer', 'min:1', 'max:9223372036854775807']
+                : ['prohibited'],
         ];
     }
 
@@ -153,10 +159,11 @@ class StoreMerchandiseRequestRequest extends FormRequest
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
-     *     requested_pallets:int,
-     *     requested_peaks:int,
-     *     requested_units:int
-     * }>
+ *     requested_pallets:int,
+ *     requested_peaks:int,
+  *     requested_units:int,
+  *     required_units:int|null
+  * }>
      */
     public function validatedLines(): array
     {
@@ -172,6 +179,9 @@ class StoreMerchandiseRequestRequest extends FormRequest
         $this->resolvedLines = collect($resolved['lines'])
             ->map(function (array $line, int $index) use ($submittedLines): array {
                 $line['destination_location'] = $submittedLines->get($index)['destination_location'] ?? null;
+                $line['required_units'] = $this->allowsRequiredUnits()
+                    ? ($submittedLines->get($index)['required_units'] ?? null)
+                    : null;
 
                 return $line;
             })
@@ -190,6 +200,19 @@ class StoreMerchandiseRequestRequest extends FormRequest
         }
 
         return (int) $this->input('client_id');
+    }
+
+    public function allowsRequiredUnits(): bool
+    {
+        $clientId = $this->effectiveClientId();
+
+        if ($clientId <= 0) {
+            return false;
+        }
+
+        return (bool) Client::query()
+            ->whereKey($clientId)
+            ->value('allow_order_line_required_units');
     }
 
     /**

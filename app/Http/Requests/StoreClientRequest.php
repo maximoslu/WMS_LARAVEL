@@ -26,6 +26,8 @@ class StoreClientRequest extends FormRequest
             'active' => ['nullable', 'boolean'],
             'show_storage_occupancy_to_client' => ['nullable', 'boolean'],
             'show_stock_total_to_client' => ['nullable', 'boolean'],
+            'send_order_preparation_pdf_to_client' => ['nullable', 'boolean'],
+            'allow_order_line_required_units' => ['nullable', 'boolean'],
         ];
     }
 }
