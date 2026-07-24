@@ -4,6 +4,68 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## ESTADO ACTUAL CONSOLIDADO
+
+**Fecha:** 2026-07-24.
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**HEAD verificado antes de esta actualizacion documental:** `8d61d2c0015dcd188bf0c4ca45d64c2f359069b3`.
+**Sincronizacion:** `HEAD` y `origin/main` coinciden en `8d61d2c0015dcd188bf0c4ca45d64c2f359069b3`.
+**Ultimo commit funcional confirmado:** `8d61d2c fix: hide stock total for configured clients`.
+
+### Resumen ejecutivo
+
+1. **Pedidos y comunicaciones** (`8c43fd6e`):
+   - Solo se comunica la creacion del pedido y la finalizacion con albaran.
+   - Empresa y cliente reciben esos dos hitos.
+   - No se envian avisos en preparacion, carga, `sent` ni estados intermedios.
+
+2. **Stock Friesland** (`12406315`):
+   - Stock fisico local real: `2.338` pales.
+   - El importador estaba correcto.
+   - Desfase reproducido: `78` pales internos ocultos + `16` por diferencia de metrica = `94`.
+
+3. **Ocupacion / huecos** (`ab67ebd`):
+   - Campo `clients.show_storage_occupancy_to_client`.
+   - Default `true`.
+   - FRIESLAND queda en `false`.
+   - Usuarios internos siguen viendo el dato.
+   - Cliente FRIESLAND no ve huecos ni ubicaciones ocupadas.
+   - `Descargar` permanece visible y operativo.
+
+4. **Total global de stock** (`8d61d2c`):
+   - Campo `clients.show_stock_total_to_client`.
+   - Default `true`.
+   - FRIESLAND queda en `false`.
+   - Cliente FRIESLAND no ve `Pales almacenados`, `Stock fisico total` ni `2.338`.
+   - Mantiene `Descargar`, modal Excel/PDF/CSV, filtros y tabla.
+   - Usuarios internos siguen viendo el total.
+
+5. **Configuracion final FRIESLAND**:
+   - `show_storage_occupancy_to_client = false`.
+   - `show_stock_total_to_client = false`.
+   - Tabla y export ocultan referencias `_` y categoria `misc/VARIOS`.
+   - `BLOQUEADO` y `OBSOLETO` siguen visibles.
+   - Nunca se mezcla stock de otros clientes.
+
+6. **Estado de validacion registrado**:
+   - Ultima suite completa reportada: `741 passed`, `3976 assertions`.
+   - `npm run build`: OK.
+   - `git diff --check`: OK.
+   - Estas cifras proceden de la entrada detallada del cambio `8d61d2c`.
+
+7. **Produccion / Forge**:
+   - Estar en `origin/main` no implica por si solo que este desplegado en produccion.
+   - Las migraciones nuevas requieren `php artisan migrate --force` en Forge.
+   - Pendiente validar en produccion con cliente FRIESLAND y superadmin.
+
+### Nota sobre `.claude/`
+
+`.claude/` fuera de Git significa unicamente que la carpeta local de configuracion de Claude Code no se versiona. No significa que se omitan del `SESSION_LOG.md` los trabajos realizados por Claude o Codex.
+
+---
+
 ## 2026-07-23 - FUNCIONAL PEDIDOS 2 - Reducir comunicaciones a creacion y cierre
 
 **Equipo:** PC trabajo / portatil.
