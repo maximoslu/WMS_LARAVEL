@@ -300,7 +300,7 @@ class StockExportTest extends TestCase
         $response = $this->actingAs($user)->get(route('stock.export', ['format' => 'csv']));
         $content = file_get_contents($response->baseResponse->getFile()->getPathname());
 
-        $this->assertStringContainsString('SKU-NOLOT;"Sin lote articulo";"SIN LOTE";5;1', $content);
+        $this->assertStringContainsString('SKU-NOLOT;"Sin lote articulo";"NO LOTE";5;1', $content);
     }
 
     public function test_export_calcula_siete_pales_completos_mas_un_pico_como_ocho(): void

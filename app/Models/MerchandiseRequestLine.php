@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\NormalizesLotAttribute;
 use App\Support\WmsLineType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class MerchandiseRequestLine extends Model
 {
     use HasFactory;
+    use NormalizesLotAttribute;
 
     protected $fillable = [
         'merchandise_request_id',

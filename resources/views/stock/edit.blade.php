@@ -48,7 +48,7 @@
 
                 <label class="auth-field">
                     <span>Lote</span>
-                    <input type="text" class="auth-input" value="{{ $stockPallet->lot ?: 'SIN LOTE' }}" disabled>
+                    <input type="text" class="auth-input" value="{{ $stockPallet->lot ?: 'NO LOTE' }}" disabled>
                 </label>
 
                 <label class="auth-field">

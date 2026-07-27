@@ -6,6 +6,7 @@ use App\Jobs\EvaluateStockAlertsJob;
 use App\Models\InventoryMovement;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +24,7 @@ class InventoryMovementService
                 'item_id' => null,
                 'sku' => null,
                 'description' => null,
-                'lot' => null,
+                'lot' => LotNormalizer::NO_LOT,
                 'stock_pallet_id' => null,
                 'warehouse_id' => null,
                 'location_id' => null,
@@ -45,7 +46,7 @@ class InventoryMovementService
             'item_id' => $stockPallet->item_id !== null ? (int) $stockPallet->item_id : null,
             'sku' => $stockPallet->item?->sku,
             'description' => $stockPallet->item?->description,
-            'lot' => $stockPallet->lot,
+            'lot' => LotNormalizer::normalize($stockPallet->lot),
             'stock_pallet_id' => $stockPallet->exists ? (int) $stockPallet->id : null,
             'warehouse_id' => $stockPallet->location?->warehouse_id,
             'location_id' => $stockPallet->location_id,
@@ -111,7 +112,7 @@ class InventoryMovementService
             'item_id' => $after['item_id'] ?? $before['item_id'] ?? null,
             'sku' => $after['sku'] ?? $before['sku'] ?? null,
             'description' => $after['description'] ?? $before['description'] ?? null,
-            'lot' => $after['lot'] ?? $before['lot'] ?? null,
+            'lot' => LotNormalizer::normalize($after['lot'] ?? $before['lot'] ?? null),
             'stock_pallet_id' => $after['stock_pallet_id'] ?? $before['stock_pallet_id'] ?? null,
             'movement_type' => $movementType,
             'source' => $sourceLabel,

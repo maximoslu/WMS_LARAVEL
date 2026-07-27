@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
+use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -227,6 +228,34 @@ class AjaxSearchTest extends TestCase
         $this->assertSame(['1', '10', '11'], collect($data)->pluck('value')->all());
         $this->assertSame($locations->pluck('id')->values()->all(), collect($data)->pluck('id')->all());
         $this->assertSame('NAVE 38 - Calle 1', $data[0]['label']);
+    }
+
+    public function test_lots_endpoint_finds_canonical_no_lot_by_alias(): void
+    {
+        [$client] = $this->seedClients();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'NOLOT-AJAX',
+            'description' => 'Articulo sin lote',
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'NO LOTE',
+            'active' => true,
+            'status' => StockPallet::STATUS_AVAILABLE,
+        ]);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $this->actingAs($user)
+            ->getJson(route('ajax.lots', [
+                'q' => 'Sin Lote',
+                'client_id' => $client->id,
+            ]))
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $stock->id)
+            ->assertJsonPath('data.0.label', 'NO LOTE')
+            ->assertJsonPath('data.0.value', 'NO LOTE');
     }
 
     public function test_suppliers_endpoint_finds_matches_scoped_to_client_and_global(): void

@@ -855,7 +855,7 @@ class StockImportTest extends TestCase
             ->assertSee('Se usara el almacen NAVE 38 y se aseguraran las calles 0-45, A-F, FONDO y SIN UBICACION.')
             ->assertSee('100x127 135')
             ->assertSee('100x131 110')
-            ->assertSee('SIN LOTE')
+            ->assertSee('NO LOTE')
             ->assertDontSee('La hoja STOCK no tiene el formato esperado para Edelvives.');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
@@ -906,7 +906,7 @@ class StockImportTest extends TestCase
         $this->assertSame(Item::STATUS_ACTIVE, $firstItem->status);
         $this->assertTrue($firstItem->active);
         $this->assertSame('Papel offset 70x100 80', $firstItem->description);
-        $this->assertSame('SIN LOTE', $firstStock->lot);
+        $this->assertSame('NO LOTE', $firstStock->lot);
         $this->assertSame('18', $firstStock->location?->code);
         $this->assertSame(StockPallet::STATUS_AVAILABLE, $firstStock->status);
         $this->assertSame(1880, $firstStock->quantity_units);
@@ -1338,7 +1338,7 @@ class StockImportTest extends TestCase
         $this->assertSame([2, 1], $stocks->pluck('full_pallets')->all());
         $this->assertSame([0, 1], $stocks->pluck('peaks_count')->all());
         $this->assertSame([0, 200], $stocks->pluck('peak_1')->all());
-        $this->assertTrue($stocks->every(fn (StockPallet $stock): bool => $stock->lot === 'SIN LOTE'));
+        $this->assertTrue($stocks->every(fn (StockPallet $stock): bool => $stock->lot === 'NO LOTE'));
 
         $this->assertDatabaseHas('locations', [
             'code' => '40-41',
@@ -1414,7 +1414,7 @@ class StockImportTest extends TestCase
         $this->assertSame(0, $contracolados->units_per_pallet);
         $this->assertSame(24, $contracolados->full_pallets);
         $this->assertSame(0, $contracolados->peaks_count);
-        $this->assertSame('SIN LOTE', $contracolados->lot);
+        $this->assertSame('NO LOTE', $contracolados->lot);
 
         $overview = app(StockOverviewBuilder::class)->build($user, [
             'client_id' => $edelvives->id,

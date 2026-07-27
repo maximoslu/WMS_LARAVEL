@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\NormalizesLotAttribute;
 use App\Support\WmsLineType;
 use Database\Factories\GoodsDispatchLineFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,6 +16,7 @@ class GoodsDispatchLine extends Model
 {
     /** @use HasFactory<GoodsDispatchLineFactory> */
     use HasFactory;
+    use NormalizesLotAttribute;
 
     protected $fillable = [
         'goods_dispatch_id',

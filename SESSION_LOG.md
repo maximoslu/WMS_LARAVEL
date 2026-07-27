@@ -5661,3 +5661,100 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocó producción, `.env`, secretos, importador, cálculos de stock físico ni datos de stock.
 - No se usó `migrate:fresh`, `db:wipe`, borrados ni force push.
 - `.claude/` permanece fuera de Git.
+
+## 2026-07-27 - HOTFIX LOTES - Canonicalizar ausencia de lote (PC casa)
+
+**Equipo:** PC casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Punto de partida:** `e00714b feat: email order preparation and capture required units`, sincronizado con `origin/main` mediante `git pull --ff-only origin main`.
+
+### Causa
+- El sistema aceptaba valores equivalentes a ausencia de lote como `NULL`, cadena vacia, espacios, `NO LOTE`, `No Lote`, `SIN LOTE` y `Sin Lote`.
+- Al comparar partidas, una entrada sin lote podia no reutilizar una partida existente con `NO LOTE`, creando una partida distinta solo por texto.
+- La decision de reutilizar o crear partida se concentra en `GoodsReceiptStockApplicationService::resolveTargetBatch()`.
+
+### Tablas con lote operativo revisadas
+- `stock_pallets.lot`.
+- `goods_receipt_lines.lot`.
+- `merchandise_request_lines.lot`.
+- `goods_dispatch_lines.lot`.
+- `goods_dispatch_line_allocations.lot`.
+- `inventory_movements.lot`.
+- `items.lot` se dejo fuera de la normalizacion operativa porque el lote no debe vivir como dato maestro del articulo y los tests lo cubren.
+
+### Cambio funcional
+- Valor canonico unico: `NO LOTE`.
+- Clase central: `App\Support\Stock\LotNormalizer`.
+- Trait de modelo: `App\Models\Concerns\NormalizesLotAttribute`.
+- Alias normalizados a `NO LOTE`: `NULL`, vacio, espacios, `NO LOTE`, `No Lote`, `no lote`, `SIN LOTE`, `Sin Lote` y espacios interiores irregulares.
+- Los lotes reales se conservan salvo trim exterior; no se fuerzan mayusculas (`LL6E704`, `A-001`, `SIN-LOTE-2026`, valores mixtos).
+- Se normaliza en escrituras de entradas, IA de entradas, importadores, stock, pedidos, salidas, asignaciones, etiquetas, movimientos, filtros, busquedas, exports, vistas y PDFs.
+- La identidad de partida sigue respetando cliente, articulo, entrada/importacion, ubicacion, unidades por pallet, estado, categoria y disponibilidad; no se agrupa solo por articulo y lote.
+
+### Comando de mantenimiento
+- Nuevo comando: `php artisan wms:lots:canonicalize`.
+- Modos:
+  - `--dry-run` por defecto y explicito.
+  - `--apply` obligatorio para modificar.
+  - `--client=` para limitar por cliente.
+  - `--table=` para limitar por tabla.
+- El comando informa variantes, tablas, cambios simples, colisiones, conflictos, unidades, pallets completos, picos y pallets almacen antes/despues.
+- La consolidacion de `stock_pallets` solo se aplica si la identidad fisica es compatible y los picos caben en las columnas disponibles; si no, informa conflicto y no toca el grupo.
+- Al consolidar reasigna referencias externas conocidas (`merchandise_request_lines`, `goods_dispatch_lines`, `goods_dispatch_line_allocations`, `inventory_movements`) antes de eliminar duplicados.
+
+### Auditoria local
+- `php artisan migrate:status`: conexion DB OK. La base local conserva migraciones pendientes de fases anteriores (`2026_07_14`, `2026_07_15`, `2026_07_16`, `2026_07_23`, `2026_07_24`); no se ejecuto `php artisan migrate` en esta fase.
+- Dry-run global antes de aplicar:
+  - `stock_pallets`: 6 escaneados, 4 a normalizar, variante `[NULL]: 4`.
+  - cambios simples: 4.
+  - grupos con colision: 0.
+  - conflictos: 0.
+  - unidades antes/despues: 2240 / 2240.
+  - pallets completos antes/despues: 3 / 3.
+  - picos antes/despues: 2 / 2.
+  - pallets almacen antes/despues: 5 / 5.
+- Dry-run EDELVIVES antes de aplicar:
+  - 3 `stock_pallets` escaneados, 1 a normalizar, 0 colisiones, 0 conflictos.
+  - unidades 540 / 540; pallets almacen 2 / 2.
+- Dry-run FRIESLAND antes de aplicar:
+  - 3 `stock_pallets` escaneados, 3 a normalizar, 0 colisiones, 0 conflictos.
+  - unidades 1700 / 1700; pallets almacen 3 / 3.
+- Apply local ejecutado tras pasar tests/build/diff:
+  - `php artisan wms:lots:canonicalize --apply`.
+  - registros cambiados: 4.
+  - registros eliminados por consolidacion: 0.
+  - grupos consolidados: 0.
+  - conflictos: 0.
+  - no hubo perdida de unidades, pallets completos, picos ni pallets almacen.
+- Dry-run posterior:
+  - 0 registros a normalizar.
+  - 0 colisiones.
+  - 0 conflictos.
+- Estado local de lotes en `stock_pallets` tras apply:
+  - `NO LOTE`: 4 registros, 2240 unidades, 5.00 pallets almacen.
+  - `LOT-A1`: 2 registros, 600 unidades, 2.00 pallets almacen.
+
+### Tests y validaciones
+- `php artisan test --filter=Lot`: **39 passed** (170 assertions).
+- `php artisan test --filter=GoodsReceipt`: **149 passed** (694 assertions).
+- `php artisan test --filter=StockImport`: **36 passed** (398 assertions).
+- `php artisan test --filter=StockOverview`: **61 passed** (414 assertions).
+- `php artisan test --filter=GoodsDispatch`: **60 passed** (435 assertions).
+- `php artisan test --filter=Label`: **19 passed** (100 assertions).
+- `php artisan test tests\Feature\LotCanonicalizationCommandTest.php`: **6 passed** (27 assertions).
+- `php artisan test tests\Feature\MerchandiseRequestManagementTest.php`: **52 passed** (335 assertions).
+- `php artisan test tests\Feature\AjaxSearchTest.php`: **11 passed** (32 assertions).
+- `php artisan test`: **785 passed** (4216 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `php -l` sobre todos los PHP modificados y nuevos: OK.
+
+### Alcance y seguridad
+- No se creo migracion.
+- No se toco produccion.
+- No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh`, `db:wipe`, force push ni `git add .`.
+- No se modificaron Bookings, Google Calendar, facturacion ni la logica de stock oficial Friesland.
+- El unico cambio de datos fue el `--apply` local controlado indicado arriba; no fue produccion.
+- Para produccion, ejecutar primero `php artisan wms:lots:canonicalize --dry-run`, revisar el informe, y solo entonces considerar `php artisan wms:lots:canonicalize --apply`.

@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\NormalizesLotAttribute;
 use App\Models\Concerns\ImmutableLedgerRecord;
 use Illuminate\Database\Eloquent\Model;
 
 class InventoryMovement extends Model
 {
     use ImmutableLedgerRecord;
+    use NormalizesLotAttribute;
 
     public const UPDATED_AT = null;
 

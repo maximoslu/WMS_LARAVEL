@@ -4,6 +4,7 @@ namespace App\Support\Stock;
 
 use App\Models\Item;
 use App\Models\StockPallet;
+use App\Support\Stock\LotNormalizer;
 use App\Support\WmsLineType;
 
 class StockLinePayloadResolver
@@ -156,7 +157,7 @@ class StockLinePayloadResolver
                     'stock_pallet_id' => $stockPallet->id,
                     'line_type' => WmsLineType::PEAK,
                     'stock_peak_index' => $stockPeakIndex,
-                    'lot' => filled($stockPallet->lot) ? trim((string) $stockPallet->lot) : null,
+                    'lot' => LotNormalizer::normalize($stockPallet->lot),
                     'location_text' => filled($stockPallet->location_text) ? trim((string) $stockPallet->location_text) : null,
                     'units_per_pallet' => (int) $item->units_per_pallet,
                     'units_per_peak' => $unitsPerPeak,
@@ -175,7 +176,7 @@ class StockLinePayloadResolver
                 'stock_pallet_id' => $stockPallet?->id,
                 'line_type' => WmsLineType::PALLET,
                 'stock_peak_index' => null,
-                'lot' => filled($stockPallet?->lot) ? trim((string) $stockPallet->lot) : null,
+                'lot' => LotNormalizer::normalize($stockPallet?->lot),
                 'location_text' => filled($stockPallet?->location_text) ? trim((string) $stockPallet->location_text) : null,
                 'units_per_pallet' => (int) $item->units_per_pallet,
                 'units_per_peak' => null,

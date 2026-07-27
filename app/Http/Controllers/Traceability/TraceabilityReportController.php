@@ -7,6 +7,7 @@ use App\Http\Controllers\Traceability\Concerns\AuthorizesTraceability;
 use App\Models\Client;
 use App\Models\InventoryMovement;
 use App\Services\Audit\AuditLogService;
+use App\Support\Stock\LotNormalizer;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -41,12 +42,15 @@ class TraceabilityReportController extends Controller
         ]);
         $from = Carbon::parse($filters['date_from'])->startOfDay();
         $to = Carbon::parse($filters['date_to'])->endOfDay();
+        $lotFilter = filled($filters['lot'] ?? null)
+            ? (LotNormalizer::isNoLotAlias($filters['lot']) ? LotNormalizer::NO_LOT : trim((string) $filters['lot']))
+            : null;
         abort_if($from->diffInDays($to) > 366, 422, 'El periodo maximo es de 366 dias.');
         $query = InventoryMovement::query()
             ->where('client_id', $filters['client_id'])
             ->whereBetween('effective_at', [$from, $to])
             ->when(filled($filters['movement_type'] ?? null), fn (Builder $builder) => $builder->where('movement_type', $filters['movement_type']))
-            ->when(filled($filters['lot'] ?? null), fn (Builder $builder) => $builder->where('lot', $filters['lot']))
+            ->when($lotFilter !== null, fn (Builder $builder) => $builder->where('lot', $lotFilter))
             ->orderBy('effective_at')
             ->orderBy('id');
         abort_if((clone $query)->limit(10001)->count() > 10000, 422, 'La exportacion supera 10.000 filas. Acota el periodo o los filtros.');

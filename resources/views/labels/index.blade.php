@@ -101,7 +101,7 @@
                         <div class="labels-quick-row">
                             <a href="{{ route('stock.index', ['client_id' => $stockPallet->client_id, 'item_id' => $stockPallet->item_id, 'lot' => $stockPallet->lot]) }}" class="labels-quick-main">
                                 <strong>{{ $stockPallet->item?->sku ?: 'SKU no identificado' }}</strong>
-                                <span>{{ $stockPallet->client?->name }} &middot; {{ $stockPallet->lot ?: 'SIN LOTE' }}</span>
+                                <span>{{ $stockPallet->client?->name }} &middot; {{ $stockPallet->lot ?: 'NO LOTE' }}</span>
                             </a>
                             <div class="labels-quick-actions">
                                 <a href="{{ route('labels.stock-pallet', $stockPallet) }}" target="_blank" rel="noopener noreferrer" class="button-primary compact-button btn-table">Generar etiquetas</a>

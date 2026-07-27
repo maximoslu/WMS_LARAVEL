@@ -7,6 +7,7 @@ use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Services\Locations\LocationIntegrityService;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -198,9 +199,7 @@ class StoreStockAdjustmentRequest extends FormRequest
 
     public function lot(): string
     {
-        $lot = $this->normalizeString($this->input('lot'));
-
-        return $lot !== null && $lot !== '' ? $lot : 'SIN LOTE';
+        return LotNormalizer::normalize($this->input('lot'));
     }
 
     public function stockStatus(): string

@@ -10,6 +10,7 @@ use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Services\Locations\LocationIntegrityService;
+use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockVariantCatalog;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -230,6 +231,7 @@ class AjaxSearchController extends Controller
         ]);
 
         $query = trim((string) ($validated['q'] ?? ''));
+        $lotQuery = LotNormalizer::isNoLotAlias($query) ? LotNormalizer::NO_LOT : $query;
 
         if (mb_strlen($query) < 2) {
             return response()->json(['data' => []]);
@@ -246,7 +248,7 @@ class AjaxSearchController extends Controller
                 isset($validated['stock_status']) && $validated['stock_status'] !== null,
                 fn (Builder $builder) => $builder->where('status', $validated['stock_status'])
             )
-            ->where('lot', 'like', '%'.$query.'%')
+            ->where('lot', 'like', '%'.$lotQuery.'%')
             ->orderByDesc('received_at')
             ->orderBy('lot')
             ->limit(40)

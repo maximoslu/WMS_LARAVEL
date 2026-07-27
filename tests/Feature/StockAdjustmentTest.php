@@ -378,7 +378,7 @@ class StockAdjustmentTest extends TestCase
             'action' => 'add',
             'mode' => $stockPallet instanceof StockPallet ? 'existing' : 'new',
             'stock_pallet_id' => $stockPallet?->id,
-            'lot' => $stockPallet?->lot ?? 'SIN LOTE',
+            'lot' => $stockPallet?->lot ?? 'NO LOTE',
             'location_id' => $stockPallet?->location_id,
             'status' => $stockPallet?->status ?? StockPallet::STATUS_AVAILABLE,
             'stock_category' => $stockPallet?->stock_category ?? StockPallet::CATEGORY_IN_USE,

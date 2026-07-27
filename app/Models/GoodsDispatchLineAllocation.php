@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\NormalizesLotAttribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GoodsDispatchLineAllocation extends Model
 {
+    use NormalizesLotAttribute;
+
     protected $fillable = [
         'goods_dispatch_line_id',
         'stock_pallet_id',

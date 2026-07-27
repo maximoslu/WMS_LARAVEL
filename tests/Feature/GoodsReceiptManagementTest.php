@@ -675,7 +675,7 @@ class GoodsReceiptManagementTest extends TestCase
             'client_id' => $client->id,
             'sku' => 'CAJA0001',
             'description' => 'Caja de prueba',
-            'lot' => null,
+            'lot' => 'NO LOTE',
             'lot_key' => 'LOT-CAJA',
             'units_per_pallet' => 700,
         ]);
@@ -708,7 +708,7 @@ class GoodsReceiptManagementTest extends TestCase
             'item_id' => $item->id,
             'sku' => 'CAJA0001',
             'description' => 'Caja de prueba',
-            'lot' => null,
+            'lot' => 'NO LOTE',
             'units_per_pallet' => 700,
             'pallet_count' => 21,
             'pico_units' => 300,
@@ -3288,6 +3288,138 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertSame(500, $existingBatch->peak_1);
         $this->assertSame($receipt->id, $existingBatch->goods_receipt_id);
         $this->assertDatabaseCount('stock_pallets', 1);
+    }
+
+    public function test_entrada_sin_lote_reutiliza_partida_no_lote_existente(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-NO-LOTE-MERGE',
+            'description' => 'Partida sin lote acumulable',
+            'units_per_pallet' => 1000,
+        ]);
+
+        $existingBatch = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'goods_receipt_id' => null,
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 1500,
+            'units_per_pallet' => 1000,
+            'peak_1' => 500,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'active' => true,
+        ]);
+
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-NO-LOTE-MERGE',
+            'created_by' => $user->id,
+            'received_at' => '2026-07-04',
+        ]);
+        GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'lot' => 'Sin Lote',
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'pallet_count' => 1,
+            'pico_units' => null,
+            'location_id' => $location->id,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $existingBatch->refresh();
+
+        $this->assertSame('NO LOTE', $existingBatch->lot);
+        $this->assertSame(2500, $existingBatch->quantity_units);
+        $this->assertSame(2, $existingBatch->full_pallets);
+        $this->assertSame(1, $existingBatch->peaks_count);
+        $this->assertSame(500, $existingBatch->peak_1);
+        $this->assertDatabaseCount('stock_pallets', 1);
+    }
+
+    public function test_entrada_sin_lote_no_mezcla_ubicaciones_distintas(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $otherLocation = Location::factory()->create([
+            'warehouse_id' => $location->warehouse_id,
+            'code' => 'C9',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-NO-LOTE-LOC',
+            'description' => 'Partida sin lote por ubicacion',
+            'units_per_pallet' => 1000,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'goods_receipt_id' => null,
+            'location_id' => $location->id,
+            'location_text' => $location->code,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'active' => true,
+        ]);
+
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => 'ALB-NO-LOTE-LOC',
+            'created_by' => $user->id,
+            'received_at' => '2026-07-04',
+        ]);
+        GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'lot' => '',
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'pallet_count' => 1,
+            'pico_units' => null,
+            'location_id' => $otherLocation->id,
+        ]);
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->assertDatabaseCount('stock_pallets', 2);
+        $this->assertDatabaseHas('stock_pallets', [
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 1000,
+        ]);
+        $this->assertDatabaseHas('stock_pallets', [
+            'item_id' => $item->id,
+            'location_id' => $otherLocation->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 1000,
+        ]);
     }
 
     public function test_autocomplete_entrada_renderiza_sin_mojibake_y_con_contenedor_visible(): void

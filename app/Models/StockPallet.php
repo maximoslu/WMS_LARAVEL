@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Stock\StockBatchCalculator;
+use App\Support\Stock\LotNormalizer;
 use Database\Factories\StockPalletFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -121,6 +122,7 @@ class StockPallet extends Model
             $stockPallet->pallet_code = filled($stockPallet->pallet_code)
                 ? trim((string) $stockPallet->pallet_code)
                 : null;
+            $stockPallet->lot = LotNormalizer::normalize($stockPallet->lot);
 
             $stockPallet->status = in_array((string) $stockPallet->status, self::statuses(), true)
                 ? $stockPallet->status
@@ -179,6 +181,11 @@ class StockPallet extends Model
                 $stockPallet->warehouse_pallets = (int) $stockPallet->full_pallets + (int) $stockPallet->peaks_count;
             }
         });
+    }
+
+    public function getLotAttribute(mixed $value): string
+    {
+        return LotNormalizer::normalize($value);
     }
 
     public function client(): BelongsTo

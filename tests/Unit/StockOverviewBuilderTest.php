@@ -89,7 +89,7 @@ class StockOverviewBuilderTest extends TestCase
             'client_id' => $client->id,
             'item_id' => $item->id,
             'stock_import_id' => $stockImport->id,
-            'lot' => 'SIN LOTE',
+            'lot' => 'NO LOTE',
             'location_text' => '0',
             'quantity_units' => 0,
             'units_per_pallet' => 0,

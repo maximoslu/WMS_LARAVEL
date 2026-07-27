@@ -109,7 +109,7 @@
                             <strong>{{ $line->item?->sku ?? 'Articulo eliminado' }}</strong><br>
                             {{ $line->item?->description ?? 'Sin descripción' }}
                         </td>
-                        <td>{{ $line->lot ?: 'Sin lote' }}</td>
+                        <td>{{ $line->lot ?: 'NO LOTE' }}</td>
                         <td>{{ $line->unitsLabel() }}</td>
                         <td>{{ $line->requestedQuantityLabel() }}</td>
                         <td>{{ $line->requiredUnits() !== null ? number_format((int) $line->requiredUnits(), 0, ',', '.').' uds.' : '-' }}</td>

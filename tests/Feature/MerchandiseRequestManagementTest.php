@@ -11,6 +11,7 @@ use App\Models\MerchandiseRequestLine;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Support\Stock\LotNormalizer;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -275,7 +276,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->assertDatabaseHas('merchandise_request_lines', [
             'merchandise_request_id' => $request->id,
             'item_id' => $item->id,
-            'lot' => null,
+            'lot' => LotNormalizer::NO_LOT,
             'requested_pallets' => 4,
             'requested_units' => 2800,
         ]);

@@ -84,7 +84,7 @@
                         <option value="">Sin preseleccion</option>
                         @foreach ($stockPallets as $stockPallet)
                             <option value="{{ $stockPallet->id }}" @selected((string) $filters['stock_pallet_id'] === (string) $stockPallet->id)>
-                                #{{ $stockPallet->id }} / {{ $stockPallet->lot ?: 'SIN LOTE' }} / {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicacion' }} / {{ number_format((int) $stockPallet->quantity_units, 0, ',', '.') }} uds
+                                #{{ $stockPallet->id }} / {{ $stockPallet->lot ?: 'NO LOTE' }} / {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicacion' }} / {{ number_format((int) $stockPallet->quantity_units, 0, ',', '.') }} uds
                             </option>
                         @endforeach
                     </select>
@@ -180,7 +180,7 @@
                                             ->sum(fn (int $peakNumber): int => (int) ($stockPallet->{'peak_'.$peakNumber} ?? 0));
                                     @endphp
                                     <option value="{{ $stockPallet->id }}" @selected((string) old('stock_pallet_id', $filters['stock_pallet_id'] ?? $singleStockPallet?->id) === (string) $stockPallet->id)>
-                                        #{{ $stockPallet->id }} / Lote {{ $stockPallet->lot ?: 'SIN LOTE' }} / {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicacion' }} / {{ number_format((int) $stockPallet->full_pallets, 0, ',', '.') }} pallets / {{ number_format($peakUnits, 0, ',', '.') }} uds pico / {{ number_format((int) $stockPallet->quantity_units, 0, ',', '.') }} uds / {{ $stockPallet->stockCategoryLabel() }}
+                                        #{{ $stockPallet->id }} / Lote {{ $stockPallet->lot ?: 'NO LOTE' }} / {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicacion' }} / {{ number_format((int) $stockPallet->full_pallets, 0, ',', '.') }} pallets / {{ number_format($peakUnits, 0, ',', '.') }} uds pico / {{ number_format((int) $stockPallet->quantity_units, 0, ',', '.') }} uds / {{ $stockPallet->stockCategoryLabel() }}
                                     </option>
                                 @endforeach
                             </select>
@@ -188,7 +188,7 @@
 
                         <label class="auth-field">
                             <span>Lote nueva partida</span>
-                            <input type="text" name="lot" value="{{ old('lot', $summaryStockPallet?->lot ?: 'SIN LOTE') }}" class="auth-input" maxlength="100">
+                            <input type="text" name="lot" value="{{ old('lot', $summaryStockPallet?->lot ?: 'NO LOTE') }}" class="auth-input" maxlength="100">
                         </label>
 
                         <label class="auth-field">
@@ -271,7 +271,7 @@
                             </div>
                             <div>
                                 <dt>Lote</dt>
-                                <dd>{{ $summaryStockPallet->lot ?: 'SIN LOTE' }}</dd>
+                                <dd>{{ $summaryStockPallet->lot ?: 'NO LOTE' }}</dd>
                             </div>
                             <div>
                                 <dt>Ubicacion</dt>
@@ -327,7 +327,7 @@
                     <span>{{ $movement->sku ?? 'Referencia' }}</span>
                     <span>{{ ($movement->metadata['action'] ?? '') === 'remove' ? 'Quitar' : 'Anadir' }}</span>
                     <span>{{ number_format((int) $movement->units_delta, 0, ',', '.') }} uds</span>
-                    <span>Lote {{ $movement->lot ?: 'SIN LOTE' }}</span>
+                    <span>Lote {{ $movement->lot ?: 'NO LOTE' }}</span>
                     <span>Final {{ number_format((int) $movement->units_after, 0, ',', '.') }} uds</span>
                 </div>
             @empty

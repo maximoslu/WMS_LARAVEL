@@ -36,7 +36,7 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
                 '%s | %d pallets | lote %s',
                 $line->item?->sku ?? 'Articulo eliminado',
                 $line->requested_pallets,
-                $line->lot ?: 'sin lote'
+                $line->lot ?: 'NO LOTE'
             ))
             ->implode('; ');
 

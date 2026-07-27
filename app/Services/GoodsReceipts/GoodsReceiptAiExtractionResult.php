@@ -2,6 +2,7 @@
 
 namespace App\Services\GoodsReceipts;
 
+use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
 
 class GoodsReceiptAiExtractionResult
@@ -26,7 +27,7 @@ class GoodsReceiptAiExtractionResult
 
                 $sku = self::normalizeNullableUpper($line['sku'] ?? null);
                 $description = self::normalizeNullableText($line['description'] ?? null);
-                $lot = self::normalizeNullableUpper($line['lot'] ?? null);
+                $lot = LotNormalizer::normalize($line['lot'] ?? null);
                 $unitsPerPallet = self::normalizeNullableInteger($line['units_per_pallet'] ?? null);
                 $totalUnits = self::normalizeInteger($line['total_units'] ?? 0);
                 $fullPallets = self::normalizeNullableInteger($line['full_pallets'] ?? null);

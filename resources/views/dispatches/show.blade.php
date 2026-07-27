@@ -283,7 +283,7 @@
                     <div class="wms-line-card-meta">
                         <span>Solicitado {{ method_exists($requestedLine, 'requestedQuantityLabel') ? $requestedLine->requestedQuantityLabel() : number_format($requestedLine->requested_pallets ?? 0, 0, ',', '.').' pallets' }}</span>
                         <span>{{ method_exists($requestedLine, 'unitsLabel') ? $requestedLine->unitsLabel() : number_format($requestedLine->units_per_pallet ?? 0, 0, ',', '.').' uds/pallet' }}</span>
-                        <span>{{ $requestedLine->lot ? 'Lote '.$requestedLine->lot : 'Sin lote' }}</span>
+                        <span>{{ $requestedLine->lot ? 'Lote '.$requestedLine->lot : 'NO LOTE' }}</span>
                         @if ($requestedLine->stockPallet?->location_text ?? false)
                             <span>Ubicación {{ $requestedLine->stockPallet->location_text }}</span>
                         @endif
@@ -348,7 +348,7 @@
                                 <span>{{ $line->requiredUnitsLabel() }}</span>
                             @endif
                             <span>{{ $line->unitsLabel() }}</span>
-                            <span>{{ $line->lot ? 'Lote '.$line->lot : 'Sin lote' }}</span>
+                            <span>{{ $line->lot ? 'Lote '.$line->lot : 'NO LOTE' }}</span>
                         </div>
 
                         @include('dispatches.partials.picking-locations', ['line' => $line])
@@ -609,7 +609,7 @@
                         @endif
                         <span>Cargado {{ $line->loadedQuantityLabel() }}</span>
                         <span>{{ $line->unitsLabel() }}</span>
-                        <span>{{ $line->lot ? 'Lote '.$line->lot : 'Sin lote' }}</span>
+                        <span>{{ $line->lot ? 'Lote '.$line->lot : 'NO LOTE' }}</span>
                         <span>{{ $line->loading_notes ?: 'Sin observaciones' }}</span>
                     </div>
 

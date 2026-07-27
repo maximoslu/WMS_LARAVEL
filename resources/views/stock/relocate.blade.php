@@ -150,7 +150,7 @@
                             </div>
                             <div>
                                 <dt>Lote</dt>
-                                <dd>{{ $summaryStockPallet->lot ?: 'SIN LOTE' }}</dd>
+                                <dd>{{ $summaryStockPallet->lot ?: 'NO LOTE' }}</dd>
                             </div>
                             <div>
                                 <dt>Categoria</dt>
@@ -189,7 +189,7 @@
                             </span>
                             <span class="wms-relocation-batch-meta">
                                 <span>Partida #{{ $stockPallet->id }}</span>
-                                <span>Lote: {{ $stockPallet->lot ?: 'SIN LOTE' }}</span>
+                                <span>Lote: {{ $stockPallet->lot ?: 'NO LOTE' }}</span>
                                 <span>{{ number_format((int) $stockPallet->full_pallets, 0, ',', '.') }} pallets</span>
                                 <span>{{ number_format((int) $stockPallet->peaks_count, 0, ',', '.') }} picos</span>
                                 <span>{{ number_format($peakUnits, 0, ',', '.') }} uds pico</span>

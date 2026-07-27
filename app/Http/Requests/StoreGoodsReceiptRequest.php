@@ -7,6 +7,7 @@ use App\Models\Location;
 use App\Models\Role;
 use App\Models\Supplier;
 use App\Support\GoodsReceipts\GoodsReceiptDocumentRules;
+use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -73,7 +74,7 @@ class StoreGoodsReceiptRequest extends FormRequest
                     'item_id' => $itemId,
                     'sku' => $sku ?? $item?->sku,
                     'description' => $this->normalizeNullableText($line['description'] ?? null) ?? $item?->description,
-                    'lot' => $this->normalizeNullableUpper($line['lot'] ?? null),
+                    'lot' => LotNormalizer::normalize($line['lot'] ?? null),
                     'quantity_units' => $quantityUnits,
                     'units_per_pallet' => $unitsPerPallet,
                     'pallet_count' => $palletCount ?? 0,

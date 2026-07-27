@@ -185,7 +185,7 @@ class BackupService
                     'item_id' => $stockPallet->item_id,
                     'sku' => $stockPallet->item?->sku,
                     'description' => $stockPallet->item?->description,
-                    'lot' => $stockPallet->lot ?: 'SIN LOTE',
+                    'lot' => $stockPallet->lot ?: 'NO LOTE',
                     'stock_status' => $stockPallet->status,
                     'stock_category' => $stockPallet->stock_category,
                     'quantity' => (int) $stockPallet->quantity_units,

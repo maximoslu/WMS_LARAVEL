@@ -10,6 +10,7 @@ use App\Models\Location;
 use App\Models\Supplier;
 use App\Services\Traceability\LotTraceabilityService;
 use App\Support\Locations\LocationCode;
+use App\Support\Stock\LotNormalizer;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -34,6 +35,7 @@ class LotTraceabilityController extends Controller
         ]);
         $clientId = $filters['client_id'] ?? null;
         $lot = trim((string) ($filters['lot'] ?? ''));
+        $lot = $lot !== '' && LotNormalizer::isNoLotAlias($lot) ? LotNormalizer::NO_LOT : $lot;
         $trace = $clientId !== null && $lot !== ''
             ? $traceability->trace(
                 (int) $clientId,

@@ -11,6 +11,7 @@ use App\Models\Location;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Support\Locations\LocationCode;
+use App\Support\Stock\LotNormalizer;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -41,11 +42,14 @@ class InventoryMovementController extends Controller
         $from = $filters['date_from'] ?? now()->subDays(30)->toDateString();
         $to = $filters['date_to'] ?? now()->toDateString();
         $clientId = $filters['client_id'] ?? null;
+        $lotFilter = filled($filters['lot'] ?? null)
+            ? (LotNormalizer::isNoLotAlias($filters['lot']) ? LotNormalizer::NO_LOT : trim((string) $filters['lot']))
+            : null;
         $query = InventoryMovement::query()
             ->when($clientId !== null, fn (Builder $builder) => $builder->where('client_id', $clientId))
             ->when(isset($filters['item_id']), fn (Builder $builder) => $builder->where('item_id', $filters['item_id']))
             ->when(filled($filters['sku'] ?? null), fn (Builder $builder) => $builder->where('sku', 'like', '%'.$filters['sku'].'%'))
-            ->when(filled($filters['lot'] ?? null), fn (Builder $builder) => $builder->where('lot', 'like', '%'.$filters['lot'].'%'))
+            ->when($lotFilter !== null, fn (Builder $builder) => $builder->where('lot', 'like', '%'.$lotFilter.'%'))
             ->when(filled($filters['movement_type'] ?? null), fn (Builder $builder) => $builder->where('movement_type', $filters['movement_type']))
             ->when(($filters['direction'] ?? null) === 'inbound', fn (Builder $builder) => $builder->where('units_delta', '>', 0))
             ->when(($filters['direction'] ?? null) === 'outbound', fn (Builder $builder) => $builder->where('units_delta', '<', 0))

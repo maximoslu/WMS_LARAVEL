@@ -4,6 +4,7 @@ namespace App\Support\Stock;
 
 use App\Models\Item;
 use App\Models\StockPallet;
+use App\Support\Stock\LotNormalizer;
 use App\Support\WmsLineType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -16,6 +17,9 @@ class StockVariantCatalog
     public function search(string $query, ?int $clientId = null, int $limit = 10, bool $activeOnly = true): array
     {
         $normalizedQuery = trim($query);
+        $lotQuery = LotNormalizer::isNoLotAlias($normalizedQuery)
+            ? LotNormalizer::NO_LOT
+            : $normalizedQuery;
 
         if (mb_strlen($normalizedQuery) < 2) {
             return [];
@@ -32,17 +36,17 @@ class StockVariantCatalog
             ])
             ->when($clientId !== null, fn (Builder $builder) => $builder->where('client_id', $clientId))
             ->when($activeOnly, fn (Builder $builder) => $builder->where('active', true))
-            ->where(function (Builder $builder) use ($normalizedQuery): void {
+            ->where(function (Builder $builder) use ($normalizedQuery, $lotQuery): void {
                 $builder
                     ->where('sku', 'like', '%'.$normalizedQuery.'%')
                     ->orWhere('description', 'like', '%'.$normalizedQuery.'%')
-                    ->orWhereHas('stockPallets', function (Builder $builder) use ($normalizedQuery): void {
+                    ->orWhereHas('stockPallets', function (Builder $builder) use ($normalizedQuery, $lotQuery): void {
                         $builder
                             ->where('active', true)
                             ->where('status', StockPallet::STATUS_AVAILABLE)
-                            ->where(function (Builder $builder) use ($normalizedQuery): void {
+                            ->where(function (Builder $builder) use ($normalizedQuery, $lotQuery): void {
                                 $builder
-                                    ->where('lot', 'like', '%'.$normalizedQuery.'%')
+                                    ->where('lot', 'like', '%'.$lotQuery.'%')
                                     ->orWhere('location_text', 'like', '%'.$normalizedQuery.'%')
                                     ->orWhere('pallet_code', 'like', '%'.$normalizedQuery.'%');
                             });
@@ -226,7 +230,7 @@ class StockVariantCatalog
             'line_type_label' => WmsLineType::label(WmsLineType::PALLET),
             'sku' => $item->sku,
             'description' => $item->description,
-            'lot' => null,
+            'lot' => LotNormalizer::NO_LOT,
             'location_text' => null,
             'stock_pallet_id' => null,
             'stock_peak_index' => null,
@@ -251,7 +255,7 @@ class StockVariantCatalog
         $availablePallets = max(0, (int) $stockPallet->full_pallets);
         $availablePeaks = $this->countAvailablePeaks($stockPallet);
         $location = filled($stockPallet->location_text) ? trim((string) $stockPallet->location_text) : null;
-        $lot = filled($stockPallet->lot) ? trim((string) $stockPallet->lot) : null;
+        $lot = LotNormalizer::normalize($stockPallet->lot);
 
         return [
             'variant_key' => $this->variantKey(WmsLineType::PALLET, $item->id, $stockPallet->id),
@@ -274,7 +278,7 @@ class StockVariantCatalog
             'quantity_min' => 1,
             'quantity_max' => $availablePallets > 0 ? $availablePallets : null,
             'meta' => $this->metaString([
-                $lot ? 'Lote '.$lot : null,
+                'Lote '.$lot,
                 number_format((int) $item->units_per_pallet, 0, ',', '.').' uds/pallet',
                 $availablePallets > 0 ? number_format($availablePallets, 0, ',', '.').' pallets disponibles' : null,
                 $availablePeaks > 0 ? number_format($availablePeaks, 0, ',', '.').' picos' : null,
@@ -282,7 +286,7 @@ class StockVariantCatalog
             ]),
             'label' => $item->sku.' · '.$item->description,
             'search_value' => $item->sku,
-            'summary' => 'Pallet completo'.($lot ? ' · lote '.$lot : ''),
+            'summary' => 'Pallet completo · lote '.$lot,
         ];
     }
 
@@ -298,7 +302,7 @@ class StockVariantCatalog
         $availablePallets = max(0, (int) $stockPallet->full_pallets);
         $availablePeaks = $this->countAvailablePeaks($stockPallet);
         $location = filled($stockPallet->location_text) ? trim((string) $stockPallet->location_text) : null;
-        $lot = filled($stockPallet->lot) ? trim((string) $stockPallet->lot) : null;
+        $lot = LotNormalizer::normalize($stockPallet->lot);
 
         return [
             'variant_key' => $this->variantKey(WmsLineType::PEAK, $item->id, $stockPallet->id, $peakIndex),
@@ -321,7 +325,7 @@ class StockVariantCatalog
             'quantity_min' => 1,
             'quantity_max' => 1,
             'meta' => $this->metaString([
-                $lot ? 'Lote '.$lot : null,
+                'Lote '.$lot,
                 'Pico '.$peakIndex.' · '.number_format($peakUnits, 0, ',', '.').' uds',
                 $availablePallets > 0 ? number_format($availablePallets, 0, ',', '.').' pallets disponibles' : null,
                 $availablePeaks > 0 ? number_format($availablePeaks, 0, ',', '.').' picos' : null,

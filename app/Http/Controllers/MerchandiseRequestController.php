@@ -14,6 +14,7 @@ use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestScheduleService;
+use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockVariantCatalog;
 use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -37,13 +38,15 @@ class MerchandiseRequestController extends Controller
         $search = trim((string) $request->string('search'));
         $clientId = $request->integer('client_id');
 
+        $lotSearch = $search !== '' && LotNormalizer::isNoLotAlias($search) ? LotNormalizer::NO_LOT : $search;
+
         $requests = MerchandiseRequest::query()
             ->with(['client', 'requestedBy', 'lines.item', 'dispatch'])
             ->when($isClient, fn (Builder $query) => $query->where('client_id', $user->client_id))
             ->when(! $isClient && $clientId > 0, fn (Builder $query) => $query->where('client_id', $clientId))
             ->when($status !== 'all' && in_array($status, MerchandiseRequest::statuses(), true), fn (Builder $query) => $query->where('status', $status))
-            ->when($search !== '', function (Builder $query) use ($search): void {
-                $query->where(function (Builder $query) use ($search): void {
+            ->when($search !== '', function (Builder $query) use ($search, $lotSearch): void {
+                $query->where(function (Builder $query) use ($search, $lotSearch): void {
                     $normalizedCode = preg_replace('/\D+/', '', $search);
 
                     if (Schema::hasColumn('merchandise_requests', 'request_code')) {
@@ -52,9 +55,9 @@ class MerchandiseRequestController extends Controller
                         $query->whereKey((int) $normalizedCode);
                     }
 
-                    $query->orWhereHas('lines', function (Builder $query) use ($search): void {
+                    $query->orWhereHas('lines', function (Builder $query) use ($search, $lotSearch): void {
                         $query
-                            ->where('lot', 'like', '%'.$search.'%')
+                            ->where('lot', 'like', '%'.$lotSearch.'%')
                             ->orWhereHas('item', function (Builder $query) use ($search): void {
                                 $query
                                     ->where('sku', 'like', '%'.$search.'%')

@@ -136,8 +136,8 @@ class MerchandiseLabelTest extends TestCase
     public function test_no_lot_labels_fit_two_per_a4_page(): void
     {
         $labels = collect([
-            $this->labelPayload(sku: '149677', lot: 'SIN LOTE', units: 5000, number: 'Pallet 1 de 2'),
-            $this->labelPayload(sku: '149677', lot: 'SIN LOTE', units: 5000, number: 'Pallet 2 de 2'),
+            $this->labelPayload(sku: '149677', lot: 'NO LOTE', units: 5000, number: 'Pallet 1 de 2'),
+            $this->labelPayload(sku: '149677', lot: 'NO LOTE', units: 5000, number: 'Pallet 2 de 2'),
         ]);
 
         $html = $this->renderLabelsHtml($labels);
@@ -145,7 +145,7 @@ class MerchandiseLabelTest extends TestCase
         $this->assertSame(1, substr_count($html, 'class="label-page'));
         $this->assertSame(2, substr_count($html, 'class="label-content"'));
         $this->assertStringContainsString('149677', $html);
-        $this->assertStringContainsString('SIN LOTE', $html);
+        $this->assertStringContainsString('NO LOTE', $html);
         $this->assertStringContainsString('5.000', $html);
         $this->assertSame(1, $this->renderLabelsPdfPageCount($labels));
     }
@@ -168,7 +168,7 @@ class MerchandiseLabelTest extends TestCase
     public function test_mixed_lot_and_no_lot_labels_share_one_a4_page(): void
     {
         $labels = collect([
-            $this->labelPayload(sku: '149677', lot: 'SIN LOTE', units: 5000, number: 'Pallet 1'),
+            $this->labelPayload(sku: '149677', lot: 'NO LOTE', units: 5000, number: 'Pallet 1'),
             $this->labelPayload(sku: '11', lot: 'LL6E704', units: 1000, number: 'Pallet 2'),
         ]);
 
@@ -176,7 +176,7 @@ class MerchandiseLabelTest extends TestCase
 
         $this->assertSame(1, substr_count($html, 'class="label-page'));
         $this->assertSame(2, substr_count($html, 'class="label-content"'));
-        $this->assertStringContainsString('SIN LOTE', $html);
+        $this->assertStringContainsString('NO LOTE', $html);
         $this->assertStringContainsString('LL6E704', $html);
         $this->assertSame(1, $this->renderLabelsPdfPageCount($labels));
     }
@@ -186,7 +186,7 @@ class MerchandiseLabelTest extends TestCase
         $labels = collect([
             $this->labelPayload(
                 sku: 'REFERENCIA-LARGA-149677-FRIESLAND-SIN-LOTE',
-                lot: 'SIN LOTE',
+                lot: 'NO LOTE',
                 units: 123456789,
                 number: 'Pallet 1',
             ),

@@ -5,6 +5,7 @@ namespace App\Services\Traceability;
 use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\StockPallet;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,8 @@ class ClientInventoryAnalyticsService
         ?string $lot = null,
         ?int $warehouseId = null,
     ): array {
+        $lot = filled($lot) && LotNormalizer::isNoLotAlias($lot) ? LotNormalizer::NO_LOT : ($lot !== null ? trim($lot) : null);
+
         $base = InventoryMovement::query()
             ->where('client_id', $clientId)
             ->whereBetween('effective_at', [$from->startOfDay(), $to->endOfDay()])

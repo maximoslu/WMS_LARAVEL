@@ -13,6 +13,7 @@ use App\Models\Warehouse;
 use App\Services\Audit\AuditLogService;
 use App\Services\Inventory\InventoryMovementService;
 use App\Support\Locations\LocationCode;
+use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
 use DateTimeInterface;
 use Illuminate\Database\DatabaseManager;
@@ -38,7 +39,7 @@ class StockExcelImportService
 
     private const EDELVIVES_WAREHOUSE_NAME = 'NAVE 38';
 
-    private const EDELVIVES_DEFAULT_LOT = 'SIN LOTE';
+    private const EDELVIVES_DEFAULT_LOT = LotNormalizer::NO_LOT;
 
     /**
      * @var array<string, string>
@@ -308,7 +309,7 @@ class StockExcelImportService
                         : null,
                     'location_text' => $row['location_text'] ?? null,
                     'pallet_code' => null,
-                    'lot' => $row['lot'],
+                    'lot' => LotNormalizer::normalize($row['lot'] ?? null),
                     'quantity_units' => $row['quantity_units'],
                     'units_per_pallet' => $row['units_per_pallet'],
                     'full_pallets' => $row['full_pallets'],
@@ -1058,7 +1059,7 @@ class StockExcelImportService
 
         $existingItem = $existingItems->get(Str::upper($sku));
         $description = $this->stringValue($values[$headerMap['description'] ?? -1] ?? null) ?: ($existingItem?->description ?? $sku);
-        $lot = $this->nullableStringValue($values[$headerMap['lot'] ?? -1] ?? null);
+        $lot = LotNormalizer::normalize($this->nullableStringValue($values[$headerMap['lot'] ?? -1] ?? null));
         $locationText = $this->nullableStringValue($values[$headerMap['location_text'] ?? -1] ?? null);
         $blockedReason = $this->nullableStringValue($values[$headerMap['blocked_reason'] ?? -1] ?? null);
 

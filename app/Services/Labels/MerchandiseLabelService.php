@@ -5,6 +5,7 @@ namespace App\Services\Labels;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
 use App\Models\StockPallet;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -228,7 +229,7 @@ class MerchandiseLabelService
 
     private function lot(?string $lot): string
     {
-        return filled($lot) ? (string) $lot : 'SIN LOTE';
+        return LotNormalizer::normalize($lot);
     }
 
     private function receiptNumber(GoodsReceipt $receipt): string

@@ -78,7 +78,7 @@ class StockOverviewBuilder
                 return [
                     'sku' => $item?->sku ?? 'Sin SKU',
                     'description' => $item?->description ?? 'Sin descripcion',
-                    'lot' => $first->lot ?: 'SIN LOTE',
+                    'lot' => LotNormalizer::normalize($first->lot),
                     'quantity' => (int) $group->sum('quantity_units'),
                     'total_pallets' => abs($totalPallets - round($totalPallets)) < 0.00001 ? (int) round($totalPallets) : $totalPallets,
                 ];
@@ -117,7 +117,10 @@ class StockOverviewBuilder
                     });
                 });
             })
-            ->when($filters['lot'] !== '', fn (Builder $query) => $query->where('lot', 'like', '%'.$filters['lot'].'%'))
+            ->when($filters['lot'] !== '', function (Builder $query) use ($filters): void {
+                $lot = $filters['lot'];
+                $query->where('lot', 'like', '%'.$lot.'%');
+            })
             ->when($filters['location_id'] !== null, fn (Builder $query) => $query->where('location_id', $filters['location_id']))
             ->when($filters['location'] !== '', function (Builder $query) use ($filters): void {
                 $query->where(function (Builder $query) use ($filters): void {
@@ -216,7 +219,7 @@ class StockOverviewBuilder
                 ? (int) $filters['item_id']
                 : null),
             'search' => trim((string) ($filters['search'] ?? '')),
-            'lot' => trim((string) ($filters['lot'] ?? '')),
+            'lot' => $this->normalizeLotFilter($filters['lot'] ?? ''),
             'location' => $isClient ? '' : trim((string) ($filters['location'] ?? '')),
             'location_id' => $isClient
                 ? null
@@ -285,8 +288,8 @@ class StockOverviewBuilder
             'item_id' => $item?->id,
             'sku' => $item?->sku ?? 'Sin SKU',
             'description' => $item?->description ?? 'Sin descripcion',
-            'lot' => $pallet->lot,
-            'lot_label' => $pallet->lot ?: 'Sin lote',
+            'lot' => LotNormalizer::normalize($pallet->lot),
+            'lot_label' => LotNormalizer::normalize($pallet->lot),
             'received_at' => $pallet->received_at?->format('d/m/Y'),
             'received_at_raw' => $pallet->received_at?->format('Y-m-d'),
             'item_status' => $item?->status ?? Item::STATUS_ACTIVE,
@@ -420,6 +423,15 @@ class StockOverviewBuilder
         return $unitsPerPallet > 0
             ? number_format($unitsPerPallet, 0, ',', '.')
             : 'Sin dato';
+    }
+
+    private function normalizeLotFilter(mixed $value): string
+    {
+        $normalized = trim((string) $value);
+
+        return $normalized !== '' && LotNormalizer::isNoLotAlias($normalized)
+            ? LotNormalizer::NO_LOT
+            : $normalized;
     }
 
     private function rowVisualState(?string $itemStatus, ?string $batchStatus, ?string $stockCategory): string

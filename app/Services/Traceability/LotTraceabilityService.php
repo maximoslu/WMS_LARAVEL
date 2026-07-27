@@ -7,6 +7,7 @@ use App\Models\GoodsDispatchLine;
 use App\Models\GoodsReceiptLine;
 use App\Models\InventoryMovement;
 use App\Models\StockPallet;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 
 class LotTraceabilityService
@@ -14,7 +15,7 @@ class LotTraceabilityService
     /** @return array<string, mixed> */
     public function trace(int $clientId, string $lot, ?int $itemId = null, array $filters = []): array
     {
-        $lot = trim($lot);
+        $lot = LotNormalizer::isNoLotAlias($lot) ? LotNormalizer::NO_LOT : trim($lot);
         $from = $filters['date_from'] ?? null;
         $to = $filters['date_to'] ?? null;
         $locationId = isset($filters['location_id']) ? (int) $filters['location_id'] : null;

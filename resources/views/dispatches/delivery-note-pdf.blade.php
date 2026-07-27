@@ -125,7 +125,7 @@
                                 <br><small>{{ $line->requiredUnitsLabel() }}</small>
                             @endif
                         </td>
-                        <td class="col-lot">{{ $line->lot ?: 'Sin lote' }}</td>
+                        <td class="col-lot">{{ $line->lot ?: 'NO LOTE' }}</td>
                         <td class="col-delivered">{{ $line->loadedQuantityLabel() }}</td>
                         <td class="col-quantity number">{{ number_format($line->loadedUnitsTotal(), 0, ',', '.') }} uds</td>
                         <td class="col-destination">{{ $line->destination_location ?: '-' }}</td>

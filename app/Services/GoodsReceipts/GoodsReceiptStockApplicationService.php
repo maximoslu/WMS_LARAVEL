@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Services\Inventory\InventoryMovementService;
+use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -100,7 +101,7 @@ class GoodsReceiptStockApplicationService
         // manual edit of the batch (location, lot...) does not falsely block reversion.
         $target = $candidateBatches->first(function (StockPallet $batch) use ($line): bool {
             return (int) $batch->location_id === (int) $line->location_id
-                && (string) $batch->lot === (string) $line->lot
+                && LotNormalizer::normalize($batch->lot) === LotNormalizer::normalize($line->lot)
                 && (int) $batch->units_per_pallet === (int) $line->units_per_pallet;
         }) ?? $candidateBatches->sortByDesc('quantity_units')->first();
 
@@ -169,7 +170,7 @@ class GoodsReceiptStockApplicationService
             'goods_receipt_id' => $receipt->id,
             'location_id' => $line->location_id,
             'location_text' => $line->location?->code,
-            'lot' => $line->lot,
+            'lot' => LotNormalizer::normalize($line->lot),
             'units_per_pallet' => $unitsPerPallet,
             'received_at' => $receipt->received_at,
             'status' => StockPallet::STATUS_AVAILABLE,
@@ -198,7 +199,7 @@ class GoodsReceiptStockApplicationService
             'item_id' => $item->id,
             'sku' => $line->sku ?? $item->sku,
             'description' => $line->description ?? $item->description,
-            'lot' => $line->lot,
+            'lot' => LotNormalizer::normalize($line->lot),
             'units_per_pallet' => $unitsPerPallet,
             'pallet_count' => $fullPallets,
             'pico_units' => $picoUnits > 0 ? $picoUnits : null,
@@ -253,7 +254,7 @@ class GoodsReceiptStockApplicationService
             ->where('client_id', $receipt->client_id)
             ->where('item_id', $item->id)
             ->where('location_id', $line->location_id)
-            ->where('lot', $line->lot)
+            ->where('lot', LotNormalizer::normalize($line->lot))
             ->where('units_per_pallet', $unitsPerPallet)
             ->where('active', true)
             ->where('status', StockPallet::STATUS_AVAILABLE)

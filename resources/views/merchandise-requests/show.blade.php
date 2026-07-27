@@ -366,7 +366,7 @@
                             <tr>
                                 <td class="order-table-strong">{{ $line->item?->sku ?? 'Artículo eliminado' }}</td>
                                 <td>{{ $line->item?->description ?? 'Sin descripción disponible' }}</td>
-                                <td>{{ $line->lot ?: 'Sin lote' }}</td>
+                                <td>{{ $line->lot ?: 'NO LOTE' }}</td>
                                 <td>{{ $line->destination_location ?: '-' }}</td>
                                 <td>{{ $line->requestedQuantityLabel() }}</td>
                                 <td>{{ $line->requiredUnitsLabel() ?? '—' }}</td>
@@ -466,7 +466,7 @@
                                 <tr>
                                     <td class="order-table-strong">{{ $extraLine->sku }}</td>
                                     <td>{{ $extraLine->description }}</td>
-                                    <td>{{ $extraLine->lot ?: 'Sin lote' }}</td>
+                                    <td>{{ $extraLine->lot ?: 'NO LOTE' }}</td>
                                     <td>{{ $extraLine->loadedQuantityLabel() }}</td>
                                     <td>{{ $extraLine->unitsLabel() }}</td>
                                     <td><span class="wms-line-type-pill wms-line-type-pill--{{ $extraLine->lineType() }}">{{ $extraLine->lineTypeLabel() }}</span></td>

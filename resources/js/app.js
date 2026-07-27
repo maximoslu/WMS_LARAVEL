@@ -181,7 +181,7 @@ const renderVariantPreview = (item, quantity = null) => {
     const quantityMarkup = Number.isFinite(quantity) && quantity > 0
         ? `<span>${escapeHtml(formatRequestedQuantity(item, quantity))}</span>`
         : '';
-    const lotMarkup = item.lot ? `<span>Lote ${escapeHtml(item.lot)}</span>` : '<span>Sin lote</span>';
+    const lotMarkup = item.lot ? `<span>Lote ${escapeHtml(item.lot)}</span>` : '<span>NO LOTE</span>';
     const locationMarkup = item.location_text ? `<span>Ubicación ${escapeHtml(item.location_text)}</span>` : '';
     const availability = item.line_type === 'peak'
         ? `Pico ${escapeHtml(item.stock_peak_index ?? '')} · ${escapeHtml(formatVariantUnits(item))}`
@@ -215,7 +215,7 @@ const renderVariantAutocompleteOption = (item) => {
             ? `${formatNumber.format(item.available_pallets)} pallets disponibles`
             : 'Pallet genérico';
     const secondary = [
-        item.lot ? `Lote ${item.lot}` : 'Sin lote',
+        item.lot ? `Lote ${item.lot}` : 'NO LOTE',
         formatVariantUnits(item),
         item.available_peaks ? `${formatNumber.format(item.available_peaks)} picos` : null,
         item.location_text ? `Ubicación ${item.location_text}` : null,
@@ -811,7 +811,7 @@ const setupMerchandiseRequestBuilder = () => {
                 <div class="merchandise-request-line-ref">
                     <strong>${escapeHtml(line.sku)}</strong>
                     <span>${escapeHtml(line.description)}</span>
-                    <small>${escapeHtml(formatVariantUnits(line))} · ${escapeHtml(line.lot ? `Lote ${line.lot}` : 'Sin lote')}${escapeHtml(location)}</small>
+                    <small>${escapeHtml(formatVariantUnits(line))} · ${escapeHtml(line.lot ? `Lote ${line.lot}` : 'NO LOTE')}${escapeHtml(location)}</small>
                 </div>
                 <label class="auth-field merchandise-request-line-quantity">
                     <span>Pallets</span>
@@ -1065,7 +1065,7 @@ const setupGoodsDispatchBuilder = () => {
                 </div>
                 <div class="wms-line-card-meta">
                     <span>${escapeHtml(formatVariantUnits(line))}</span>
-                    <span>${escapeHtml(line.lot ? `Lote ${line.lot}` : 'Sin lote')}</span>
+                    <span>${escapeHtml(line.lot ? `Lote ${line.lot}` : 'NO LOTE')}</span>
                     ${line.location_text ? `<span>Ubicación ${escapeHtml(line.location_text)}</span>` : ''}
                 </div>
                 <div class="wms-line-editor-actions">

@@ -340,7 +340,7 @@
                                                             ->values();
                                                     @endphp
                                                     <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}" @selected((int) $selectedStockPalletId === (int) $stockOption->id)>
-                                                        Lote: {{ $stockOption->lot ?: 'SIN LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                                        Lote: {{ $stockOption->lot ?: 'NO LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
                                                     </option>
                                                 @endforeach
                                             </select>
@@ -409,7 +409,7 @@
                                                             ->values();
                                                     @endphp
                                                     <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}">
-                                                        Lote: {{ $stockOption->lot ?: 'SIN LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                                        Lote: {{ $stockOption->lot ?: 'NO LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
                                                     </option>
                                                 @endforeach
                                             </select>

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\NormalizesLotAttribute;
 use Database\Factories\GoodsReceiptLineFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ class GoodsReceiptLine extends Model
 {
     /** @use HasFactory<GoodsReceiptLineFactory> */
     use HasFactory;
+    use NormalizesLotAttribute;
 
     public const MAX_PEAK_COLUMNS = 10;
 
