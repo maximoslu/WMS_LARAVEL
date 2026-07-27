@@ -5758,3 +5758,35 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se modificaron Bookings, Google Calendar, facturacion ni la logica de stock oficial Friesland.
 - El unico cambio de datos fue el `--apply` local controlado indicado arriba; no fue produccion.
 - Para produccion, ejecutar primero `php artisan wms:lots:canonicalize --dry-run`, revisar el informe, y solo entonces considerar `php artisan wms:lots:canonicalize --apply`.
+
+## 2026-07-27 - HOTFIX LOTES - Hardening posterior a auditoria 59e5d95 (18:02 +02:00)
+
+**Equipo:** PC casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Punto de partida:** `59e5d95 fix: canonicalize no-lot stock batches`, HEAD alineado con `origin/main`.
+
+### Alcance
+- Parche pequeno y focalizado tras la auditoria del commit `59e5d95`.
+- Se corrigio el filtro de filas vacias de entradas: el lote ya no se normaliza a `NO LOTE` antes de decidir si una fila plantilla esta vacia, y el lote por si solo no convierte una fila vacia en linea real.
+- Se corrigio `needsCanonicalLot()` para comparar el valor canonico final contra el valor bruto almacenado, no contra `trim($lot)`. Asi valores como ` NO LOTE ` y `NO   LOTE` quedan pendientes de canonicalizacion.
+- Se endurecio la consolidacion de `stock_pallets`: si una colision incluye `location_id = null`, el comando puede normalizar el texto de lote, pero no fusiona ni borra partidas por ubicacion/almacen ambiguo.
+- El comando informa el motivo de los conflictos pendientes de revision manual.
+- Se anadieron regresiones en `GoodsReceiptManagementTest` y `LotCanonicalizationCommandTest`, incluyendo documentacion del trait `NormalizesLotAttribute` con raw null, lectura sin dirty y escritura solo tras guardado explicito.
+
+### Validaciones
+- `php -l` sobre PHP modificados: OK.
+- `php artisan test --filter=Lot`: **44 passed** (213 assertions).
+- `php artisan test --filter=GoodsReceipt`: **152 passed** (707 assertions).
+- `php artisan test --filter=LotCanonicalizationCommand`: **9 passed** (61 assertions).
+- `php artisan test`: **791 passed** (4263 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+- `php artisan wms:lots:canonicalize --dry-run`: OK, 0 registros a normalizar, 0 colisiones, 0 conflictos, 0 cambios y 0 eliminaciones.
+
+### Seguridad
+- No se creo migracion.
+- No se ejecuto `--apply` en la base local fuera de tests automatizados.
+- No se tocaron datos reales ni produccion.
+- No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh`, `db:wipe`, force push ni `git add .`.

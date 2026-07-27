@@ -599,6 +599,159 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertSame(1, $receipt->lines()->count());
     }
 
+    public function test_entrada_descarta_filas_plantilla_aunque_solo_informen_alias_sin_lote(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-NO-LOT-REQUEST',
+            'description' => 'Articulo real sin lote',
+            'units_per_pallet' => 500,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_draft',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-BLANK-NO-LOT',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => '',
+                        'quantity_units' => '',
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => '',
+                    ],
+                    [
+                        'item_id' => '',
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => 'NO LOTE',
+                        'quantity_units' => '',
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => '',
+                    ],
+                    [
+                        'item_id' => '',
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => 'Sin Lote',
+                        'quantity_units' => '',
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => '',
+                    ],
+                    [
+                        'item_id' => $item->id,
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => '',
+                        'quantity_units' => 1000,
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-BLANK-NO-LOT')->firstOrFail();
+
+        $this->assertSame(1, $receipt->lines()->count());
+        $this->assertDatabaseHas('goods_receipt_lines', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 1000,
+        ]);
+    }
+
+    public function test_entrada_con_fila_real_incompleta_no_se_descarta_por_tener_lote_vacio(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_draft',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-INCOMPLETE-NO-LOT',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-INCOMPLETE-NO-LOT',
+                        'description' => '',
+                        'lot' => '',
+                        'quantity_units' => 0,
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => '',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors([
+                'lines.0.description',
+                'lines.0.units_per_pallet',
+            ]);
+    }
+
+    public function test_entrada_con_articulo_sin_cantidad_se_conserva_y_falla_validacion(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-ITEM-NO-QTY',
+            'description' => 'Articulo sin cantidad',
+            'units_per_pallet' => 500,
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'action' => 'create_draft',
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-ITEM-NO-QTY',
+                'lines' => [
+                    [
+                        'item_id' => $item->id,
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => '',
+                        'quantity_units' => '',
+                        'units_per_pallet' => '',
+                        'pallet_count' => '',
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors('lines.0.quantity_units');
+    }
+
     public function test_anadir_linea_manual_desde_detalle_de_borrador_no_aplica_stock_y_confirmar_si(): void
     {
         $this->seed(RoleSeeder::class);

@@ -44,12 +44,14 @@ class StoreGoodsReceiptRequest extends FormRequest
                 }
 
                 $item = $itemId !== null ? Item::query()->find($itemId) : null;
+                $description = $this->normalizeNullableText($line['description'] ?? null) ?? $item?->description;
                 $quantityUnits = $this->normalizeInteger($line['quantity_units'] ?? 0);
                 $unitsPerPallet = $this->normalizeNullableInteger($line['units_per_pallet'] ?? null)
                     ?? ($item?->units_per_pallet !== null ? (int) $item->units_per_pallet : null);
                 $palletCount = $this->normalizeNullableInteger($line['pallet_count'] ?? null);
                 $peaks = $this->normalizePeaks($line);
                 $picoUnits = $this->validPeakTotal($peaks);
+                $locationId = $this->normalizeNullableInteger($line['location_id'] ?? null);
                 $manualPicoUnitsProvided = collect($peaks)->contains(fn (mixed $value): bool => $value !== null && $value !== '');
                 $manualPalletCountProvided = array_key_exists('pallet_count', $line)
                     && $line['pallet_count'] !== ''
@@ -70,23 +72,32 @@ class StoreGoodsReceiptRequest extends FormRequest
                     $peaks['peak_1'] = $picoUnits > 0 ? $picoUnits : null;
                 }
 
+                $hasSubstantiveContent = $itemId !== null
+                    || $sku !== null
+                    || $description !== null
+                    || $quantityUnits > 0
+                    || $unitsPerPallet !== null
+                    || ($palletCount ?? 0) > 0
+                    || ($picoUnits ?? 0) > 0
+                    || collect(range(1, 10))->contains(fn (int $number): bool => filled($peaks['peak_'.$number] ?? null))
+                    || $locationId !== null;
+
                 return array_merge([
                     'item_id' => $itemId,
                     'sku' => $sku ?? $item?->sku,
-                    'description' => $this->normalizeNullableText($line['description'] ?? null) ?? $item?->description,
-                    'lot' => LotNormalizer::normalize($line['lot'] ?? null),
+                    'description' => $description,
+                    'lot' => $hasSubstantiveContent ? LotNormalizer::normalize($line['lot'] ?? null) : null,
                     'quantity_units' => $quantityUnits,
                     'units_per_pallet' => $unitsPerPallet,
                     'pallet_count' => $palletCount ?? 0,
                     'pico_units' => ($picoUnits ?? 0) > 0 ? $picoUnits : null,
-                    'location_id' => $this->normalizeNullableInteger($line['location_id'] ?? null),
+                    'location_id' => $locationId,
                 ], $peaks);
             })
             ->filter(function (array $line): bool {
                 return $line['item_id'] !== null
                     || $line['sku'] !== null
                     || $line['description'] !== null
-                    || $line['lot'] !== null
                     || $line['quantity_units'] > 0
                     || $line['units_per_pallet'] !== null
                     || $line['pallet_count'] > 0
@@ -203,6 +214,10 @@ class StoreGoodsReceiptRequest extends FormRequest
 
                 if ($unitsPerPallet === null && ($palletCount > 0 || ($picoUnits ?? 0) > 0)) {
                     $validator->errors()->add("lines.$index.units_per_pallet", 'Para informar pallets completos o pico, indica tambien las unidades por pallet.');
+                }
+
+                if ($quantityUnits <= 0 && $palletCount <= 0 && $picoUnits <= 0) {
+                    $validator->errors()->add("lines.$index.quantity_units", 'Indica la cantidad total, los pallets completos o algun pico para la linea.');
                 }
 
                 if ($unitsPerPallet !== null && ($palletCount > 0 || $picoUnits !== null)) {

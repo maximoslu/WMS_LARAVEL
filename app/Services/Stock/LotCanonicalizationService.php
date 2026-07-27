@@ -206,13 +206,17 @@ class LotCanonicalizationService
             }
 
             if (! $this->canConsolidateStockGroup($group)) {
+                if ($apply) {
+                    $result['records_changed'] += $this->normalizeStockGroupLots($group);
+                }
+
                 $result['stock_conflicts'][] = [
                     ...$summary,
-                    'reason' => 'No se consolida automaticamente: supera 10 picos o no mantiene identidad fisica compatible.',
+                    'reason' => $this->stockGroupConflictReason($group),
                 ];
 
                 foreach ($group as $stock) {
-                    $this->addStockTotals($result, $stock, 'after');
+                    $this->addStockTotals($result, $stock->fresh() ?? $stock, 'after');
                 }
 
                 continue;
@@ -238,7 +242,7 @@ class LotCanonicalizationService
     private function needsCanonicalLot(mixed $lot): bool
     {
         return LotNormalizer::isNoLotAlias($lot)
-            && LotNormalizer::normalize($lot) !== (is_string($lot) ? trim($lot) : $lot);
+            && LotNormalizer::normalize($lot) !== $lot;
     }
 
     private function variantLabel(mixed $lot): string
@@ -278,9 +282,38 @@ class LotCanonicalizationService
 
     private function canConsolidateStockGroup(Collection $group): bool
     {
+        if ($group->contains(fn (StockPallet $stock): bool => $stock->location_id === null)) {
+            return false;
+        }
+
         return $group
             ->flatMap(fn (StockPallet $stock): array => $this->positivePeaks($stock))
             ->count() <= StockPallet::MAX_PEAK_COLUMNS;
+    }
+
+    private function stockGroupConflictReason(Collection $group): string
+    {
+        if ($group->contains(fn (StockPallet $stock): bool => $stock->location_id === null)) {
+            return 'No se consolida automaticamente: ubicacion/almacen ambiguo sin location_id.';
+        }
+
+        return 'No se consolida automaticamente: supera 10 picos o no mantiene identidad fisica compatible.';
+    }
+
+    private function normalizeStockGroupLots(Collection $group): int
+    {
+        $changed = 0;
+
+        foreach ($group as $stock) {
+            if (! $stock instanceof StockPallet || ! $this->needsCanonicalLot($stock->getRawOriginal('lot'))) {
+                continue;
+            }
+
+            $stock->forceFill(['lot' => LotNormalizer::NO_LOT])->save();
+            $changed++;
+        }
+
+        return $changed;
     }
 
     /**

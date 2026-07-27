@@ -68,6 +68,61 @@ class LotCanonicalizationCommandTest extends TestCase
         $this->assertSame(LotNormalizer::NO_LOT, DB::table('goods_receipt_lines')->where('id', $line->id)->value('lot'));
     }
 
+    public function test_apply_detects_spaced_no_lot_aliases_and_preserves_real_lots(): void
+    {
+        [$client, $item, $location] = $this->stockContext();
+
+        $spaced = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'lot' => LotNormalizer::NO_LOT,
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+        ]);
+        DB::table('stock_pallets')->where('id', $spaced->id)->update(['lot' => ' NO LOTE ']);
+
+        $collapsed = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 1000])->id,
+            'location_id' => $location->id,
+            'lot' => LotNormalizer::NO_LOT,
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+        ]);
+        DB::table('stock_pallets')->where('id', $collapsed->id)->update(['lot' => 'NO   LOTE']);
+
+        foreach (['NO LOTE', 'SIN-LOTE-2026', 'NO LOTE 2', 'LOTE SIN MARCAR'] as $lot) {
+            StockPallet::factory()->create([
+                'client_id' => $client->id,
+                'item_id' => Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 1000])->id,
+                'location_id' => $location->id,
+                'lot' => $lot,
+                'quantity_units' => 1000,
+                'units_per_pallet' => 1000,
+            ]);
+        }
+
+        $this->artisan('wms:lots:canonicalize --client='.$client->id.' --dry-run')
+            ->expectsOutputToContain('stock_pallets | escaneados: 6 | a normalizar: 2')
+            ->expectsOutputToContain(' NO LOTE : 1')
+            ->expectsOutputToContain('NO   LOTE: 1')
+            ->assertSuccessful();
+
+        $this->assertSame(' NO LOTE ', DB::table('stock_pallets')->where('id', $spaced->id)->value('lot'));
+        $this->assertSame('NO   LOTE', DB::table('stock_pallets')->where('id', $collapsed->id)->value('lot'));
+
+        $this->artisan('wms:lots:canonicalize --client='.$client->id.' --apply')
+            ->expectsOutputToContain('Registros cambiados: 2')
+            ->assertSuccessful();
+
+        $this->assertSame(LotNormalizer::NO_LOT, DB::table('stock_pallets')->where('id', $spaced->id)->value('lot'));
+        $this->assertSame(LotNormalizer::NO_LOT, DB::table('stock_pallets')->where('id', $collapsed->id)->value('lot'));
+        $this->assertSame('SIN-LOTE-2026', DB::table('stock_pallets')->where('lot', 'SIN-LOTE-2026')->value('lot'));
+        $this->assertSame('NO LOTE 2', DB::table('stock_pallets')->where('lot', 'NO LOTE 2')->value('lot'));
+        $this->assertSame('LOTE SIN MARCAR', DB::table('stock_pallets')->where('lot', 'LOTE SIN MARCAR')->value('lot'));
+    }
+
     public function test_apply_consolidates_only_compatible_stock_batches(): void
     {
         [$client, $item, $location] = $this->stockContext();
@@ -137,6 +192,91 @@ class LotCanonicalizationCommandTest extends TestCase
 
         $this->assertDatabaseHas('stock_pallets', ['id' => $first->id, 'lot' => LotNormalizer::NO_LOT]);
         $this->assertDatabaseHas('stock_pallets', ['id' => $second->id, 'lot' => LotNormalizer::NO_LOT]);
+    }
+
+    public function test_apply_normalizes_but_does_not_consolidate_ambiguous_null_location_stock(): void
+    {
+        [$client, $item] = $this->stockContext();
+
+        $canonical = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => null,
+            'location_text' => 'A1',
+            'lot' => LotNormalizer::NO_LOT,
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 1.0,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'active' => true,
+        ]);
+        $alias = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => null,
+            'location_text' => 'A1',
+            'lot' => 'Sin Lote',
+            'quantity_units' => 500,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 0,
+            'warehouse_pallets' => 1.0,
+            'peaks_count' => 1,
+            'peak_1' => 500,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'active' => true,
+        ]);
+        DB::table('stock_pallets')->where('id', $alias->id)->update(['lot' => 'Sin Lote']);
+
+        DB::table('inventory_movements')->insert([
+            'uuid' => (string) Str::uuid(),
+            'correlation_id' => (string) Str::uuid(),
+            'idempotency_key' => (string) Str::uuid(),
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'sku' => $item->sku,
+            'lot' => 'Sin Lote',
+            'stock_pallet_id' => $alias->id,
+            'movement_type' => 'test',
+            'units_delta' => 500,
+            'effective_at' => now(),
+            'recorded_at' => now(),
+            'created_at' => now(),
+        ]);
+
+        $this->artisan('wms:lots:canonicalize --client='.$client->id.' --table=stock_pallets --dry-run')
+            ->expectsOutputToContain('grupos con colision: 1')
+            ->expectsOutputToContain('ubicacion/almacen ambiguo sin location_id')
+            ->expectsOutputToContain('Dry-run: no se ha modificado ningun dato')
+            ->assertSuccessful();
+
+        $this->assertSame('Sin Lote', DB::table('stock_pallets')->where('id', $alias->id)->value('lot'));
+        $this->assertDatabaseHas('inventory_movements', ['stock_pallet_id' => $alias->id]);
+
+        $this->artisan('wms:lots:canonicalize --client='.$client->id.' --table=stock_pallets --apply')
+            ->expectsOutputToContain('Registros cambiados: 1')
+            ->expectsOutputToContain('Registros eliminados por consolidacion: 0')
+            ->expectsOutputToContain('Conflictos pendientes de revision manual: 1')
+            ->assertSuccessful();
+
+        $this->assertDatabaseHas('stock_pallets', [
+            'id' => $canonical->id,
+            'lot' => LotNormalizer::NO_LOT,
+            'quantity_units' => 1000,
+        ]);
+        $this->assertDatabaseHas('stock_pallets', [
+            'id' => $alias->id,
+            'lot' => LotNormalizer::NO_LOT,
+            'quantity_units' => 500,
+        ]);
+        $this->assertDatabaseHas('inventory_movements', ['stock_pallet_id' => $alias->id]);
+
+        $this->artisan('wms:lots:canonicalize --client='.$client->id.' --table=stock_pallets --apply')
+            ->expectsOutputToContain('Registros cambiados: 0')
+            ->expectsOutputToContain('Registros eliminados por consolidacion: 0')
+            ->assertSuccessful();
     }
 
     public function test_apply_preserves_totals_peaks_and_reassigns_historical_movements(): void
@@ -250,6 +390,31 @@ class LotCanonicalizationCommandTest extends TestCase
         $this->artisan('wms:lots:canonicalize --client='.$client->id.' --apply')
             ->expectsOutputToContain('Registros cambiados: 0')
             ->assertSuccessful();
+    }
+
+    public function test_normalizes_lot_attribute_presents_raw_null_without_dirtying_model(): void
+    {
+        [$client, $item, $location] = $this->stockContext();
+        $receipt = GoodsReceipt::factory()->create(['client_id' => $client->id]);
+        $line = GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'location_id' => $location->id,
+            'lot' => LotNormalizer::NO_LOT,
+        ]);
+        DB::table('goods_receipt_lines')->where('id', $line->id)->update(['lot' => null]);
+
+        $line = GoodsReceiptLine::query()->findOrFail($line->id);
+
+        $this->assertNull($line->getRawOriginal('lot'));
+        $this->assertSame(LotNormalizer::NO_LOT, $line->lot);
+        $this->assertFalse($line->isDirty('lot'));
+        $this->assertNull(DB::table('goods_receipt_lines')->where('id', $line->id)->value('lot'));
+
+        $line->lot = $line->lot;
+        $line->save();
+
+        $this->assertSame(LotNormalizer::NO_LOT, DB::table('goods_receipt_lines')->where('id', $line->id)->value('lot'));
     }
 
     /**

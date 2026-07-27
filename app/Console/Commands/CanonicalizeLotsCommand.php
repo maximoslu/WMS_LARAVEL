@@ -91,6 +91,14 @@ class CanonicalizeLotsCommand extends Command
         if ($result['stock_conflicts'] !== []) {
             $this->newLine();
             $this->warn('Conflictos pendientes de revision manual: '.count($result['stock_conflicts']));
+
+            foreach ($result['stock_conflicts'] as $conflict) {
+                $this->line(sprintf(
+                    '  - IDs [%s] | motivo: %s',
+                    implode(', ', $conflict['ids']),
+                    $conflict['reason'],
+                ));
+            }
         }
 
         if (! $apply) {
