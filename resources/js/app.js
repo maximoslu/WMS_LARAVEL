@@ -1312,7 +1312,7 @@ const setupGoodsReceiptLines = () => {
             .map((value) => value.trim())
             .filter(Boolean);
 
-        return compatibleClients.length === 0 || compatibleClients.includes(String(clientId));
+        return compatibleClients.includes(String(clientId));
     };
 
     const filterLocationField = (field, clearInvalid = false) => {
@@ -1741,6 +1741,53 @@ const setupGoodsReceiptLines = () => {
 
     container.dataset.linesBound = 'true';
     updateAiSubmitState();
+};
+
+const setupItemFormLocations = () => {
+    const form = document.querySelector('[data-item-form]');
+
+    if (!form || form.dataset.itemLocationsBound === 'true') {
+        return;
+    }
+
+    const clientSelect = form.querySelector('[data-item-client]');
+    const locationSelect = form.querySelector('[data-item-location]');
+
+    if (!(clientSelect instanceof HTMLSelectElement) || !(locationSelect instanceof HTMLSelectElement)) {
+        return;
+    }
+
+    const optionMatchesClient = (option, clientId) => {
+        if (!clientId || option.value === '') {
+            return true;
+        }
+
+        const compatibleClients = (option.dataset.compatibleClients ?? '')
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean);
+
+        return compatibleClients.includes(String(clientId));
+    };
+
+    const filterLocations = (clearInvalid = false) => {
+        const clientId = clientSelect.value ?? '';
+
+        Array.from(locationSelect.options).forEach((option) => {
+            option.hidden = !optionMatchesClient(option, clientId);
+        });
+
+        const selectedOption = locationSelect.selectedOptions.item(0);
+
+        if (clearInvalid && selectedOption && !optionMatchesClient(selectedOption, clientId)) {
+            locationSelect.value = '';
+        }
+    };
+
+    clientSelect.addEventListener('change', () => filterLocations(true));
+
+    filterLocations(true);
+    form.dataset.itemLocationsBound = 'true';
 };
 
 const setupSupplierPicker = () => {
@@ -2298,6 +2345,7 @@ const boot = () => {
     setupStockExportModal();
     setupStockDetailToggles();
     setupGoodsReceiptLines();
+    setupItemFormLocations();
     setupSupplierPicker();
     setupMerchandiseRequestBuilder();
     setupGoodsDispatchBuilder();

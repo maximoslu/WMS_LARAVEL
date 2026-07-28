@@ -1,12 +1,10 @@
 @php
     $isEditing = $client->exists;
     $breadcrumbs = [
-
-
-    ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-    ['label' => 'Gestion'],
-    ['label' => 'Clientes', 'href' => route('clients.index')],
-    ['label' => $isEditing ? 'Editar' : 'Crear'],
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Gestión'],
+        ['label' => 'Clientes', 'href' => route('clients.index')],
+        ['label' => $isEditing ? 'Editar' : 'Crear'],
     ];
 @endphp
 <x-breadcrumbs :items="$breadcrumbs" />
@@ -14,9 +12,9 @@
 <div class="surface-card item-form-card entity-form compact-card">
     <div class="item-form-header">
         <div class="app-copy">
-            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
+            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edición' : 'Alta' }}</span>
             <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar cliente' : 'Nuevo cliente' }}</h2>
-            <p>Gestiona el maestro de cliente y su direccion de entrega para expediciones y albaranes.</p>
+            <p>Gestiona el maestro de cliente y su dirección de entrega para expediciones y albaranes.</p>
         </div>
     </div>
 
@@ -36,7 +34,7 @@
             </label>
 
             <label class="auth-field">
-                <span>Codigo</span>
+                <span>Código</span>
                 <input type="text" name="code" value="{{ old('code', $client->code) }}" class="auth-input" maxlength="60" required>
                 @error('code')
                     <small class="form-error">{{ $message }}</small>
@@ -44,7 +42,7 @@
             </label>
 
             <label class="auth-field item-form-field--full">
-                <span>Direccion de entrega</span>
+                <span>Dirección de entrega</span>
                 <textarea name="delivery_address" class="auth-input" rows="3" maxlength="1000">{{ old('delivery_address', $client->delivery_address) }}</textarea>
                 @error('delivery_address')
                     <small class="form-error">{{ $message }}</small>
@@ -52,7 +50,7 @@
             </label>
 
             <label class="auth-field">
-                <span>Codigo postal</span>
+                <span>Código postal</span>
                 <input type="text" name="delivery_postal_code" value="{{ old('delivery_postal_code', $client->delivery_postal_code) }}" class="auth-input" maxlength="20">
                 @error('delivery_postal_code')
                     <small class="form-error">{{ $message }}</small>
@@ -76,7 +74,7 @@
             </label>
 
             <label class="auth-field">
-                <span>Pais</span>
+                <span>País</span>
                 <input type="text" name="delivery_country" value="{{ old('delivery_country', $client->delivery_country) }}" class="auth-input" maxlength="120">
                 @error('delivery_country')
                     <small class="form-error">{{ $message }}</small>
@@ -87,15 +85,15 @@
         <label class="toggle-field">
             <input type="hidden" name="active" value="0">
             <input type="checkbox" name="active" value="1" @checked(old('active', $client->active ?? true))>
-            <span>Cliente activo para operativa y asignacion de usuarios</span>
+            <span>Cliente activo para operativa y asignación de usuarios</span>
         </label>
 
         <label class="toggle-field">
             <input type="hidden" name="show_storage_occupancy_to_client" value="0">
             <input type="checkbox" name="show_storage_occupancy_to_client" value="1" @checked(old('show_storage_occupancy_to_client', $client->show_storage_occupancy_to_client ?? true))>
             <span>
-                Mostrar ocupacion de almacen al cliente
-                <small class="helper-text">Permite que los usuarios de este cliente vean el total de huecos utilizados en el almacen.</small>
+                Mostrar ocupación de almacén al cliente
+                <small class="helper-text">Permite que los usuarios de este cliente vean el total de huecos utilizados en el almacén.</small>
             </span>
         </label>
 
@@ -112,8 +110,8 @@
             <input type="hidden" name="send_order_preparation_pdf_to_client" value="0">
             <input type="checkbox" name="send_order_preparation_pdf_to_client" value="1" @checked(old('send_order_preparation_pdf_to_client', $client->send_order_preparation_pdf_to_client ?? false))>
             <span>
-                Enviar preparaciÃ³n del pedido al cliente
-                <small class="helper-text">Adjunta el PDF de preparaciÃ³n al correo que recibe el cliente al registrar un pedido.</small>
+                Enviar preparación del pedido al cliente
+                <small class="helper-text">Adjunta el PDF de preparación al correo que recibe el cliente al registrar un pedido.</small>
             </span>
         </label>
 
@@ -121,8 +119,8 @@
             <input type="hidden" name="allow_order_line_required_units" value="0">
             <input type="checkbox" name="allow_order_line_required_units" value="1" @checked(old('allow_order_line_required_units', $client->allow_order_line_required_units ?? false))>
             <span>
-                Permitir necesidad a cubrir en las lÃ­neas del pedido
-                <small class="helper-text">Permite que el cliente indique opcionalmente la cantidad mÃ­nima de unidades que necesita recibir.</small>
+                Permitir necesidad a cubrir en las líneas del pedido
+                <small class="helper-text">Permite que el cliente indique opcionalmente la cantidad mínima de unidades que necesita recibir.</small>
             </span>
         </label>
 
@@ -199,7 +197,7 @@
         <div class="item-form-header">
             <div class="app-copy">
                 <h2 class="ops-page-title page-title-compact">Emails para albaranes de salida</h2>
-                <p>Estos correos recibiran el albaran de salida cuando se envie un pedido. Sirve para carretilleros, responsables de almacen o contactos sin usuario WMS.</p>
+                <p>Estos correos recibirán el albarán de salida cuando se envíe un pedido. Sirve para carretilleros, responsables de almacén o contactos sin usuario WMS.</p>
             </div>
         </div>
 
@@ -230,7 +228,7 @@
         </form>
 
         @if ($dispatchEmailRecipients->isEmpty())
-            <p class="helper-text">Todavia no hay emails adicionales configurados para albaranes de salida.</p>
+            <p class="helper-text">Todavía no hay emails adicionales configurados para albaranes de salida.</p>
         @else
             <ul class="client-receipt-email-list">
                 @foreach ($dispatchEmailRecipients as $recipient)
@@ -278,7 +276,7 @@
                 </label>
             </div>
             <div class="item-form-actions action-buttons">
-                <button type="submit" class="button-primary compact-button btn-compact">Anadir aviso</button>
+                <button type="submit" class="button-primary compact-button btn-compact">Añadir aviso</button>
             </div>
         </form>
 
@@ -289,7 +287,7 @@
                 @foreach ($stockAlertEmailRecipients as $recipient)
                     <li class="client-receipt-email-item">
                         <span><strong>{{ $recipient->email }}</strong> <span class="status-chip small-badge badge-compact">{{ $recipient->active ? 'Activo' : 'Inactivo' }}</span></span>
-                        <form method="POST" action="{{ route('clients.stock-alert-emails.destroy', [$client, $recipient]) }}" onsubmit="return confirm('Eliminar este destinatario de avisos de stock?');">
+                        <form method="POST" action="{{ route('clients.stock-alert-emails.destroy', [$client, $recipient]) }}" onsubmit="return confirm('¿Eliminar este destinatario de avisos de stock?');">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="button-secondary compact-button btn-table">Eliminar</button>

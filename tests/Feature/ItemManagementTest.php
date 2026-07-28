@@ -385,6 +385,63 @@ class ItemManagementTest extends TestCase
         ]);
     }
 
+    public function test_item_rejects_default_location_from_another_client(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $otherWarehouse = Warehouse::factory()->create(['client_id' => $otherClient->id]);
+        $otherLocation = Location::factory()->create([
+            'warehouse_id' => $otherWarehouse->id,
+            'code' => '38',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('items.create'))
+            ->post(route('items.store'), [
+                'client_id' => $client->id,
+                'sku' => 'SKU-LOC-OTHER-CLIENT',
+                'description' => 'Ubicación ajena',
+                'units_per_pallet' => 500,
+                'status' => Item::STATUS_ACTIVE,
+                'default_location_id' => $otherLocation->id,
+            ])
+            ->assertRedirect(route('items.create'))
+            ->assertSessionHasErrors('default_location_id');
+
+        $this->assertDatabaseMissing('items', [
+            'sku' => 'SKU-LOC-OTHER-CLIENT',
+        ]);
+    }
+
+    public function test_item_form_marks_location_options_with_compatible_clients(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '10',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('items.create'))
+            ->assertOk()
+            ->assertSee('data-item-form', false)
+            ->assertSee('data-item-client', false)
+            ->assertSee('data-item-location', false)
+            ->assertSee('value="'.$location->id.'"', false)
+            ->assertSee('data-compatible-clients="'.$client->id.'"', false);
+    }
+
     private function seedBaseData(): void
     {
         $this->seed([

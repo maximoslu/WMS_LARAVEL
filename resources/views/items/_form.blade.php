@@ -1,12 +1,10 @@
 @php
     $isEditing = $item->exists;
     $breadcrumbs = [
-
-
-    ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
-    ['label' => 'Stock'],
-    ['label' => 'Articulos', 'href' => route('items.index')],
-    ['label' => $isEditing ? 'Editar' : 'Crear'],
+        ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
+        ['label' => 'Stock'],
+        ['label' => 'Artículos', 'href' => route('items.index')],
+        ['label' => $isEditing ? 'Editar' : 'Crear'],
     ];
 @endphp
 <x-breadcrumbs :items="$breadcrumbs" />
@@ -14,13 +12,13 @@
 <div class="surface-card item-form-card entity-form compact-card">
     <div class="item-form-header">
         <div class="app-copy">
-            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edicion' : 'Alta' }}</span>
-            <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar articulo' : 'Nuevo articulo' }}</h2>
+            <span class="status-chip small-badge badge-compact">{{ $isEditing ? 'Edición' : 'Alta' }}</span>
+            <h2 class="ops-page-title page-title-compact">{{ $isEditing ? 'Editar artículo' : 'Nuevo artículo' }}</h2>
             <p>Define cliente, SKU, estado, ubicación por defecto opcional y paletizado estándar.</p>
         </div>
     </div>
 
-    <form method="POST" action="{{ $isEditing ? route('items.update', $item) : route('items.store') }}" class="item-form">
+    <form method="POST" action="{{ $isEditing ? route('items.update', $item) : route('items.store') }}" class="item-form" data-item-form>
         @csrf
         @if ($isEditing)
             @method('PUT')
@@ -29,7 +27,7 @@
         <div class="item-form-grid">
             <label class="auth-field">
                 <span>Cliente propietario</span>
-                <select name="client_id" class="auth-input" required>
+                <select name="client_id" class="auth-input" data-item-client required>
                     <option value="">Selecciona un cliente</option>
                     @foreach ($clients as $client)
                         <option value="{{ $client->id }}" @selected((string) old('client_id', $item->client_id) === (string) $client->id)>
@@ -58,7 +56,7 @@
             </label>
 
             <label class="auth-field item-form-field--full">
-                <span>Descripcion</span>
+                <span>Descripción</span>
                 <input
                     type="text"
                     name="description"
@@ -104,11 +102,15 @@
 
             <label class="auth-field item-form-field--full">
                 <span>Ubicación por defecto</span>
-                <select name="default_location_id" class="auth-input">
+                <select name="default_location_id" class="auth-input" data-item-location>
                     <option value="">Sin ubicación por defecto</option>
                     @foreach ($locations as $location)
-                        <option value="{{ $location->id }}" @selected((string) old('default_location_id', $item->default_location_id) === (string) $location->id)>
-                            {{ $location->code }}{{ $location->warehouse ? ' / '.$location->warehouse->code : '' }}
+                        <option
+                            value="{{ $location->id }}"
+                            data-compatible-clients="{{ implode(',', $locationClientOptions[$location->id] ?? []) }}"
+                            @selected((string) old('default_location_id', $item->default_location_id) === (string) $location->id)
+                        >
+                            {{ $location->displayLabel() }}
                         </option>
                     @endforeach
                 </select>
@@ -131,12 +133,7 @@
 
         <div class="item-form-actions action-buttons">
             <a href="{{ route('items.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
-            <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear articulo' }}</button>
+            <button type="submit" class="button-primary compact-button btn-compact">{{ $isEditing ? 'Guardar cambios' : 'Crear artículo' }}</button>
         </div>
     </form>
 </div>
-
-
-
-
-

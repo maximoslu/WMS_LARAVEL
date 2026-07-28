@@ -277,7 +277,7 @@ class GoodsReceiptController extends Controller
         return view('goods-receipts.show', [
             'receipt' => $goodsReceipt,
             'locations' => $locations,
-            'locationClientOptions' => $this->locationClientOptions($locations, $clients),
+            'locationClientOptions' => $this->locationIntegrityService->clientIdsForLocationOptions($locations, $clients),
             'suppliers' => Supplier::query()
                 ->where('active', true)
                 ->where(function ($query) use ($goodsReceipt): void {
@@ -614,7 +614,7 @@ class GoodsReceiptController extends Controller
             'clients' => $clients = Client::query()->where('active', true)->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('active', true)->orderBy('name')->get(),
             'locations' => $locations = $this->locationOptions(),
-            'locationClientOptions' => $this->locationClientOptions($locations, $clients),
+            'locationClientOptions' => $this->locationIntegrityService->clientIdsForLocationOptions($locations, $clients),
             'lineValues' => $this->lineValues($request, $receipt),
             'searchEndpoint' => route('ajax.items'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
@@ -627,57 +627,6 @@ class GoodsReceiptController extends Controller
         return $this->locationIntegrityService->canonicalActiveLocations(
             Location::query()->where('active', true)->with('warehouse.client')->get(),
         );
-    }
-
-    /**
-     * @param  Collection<int, Location>  $locations
-     * @param  Collection<int, Client>  $clients
-     * @return array<int, list<int>>
-     */
-    private function locationClientOptions(Collection $locations, Collection $clients): array
-    {
-        $locationIds = $locations->pluck('id');
-
-        $stockClientIds = DB::table('stock_pallets')
-            ->whereIn('location_id', $locationIds)
-            ->select('location_id', 'client_id')
-            ->distinct()
-            ->get()
-            ->groupBy('location_id');
-        $itemClientIds = DB::table('items')
-            ->whereIn('default_location_id', $locationIds)
-            ->select('default_location_id as location_id', 'client_id')
-            ->distinct()
-            ->get()
-            ->groupBy('location_id');
-        $receiptClientIds = DB::table('goods_receipt_lines')
-            ->join('goods_receipts', 'goods_receipts.id', '=', 'goods_receipt_lines.goods_receipt_id')
-            ->whereIn('goods_receipt_lines.location_id', $locationIds)
-            ->select('goods_receipt_lines.location_id', 'goods_receipts.client_id')
-            ->distinct()
-            ->get()
-            ->groupBy('location_id');
-        $allClientIds = $clients->pluck('id')->map(fn (int $id): int => $id)->values()->all();
-
-        return $locations
-            ->mapWithKeys(function (Location $location) use ($stockClientIds, $itemClientIds, $receiptClientIds, $allClientIds): array {
-                if ($location->warehouse?->client_id !== null) {
-                    return [$location->id => [(int) $location->warehouse->client_id]];
-                }
-
-                $clientIds = collect()
-                    ->merge($stockClientIds->get($location->id, collect())->pluck('client_id'))
-                    ->merge($itemClientIds->get($location->id, collect())->pluck('client_id'))
-                    ->merge($receiptClientIds->get($location->id, collect())->pluck('client_id'))
-                    ->map(fn (mixed $id): int => (int) $id)
-                    ->filter()
-                    ->unique()
-                    ->values()
-                    ->all();
-
-                return [$location->id => $clientIds !== [] ? $clientIds : $allClientIds];
-            })
-            ->all();
     }
 
     /**

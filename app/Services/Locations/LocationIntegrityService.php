@@ -139,6 +139,85 @@ class LocationIntegrityService
         );
     }
 
+    public function isLocationCompatibleWithClient(int|Location $location, int $clientId): bool
+    {
+        $location = $location instanceof Location
+            ? $location->loadMissing('warehouse')
+            : Location::query()->with('warehouse')->find($location);
+
+        if (! $location instanceof Location || ! $location->active || ! $location->warehouse?->active) {
+            return false;
+        }
+
+        if (! $this->isCanonicalActiveLocation($location)) {
+            return false;
+        }
+
+        $warehouseClientId = $location->warehouse?->client_id;
+
+        if ($warehouseClientId !== null) {
+            return (int) $warehouseClientId === $clientId;
+        }
+
+        $clientIds = $this->clientIdsUsingWarehouse((int) $location->warehouse_id);
+
+        return $clientIds === [] || in_array($clientId, $clientIds, true);
+    }
+
+    /**
+     * @param  Collection<int, Location>  $locations
+     * @param  Collection<int, Client>  $clients
+     * @return array<int, list<int>>
+     */
+    public function clientIdsForLocationOptions(Collection $locations, Collection $clients): array
+    {
+        $allClientIds = $clients
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter()
+            ->values()
+            ->all();
+
+        $locations->each(fn (Location $location): Location => $location->loadMissing('warehouse'));
+
+        $warehouseUsage = $locations
+            ->pluck('warehouse_id')
+            ->filter()
+            ->unique()
+            ->mapWithKeys(fn (mixed $warehouseId): array => [
+                (int) $warehouseId => $this->clientIdsUsingWarehouse((int) $warehouseId),
+            ]);
+
+        return $locations
+            ->mapWithKeys(function (Location $location) use ($allClientIds, $warehouseUsage): array {
+                $warehouseClientId = $location->warehouse?->client_id;
+
+                if ($warehouseClientId !== null) {
+                    return [$location->id => [(int) $warehouseClientId]];
+                }
+
+                $clientIds = $warehouseUsage->get((int) $location->warehouse_id, []);
+
+                return [$location->id => $clientIds !== [] ? $clientIds : $allClientIds];
+            })
+            ->all();
+    }
+
+    public function isCanonicalActiveLocation(Location $location): bool
+    {
+        if (! $location->active) {
+            return false;
+        }
+
+        return $this->canonicalActiveLocations(
+            Location::query()
+                ->with('warehouse')
+                ->where('warehouse_id', $location->warehouse_id)
+                ->where('active', true)
+                ->get()
+        )->contains(fn (Location $candidate): bool => (int) $candidate->id === (int) $location->id);
+    }
+
     /** @return list<string> */
     public function expectedCodes(Warehouse $warehouse, ?Client $client): array
     {
@@ -257,6 +336,35 @@ class LocationIntegrityService
                 return $values;
             })
             ->keyBy('id')
+            ->all();
+    }
+
+    /** @return list<int> */
+    private function clientIdsUsingWarehouse(int $warehouseId): array
+    {
+        $locationIds = Location::query()
+            ->where('warehouse_id', $warehouseId)
+            ->pluck('id');
+
+        if ($locationIds->isEmpty()) {
+            return [];
+        }
+
+        return collect()
+            ->merge(DB::table('stock_pallets')
+                ->whereIn('location_id', $locationIds)
+                ->pluck('client_id'))
+            ->merge(DB::table('items')
+                ->whereIn('default_location_id', $locationIds)
+                ->pluck('client_id'))
+            ->merge(DB::table('goods_receipt_lines')
+                ->join('goods_receipts', 'goods_receipts.id', '=', 'goods_receipt_lines.goods_receipt_id')
+                ->whereIn('goods_receipt_lines.location_id', $locationIds)
+                ->pluck('goods_receipts.client_id'))
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
             ->all();
     }
 }

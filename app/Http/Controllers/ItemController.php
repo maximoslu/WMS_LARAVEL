@@ -8,10 +8,12 @@ use App\Models\Client;
 use App\Models\Item;
 use App\Models\Location;
 use App\Services\Audit\AuditLogService;
+use App\Services\Locations\LocationIntegrityService;
 use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -56,13 +58,17 @@ class ItemController extends Controller
 
     public function create(Request $request): View
     {
+        $clients = Client::query()->orderBy('name')->get();
+        $locations = $this->locationOptions();
+
         return view('items.create', [
             'item' => new Item([
                 'status' => Item::STATUS_ACTIVE,
                 'active' => true,
             ]),
-            'clients' => Client::query()->orderBy('name')->get(),
-            'locations' => $this->locationOptions(),
+            'clients' => $clients,
+            'locations' => $locations,
+            'locationClientOptions' => app(LocationIntegrityService::class)->clientIdsForLocationOptions($locations, $clients),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -89,10 +95,14 @@ class ItemController extends Controller
 
     public function edit(Request $request, Item $item): View
     {
+        $clients = Client::query()->orderBy('name')->get();
+        $locations = $this->locationOptions();
+
         return view('items.edit', [
             'item' => $item,
-            'clients' => Client::query()->orderBy('name')->get(),
-            'locations' => $this->locationOptions(),
+            'clients' => $clients,
+            'locations' => $locations,
+            'locationClientOptions' => app(LocationIntegrityService::class)->clientIdsForLocationOptions($locations, $clients),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -164,10 +174,13 @@ class ItemController extends Controller
         ];
     }
 
-    private function locationOptions()
+    /** @return Collection<int, Location> */
+    private function locationOptions(): Collection
     {
-        return LocationCode::applyNaturalOrder(
-            Location::query()->where('active', true)->with('warehouse')
-        )->get();
+        return app(LocationIntegrityService::class)->canonicalActiveLocations(
+            LocationCode::applyNaturalOrder(
+                Location::query()->where('active', true)->with('warehouse.client')
+            )->get()
+        );
     }
 }

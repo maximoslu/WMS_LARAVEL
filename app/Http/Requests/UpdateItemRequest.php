@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Item;
 use App\Models\Role;
+use App\Services\Locations\LocationIntegrityService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -54,6 +55,12 @@ class UpdateItemRequest extends FormRequest
 
             if ($exists) {
                 $validator->errors()->add('sku', 'Ya existe un artículo con el mismo SKU para este cliente.');
+            }
+
+            $locationId = $this->integer('default_location_id');
+
+            if ($locationId > 0 && ! app(LocationIntegrityService::class)->isLocationCompatibleWithClient($locationId, $this->integer('client_id'))) {
+                $validator->errors()->add('default_location_id', 'La ubicación por defecto debe pertenecer a un almacén compatible con el cliente.');
             }
         });
     }

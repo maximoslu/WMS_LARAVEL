@@ -3,9 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Models\Item;
-use App\Models\Location;
 use App\Models\Role;
 use App\Models\Supplier;
+use App\Services\Locations\LocationIntegrityService;
 use App\Support\GoodsReceipts\GoodsReceiptDocumentRules;
 use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
@@ -228,8 +228,8 @@ class StoreGoodsReceiptRequest extends FormRequest
                     }
                 }
 
-                if ($locationId > 0 && ! $this->locationBelongsToClient($locationId, $clientId)) {
-                    $validator->errors()->add("lines.$index.location_id", 'La ubicacion debe pertenecer a un almacen compatible con el cliente seleccionado.');
+                if ($locationId > 0 && ! app(LocationIntegrityService::class)->isLocationCompatibleWithClient($locationId, $clientId)) {
+                    $validator->errors()->add("lines.$index.location_id", 'La ubicación debe pertenecer a un almacén compatible con el cliente seleccionado.');
                 }
             }
         });
@@ -309,33 +309,6 @@ class StoreGoodsReceiptRequest extends FormRequest
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
-    }
-
-    private function locationBelongsToClient(int $locationId, int $clientId): bool
-    {
-        return Location::query()
-            ->whereKey($locationId)
-            ->whereHas('warehouse', function ($query) use ($clientId): void {
-                $query
-                    ->where('client_id', $clientId)
-                    ->orWhere(function ($query) use ($clientId): void {
-                        $query
-                            ->whereNull('client_id')
-                            ->where(function ($query) use ($clientId): void {
-                                $query
-                                    ->whereHas('locations.stockPallets', fn ($stockQuery) => $stockQuery->where('client_id', $clientId))
-                                    ->orWhereHas('locations.defaultItems', fn ($itemQuery) => $itemQuery->where('client_id', $clientId))
-                                    ->orWhereHas('locations.goodsReceiptLines.goodsReceipt', fn ($receiptQuery) => $receiptQuery->where('client_id', $clientId))
-                                    ->orWhere(function ($query): void {
-                                        $query
-                                            ->whereDoesntHave('locations.stockPallets')
-                                            ->whereDoesntHave('locations.defaultItems')
-                                            ->whereDoesntHave('locations.goodsReceiptLines');
-                                    });
-                            });
-                    });
-            })
-            ->exists();
     }
 
     public function expectsAiCreationFlow(): bool

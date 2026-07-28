@@ -122,27 +122,10 @@ class StoreStockAdjustmentRequest extends FormRequest
                     ->whereKey($this->locationId())
                     ->first();
 
-                if (! $location instanceof Location || ! (bool) $location->active || ! (bool) $location->warehouse?->active) {
-                    $validator->errors()->add('location_id', 'La ubicacion debe estar activa.');
+                if (! $location instanceof Location || ! app(LocationIntegrityService::class)->isLocationCompatibleWithClient($location, $this->clientId())) {
+                    $validator->errors()->add('location_id', 'La ubicación debe ser canónica, estar activa y pertenecer a un almacén compatible con el cliente.');
 
                     return;
-                }
-
-                $warehouseClientId = $location->warehouse?->client_id;
-                if ($warehouseClientId !== null && (int) $warehouseClientId !== $this->clientId()) {
-                    $validator->errors()->add('location_id', 'La ubicacion no pertenece a un almacen compatible con el cliente.');
-                }
-
-                $canonicalLocation = app(LocationIntegrityService::class)
-                    ->canonicalActiveLocations(Location::query()
-                        ->with('warehouse')
-                        ->where('warehouse_id', $location->warehouse_id)
-                        ->where('active', true)
-                        ->get())
-                    ->first(fn (Location $candidate): bool => (int) $candidate->id === (int) $location->id);
-
-                if (! $canonicalLocation instanceof Location) {
-                    $validator->errors()->add('location_id', 'La ubicacion esta duplicada. Usa la ubicacion canonica activa.');
                 }
             }
         });

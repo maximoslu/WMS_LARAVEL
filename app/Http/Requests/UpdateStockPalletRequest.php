@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Services\Locations\LocationIntegrityService;
@@ -41,31 +40,12 @@ class UpdateStockPalletRequest extends FormRequest
                 }
 
                 $stockPallet = $this->route('stockPallet');
-                $location = Location::query()->with('warehouse')->find($locationId);
-
-                if (! $stockPallet instanceof StockPallet || ! $location instanceof Location) {
+                if (! $stockPallet instanceof StockPallet) {
                     return;
                 }
 
-                if (! $location->active || ! $location->warehouse?->active) {
-                    $validator->errors()->add('location_id', 'Selecciona una ubicacion activa.');
-
-                    return;
-                }
-
-                if ($location->warehouse->client_id !== null && $location->warehouse->client_id !== $stockPallet->client_id) {
-                    $validator->errors()->add('location_id', 'La ubicacion seleccionada no pertenece a este cliente.');
-
-                    return;
-                }
-
-                $canonicalIds = app(LocationIntegrityService::class)
-                    ->canonicalActiveLocationsForStock($stockPallet)
-                    ->pluck('id')
-                    ->all();
-
-                if (! in_array($location->id, $canonicalIds, true)) {
-                    $validator->errors()->add('location_id', 'Selecciona la ubicacion canonica activa.');
+                if (! app(LocationIntegrityService::class)->isLocationCompatibleWithClient($locationId, (int) $stockPallet->client_id)) {
+                    $validator->errors()->add('location_id', 'Selecciona una ubicación canónica activa compatible con este cliente.');
                 }
             },
         ];

@@ -130,8 +130,8 @@ class ClientManagementTest extends TestCase
         $this->actingAs($administracion)
             ->get(route('clients.edit', $client))
             ->assertOk()
-            ->assertSeeText('Mostrar ocupacion de almacen al cliente')
-            ->assertSeeText('Permite que los usuarios de este cliente vean el total de huecos utilizados en el almacen.')
+            ->assertSeeText('Mostrar ocupación de almacén al cliente')
+            ->assertSeeText('Permite que los usuarios de este cliente vean el total de huecos utilizados en el almacén.')
             ->assertSeeText('Mostrar total global de stock al cliente')
             ->assertSeeText('Permite que los usuarios de este cliente vean el total global de palés almacenados.')
             ->assertSee('name="show_storage_occupancy_to_client"', false)
@@ -189,10 +189,31 @@ class ClientManagementTest extends TestCase
         $this->actingAs($administracion)
             ->get(route('clients.edit', $client))
             ->assertOk()
-            ->assertSeeText('Enviar preparaci')
-            ->assertSeeText('Permitir necesidad a cubrir')
+            ->assertSeeText('Enviar preparación del pedido al cliente')
+            ->assertSeeText('Permitir necesidad a cubrir en las líneas del pedido')
             ->assertSee('name="send_order_preparation_pdf_to_client"', false)
             ->assertSee('name="allow_order_line_required_units"', false);
+    }
+
+    public function test_client_configuration_form_does_not_render_mojibake(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $administracion = $this->makeUserWithRole(Role::ADMINISTRACION);
+
+        $content = $this->actingAs($administracion)
+            ->get(route('clients.edit', $client))
+            ->assertOk()
+            ->assertSeeText('preparación')
+            ->assertSeeText('líneas')
+            ->assertSeeText('mínima')
+            ->assertSeeText('albarán de salida')
+            ->getContent();
+
+        $this->assertStringNotContainsString('Ã', $content);
+        $this->assertStringNotContainsString('Â', $content);
+        $this->assertStringNotContainsString('â€', $content);
     }
 
     public function test_se_puede_anadir_email_adicional_valido_a_cliente(): void

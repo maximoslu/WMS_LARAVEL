@@ -254,6 +254,55 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('data-compatible-clients="'.$otherClient->id.'"', false);
     }
 
+    public function test_edelvives_location_options_are_nave_38_client_scoped_and_naturally_sorted(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $edelvives = Client::factory()->create(['code' => 'EDELVIVES', 'name' => 'EDELVIVES']);
+        $friesland = Client::factory()->create(['code' => 'FRIESLAND', 'name' => 'FRIESLAND']);
+        $nave38 = Warehouse::factory()->create([
+            'client_id' => $edelvives->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $frieslandWarehouse = Warehouse::factory()->create([
+            'client_id' => $friesland->id,
+            'code' => 'FR',
+            'name' => 'FRIESLAND',
+        ]);
+
+        foreach (['1', '10', '2'] as $code) {
+            Location::factory()->create([
+                'warehouse_id' => $nave38->id,
+                'code' => $code,
+            ]);
+        }
+
+        $otherLocation = Location::factory()->create([
+            'warehouse_id' => $frieslandWarehouse->id,
+            'code' => 'A',
+        ]);
+
+        $content = $this->actingAs($user)
+            ->get(route('goods-receipts.create'))
+            ->assertOk()
+            ->assertSee('data-compatible-clients="'.$edelvives->id.'"', false)
+            ->assertSee('data-compatible-clients="'.$friesland->id.'"', false)
+            ->assertSee('value="'.$otherLocation->id.'"', false)
+            ->getContent();
+
+        $position1 = strpos($content, 'NAVE 38 - Calle 1');
+        $position2 = strpos($content, 'NAVE 38 - Calle 2');
+        $position10 = strpos($content, 'NAVE 38 - Calle 10');
+        $this->assertNotFalse($position1);
+        $this->assertNotFalse($position2);
+        $this->assertNotFalse($position10);
+        $this->assertTrue($position1 < $position2 && $position2 < $position10);
+        $this->assertMatchesRegularExpression('/value="'.$otherLocation->id.'"\\s+data-compatible-clients="'.$friesland->id.'"/', $content);
+        $this->assertDoesNotMatchRegularExpression('/value="'.$otherLocation->id.'"\\s+data-compatible-clients="'.$edelvives->id.'"/', $content);
+    }
+
     public function test_goods_receipt_rejects_location_from_another_client(): void
     {
         $this->seed(RoleSeeder::class);
@@ -291,6 +340,53 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->assertDatabaseMissing('goods_receipts', [
             'receipt_number' => 'ALB-LOC-OTHER',
+        ]);
+    }
+
+    public function test_goods_receipt_line_stores_compatible_location(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['code' => 'EDELVIVES', 'name' => 'EDELVIVES']);
+        $supplier = Supplier::factory()->create(['client_id' => $client->id]);
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $location = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '12',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-LOC-SAVE',
+                'received_at' => '2026-07-21',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-LOC-SAVE',
+                        'description' => 'Ubicación válida guardada',
+                        'lot' => 'LOT-LOC-SAVE',
+                        'quantity_units' => 100,
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 1,
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-LOC-SAVE')->firstOrFail();
+
+        $this->assertDatabaseHas('goods_receipt_lines', [
+            'goods_receipt_id' => $receipt->id,
+            'location_id' => $location->id,
         ]);
     }
 

@@ -5868,3 +5868,39 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se tocaron datos reales ni produccion.
 - No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/` ni `node_modules/`.
 - No se uso `migrate:fresh`, `db:wipe`, force push ni `git add .`.
+
+## 2026-07-28 - FIX UTF8 CLIENTES Y COMPATIBILIDAD UBICACIONES (PC casa)
+
+**Equipo:** PC casa.
+**Ruta:** `D:\dev\WMS_LARAVEL`.
+**Rama:** `main`.
+**Punto de partida:** `583afe7 feat: support partial order fulfillment across shipments`, HEAD alineado con `origin/main`.
+
+### Alcance
+- Causa raiz UTF-8: literales ya corruptos en vistas Blade de configuracion de clientes, no ausencia de `<meta charset>` ni problema de collation. El layout principal ya declara UTF-8 y `config/database.php` mantiene `utf8mb4` / `utf8mb4_unicode_ci`.
+- Se corrigieron textos visibles de alta/edicion de clientes: preparacion, lineas, minima, pales, albaran, emails y avisos relacionados.
+- Causa raiz ubicaciones: la compatibilidad cliente/almacen/ubicacion estaba duplicada y no era identica entre frontend y backend; ademas articulos validaba `default_location_id` solo con `exists:locations,id`.
+- Se centralizo la compatibilidad en `LocationIntegrityService`: ubicacion activa, canonica, almacen activo y cliente compatible.
+- Entradas, edicion de ubicacion de stock, reubicacion, regularizacion y articulo por defecto usan la misma validacion.
+- Los selects de entradas y articulos reciben `data-compatible-clients` coherente y el JS limpia la ubicacion seleccionada al cambiar cliente si deja de ser valida.
+- Se reforzo EDELVIVES / NAVE 38 con orden natural y metadatos de cliente.
+
+### Tests y validaciones
+- `php artisan test --filter=ClientManagementTest`: **16 passed** (78 assertions).
+- `php artisan test --filter=ItemManagementTest`: **18 passed** (67 assertions).
+- `php artisan test --filter=GoodsReceiptManagementTest`: **111 passed** (591 assertions).
+- `php artisan test --filter=WarehouseLocationManagementTest`: **24 passed** (114 assertions).
+- `php artisan test --filter='LocationDeduplicationCommandTest|WarehouseDeduplicationCommandTest|PurgeLocationsCommandTest'`: **10 passed** (87 assertions).
+- `php artisan test --filter='StockRelocation|StockAdjustment|StockManagement|StockPallet|UpdateStock'`: **19 passed** (157 assertions).
+- `php artisan test --filter=StockOverviewTest`: **53 passed** (385 assertions).
+- `php artisan test`: **800 passed** (4346 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Seguridad
+- No se creo migracion.
+- No se ejecutaron purgas ni comandos `--apply`.
+- No se tocaron datos reales ni produccion.
+- No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/` ni `node_modules/`.
+- No se uso `migrate:fresh`, `db:wipe`, force push ni `git add .`.
+- Pendiente en este momento: revisar diff final, commit y push normal a `origin/main` si todo sigue correcto.

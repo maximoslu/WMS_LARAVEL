@@ -67,27 +67,14 @@ class StoreStockRelocationRequest extends FormRequest
                 $validator->errors()->add('stock_pallet_id', 'La partida seleccionada no tiene stock fisico activo para reubicar.');
             }
 
-            if (! $destination instanceof Location || ! (bool) $destination->active || ! (bool) $destination->warehouse?->active) {
-                $validator->errors()->add('destination_location_id', 'La ubicacion destino debe estar activa.');
-
+            if (! $destination instanceof Location) {
                 return;
             }
 
-            $destinationClientId = $destination->warehouse?->client_id;
-            if ($destinationClientId !== null && (int) $destinationClientId !== $clientId) {
-                $validator->errors()->add('destination_location_id', 'La ubicacion destino no pertenece a un almacen compatible con el cliente.');
-            }
+            if (! app(LocationIntegrityService::class)->isLocationCompatibleWithClient($destination, $clientId)) {
+                $validator->errors()->add('destination_location_id', 'La ubicación destino debe ser canónica, estar activa y pertenecer a un almacén compatible con el cliente.');
 
-            $canonicalDestination = app(LocationIntegrityService::class)
-                ->canonicalActiveLocations(Location::query()
-                    ->with('warehouse')
-                    ->where('warehouse_id', $destination->warehouse_id)
-                    ->where('active', true)
-                    ->get())
-                ->first(fn (Location $location): bool => (int) $location->id === (int) $destination->id);
-
-            if (! $canonicalDestination instanceof Location) {
-                $validator->errors()->add('destination_location_id', 'La ubicacion destino esta duplicada. Usa la ubicacion canonica activa.');
+                return;
             }
 
             if ((int) $stockPallet->location_id === (int) $destination->id) {
