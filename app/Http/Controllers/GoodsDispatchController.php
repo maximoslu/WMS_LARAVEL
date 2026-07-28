@@ -7,9 +7,11 @@ use App\Http\Requests\StoreGoodsDispatchRequest;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
+use App\Models\MerchandiseRequestLine;
 use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
+use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Support\Stock\StockVariantCatalog;
 use App\Support\WmsNavigation;
@@ -19,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class GoodsDispatchController extends Controller
@@ -26,11 +29,12 @@ class GoodsDispatchController extends Controller
     public function index(Request $request): View
     {
         $pendingRequests = MerchandiseRequest::query()
-            ->with(['client', 'requestedBy', 'dispatch'])
+            ->with(['client', 'requestedBy', 'dispatch', 'openDispatch'])
             ->whereIn('status', [
                 MerchandiseRequest::STATUS_PENDING,
                 MerchandiseRequest::STATUS_PREPARING,
                 MerchandiseRequest::STATUS_SENT,
+                MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
             ])
             ->latest('id')
             ->limit(8)
@@ -102,11 +106,12 @@ class GoodsDispatchController extends Controller
     public function pendingRequests(Request $request): View
     {
         $requests = MerchandiseRequest::query()
-            ->with(['client', 'requestedBy', 'dispatch'])
+            ->with(['client', 'requestedBy', 'dispatch', 'openDispatch'])
             ->whereIn('status', [
                 MerchandiseRequest::STATUS_PENDING,
                 MerchandiseRequest::STATUS_PREPARING,
                 MerchandiseRequest::STATUS_SENT,
+                MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
             ])
             ->latest('id')
             ->paginate(20)
@@ -118,7 +123,11 @@ class GoodsDispatchController extends Controller
         ]);
     }
 
-    public function showRequest(Request $request, MerchandiseRequest $merchandiseRequest): View
+    public function showRequest(
+        Request $request,
+        MerchandiseRequest $merchandiseRequest,
+        MerchandiseRequestFulfillmentService $fulfillmentService,
+    ): View
     {
         $merchandiseRequest->load([
             'client',
@@ -129,10 +138,20 @@ class GoodsDispatchController extends Controller
             'dispatch.lines.stockPallet.location.warehouse',
             'dispatch.lines.allocations.stockPallet.location.warehouse',
             'dispatch.lines.sourceRequestLine',
+            'openDispatch.lines.item',
+            'openDispatch.lines.stockPallet.location.warehouse',
+            'openDispatch.lines.allocations.stockPallet.location.warehouse',
+            'openDispatch.lines.sourceRequestLine',
+            'goodsDispatches.lines.allocations',
+            'goodsDispatches.lines.sourceRequestLine',
         ]);
+
+        $activeDispatch = $merchandiseRequest->openDispatch ?? $merchandiseRequest->dispatch;
 
         return view('dispatches.request', [
             'merchandiseRequest' => $merchandiseRequest,
+            'activeDispatch' => $activeDispatch,
+            'fulfillmentSummary' => $fulfillmentService->summary($merchandiseRequest, $activeDispatch),
             'stockOptionsByItem' => $this->stockOptionsByItem($merchandiseRequest),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
@@ -141,34 +160,77 @@ class GoodsDispatchController extends Controller
     public function generateFromRequest(
         Request $request,
         MerchandiseRequest $merchandiseRequest,
+        MerchandiseRequestFulfillmentService $fulfillmentService,
         MerchandiseRequestNotificationService $notificationService,
     ): RedirectResponse {
-        $merchandiseRequest->load(['lines.item', 'lines.stockPallet', 'dispatch']);
+        $merchandiseRequest->load(['lines.item', 'lines.stockPallet', 'dispatch', 'openDispatch', 'goodsDispatches.lines.allocations']);
 
-        if ($merchandiseRequest->dispatch !== null) {
+        if ($merchandiseRequest->openDispatch !== null) {
             if ($request->boolean('return_to_request')) {
                 return redirect()
                     ->route('dispatches.requests.show', $merchandiseRequest)
-                    ->with('status', 'El pedido ya tiene una salida asociada.');
+                    ->with('status', 'El pedido ya tiene una carga abierta.');
             }
 
             return redirect()
-                ->route('dispatches.show', $merchandiseRequest->dispatch)
-                ->with('status', 'La solicitud ya tiene una salida asociada.');
+                ->route('dispatches.show', $merchandiseRequest->openDispatch)
+                ->with('status', 'La solicitud ya tiene una carga abierta.');
         }
 
-        $dispatch = DB::transaction(function () use ($request, $merchandiseRequest): GoodsDispatch {
+        if (in_array($merchandiseRequest->status, [MerchandiseRequest::STATUS_COMPLETED, MerchandiseRequest::STATUS_CANCELLED], true)) {
+            return redirect()
+                ->route('dispatches.requests.show', $merchandiseRequest)
+                ->withErrors(['dispatch' => 'No se puede generar otra carga para un pedido completado o cancelado.']);
+        }
+
+        $dispatch = DB::transaction(function () use ($request, $merchandiseRequest, $fulfillmentService): GoodsDispatch {
+            $lockedRequest = MerchandiseRequest::query()
+                ->whereKey($merchandiseRequest->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $lockedRequest->load(['lines.item', 'lines.stockPallet', 'openDispatch', 'goodsDispatches.lines.allocations']);
+
+            if ($lockedRequest->openDispatch !== null) {
+                return $lockedRequest->openDispatch;
+            }
+
+            $pendingLines = $fulfillmentService->pendingLinesForNextDispatch($lockedRequest);
+
+            if ($pendingLines->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'dispatch' => 'El pedido no tiene cantidades pendientes para preparar otra carga.',
+                ]);
+            }
+
+            $nextSequence = ((int) $lockedRequest->goodsDispatches()->max('shipment_sequence')) + 1;
             $dispatch = GoodsDispatch::query()->create([
-                'client_id' => $merchandiseRequest->client_id,
-                'merchandise_request_id' => $merchandiseRequest->id,
+                'client_id' => $lockedRequest->client_id,
+                'merchandise_request_id' => $lockedRequest->id,
+                'shipment_sequence' => $nextSequence,
                 'type' => GoodsDispatch::TYPE_REQUEST,
                 'status' => GoodsDispatch::STATUS_PREPARING,
                 'created_by' => $request->user()->id,
-                'notes' => $merchandiseRequest->notes,
+                'notes' => $lockedRequest->notes,
                 'camion_propio' => true,
             ]);
 
-            foreach ($merchandiseRequest->lines as $line) {
+            foreach ($pendingLines as $pendingLine) {
+                /** @var MerchandiseRequestLine $line */
+                $line = $pendingLine['request_line'];
+                $pendingUnits = (int) $pendingLine['pending_units'];
+                $requestedPallets = 0;
+                $requestedPeaks = 0;
+
+                if ($line->requiredUnits() === null && $line->isPalletLine()) {
+                    $unitsPerPallet = max(1, (int) $line->units_per_pallet);
+                    $requestedPallets = min($line->requestedPalletsCount(), (int) ceil($pendingUnits / $unitsPerPallet));
+                }
+
+                if ($line->requiredUnits() === null && $line->isPeakLine()) {
+                    $unitsPerPeak = max(1, (int) $line->units_per_peak);
+                    $requestedPeaks = min($line->requestedPeaksCount(), (int) ceil($pendingUnits / $unitsPerPeak));
+                }
+
                 $dispatch->lines()->create([
                     'item_id' => $line->item_id,
                     'stock_pallet_id' => $line->stock_pallet_id,
@@ -180,19 +242,19 @@ class GoodsDispatchController extends Controller
                     'destination_location' => $line->destination_location,
                     'units_per_pallet' => $line->units_per_pallet,
                     'units_per_peak' => $line->units_per_peak,
-                    'pallets' => $line->requestedPalletsCount(),
-                    'requested_units' => $line->requested_units,
-                    'requested_pallets' => $line->requestedPalletsCount(),
-                    'requested_peaks' => $line->requestedPeaksCount(),
+                    'pallets' => $requestedPallets,
+                    'requested_units' => $pendingUnits,
+                    'requested_pallets' => $requestedPallets,
+                    'requested_peaks' => $requestedPeaks,
                     'source_request_line_id' => $line->id,
                     'notes' => $line->notes,
                 ]);
             }
 
-            $merchandiseRequest->update([
+            $lockedRequest->update([
                 'status' => MerchandiseRequest::STATUS_PREPARING,
                 'prepared_by' => $request->user()->id,
-                'prepared_at' => now(),
+                'prepared_at' => $lockedRequest->prepared_at ?? now(),
             ]);
 
             return $dispatch;
@@ -246,7 +308,13 @@ class GoodsDispatchController extends Controller
         $workflowService->confirmLoading($goodsDispatch, $request->validatedLines(), $request->user());
 
         if ($request->boolean('finalize_dispatch')) {
-            $workflowService->changeStatus($goodsDispatch->fresh(), GoodsDispatch::STATUS_SENT, $request->user());
+            $workflowService->changeStatus(
+                $goodsDispatch->fresh(),
+                GoodsDispatch::STATUS_SENT,
+                $request->user(),
+                $request->input('completion_mode'),
+                $request->input('remainder_close_reason'),
+            );
 
             $redirectRoute = $goodsDispatch->merchandise_request_id !== null
                 ? route('dispatches.requests.show', $goodsDispatch->merchandiseRequest)

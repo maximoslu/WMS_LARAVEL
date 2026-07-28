@@ -74,6 +74,9 @@
                 <td>
                     <div class="meta-label">Número</div>
                     <strong>{{ $dispatch->dispatchNumber() }}</strong>
+                    @if ($dispatch->merchandise_request_id !== null)
+                        <div>{{ $dispatch->shipmentLabel() }}</div>
+                    @endif
                 </td>
                 <td>
                     <div class="meta-label">Fecha de salida</div>

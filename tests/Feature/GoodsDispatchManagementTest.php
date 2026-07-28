@@ -2855,7 +2855,7 @@ class GoodsDispatchManagementTest extends TestCase
                 ],
             ])
             ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest))
-            ->assertSessionHasErrors('dispatch');
+            ->assertSessionHasErrors('completion_mode');
 
         $this->assertSame($client->id, $dispatch->fresh()->client_id);
         $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->fresh()->status);
@@ -2940,6 +2940,209 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(18000, $stock->fresh()->quantity_units, 'Rendering documents must not change stock.');
     }
 
+    public function test_request_can_be_served_across_multiple_independent_dispatches(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        [$client, $almacen, $merchandiseRequest, $item, $stock] = $this->createPendingPalletRequest(requestedPallets: 3);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        $firstDispatch = GoodsDispatch::query()->where('merchandise_request_id', $merchandiseRequest->id)->firstOrFail();
+        $this->assertSame(1, (int) $firstDispatch->shipment_sequence);
+        $this->assertSame(3, $firstDispatch->lines()->firstOrFail()->requestedPallets());
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest->fresh()))
+            ->assertRedirect(route('dispatches.show', $firstDispatch));
+        $this->assertSame(1, GoodsDispatch::query()->where('merchandise_request_id', $merchandiseRequest->id)->count());
+
+        $firstLine = $firstDispatch->lines()->firstOrFail();
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $firstDispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'completion_mode' => 'leave_pending',
+                'lines' => [
+                    'line_'.$firstLine->id => [
+                        'line_id' => $firstLine->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 1,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $firstDispatch->fresh()->status);
+        $this->assertSame(MerchandiseRequest::STATUS_PARTIALLY_FULFILLED, $merchandiseRequest->fresh()->status);
+        $this->assertSame(3, $merchandiseRequest->fresh('lines')->requestedPalletsCount());
+        $this->assertSame(400, (int) $stock->fresh()->quantity_units);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest->fresh()))
+            ->assertRedirect();
+
+        $secondDispatch = GoodsDispatch::query()
+            ->where('merchandise_request_id', $merchandiseRequest->id)
+            ->where('id', '!=', $firstDispatch->id)
+            ->firstOrFail();
+        $this->assertSame(2, (int) $secondDispatch->shipment_sequence);
+        $this->assertSame(2, $secondDispatch->lines()->firstOrFail()->requestedPallets());
+
+        $secondLine = $secondDispatch->lines()->firstOrFail();
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $secondDispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'lines' => [
+                    'line_'.$secondLine->id => [
+                        'line_id' => $secondLine->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 2,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 2,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $secondDispatch->fresh()->status);
+        $this->assertSame(MerchandiseRequest::STATUS_SENT, $merchandiseRequest->fresh()->status);
+        $this->assertSame(200, (int) $stock->fresh()->quantity_units);
+        $this->assertSame(2, $merchandiseRequest->goodsDispatches()->count());
+
+        foreach ([$firstDispatch, $secondDispatch] as $dispatch) {
+            $this->actingAs($almacen)
+                ->get(route('dispatches.delivery-note', $dispatch->fresh()))
+                ->assertOk();
+        }
+    }
+
+    public function test_partial_remainder_can_be_explicitly_closed_without_changing_original_request(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        [, $almacen, $merchandiseRequest, , $stock] = $this->createPendingPalletRequest(requestedPallets: 3);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        $dispatch = GoodsDispatch::query()->where('merchandise_request_id', $merchandiseRequest->id)->firstOrFail();
+        $line = $dispatch->lines()->firstOrFail();
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'completion_mode' => 'close_remainder',
+                'remainder_close_reason' => 'Cliente cancela el resto de la salida.',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 1,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $freshRequest = $merchandiseRequest->fresh('lines');
+        $this->assertSame(MerchandiseRequest::STATUS_COMPLETED, $freshRequest->status);
+        $this->assertTrue($freshRequest->completed_with_shortfall);
+        $this->assertSame(3, $freshRequest->requestedPalletsCount());
+        $this->assertSame(300, $freshRequest->remainder_close_snapshot['target_units']);
+        $this->assertSame(100, $freshRequest->remainder_close_snapshot['served_units']);
+        $this->assertSame(200, $freshRequest->remainder_close_snapshot['unserved_units']);
+    }
+
+    public function test_required_units_can_be_covered_cumulatively_across_dispatches(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        [, $almacen, $merchandiseRequest, $firstDispatch, $firstLine, $stock] = $this->createDispatchWithRequiredUnits();
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $firstDispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'completion_mode' => 'leave_pending',
+                'lines' => [
+                    'line_'.$firstLine->id => [
+                        'line_id' => $firstLine->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 1,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $this->assertSame(MerchandiseRequest::STATUS_PARTIALLY_FULFILLED, $merchandiseRequest->fresh()->status);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest->fresh()))
+            ->assertRedirect();
+
+        $secondDispatch = GoodsDispatch::query()
+            ->where('merchandise_request_id', $merchandiseRequest->id)
+            ->where('id', '!=', $firstDispatch->id)
+            ->firstOrFail();
+        $secondLine = $secondDispatch->lines()->firstOrFail();
+        $this->assertSame(4000, (int) $secondLine->requested_units);
+        $this->assertSame(0, $secondLine->requestedPallets());
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $secondDispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'lines' => [
+                    'line_'.$secondLine->id => [
+                        'line_id' => $secondLine->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 0,
+                        'loaded_partial_units' => 4000,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 0,
+                            'loaded_partial_units' => 4000,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $this->assertSame(MerchandiseRequest::STATUS_SENT, $merchandiseRequest->fresh()->status);
+        $this->assertSame(8000, (int) $stock->fresh()->quantity_units);
+        $this->assertSame(2, $merchandiseRequest->goodsDispatches()->count());
+    }
+
     private function seedBaseData(): void
     {
         $this->seed([
@@ -3006,6 +3209,43 @@ class GoodsDispatchManagementTest extends TestCase
         ]);
 
         return [$client, $almacen, $merchandiseRequest, $dispatch, $line, $stock];
+    }
+
+    private function createPendingPalletRequest(int $requestedPallets): array
+    {
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'MULTI-DISPATCH-001',
+            'units_per_pallet' => 100,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 100,
+            'quantity_units' => 500,
+            'full_pallets' => 5,
+            'warehouse_pallets' => 5,
+            'peak_1' => 0,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'line_type' => 'pallet',
+            'lot' => $stock->lot,
+            'units_per_pallet' => 100,
+            'requested_pallets' => $requestedPallets,
+            'requested_units' => $requestedPallets * 100,
+        ]);
+
+        return [$client, $almacen, $merchandiseRequest, $item, $stock];
     }
 
     private function makeUserWithRole(string $roleSlug, ?Client $client = null): User

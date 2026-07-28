@@ -16,7 +16,7 @@ return new class extends Migration
             $table->id();
             $table->string('dispatch_number', 30)->nullable()->unique();
             $table->foreignId('client_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('merchandise_request_id')->nullable()->constrained()->nullOnDelete()->unique();
+            $table->foreignId('merchandise_request_id')->nullable()->constrained()->nullOnDelete();
             $table->string('type', 20)->default('manual');
             $table->string('status', 30)->default('draft');
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();

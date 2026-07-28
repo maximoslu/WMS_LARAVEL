@@ -11,12 +11,15 @@
             ['label' => 'Pedidos pendientes', 'href' => route('dispatches.requests.index')],
             ['label' => $merchandiseRequest->referenceCode()],
         ];
-        $dispatch = $merchandiseRequest->dispatch;
+        $dispatch = $activeDispatch ?? $merchandiseRequest->openDispatch ?? $merchandiseRequest->dispatch;
+        $fulfillmentSummary = $fulfillmentSummary ?? ['target_units' => 0, 'served_units' => 0, 'current_units' => 0, 'pending_units_after_current' => 0, 'lines' => collect()];
+        $fulfillmentLines = collect($fulfillmentSummary['lines'] ?? [])->keyBy(fn ($line) => (int) $line['request_line']->id);
         $requestedPallets = $merchandiseRequest->requestedPalletsCount();
         $requestedPeaks = $merchandiseRequest->requestedPeaksCount();
-        $canGenerateDispatch = $dispatch === null && in_array($merchandiseRequest->status, [
+        $canGenerateDispatch = $merchandiseRequest->openDispatch === null && ($fulfillmentSummary['has_pending_after_current'] ?? true) && in_array($merchandiseRequest->status, [
             \App\Models\MerchandiseRequest::STATUS_PENDING,
             \App\Models\MerchandiseRequest::STATUS_PREPARING,
+            \App\Models\MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
         ], true);
         $canEditLoading = $dispatch !== null && in_array($dispatch->status, [
             \App\Models\GoodsDispatch::STATUS_DRAFT,
@@ -25,14 +28,17 @@
         $statusSteps = [
             \App\Models\MerchandiseRequest::STATUS_PENDING => 'Registrado',
             \App\Models\MerchandiseRequest::STATUS_PREPARING => 'Preparación',
+            \App\Models\MerchandiseRequest::STATUS_PARTIALLY_FULFILLED => 'Parcial',
             \App\Models\MerchandiseRequest::STATUS_SENT => 'Enviado',
             \App\Models\MerchandiseRequest::STATUS_COMPLETED => 'Completado',
         ];
         $statusOrder = array_keys($statusSteps);
         $currentStatusIndex = array_search($merchandiseRequest->status, $statusOrder, true);
         $stockOptionsByItem = $stockOptionsByItem ?? [];
-        $requestedUnitsTotal = (int) $merchandiseRequest->lines->sum(fn ($requestLine) => (int) ($requestLine->requested_units ?? 0));
+        $requestedUnitsTotal = (int) ($fulfillmentSummary['target_units'] ?? $merchandiseRequest->lines->sum(fn ($requestLine) => (int) ($requestLine->requested_units ?? 0)));
         $loadedUnitsTotal = $dispatch?->loadedUnitsCount() ?? 0;
+        $servedUnitsTotal = (int) ($fulfillmentSummary['served_units'] ?? 0);
+        $pendingUnitsAfterCurrent = (int) ($fulfillmentSummary['pending_units_after_current'] ?? 0);
         $loadedPalletsTotal = $dispatch?->loadedPalletsCount() ?? 0;
         $loadedPeaksTotal = $dispatch?->loadedPeaksCount() ?? 0;
         $dispatchNumber = $dispatch?->dispatchNumber() ?? 'Sin salida';
@@ -149,7 +155,12 @@
         <div>
             <span>Carga real</span>
             <strong>{{ number_format($loadedPalletsTotal, 0, ',', '.') }} pallets · {{ number_format($loadedPeaksTotal, 0, ',', '.') }} picos</strong>
-            <small>{{ number_format($loadedUnitsTotal, 0, ',', '.') }} de {{ number_format($requestedUnitsTotal, 0, ',', '.') }} unidades</small>
+            <small>{{ number_format($servedUnitsTotal + $loadedUnitsTotal, 0, ',', '.') }} de {{ number_format($requestedUnitsTotal, 0, ',', '.') }} unidades</small>
+        </div>
+        <div>
+            <span>Pendiente</span>
+            <strong>{{ number_format($pendingUnitsAfterCurrent, 0, ',', '.') }} uds</strong>
+            <small>Balance acumulado del pedido original</small>
         </div>
         <div>
             <span>Acción crítica</span>
@@ -182,8 +193,11 @@
                             && (int) ($candidate->stock_peak_index ?? 0) === (int) ($line->stock_peak_index ?? 0)
                     );
                     $lineKey = $dispatchLine ? 'line_'.$dispatchLine->id : null;
-                    $requestedUnits = $dispatchLine?->requestedUnitsTotal() ?? (int) ($line->requested_units ?? 0);
+                    $lineFulfillment = $fulfillmentLines->get((int) $line->id);
+                    $requestedUnits = (int) ($lineFulfillment['target_units'] ?? ($dispatchLine?->requestedUnitsTotal() ?? $line->requestedUnitsTotal()));
+                    $servedUnits = (int) ($lineFulfillment['served_units'] ?? 0);
                     $loadedUnits = $dispatchLine?->loadedUnitsTotal() ?? 0;
+                    $pendingUnits = (int) ($lineFulfillment['pending_units_after_current'] ?? max(0, $requestedUnits - $loadedUnits));
                     $requiredUnits = $line->requiredUnits();
                     $lineStockOptions = collect($stockOptionsByItem[$line->item_id] ?? []);
                     $lineAllocations = $dispatchLine?->allocations ?? collect();
@@ -231,11 +245,11 @@
                         $stateLabel = $dispatchLine->loadingStatusLabel();
                     }
                     $coverageTargetUnits = $requiredUnits ?? $requestedUnits;
-                    $unitDifference = $loadedUnits - $coverageTargetUnits;
+                    $unitDifference = ($servedUnits + $loadedUnits) - $coverageTargetUnits;
                     $differenceLabel = $unitDifference > 0 ? 'Exceso operativo' : 'Pendiente';
-                    if ($requiredUnits !== null && $loadedUnits >= $requiredUnits) {
-                        $stateClass = $loadedUnits > $requiredUnits ? 'superior' : 'ok';
-                        $stateLabel = $loadedUnits > $requiredUnits ? 'Exceso operativo' : 'Cubierta';
+                    if ($requiredUnits !== null && ($servedUnits + $loadedUnits) >= $coverageTargetUnits) {
+                        $stateClass = ($servedUnits + $loadedUnits) > $coverageTargetUnits ? 'superior' : 'ok';
+                        $stateLabel = ($servedUnits + $loadedUnits) > $coverageTargetUnits ? 'Exceso operativo' : 'Cubierta';
                     }
                 @endphp
 
@@ -281,7 +295,11 @@
                                 @endif
                                 <div>
                                     <dt>Cargado</dt>
-                                    <dd><span data-loaded-units>{{ number_format($loadedUnits, 0, ',', '.') }}</span> uds</dd>
+                                    <dd><span data-loaded-units>{{ number_format($servedUnits + $loadedUnits, 0, ',', '.') }}</span> uds</dd>
+                                </div>
+                                <div>
+                                    <dt>Pendiente acumulado</dt>
+                                    <dd>{{ number_format($pendingUnits, 0, ',', '.') }} uds</dd>
                                 </div>
                                 <div>
                                     <dt data-difference-label>{{ $differenceLabel }}</dt>
@@ -484,6 +502,20 @@
                         </div>
 
                         <div class="warehouse-request-save-actions">
+                            @if ($pendingUnitsAfterCurrent > 0)
+                                <label class="auth-field">
+                                    <span>Resto del pedido</span>
+                                    <select name="completion_mode" class="auth-input">
+                                        <option value="">Selecciona una opcion</option>
+                                        <option value="leave_pending" @selected(old('completion_mode') === 'leave_pending')>Cerrar esta carga y dejar el resto pendiente</option>
+                                        <option value="close_remainder" @selected(old('completion_mode') === 'close_remainder')>Finalizar pedido con lo cargado</option>
+                                    </select>
+                                </label>
+                                <label class="auth-field">
+                                    <span>Motivo si se finaliza con pendiente</span>
+                                    <textarea name="remainder_close_reason" class="auth-input" rows="2">{{ old('remainder_close_reason') }}</textarea>
+                                </label>
+                            @endif
                             <button type="submit" name="finalize_dispatch" value="0" class="button-secondary compact-button btn-compact">Guardar preparación</button>
                             <button
                                 type="submit"

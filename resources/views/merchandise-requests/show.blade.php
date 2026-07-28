@@ -10,7 +10,7 @@
             ['label' => 'PEDIDOS', 'href' => route('merchandise-requests.index')],
             ['label' => $merchandiseRequest->referenceCode()],
         ];
-        $dispatch = $merchandiseRequest->dispatch;
+        $dispatch = $merchandiseRequest->openDispatch ?? $merchandiseRequest->dispatch;
         $requestedPallets = $merchandiseRequest->requestedPalletsCount();
         $requestedPeaks = $merchandiseRequest->requestedPeaksCount();
         $requestedUnits = (int) $merchandiseRequest->lines->sum('requested_units');
@@ -28,9 +28,10 @@
                 break;
             }
         }
-        $canStartLoading = ! $isClient && $dispatch === null && in_array($merchandiseRequest->status, [
+        $canStartLoading = ! $isClient && $merchandiseRequest->openDispatch === null && in_array($merchandiseRequest->status, [
             \App\Models\MerchandiseRequest::STATUS_PENDING,
             \App\Models\MerchandiseRequest::STATUS_PREPARING,
+            \App\Models\MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
         ], true);
         $canContinueLoading = ! $isClient && $dispatch !== null && in_array($dispatch->status, [
             \App\Models\GoodsDispatch::STATUS_DRAFT,
@@ -134,7 +135,13 @@
 
             @unless ($isClient)
                 <div class="wms-detail-actions order-primary-action">
-                    @if ($dispatch?->status === \App\Models\GoodsDispatch::STATUS_SENT)
+                    @if ($canStartLoading)
+                        <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
+                            @csrf
+                            <input type="hidden" name="return_to_request" value="1">
+                            <button type="submit" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</button>
+                        </form>
+                    @elseif ($dispatch?->status === \App\Models\GoodsDispatch::STATUS_SENT)
                         <form method="POST" action="{{ route('merchandise-requests.update-status', $merchandiseRequest) }}">
                             @csrf
                             @method('PATCH')
@@ -142,12 +149,6 @@
                             <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Marcar este pedido como completado?')">
                                 Marcar como completado
                             </button>
-                        </form>
-                    @elseif ($canStartLoading)
-                        <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
-                            @csrf
-                            <input type="hidden" name="return_to_request" value="1">
-                            <button type="submit" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</button>
                         </form>
                     @elseif ($dispatch)
                         <a href="{{ route('dispatches.requests.show', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</a>
@@ -186,7 +187,13 @@
 
                 @unless ($isClient)
                     <div class="order-primary-action">
-                        @if ($dispatch?->status === \App\Models\GoodsDispatch::STATUS_SENT)
+                        @if ($canStartLoading)
+                            <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
+                                @csrf
+                                <input type="hidden" name="return_to_request" value="1">
+                                <button type="submit" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</button>
+                            </form>
+                        @elseif ($dispatch?->status === \App\Models\GoodsDispatch::STATUS_SENT)
                             <form method="POST" action="{{ route('merchandise-requests.update-status', $merchandiseRequest) }}">
                                 @csrf
                                 @method('PATCH')
@@ -194,12 +201,6 @@
                                 <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Marcar este pedido como completado?')">
                                     Marcar como completado
                                 </button>
-                            </form>
-                        @elseif ($canStartLoading)
-                            <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
-                                @csrf
-                                <input type="hidden" name="return_to_request" value="1">
-                                <button type="submit" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</button>
                             </form>
                         @elseif ($dispatch)
                             <a href="{{ route('dispatches.requests.show', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">{{ $primaryLoadingLabel }}</a>

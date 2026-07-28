@@ -7,6 +7,7 @@ use App\Models\GoodsDispatchLine;
 use App\Models\MerchandiseRequest;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
+use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -15,6 +16,7 @@ class GoodsDispatchWorkflowService
 {
     public function __construct(
         private readonly MerchandiseRequestNotificationService $notificationService,
+        private readonly MerchandiseRequestFulfillmentService $fulfillmentService,
         private readonly StockDispatchAllocationService $stockAllocationService,
         private readonly AuditLogService $audit,
     ) {}
@@ -207,15 +209,29 @@ class GoodsDispatchWorkflowService
         $line->unsetRelation('allocations');
     }
 
-    public function changeStatus(GoodsDispatch $dispatch, string $newStatus, User $user): ?string
+    public function changeStatus(
+        GoodsDispatch $dispatch,
+        string $newStatus,
+        User $user,
+        ?string $completionMode = null,
+        ?string $remainderCloseReason = null,
+    ): ?string
     {
         $correlationId = $this->audit->correlationId();
-        $result = DB::transaction(function () use ($dispatch, $newStatus, $user, $correlationId): array {
+        $result = DB::transaction(function () use ($dispatch, $newStatus, $user, $completionMode, $remainderCloseReason, $correlationId): array {
             $lockedDispatch = GoodsDispatch::query()
                 ->whereKey($dispatch->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $lockedDispatch->load(['client', 'merchandiseRequest', 'lines.item', 'lines.sourceRequestLine', 'lines.allocations']);
+            $lockedDispatch->load([
+                'client',
+                'merchandiseRequest.lines.item',
+                'merchandiseRequest.goodsDispatches.lines.allocations',
+                'merchandiseRequest.goodsDispatches.lines.sourceRequestLine',
+                'lines.item',
+                'lines.sourceRequestLine',
+                'lines.allocations',
+            ]);
 
             if ($lockedDispatch->status === $newStatus) {
                 return ['changed' => false, 'previous_request_status' => null];
@@ -270,53 +286,84 @@ class GoodsDispatchWorkflowService
                 return ['changed' => true, 'previous_request_status' => null];
             }
 
-            $requestPayload = [
-                'status' => $newStatus,
-            ];
+            $requestPayload = [];
 
             if ($newStatus === MerchandiseRequest::STATUS_PREPARING) {
+                $requestPayload['status'] = MerchandiseRequest::STATUS_PREPARING;
                 $requestPayload['prepared_by'] = $user->id;
                 $requestPayload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
             }
 
-            if (in_array($newStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)
-                && $merchandiseRequest->shipped_at === null) {
-                $requestPayload['shipped_by'] = $user->id;
-                $requestPayload['shipped_at'] = now();
-            }
+            if (in_array($newStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)) {
+                $fulfillment = $this->fulfillmentService->summary($merchandiseRequest, $lockedDispatch);
 
-            if ($newStatus === MerchandiseRequest::STATUS_COMPLETED && $merchandiseRequest->completed_at === null) {
-                $requestPayload['completed_at'] = now();
+                if ($fulfillment['has_pending_after_current']) {
+                    if ($completionMode === 'leave_pending') {
+                        $requestPayload['status'] = MerchandiseRequest::STATUS_PARTIALLY_FULFILLED;
+                    } elseif ($completionMode === 'close_remainder') {
+                        if (! filled($remainderCloseReason)) {
+                            throw ValidationException::withMessages([
+                                'remainder_close_reason' => 'Indica el motivo para finalizar el pedido dejando unidades pendientes.',
+                            ]);
+                        }
+
+                        $requestPayload['status'] = MerchandiseRequest::STATUS_COMPLETED;
+                        $requestPayload['completed_with_shortfall'] = true;
+                        $requestPayload['completed_at'] = $merchandiseRequest->completed_at ?? now();
+                        $requestPayload['remainder_closed_at'] = now();
+                        $requestPayload['remainder_closed_by'] = $user->id;
+                        $requestPayload['remainder_close_reason'] = trim((string) $remainderCloseReason);
+                        $requestPayload['remainder_close_snapshot'] = $this->fulfillmentService->closureSnapshot($fulfillment);
+                    } else {
+                        throw ValidationException::withMessages([
+                            'completion_mode' => 'La carga no cubre todo el pedido. Elige dejar el resto pendiente o finalizarlo con motivo.',
+                        ]);
+                    }
+                } else {
+                    $requestPayload['status'] = $newStatus;
+
+                    if ($newStatus === MerchandiseRequest::STATUS_COMPLETED && $merchandiseRequest->completed_at === null) {
+                        $requestPayload['completed_at'] = now();
+                    }
+                }
+
+                if ($merchandiseRequest->shipped_at === null) {
+                    $requestPayload['shipped_by'] = $user->id;
+                    $requestPayload['shipped_at'] = now();
+                }
             }
 
             if ($newStatus === MerchandiseRequest::STATUS_CANCELLED) {
+                $requestPayload['status'] = MerchandiseRequest::STATUS_CANCELLED;
                 $requestPayload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
             }
 
-            $merchandiseRequest->update($requestPayload);
+            if ($requestPayload !== []) {
+                $merchandiseRequest->update($requestPayload);
+            }
 
             $this->audit->record(
                 event: 'merchandise_request_status_changed',
                 module: 'merchandise_requests',
-                description: "Estado de pedido cambiado de {$previousRequestStatus} a {$newStatus} desde su salida.",
+                description: "Estado de pedido cambiado de {$previousRequestStatus} a ".($requestPayload['status'] ?? $merchandiseRequest->status)." desde su salida.",
                 auditable: $merchandiseRequest,
                 subject: $lockedDispatch,
                 user: $user,
                 clientId: $merchandiseRequest->client_id,
                 oldValues: ['status' => $previousRequestStatus],
-                newValues: ['status' => $newStatus],
+                newValues: ['status' => $requestPayload['status'] ?? $merchandiseRequest->status],
                 correlationId: $correlationId,
-                severity: in_array($newStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true) ? 'important' : 'info',
+                severity: in_array($requestPayload['status'] ?? null, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true) ? 'important' : 'info',
             );
 
-            return ['changed' => true, 'previous_request_status' => $previousRequestStatus];
+            return ['changed' => true, 'previous_request_status' => $previousRequestStatus, 'request_status' => $requestPayload['status'] ?? $merchandiseRequest->status];
         });
 
         if ($result['changed'] && $result['previous_request_status'] !== null) {
             $this->notificationService->notifyDispatchStatusChanged(
                 $dispatch->fresh(['merchandiseRequest']),
                 $result['previous_request_status'],
-                $newStatus,
+                $result['request_status'] ?? $newStatus,
             );
         }
 
@@ -430,7 +477,6 @@ class GoodsDispatchWorkflowService
             ]);
         }
 
-        $this->ensureRequiredUnitsCovered($dispatch, 'dispatch');
     }
 
     public function ensureRequiredUnitsCovered(GoodsDispatch $dispatch, string $field = 'dispatch'): void

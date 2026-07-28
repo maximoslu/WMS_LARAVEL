@@ -67,6 +67,84 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-28 - FEATURE PEDIDOS - Salidas parciales por multiples camiones
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `fc955c7a fix: harden no-lot canonicalization edge cases`, alineado con `origin/main`.
+
+### Objetivo
+- Permitir que un mismo pedido de mercancia se sirva en varias salidas/camiones independientes.
+- Mantener intacta la solicitud original del pedido: no se borran ni falsean cantidades solicitadas.
+- Cada camion queda como un `GoodsDispatch` independiente, con su propia carga real, descuento de stock y albaran.
+- El resto del pedido puede quedar pendiente o cerrarse expresamente con motivo y snapshot de cantidades servidas/no servidas.
+
+### Cambios aplicados
+- Se elimina la restriccion de una unica salida por pedido para nuevas instalaciones y se anade migracion defensiva para instalaciones existentes:
+  - `2026_07_28_000001_allow_multiple_dispatches_per_merchandise_request.php`.
+  - `goods_dispatches.shipment_sequence` identifica la carga dentro del pedido.
+  - Indice unico compuesto `merchandise_request_id + shipment_sequence`.
+- Se anade trazabilidad de cierre con pendiente:
+  - `completed_with_shortfall`.
+  - `remainder_closed_at`.
+  - `remainder_closed_by`.
+  - `remainder_close_reason`.
+  - `remainder_close_snapshot`.
+- `MerchandiseRequest` pasa a tener `goodsDispatches()` y conserva `dispatch()` como ultima salida para compatibilidad.
+- Nuevo helper `openDispatch()` para localizar la salida editable actual.
+- Nuevo estado de pedido `partially_fulfilled` / `Parcial pendiente`.
+- Nuevo servicio central `MerchandiseRequestFulfillmentService`:
+  - calcula unidades originales, servidas, cargadas en la salida actual y pendientes;
+  - usa `required_units` cuando existe;
+  - calcula el pendiente acumulado sin modificar las lineas originales.
+- `GoodsDispatchController`:
+  - bloquea una segunda salida abierta simultanea;
+  - genera la siguiente carga solo con cantidades pendientes;
+  - permite `leave_pending` para dejar resto pendiente;
+  - permite `close_remainder` solo con motivo y snapshot.
+- `GoodsDispatchWorkflowService`:
+  - aplica stock por salida, no por pedido;
+  - permite albaran de una salida parcial siempre que esa salida tenga carga real confirmada;
+  - bloquea cierres parciales sin decision explicita.
+- Vistas de pedido/salida:
+  - muestran balance acumulado y pendiente;
+  - muestran la opcion de dejar pendiente o cerrar con motivo;
+  - mantienen la pantalla de carga y los enlaces de albaran por salida.
+
+### Reglas verificadas
+- Un pedido puede generar una primera carga, enviarla parcialmente y quedar en `Parcial pendiente`.
+- Una segunda carga del mismo pedido recibe `shipment_sequence = 2`.
+- No se puede generar otra carga mientras exista una abierta.
+- Al cerrar con pendiente se conserva el pedido original y se guarda snapshot con objetivo, servido y no servido.
+- `required_units` se cubre por acumulado de salidas, no por una unica carga.
+- Los albaranes responden por cada `GoodsDispatch`.
+- Operaciones diarias contabiliza dos salidas del mismo pedido como camiones/salidas independientes.
+- No cambia ningun valor de stock salvo el descuento normal de cada salida enviada.
+- Las comunicaciones se mantienen como estaban: no se reintroducen emails en `sent` ni estados intermedios; el hito de completado conserva el albaran idempotente.
+
+### Validaciones
+- `php artisan migrate`: OK en local.
+- `php artisan test --filter=Client`: **217 passed** (931 assertions).
+- `php artisan test --filter=StockOverview`: **61 passed** (414 assertions).
+- `php artisan test --filter=StockExport`: **22 passed** (117 assertions).
+- `php artisan test --filter=MerchandiseRequestManagementTest`: **52 passed** (335 assertions).
+- `php artisan test --filter=MerchandiseRequestNotificationTest`: **11 passed** (44 assertions).
+- `php artisan test --filter=GoodsDispatchManagementTest`: **63 passed** (478 assertions).
+- `php artisan test --filter=DailyOperationsTest`: **22 passed** (143 assertions).
+- `php artisan test`: **795 passed** (4315 assertions).
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK, con aviso informativo de normalizacion CRLF/LF en `tests/Feature/DailyOperationsTest.php`.
+
+### Seguridad y despliegue
+- No se toco produccion.
+- No se uso `migrate:fresh`, `db:wipe`, force push ni `git add .`.
+- No se tocaron `.env`, secretos, `.claude/`, `tmp/`, `vendor/` ni `node_modules/`.
+- En Forge, antes de validar el flujo, ejecutar `php artisan migrate --force`.
+- Commit previsto: `feat: support partial order fulfillment across shipments`.
+
+---
+
 ## 2026-07-24 - FEATURE EDELVIVES - PDF de preparacion al cliente y necesidad a cubrir
 
 **Equipo:** PC trabajo.

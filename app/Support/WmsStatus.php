@@ -17,6 +17,7 @@ class WmsStatus
             MerchandiseRequest::STATUS_PENDING => 'Pendiente',
             MerchandiseRequest::STATUS_PREPARING => 'En preparación',
             MerchandiseRequest::STATUS_SENT => 'Enviado',
+            MerchandiseRequest::STATUS_PARTIALLY_FULFILLED => 'Parcial pendiente',
             MerchandiseRequest::STATUS_COMPLETED => 'Completado',
             MerchandiseRequest::STATUS_CANCELLED => 'Cancelado',
         ];

@@ -20,6 +20,8 @@ class MerchandiseRequest extends Model
 
     public const STATUS_SENT = 'sent';
 
+    public const STATUS_PARTIALLY_FULFILLED = 'partially_fulfilled';
+
     public const STATUS_COMPLETED = 'completed';
 
     public const STATUS_CANCELLED = 'cancelled';
@@ -38,6 +40,11 @@ class MerchandiseRequest extends Model
         'shipped_by',
         'shipped_at',
         'completed_at',
+        'completed_with_shortfall',
+        'remainder_closed_at',
+        'remainder_closed_by',
+        'remainder_close_reason',
+        'remainder_close_snapshot',
         'cancelled_at',
     ];
 
@@ -48,6 +55,9 @@ class MerchandiseRequest extends Model
             'prepared_at' => 'datetime',
             'shipped_at' => 'datetime',
             'completed_at' => 'datetime',
+            'completed_with_shortfall' => 'boolean',
+            'remainder_closed_at' => 'datetime',
+            'remainder_close_snapshot' => 'array',
             'cancelled_at' => 'datetime',
             'camion_propio' => 'boolean',
         ];
@@ -62,6 +72,7 @@ class MerchandiseRequest extends Model
             self::STATUS_PENDING,
             self::STATUS_PREPARING,
             self::STATUS_SENT,
+            self::STATUS_PARTIALLY_FULFILLED,
             self::STATUS_COMPLETED,
             self::STATUS_CANCELLED,
         ];
@@ -84,7 +95,24 @@ class MerchandiseRequest extends Model
 
     public function dispatch(): HasOne
     {
-        return $this->hasOne(GoodsDispatch::class);
+        return $this->hasOne(GoodsDispatch::class)->latestOfMany();
+    }
+
+    public function goodsDispatches(): HasMany
+    {
+        return $this->hasMany(GoodsDispatch::class)->orderBy('shipment_sequence')->orderBy('id');
+    }
+
+    public function openDispatch(): HasOne
+    {
+        return $this->hasOne(GoodsDispatch::class)
+            ->whereIn('status', [GoodsDispatch::STATUS_DRAFT, GoodsDispatch::STATUS_PREPARING])
+            ->latestOfMany();
+    }
+
+    public function remainderClosedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'remainder_closed_by');
     }
 
     public function referenceCode(): string

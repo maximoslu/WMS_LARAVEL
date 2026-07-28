@@ -72,6 +72,10 @@
                 <dd>{{ $dispatch->merchandiseRequest?->referenceCode() ?? 'Sin pedido' }}</dd>
             </div>
             <div class="order-meta-item">
+                <dt>Carga</dt>
+                <dd>{{ $dispatch->shipmentLabel() }}</dd>
+            </div>
+            <div class="order-meta-item">
                 <dt>Creada</dt>
                 <dd>{{ $dispatch->created_at?->format('d/m/Y H:i') ?? '-' }}</dd>
             </div>

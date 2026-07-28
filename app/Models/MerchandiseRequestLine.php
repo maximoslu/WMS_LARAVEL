@@ -115,6 +115,19 @@ class MerchandiseRequestLine extends Model
         return number_format($quantity, 0, ',', '.').' '.WmsLineType::quantityLabel($this->lineType(), $quantity);
     }
 
+    public function requestedUnitsTotal(): int
+    {
+        if ($this->isPeakLine()) {
+            $unitsFromPeaks = $this->requestedPeaksCount() * max(0, (int) ($this->units_per_peak ?? 0));
+
+            return $unitsFromPeaks > 0 ? $unitsFromPeaks : max(0, (int) $this->requested_units);
+        }
+
+        $unitsFromPallets = $this->requestedPalletsCount() * max(0, (int) ($this->units_per_pallet ?? 0));
+
+        return $unitsFromPallets > 0 ? $unitsFromPallets : max(0, (int) $this->requested_units);
+    }
+
     public function requiredUnits(): ?int
     {
         $requiredUnits = (int) ($this->required_units ?? 0);

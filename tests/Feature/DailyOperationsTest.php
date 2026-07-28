@@ -10,6 +10,7 @@ use App\Models\GoodsDispatchLine;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
 use App\Models\Item;
+use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\Supplier;
@@ -950,6 +951,70 @@ class DailyOperationsTest extends TestCase
                 'observations' => 'Automática de test',
             ])
             ->assertRedirect();
+    }
+
+    public function test_recalculate_counts_multiple_dispatches_for_same_request_as_independent_trucks(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'Friesland']);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 100,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
+        ]);
+
+        $this->createStockPallet($client, 7, StockPallet::STATUS_AVAILABLE, $item);
+
+        foreach ([1 => 2, 2 => 3] as $sequence => $pallets) {
+            $dispatch = GoodsDispatch::factory()->create([
+                'client_id' => $client->id,
+                'merchandise_request_id' => $request->id,
+                'shipment_sequence' => $sequence,
+                'type' => GoodsDispatch::TYPE_REQUEST,
+                'status' => GoodsDispatch::STATUS_SENT,
+                'sent_at' => '2026-07-10 10:0'.$sequence.':00',
+                'created_by' => $user->id,
+                'camion_propio' => true,
+            ]);
+
+            GoodsDispatchLine::query()->create([
+                'goods_dispatch_id' => $dispatch->id,
+                'item_id' => $item->id,
+                'line_type' => WmsLineType::PALLET,
+                'sku' => 'MULTI-DAILY-'.$sequence,
+                'description' => 'Salida parcial '.$sequence,
+                'units_per_pallet' => 100,
+                'pallets' => $pallets,
+                'requested_units' => $pallets * 100,
+                'requested_pallets' => $pallets,
+                'loaded_pallets' => $pallets,
+                'is_extra_line' => false,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-10',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-10', 'client_id' => $client->id]));
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-10')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(12, $day->opening_pallets);
+        $this->assertSame(12, $day->stored_pallets_today);
+        $this->assertSame(5, $day->moved_pallets_today);
+        $this->assertSame(7, $day->expected_pallets_tomorrow);
+        $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->count());
+        $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+        $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
     }
 
     private function createStockBase(Client $client, int $pallets): void

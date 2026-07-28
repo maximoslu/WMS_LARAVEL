@@ -41,7 +41,7 @@ class MerchandiseRequestController extends Controller
         $lotSearch = $search !== '' && LotNormalizer::isNoLotAlias($search) ? LotNormalizer::NO_LOT : $search;
 
         $requests = MerchandiseRequest::query()
-            ->with(['client', 'requestedBy', 'lines.item', 'dispatch'])
+            ->with(['client', 'requestedBy', 'lines.item', 'dispatch', 'openDispatch'])
             ->when($isClient, fn (Builder $query) => $query->where('client_id', $user->client_id))
             ->when(! $isClient && $clientId > 0, fn (Builder $query) => $query->where('client_id', $clientId))
             ->when($status !== 'all' && in_array($status, MerchandiseRequest::statuses(), true), fn (Builder $query) => $query->where('status', $status))
@@ -114,12 +114,13 @@ class MerchandiseRequestController extends Controller
         }
 
         $pendingRequests = MerchandiseRequest::query()
-            ->with(['lines', 'dispatch'])
+            ->with(['lines', 'dispatch', 'openDispatch'])
             ->when($selectedClient instanceof Client, fn (Builder $query) => $query->where('client_id', $selectedClient->id))
             ->when(! ($selectedClient instanceof Client), fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->whereIn('status', [
                 MerchandiseRequest::STATUS_PENDING,
                 MerchandiseRequest::STATUS_PREPARING,
+                MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
             ])
             ->latest('id')
             ->get();
@@ -267,6 +268,12 @@ class MerchandiseRequestController extends Controller
                 'dispatch.lines.stockPallet.location.warehouse',
                 'dispatch.lines.allocations.stockPallet.location.warehouse',
                 'dispatch.lines.sourceRequestLine',
+                'openDispatch.lines.item',
+                'openDispatch.lines.stockPallet.location.warehouse',
+                'openDispatch.lines.allocations.stockPallet.location.warehouse',
+                'openDispatch.lines.sourceRequestLine',
+                'goodsDispatches.lines.item',
+                'goodsDispatches.lines.allocations',
             ]);
         $canAddInternalLine = ! $user->hasRole(Role::CLIENTE)
             && $user->canAccessRole(Role::ALMACEN)
@@ -304,7 +311,7 @@ class MerchandiseRequestController extends Controller
                 ->whereKey($merchandiseRequest->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $lockedRequest->load(['dispatch', 'lines']);
+            $lockedRequest->load(['openDispatch', 'lines']);
 
             if (! $this->canAcceptInternalLines($lockedRequest)) {
                 throw ValidationException::withMessages([
@@ -331,7 +338,7 @@ class MerchandiseRequestController extends Controller
                 ]);
 
                 $createdLines->push($createdLine);
-                $this->syncPendingDispatchLine($lockedRequest->dispatch, $createdLine, $line);
+                $this->syncPendingDispatchLine($lockedRequest->openDispatch, $createdLine, $line);
             }
 
             $audit->record(
@@ -346,8 +353,8 @@ class MerchandiseRequestController extends Controller
                     'requested_pallets' => collect($requestedLines)->sum('requested_pallets'),
                     'requested_peaks' => collect($requestedLines)->sum('requested_peaks'),
                     'requested_units' => collect($requestedLines)->sum('requested_units'),
-                    'dispatch_synced' => $lockedRequest->dispatch instanceof GoodsDispatch
-                        && in_array($lockedRequest->dispatch->status, [GoodsDispatch::STATUS_DRAFT, GoodsDispatch::STATUS_PREPARING], true),
+                    'dispatch_synced' => $lockedRequest->openDispatch instanceof GoodsDispatch
+                        && in_array($lockedRequest->openDispatch->status, [GoodsDispatch::STATUS_DRAFT, GoodsDispatch::STATUS_PREPARING], true),
                 ],
             );
         });
@@ -466,8 +473,9 @@ class MerchandiseRequestController extends Controller
         return in_array($merchandiseRequest->status, [
             MerchandiseRequest::STATUS_PENDING,
             MerchandiseRequest::STATUS_PREPARING,
+            MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
         ], true)
-            && ! in_array($merchandiseRequest->dispatch?->status, [
+            && ! in_array($merchandiseRequest->openDispatch?->status, [
                 GoodsDispatch::STATUS_SENT,
                 GoodsDispatch::STATUS_COMPLETED,
                 GoodsDispatch::STATUS_CANCELLED,

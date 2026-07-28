@@ -32,6 +32,7 @@ class GoodsDispatch extends Model
         'dispatch_number',
         'client_id',
         'merchandise_request_id',
+        'shipment_sequence',
         'type',
         'status',
         'created_by',
@@ -52,6 +53,7 @@ class GoodsDispatch extends Model
             'sent_at' => 'datetime',
             'completed_at' => 'datetime',
             'delivery_note_sent_at' => 'datetime',
+            'shipment_sequence' => 'integer',
             'stock_applied_at' => 'datetime',
             'warehouse_stock_applied_at' => 'datetime',
             'camion_propio' => 'boolean',
@@ -134,6 +136,13 @@ class GoodsDispatch extends Model
     public function dispatchNumber(): string
     {
         return $this->dispatch_number ?: 'SAL-'.str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);
+    }
+
+    public function shipmentLabel(): string
+    {
+        return $this->merchandise_request_id !== null && (int) $this->shipment_sequence > 0
+            ? 'Carga '.(int) $this->shipment_sequence
+            : 'Salida';
     }
 
     public function palletsCount(): int
