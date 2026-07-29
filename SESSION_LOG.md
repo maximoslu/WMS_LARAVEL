@@ -67,6 +67,80 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-29 - FIX OPERACIONES DIARIAS - Edicion idempotente de entradas confirmadas
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `5339102a fix: normalize warehouse location compatibility`, alineado con `origin/main`.
+
+### Incidente
+- Al editar una entrada confirmada, Operaciones diarias podia contar las descargas como si cada guardado fuera una nueva entrada.
+- Caso operativo reportado: BOBINAS-100 habia nacido como dos lineas, `11` pallets en una ubicacion y `10` en otra; se corrigio manualmente a `21` porque el sistema no era fiable.
+- Regla funcional cerrada: la entrada conserva su estado actual consolidado; editar o guardar varias veces no debe acumular descargas antiguas.
+
+### Diagnostico
+- `GoodsReceiptController@update` trabaja en transaccion y, para entradas confirmadas con stock aplicado, revierte stock, ejecuta `syncLines()` y reaplica stock.
+- `syncLines()` borra las lineas antiguas del albaran y crea las lineas vigentes nuevas.
+- `inventory_movements` conserva correctamente el ledger historico: movimientos `receipt` antiguos, reversiones y nuevas aplicaciones.
+- La causa raiz estaba en `DailyOperationTotalsService::receiptLogisticUnits()`:
+  - calculaba por lineas, pero ademas tomaba el maximo contra la suma historica de todos los movimientos `receipt` del documento;
+  - esa suma incluia movimientos positivos de versiones anteriores de la misma entrada;
+  - resultado anterior: `21`, editar sin cambio => podia pasar a `42`; guardar varias veces seguia creciendo.
+- Informe local de solo lectura:
+  - no se encontro entrada BOBINAS real en la base local;
+  - en los ultimos 200 recibos confirmados locales no habia ningun recibo con historico `receipt` por encima de las lineas actuales.
+
+### Cambios aplicados
+- `DailyOperationTotalsService` calcula las descargas de entradas solo desde las lineas actuales del recibo.
+- Por cada linea vigente usa el mayor valor entre:
+  - la unidad logistica de la linea actual (`pallet_count + picos`);
+  - la ultima traza `receipt` asociada a esa misma linea vigente.
+- Se elimina para entradas el fallback de documento completo que sumaba todo el historico `receipt`.
+- Se mantiene intacto el calculo de salidas, importador, stock real, datos, aislamiento por cliente y ubicaciones.
+- La regla EDELVIVES previa se conserva: una linea de `29` pallets puede computar `31` si su ultima traza fiable de linea indica `31`.
+
+### Regresiones cubiertas
+- Entrada BOBINAS/EDELVIVES en NAVE 38 con dos ubicaciones: `11 + 10 = 21`.
+- Recalculo inicial: descargas `21`, movido `21`, stock final `21`.
+- Editar a una sola linea de `21`: descargas siguen `21`, sin duplicar.
+- Guardar la misma entrada varias veces sin cambios: descargas siguen `21`.
+- Cambiar `21 -> 23`: descargas `23`, no `44`.
+- Cambiar `23 -> 18`: descargas `18`, no queda historico inflando el dia.
+- Stock final coincide tras cada edicion.
+- Recalcular Operaciones diarias varias veces no duplica lineas automaticas.
+- Se mantiene el caso cerrado:
+  - base inicio `1026`;
+  - descargas `67`;
+  - envios `14`;
+  - facturable `1093`;
+  - movido `81`;
+  - base manana `1079`.
+
+### Tests y validaciones
+- `php artisan test --filter=confirmed_receipt_edits`: OK, `1 passed`, `115 assertions`.
+- `php artisan test --filter=DailyOperations`: OK, `25 passed`, `277 assertions`.
+- `php artisan test --filter=GoodsReceiptManagement`: OK, `114 passed`, `616 assertions`.
+- `php artisan test`: OK, `813 passed`, `4576 assertions`.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Alcance y seguridad
+- No se ejecuto ninguna migracion.
+- No se modifico el importador.
+- No se tocaron datos reales ni produccion.
+- No se borro ni purgo ningun dato.
+- No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/`, `node_modules` ni `public/build`.
+- No se uso `migrate:fresh`, `db:wipe`, force push ni comandos destructivos.
+- No se preparo comando de purga porque localmente no habia contaminacion de datos; si produccion tiene dias inflados, debe desplegarse el codigo y recalcular el cliente/fecha afectado, sin borrar ledger.
+- Produccion/Forge queda pendiente de despliegue normal y validacion operativa.
+
+### Cierre preparado
+- Commit sugerido: `fix: prevent duplicated receipt movements on edit`.
+- Push normal a `origin/main`, sin `force push`.
+
+---
+
 ## 2026-07-29 - FIX UBICACIONES - Catalogo compatible y deduplicado por cliente
 
 **Equipo:** PC trabajo.

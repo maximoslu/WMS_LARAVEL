@@ -11,11 +11,13 @@ use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
 use App\Models\InventoryMovement;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Support\WmsLineType;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -804,6 +806,109 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(10, $secondLine->fresh()->pallet_count);
     }
 
+    public function test_confirmed_receipt_edits_rebuild_daily_operations_from_current_lines_without_duplicating_movements(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $client = Client::factory()->create([
+            'name' => 'EDELVIVES',
+            'code' => 'EDELVIVES',
+        ]);
+        $supplier = Supplier::factory()->create([
+            'client_id' => $client->id,
+            'name' => 'EDELVIVES proveedor',
+        ]);
+        $warehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $location11 = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '11',
+        ]);
+        $location10 = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => '10',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'BOBINAS-100',
+            'description' => 'Bobinas 100',
+            'units_per_pallet' => 100,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-BOBINAS-IDEMP',
+                'received_at' => '2026-07-29',
+                'camion_propio' => false,
+                'lines' => [
+                    $this->receiptLinePayload($item, $location11, 11),
+                    $this->receiptLinePayload($item, $location10, 10),
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()
+            ->where('receipt_number', 'ALB-BOBINAS-IDEMP')
+            ->firstOrFail();
+
+        $this->assertSame(2, $receipt->lines()->count());
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->assertReceiptDailyState($user, $client, $receipt->fresh(), 21);
+        $this->assertReceiptStock($receipt, 21, 2100, 2);
+
+        $this->updateConfirmedReceiptToPallets($user, $receipt, $item, $location11, 21);
+        $this->assertReceiptDailyState($user, $client, $receipt->fresh(), 21);
+        $this->assertReceiptStock($receipt, 21, 2100, 1);
+
+        foreach (range(1, 3) as $_) {
+            $this->updateConfirmedReceiptToPallets($user, $receipt, $item, $location11, 21);
+            $this->assertReceiptDailyState($user, $client, $receipt->fresh(), 21);
+            $this->assertReceiptStock($receipt, 21, 2100, 1);
+        }
+
+        $this->updateConfirmedReceiptToPallets($user, $receipt, $item, $location11, 23);
+        $this->assertReceiptDailyState($user, $client, $receipt->fresh(), 23);
+        $this->assertReceiptStock($receipt, 23, 2300, 1);
+
+        $this->updateConfirmedReceiptToPallets($user, $receipt, $item, $location11, 18);
+        $day = $this->assertReceiptDailyState($user, $client, $receipt->fresh(), 18);
+        $this->assertReceiptStock($receipt, 18, 1800, 1);
+
+        $this->assertGreaterThan(
+            2,
+            InventoryMovement::query()
+                ->where('source_type', $receipt->getMorphClass())
+                ->where('source_id', $receipt->id)
+                ->where('movement_type', InventoryMovement::RECEIPT)
+                ->count()
+        );
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-29',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-29', 'client_id' => $client->id]));
+
+        $day->refresh();
+
+        $this->assertSame(18, $day->stored_pallets_today);
+        $this->assertSame(18, $day->moved_pallets_today);
+        $this->assertSame(18, $day->expected_pallets_tomorrow);
+        $this->assertSame(3, DailyOperationLine::query()->where('day_id', $day->id)->count());
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->count());
+    }
+
     public function test_recalculate_counts_trips_only_for_receipts_and_dispatches_marked_as_own_truck(): void
     {
         $this->seed(RoleSeeder::class);
@@ -1094,6 +1199,81 @@ class DailyOperationsTest extends TestCase
                 'observations' => 'Automática de test',
             ])
             ->assertRedirect();
+    }
+
+    private function receiptLinePayload(Item $item, Location $location, int $pallets): array
+    {
+        return [
+            'item_id' => $item->id,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'lot' => 'BOB-100',
+            'quantity_units' => $pallets * 100,
+            'units_per_pallet' => 100,
+            'pallet_count' => $pallets,
+            'pico_units' => '',
+            'location_id' => $location->id,
+        ];
+    }
+
+    private function updateConfirmedReceiptToPallets(
+        User $user,
+        GoodsReceipt $receipt,
+        Item $item,
+        Location $location,
+        int $pallets,
+    ): void {
+        $receipt->refresh();
+
+        $this->actingAs($user)
+            ->put(route('goods-receipts.update', $receipt), [
+                'client_id' => $receipt->client_id,
+                'supplier_id' => $receipt->supplier_id,
+                'receipt_number' => $receipt->receipt_number,
+                'received_at' => $receipt->received_at?->format('Y-m-d'),
+                'camion_propio' => false,
+                'lines' => [
+                    $this->receiptLinePayload($item, $location, $pallets),
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+    }
+
+    private function assertReceiptDailyState(User $user, Client $client, GoodsReceipt $receipt, int $pallets): DailyOperationDay
+    {
+        $date = $receipt->received_at?->format('Y-m-d') ?? '2026-07-29';
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => $date,
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => $date, 'client_id' => $client->id]));
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', $date)
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(0, $day->opening_pallets);
+        $this->assertSame($pallets, $day->stored_pallets_today);
+        $this->assertSame($pallets, $day->moved_pallets_today);
+        $this->assertSame($pallets, $day->expected_pallets_tomorrow);
+        $this->assertSame($pallets, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->count());
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+        $this->assertSame(3, DailyOperationLine::query()->where('day_id', $day->id)->count());
+
+        return $day;
+    }
+
+    private function assertReceiptStock(GoodsReceipt $receipt, int $warehousePallets, int $quantityUnits, int $batchCount): void
+    {
+        $query = StockPallet::query()->where('goods_receipt_id', $receipt->id);
+
+        $this->assertSame($batchCount, (int) $query->count());
+        $this->assertSame($quantityUnits, (int) $query->sum('quantity_units'));
+        $this->assertSame((float) $warehousePallets, (float) $query->sum('warehouse_pallets'));
     }
 
     public function test_recalculate_counts_multiple_dispatches_for_same_request_as_independent_trucks(): void

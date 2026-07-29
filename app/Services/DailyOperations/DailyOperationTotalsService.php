@@ -87,16 +87,12 @@ class DailyOperationTotalsService
         $receipt->loadMissing('lines');
 
         $lineUnits = (int) $receipt->lines->sum(function (GoodsReceiptLine $line) use ($receipt): int {
-            $movementUnits = $this->movementWarehousePalletsForLine($receipt, $line, InventoryMovement::RECEIPT);
+            $movementUnits = $this->receiptMovementWarehousePalletsForCurrentLine($receipt, $line);
 
-            return $movementUnits > 0 ? $movementUnits : $this->receiptLineLogisticUnits($line);
+            return max($movementUnits, $this->receiptLineLogisticUnits($line));
         });
 
-        return max(
-            0,
-            $lineUnits,
-            $this->movementWarehousePallets($receipt, InventoryMovement::RECEIPT),
-        );
+        return max(0, $lineUnits);
     }
 
     public function dispatchLogisticUnits(GoodsDispatch $dispatch): int
@@ -128,6 +124,21 @@ class DailyOperationTotalsService
     private function receiptLineLogisticUnits(GoodsReceiptLine $line): int
     {
         return (int) $line->pallet_count + ($line->peakUnits() !== [] ? count($line->peakUnits()) : 0);
+    }
+
+    private function receiptMovementWarehousePalletsForCurrentLine(GoodsReceipt $receipt, GoodsReceiptLine $line): int
+    {
+        $delta = (float) InventoryMovement::query()
+            ->where('source_type', $receipt->getMorphClass())
+            ->where('source_id', $receipt->getKey())
+            ->where('source_line_type', $line->getMorphClass())
+            ->where('source_line_id', $line->getKey())
+            ->where('movement_type', InventoryMovement::RECEIPT)
+            ->latest('recorded_at')
+            ->latest('id')
+            ->value('warehouse_pallets_delta');
+
+        return (int) round(abs($delta));
     }
 
     private function dispatchLineLogisticUnits(GoodsDispatchLine $line): int
