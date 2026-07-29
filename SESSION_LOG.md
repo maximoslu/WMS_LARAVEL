@@ -67,6 +67,51 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-29 - FIX PEDIDOS - Progreso acumulado en salidas parciales
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `397e7d7d fix: enforce client warehouse locations and repair utf8 labels`, alineado con `origin/main`.
+
+### Objetivo
+- Corregir la visualizacion de `Lineas del pedido y carga real` cuando un pedido se sirve en varios camiones.
+- Mantener siempre intacta la solicitud original: no se borran ni se falsean cantidades solicitadas.
+- Evitar que una linea ya cargada por completo en una salida anterior vuelva a aparecer como `Sin preparar`, sin ubicacion ni carga.
+
+### Cambios aplicados
+- `MerchandiseRequestFulfillmentService` mantiene el calculo acumulado por linea y anade las ubicaciones de recogida ya servidas en salidas finalizadas.
+- `resources/views/dispatches/request.blade.php` muestra cada linea con:
+  - total solicitado original;
+  - carga acumulada real (`servido antes + salida actual`);
+  - pendiente real `max(solicitado - acumulado, 0)`;
+  - estado `Completo`, `Parcial`, `Cubierta` o `Exceso operativo` segun el acumulado real.
+- Las lineas ya completadas en camiones anteriores no renderizan controles de preparacion ni mensaje de asignacion pendiente.
+- `resources/js/app.js` suma las unidades servidas anteriormente antes de recalcular estado, diferencia y ubicaciones visibles.
+
+### Caso cubierto
+- Pedido con dos lineas:
+  - Linea A: `4` pallets solicitados, cargados por completo en la primera salida.
+  - Linea B: `16` pallets solicitados, `10` pallets cargados en la segunda salida.
+- Resultado verificado:
+  - Linea A queda `Completo`, cargado acumulado `20.000 uds`, pendiente `0 uds`, sin controles de nueva carga.
+  - Linea B queda `Parcial`, cargado `10.000 uds`, pendiente `6.000 uds`.
+  - El stock se descuenta una sola vez por salida real.
+  - El albaran de la segunda salida no duplica la carga previa de la linea A.
+
+### Validacion
+- `php artisan test --filter=partial_dispatch_line_progress_uses_cumulative_loading_without_reopening_completed_lines`: OK, `1 passed`, `34 assertions`.
+- `php artisan test --filter=GoodsDispatchManagementTest`: OK, `64 passed`, `512 assertions`.
+- `php artisan test`: OK, `801 passed`, `4380 assertions`.
+- `npm run build`: OK.
+- `git diff --check`: OK.
+
+### Cierre preparado
+- Commit de cierre: `fix: correct partial dispatch line progress`.
+- Push normal a `origin/main`, sin `force push`.
+
+---
+
 ## 2026-07-28 - FEATURE PEDIDOS - Salidas parciales por multiples camiones
 
 **Equipo:** PC trabajo.

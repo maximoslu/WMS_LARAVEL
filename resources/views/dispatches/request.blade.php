@@ -197,8 +197,10 @@
                     $requestedUnits = (int) ($lineFulfillment['target_units'] ?? ($dispatchLine?->requestedUnitsTotal() ?? $line->requestedUnitsTotal()));
                     $servedUnits = (int) ($lineFulfillment['served_units'] ?? 0);
                     $loadedUnits = $dispatchLine?->loadedUnitsTotal() ?? 0;
-                    $pendingUnits = (int) ($lineFulfillment['pending_units_after_current'] ?? max(0, $requestedUnits - $loadedUnits));
                     $requiredUnits = $line->requiredUnits();
+                    $coverageTargetUnits = $requiredUnits ?? $requestedUnits;
+                    $totalLoadedUnits = $servedUnits + $loadedUnits;
+                    $pendingUnits = (int) ($lineFulfillment['pending_units_after_current'] ?? max(0, $coverageTargetUnits - $totalLoadedUnits));
                     $lineStockOptions = collect($stockOptionsByItem[$line->item_id] ?? []);
                     $lineAllocations = $dispatchLine?->allocations ?? collect();
 
@@ -228,32 +230,36 @@
                         ]]);
                     }
 
-                    $pickingLocationSummaries = $dispatchLine?->pickingLocationSummaries() ?? collect();
+                    $servedPickingLocationSummaries = collect($lineFulfillment['served_picking_locations'] ?? []);
+                    $currentPickingLocationSummaries = $dispatchLine?->pickingLocationSummaries() ?? collect();
+                    $pickingLocationSummaries = $servedPickingLocationSummaries->concat($currentPickingLocationSummaries)->values();
                     if ($pickingLocationSummaries->isEmpty() && $line->stockPallet !== null) {
                         $pickingLocationSummaries = collect([[
                             'location' => $line->stockPallet->pickingLocationLabel() ?? 'Sin ubicación registrada',
                             'quantity' => null,
                         ]]);
                     }
+                    $servedPickingLocationLabels = $servedPickingLocationSummaries
+                        ->map(fn ($summary) => $summary['location'].($summary['quantity'] ? ' · '.$summary['quantity'] : ''))
+                        ->values();
 
                     $stateClass = 'pending';
                     $stateLabel = 'Sin preparar';
-                    if ($dispatchLine?->confirmed_at !== null) {
-                        $stateClass = $dispatchLine->loadingStatus() === 'complete'
-                            ? 'ok'
-                            : $dispatchLine->loadingStatus();
-                        $stateLabel = $dispatchLine->loadingStatusLabel();
-                    }
-                    $coverageTargetUnits = $requiredUnits ?? $requestedUnits;
-                    $unitDifference = ($servedUnits + $loadedUnits) - $coverageTargetUnits;
-                    $differenceLabel = $unitDifference > 0 ? 'Exceso operativo' : 'Pendiente';
-                    if ($requiredUnits !== null && ($servedUnits + $loadedUnits) >= $coverageTargetUnits) {
-                        $stateClass = ($servedUnits + $loadedUnits) > $coverageTargetUnits ? 'superior' : 'ok';
-                        $stateLabel = ($servedUnits + $loadedUnits) > $coverageTargetUnits ? 'Exceso operativo' : 'Cubierta';
+                    $unitDifference = $totalLoadedUnits - $coverageTargetUnits;
+                    $differenceLabel = $unitDifference > 0 ? 'Exceso operativo' : ($pendingUnits === 0 ? 'Cubierto' : 'Pendiente');
+                    if ($pendingUnits === 0 && $totalLoadedUnits > $coverageTargetUnits) {
+                        $stateClass = 'superior';
+                        $stateLabel = $requiredUnits !== null ? 'Exceso operativo' : 'Carga superior a lo solicitado';
+                    } elseif ($pendingUnits === 0 && $coverageTargetUnits > 0) {
+                        $stateClass = 'ok';
+                        $stateLabel = $requiredUnits !== null ? 'Cubierta' : 'Completo';
+                    } elseif ($totalLoadedUnits > 0) {
+                        $stateClass = 'partial';
+                        $stateLabel = 'Parcial';
                     }
                 @endphp
 
-                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-required-units="{{ $requiredUnits ?? '' }}" data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
+                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-required-units="{{ $requiredUnits ?? '' }}" data-served-units="{{ $servedUnits }}" data-served-picking-locations='@js($servedPickingLocationLabels->all())' data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
                     <header class="warehouse-prep-line-head">
                         <div>
                             <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
@@ -295,7 +301,7 @@
                                 @endif
                                 <div>
                                     <dt>Cargado</dt>
-                                    <dd><span data-loaded-units>{{ number_format($servedUnits + $loadedUnits, 0, ',', '.') }}</span> uds</dd>
+                                    <dd><span data-loaded-units>{{ number_format($totalLoadedUnits, 0, ',', '.') }}</span> uds</dd>
                                 </div>
                                 <div>
                                     <dt>Pendiente acumulado</dt>
@@ -470,7 +476,7 @@
                                     <input type="text" maxlength="250" name="lines[{{ $lineKey }}][loading_notes]" value="{{ old('lines.'.$lineKey.'.loading_notes', $dispatchLine->loading_notes) }}" class="auth-input" placeholder="Opcional" @disabled(! $canEditLoading)>
                                 </label>
                             @else
-                                <div class="warehouse-request-inline-state">Genera la salida para registrar asignaciones de carga real.</div>
+                                <div class="warehouse-request-inline-state">{{ $pendingUnits === 0 ? 'Línea completada en cargas anteriores.' : 'Genera la salida para registrar asignaciones de carga real.' }}</div>
                             @endif
                         </div>
                     </div>

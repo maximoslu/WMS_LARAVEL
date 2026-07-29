@@ -2217,15 +2217,23 @@ const setupWarehouseRequestAllocations = () => {
         });
 
         const pickingSummaryNode = line.querySelector('[data-line-picking-locations]');
+        let servedPickingSummaries = [];
+
+        try {
+            servedPickingSummaries = JSON.parse(line.dataset.servedPickingLocations ?? '[]');
+        } catch {
+            servedPickingSummaries = [];
+        }
 
         if (pickingSummaryNode) {
             const summaries = Array.from(line.querySelectorAll('[data-assignment]'))
                 .map((assignment) => assignment.dataset.pickingSummary)
                 .filter(Boolean);
+            const visibleSummaries = [...servedPickingSummaries, ...summaries];
 
             pickingSummaryNode.replaceChildren();
 
-            (summaries.length > 0 ? summaries : ['Pendiente de asignar ubicación']).forEach((summary) => {
+            (visibleSummaries.length > 0 ? visibleSummaries : ['Pendiente de asignar ubicación']).forEach((summary) => {
                 const row = document.createElement('span');
                 row.textContent = summary;
                 pickingSummaryNode.append(row);
@@ -2234,8 +2242,11 @@ const setupWarehouseRequestAllocations = () => {
 
         const requestedUnits = parsePositiveInteger(line.dataset.requestedUnits);
         const requiredUnits = parsePositiveInteger(line.dataset.requiredUnits);
+        const servedUnits = parsePositiveInteger(line.dataset.servedUnits);
         const coverageTargetUnits = Number.isFinite(requiredUnits) && requiredUnits > 0 ? requiredUnits : requestedUnits;
-        const differenceUnits = totalUnits - coverageTargetUnits;
+        const cumulativeUnits = servedUnits + totalUnits;
+        const pendingUnits = Math.max(coverageTargetUnits - cumulativeUnits, 0);
+        const differenceUnits = cumulativeUnits - coverageTargetUnits;
         const loadedPalletsField = line.querySelector('[data-line-loaded-pallets]');
         const loadedPartialUnitsField = line.querySelector('[data-line-loaded-partial-units]');
         const loadedUnitsNode = line.querySelector('[data-loaded-units]');
@@ -2252,7 +2263,7 @@ const setupWarehouseRequestAllocations = () => {
         }
 
         if (loadedUnitsNode) {
-            loadedUnitsNode.textContent = formatNumber.format(totalUnits);
+            loadedUnitsNode.textContent = formatNumber.format(cumulativeUnits);
         }
 
         if (differenceUnitsNode) {
@@ -2260,7 +2271,7 @@ const setupWarehouseRequestAllocations = () => {
         }
 
         if (differenceLabelNode) {
-            differenceLabelNode.textContent = differenceUnits > 0 ? 'Exceso operativo' : 'Pendiente';
+            differenceLabelNode.textContent = differenceUnits > 0 ? 'Exceso operativo' : pendingUnits === 0 ? 'Cubierto' : 'Pendiente';
         }
 
         if (stateNode) {
@@ -2273,23 +2284,23 @@ const setupWarehouseRequestAllocations = () => {
             );
 
             if (Number.isFinite(requiredUnits) && requiredUnits > 0) {
-                if (totalUnits < requiredUnits) {
-                    stateNode.textContent = totalUnits === 0 ? 'Pendiente' : 'Pendiente';
-                    stateNode.classList.add(totalUnits === 0 ? 'warehouse-load-state--pending' : 'warehouse-load-state--partial');
-                } else if (totalUnits === requiredUnits) {
+                if (cumulativeUnits < requiredUnits) {
+                    stateNode.textContent = cumulativeUnits === 0 ? 'Pendiente' : 'Pendiente';
+                    stateNode.classList.add(cumulativeUnits === 0 ? 'warehouse-load-state--pending' : 'warehouse-load-state--partial');
+                } else if (cumulativeUnits === requiredUnits) {
                     stateNode.textContent = 'Cubierta';
                     stateNode.classList.add('warehouse-load-state--ok');
                 } else {
                     stateNode.textContent = 'Exceso operativo';
                     stateNode.classList.add('warehouse-load-state--superior');
                 }
-            } else if (totalUnits === 0) {
+            } else if (cumulativeUnits === 0) {
                 stateNode.textContent = 'Sin preparar';
                 stateNode.classList.add('warehouse-load-state--pending');
-            } else if (totalUnits === requestedUnits) {
+            } else if (cumulativeUnits === requestedUnits) {
                 stateNode.textContent = 'Completo';
                 stateNode.classList.add('warehouse-load-state--ok');
-            } else if (totalUnits > requestedUnits && requestedUnits > 0) {
+            } else if (cumulativeUnits > requestedUnits && requestedUnits > 0) {
                 stateNode.textContent = 'Carga superior a lo solicitado';
                 stateNode.classList.add('warehouse-load-state--superior');
             } else {

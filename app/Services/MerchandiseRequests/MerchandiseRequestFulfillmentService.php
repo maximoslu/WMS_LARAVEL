@@ -27,7 +27,8 @@ class MerchandiseRequestFulfillmentService
     {
         $request->loadMissing([
             'lines.item',
-            'goodsDispatches.lines.allocations',
+            'goodsDispatches.lines.allocations.stockPallet.location.warehouse',
+            'goodsDispatches.lines.stockPallet.location.warehouse',
             'goodsDispatches.lines.sourceRequestLine',
         ]);
 
@@ -37,7 +38,7 @@ class MerchandiseRequestFulfillmentService
             ->reject(fn (GoodsDispatch $dispatch): bool => $currentDispatch !== null && (int) $dispatch->id === (int) $currentDispatch->id);
 
         $currentLinesByRequestLine = $currentDispatch
-            ? $currentDispatch->loadMissing(['lines.allocations'])->lines->groupBy('source_request_line_id')
+            ? $currentDispatch->loadMissing(['lines.allocations.stockPallet.location.warehouse', 'lines.stockPallet.location.warehouse'])->lines->groupBy('source_request_line_id')
             : collect();
 
         $servedLinesByRequestLine = $finalizedDispatches
@@ -47,7 +48,8 @@ class MerchandiseRequestFulfillmentService
 
         $lineSummaries = $request->lines->map(function (MerchandiseRequestLine $line) use ($servedLinesByRequestLine, $currentLinesByRequestLine): array {
             $targetUnits = $line->requiredUnits() ?? $line->requestedUnitsTotal();
-            $servedUnits = (int) ($servedLinesByRequestLine->get($line->id, collect()))
+            $servedLines = $servedLinesByRequestLine->get($line->id, collect());
+            $servedUnits = (int) $servedLines
                 ->sum(fn (GoodsDispatchLine $dispatchLine): int => $dispatchLine->loadedUnitsTotal());
             $currentUnits = (int) ($currentLinesByRequestLine->get($line->id, collect()))
                 ->sum(fn (GoodsDispatchLine $dispatchLine): int => $dispatchLine->loadedUnitsTotal());
@@ -62,6 +64,9 @@ class MerchandiseRequestFulfillmentService
                 'pending_units' => $pendingBeforeCurrent,
                 'pending_units_after_current' => $pendingAfterCurrent,
                 'is_fully_served' => $pendingAfterCurrent === 0,
+                'served_picking_locations' => $servedLines
+                    ->flatMap(fn (GoodsDispatchLine $dispatchLine): Collection => $dispatchLine->pickingLocationSummaries())
+                    ->values(),
             ];
         });
 

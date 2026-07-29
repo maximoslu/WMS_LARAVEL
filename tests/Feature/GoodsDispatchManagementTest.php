@@ -3031,6 +3031,176 @@ class GoodsDispatchManagementTest extends TestCase
         }
     }
 
+    public function test_partial_dispatch_line_progress_uses_cumulative_loading_without_reopening_completed_lines(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $itemA = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'PARTIAL-A-FULLY-SERVED',
+            'units_per_pallet' => 5000,
+        ]);
+        $itemB = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'PARTIAL-B-CURRENT',
+            'units_per_pallet' => 1000,
+        ]);
+        $stockA = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $itemA->id,
+            'units_per_pallet' => 5000,
+            'quantity_units' => 30000,
+            'full_pallets' => 6,
+            'warehouse_pallets' => 6,
+            'peak_1' => 0,
+        ]);
+        $stockB = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $itemB->id,
+            'units_per_pallet' => 1000,
+            'quantity_units' => 20000,
+            'full_pallets' => 20,
+            'warehouse_pallets' => 20,
+            'peak_1' => 0,
+        ]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $lineA = $merchandiseRequest->lines()->create([
+            'item_id' => $itemA->id,
+            'stock_pallet_id' => $stockA->id,
+            'line_type' => 'pallet',
+            'lot' => $stockA->lot,
+            'units_per_pallet' => 5000,
+            'requested_pallets' => 4,
+            'requested_units' => 20000,
+        ]);
+        $lineB = $merchandiseRequest->lines()->create([
+            'item_id' => $itemB->id,
+            'stock_pallet_id' => $stockB->id,
+            'line_type' => 'pallet',
+            'lot' => $stockB->lot,
+            'units_per_pallet' => 1000,
+            'requested_pallets' => 16,
+            'requested_units' => 16000,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        $firstDispatch = GoodsDispatch::query()->where('merchandise_request_id', $merchandiseRequest->id)->firstOrFail();
+        $firstLineA = $firstDispatch->lines()->where('source_request_line_id', $lineA->id)->firstOrFail();
+        $firstLineB = $firstDispatch->lines()->where('source_request_line_id', $lineB->id)->firstOrFail();
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $firstDispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'completion_mode' => 'leave_pending',
+                'lines' => [
+                    'line_'.$firstLineA->id => [
+                        'line_id' => $firstLineA->id,
+                        'stock_pallet_id' => $stockA->id,
+                        'loaded_pallets' => 4,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stockA->id,
+                            'loaded_pallets' => 4,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                    'line_'.$firstLineB->id => [
+                        'line_id' => $firstLineB->id,
+                        'stock_pallet_id' => $stockB->id,
+                        'loaded_pallets' => 0,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stockB->id,
+                            'loaded_pallets' => 0,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $this->assertSame(MerchandiseRequest::STATUS_PARTIALLY_FULFILLED, $merchandiseRequest->fresh()->status);
+        $this->assertSame(10000, (int) $stockA->fresh()->quantity_units);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest->fresh()))
+            ->assertRedirect();
+
+        $secondDispatch = GoodsDispatch::query()
+            ->where('merchandise_request_id', $merchandiseRequest->id)
+            ->where('id', '!=', $firstDispatch->id)
+            ->firstOrFail();
+        $this->assertNull($secondDispatch->lines()->where('source_request_line_id', $lineA->id)->first());
+        $secondLineB = $secondDispatch->lines()->where('source_request_line_id', $lineB->id)->firstOrFail();
+        $this->assertSame(16000, (int) $secondLineB->requested_units);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $secondDispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'completion_mode' => 'leave_pending',
+                'lines' => [
+                    'line_'.$secondLineB->id => [
+                        'line_id' => $secondLineB->id,
+                        'stock_pallet_id' => $stockB->id,
+                        'loaded_pallets' => 10,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stockB->id,
+                            'loaded_pallets' => 10,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $response = $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest->fresh()))
+            ->assertOk()
+            ->assertSeeText('PARTIAL-A-FULLY-SERVED')
+            ->assertSeeText('PARTIAL-B-CURRENT');
+
+        $html = $response->getContent();
+        $lineABlock = $this->extractArticleContaining($html, 'PARTIAL-A-FULLY-SERVED');
+        $lineBBlock = $this->extractArticleContaining($html, 'PARTIAL-B-CURRENT');
+
+        $this->assertStringContainsString('Completo', $lineABlock);
+        $this->assertStringContainsString('data-served-units="20000"', $lineABlock);
+        $this->assertStringContainsString('20.000', $lineABlock);
+        $this->assertStringContainsString('Pendiente acumulado', $lineABlock);
+        $this->assertStringContainsString('0 uds', $lineABlock);
+        $this->assertStringNotContainsString('Sin preparar', $lineABlock);
+        $this->assertStringNotContainsString('Pendiente de asignar', $lineABlock);
+        $this->assertStringNotContainsString('name="lines[', $lineABlock);
+
+        $this->assertStringContainsString('Parcial', $lineBBlock);
+        $this->assertStringContainsString('10.000', $lineBBlock);
+        $this->assertStringContainsString('6.000', $lineBBlock);
+
+        $this->assertSame(10000, (int) $stockA->fresh()->quantity_units, 'The first line stock must only be deducted by the first dispatch.');
+        $this->assertSame(10000, (int) $stockB->fresh()->quantity_units, 'The second line stock must only be deducted by the current dispatch.');
+
+        $deliveryHtml = view('dispatches.delivery-note-pdf', [
+            'dispatch' => $secondDispatch->fresh(['client', 'lines.sourceRequestLine', 'lines.allocations']),
+        ])->render();
+
+        $this->assertStringNotContainsString('PARTIAL-A-FULLY-SERVED', $deliveryHtml);
+        $this->assertStringContainsString('PARTIAL-B-CURRENT', $deliveryHtml);
+    }
+
     public function test_partial_remainder_can_be_explicitly_closed_without_changing_original_request(): void
     {
         Bus::fake();
@@ -3256,5 +3426,19 @@ class GoodsDispatchManagementTest extends TestCase
             'role_id' => $role->id,
             'client_id' => $client?->id,
         ]);
+    }
+
+    private function extractArticleContaining(string $html, string $needle): string
+    {
+        $needlePosition = strpos($html, $needle);
+        $this->assertNotFalse($needlePosition, "Expected [{$needle}] to be present in the response HTML.");
+
+        $articleStart = strrpos(substr($html, 0, $needlePosition), '<article');
+        $this->assertNotFalse($articleStart, "Expected [{$needle}] to be inside an article.");
+
+        $articleEnd = strpos($html, '</article>', $needlePosition);
+        $this->assertNotFalse($articleEnd, "Expected [{$needle}] article to close.");
+
+        return substr($html, $articleStart, $articleEnd - $articleStart);
     }
 }
