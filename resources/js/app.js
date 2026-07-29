@@ -1303,8 +1303,12 @@ const setupGoodsReceiptLines = () => {
     };
 
     const optionMatchesClient = (option, clientId) => {
-        if (!clientId || option.value === '') {
+        if (option.value === '') {
             return true;
+        }
+
+        if (!clientId) {
+            return false;
         }
 
         const compatibleClients = (option.dataset.compatibleClients ?? '')
@@ -1466,7 +1470,13 @@ const setupGoodsReceiptLines = () => {
                 }
 
                 if (locationField && !locationField.value && item.default_location_id) {
-                    locationField.value = String(item.default_location_id);
+                    const defaultLocationOption = Array.from(locationField.options)
+                        .find((option) => option.value === String(item.default_location_id));
+
+                    if (defaultLocationOption && optionMatchesClient(defaultLocationOption, clientSelect.value ?? '')) {
+                        locationField.value = String(item.default_location_id);
+                        filterLocationField(locationField, true);
+                    }
                 }
 
                 syncRowTotals(row);
@@ -1758,8 +1768,12 @@ const setupItemFormLocations = () => {
     }
 
     const optionMatchesClient = (option, clientId) => {
-        if (!clientId || option.value === '') {
+        if (option.value === '') {
             return true;
+        }
+
+        if (!clientId) {
+            return false;
         }
 
         const compatibleClients = (option.dataset.compatibleClients ?? '')

@@ -244,6 +244,56 @@ class StockAdjustmentTest extends TestCase
         $this->assertSame(100, $stockPallet->fresh()->quantity_units);
     }
 
+    public function test_stock_adjustment_hides_and_rejects_equivalent_duplicate_location(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture();
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $canonicalLocation = Location::factory()->create([
+            'warehouse_id' => $canonicalWarehouse->id,
+            'code' => '16',
+            'active' => true,
+        ]);
+        $duplicateLocation = Location::factory()->create([
+            'warehouse_id' => $duplicateWarehouse->id,
+            'code' => '16',
+            'active' => true,
+        ]);
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $content = $this->actingAs($user)
+            ->get(route('stock.adjustments.create', [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+            ]))
+            ->assertOk()
+            ->assertSee('value="'.$canonicalLocation->id.'"', false)
+            ->getContent();
+
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]+value="'.$duplicateLocation->id.'"[^>]*>\s*NAVE 38 - Calle 16\s*<\/option>/s', $content);
+        $this->assertSame(1, substr_count($content, 'NAVE 38 - Calle 16'));
+
+        $this->actingAs($user)
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
+                'mode' => 'new',
+                'stock_pallet_id' => null,
+                'location_id' => $duplicateLocation->id,
+            ]))
+            ->assertSessionHasErrors('location_id');
+
+        $this->assertSame(1000, $stockPallet->fresh()->quantity_units);
+    }
+
     public function test_history_shows_last_adjustments_with_user_reference_action_and_delta(): void
     {
         [$client, $item, $stockPallet] = $this->stockFixture([

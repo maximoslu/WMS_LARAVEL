@@ -10,6 +10,7 @@ use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Services\Locations\LocationIntegrityService;
+use App\Support\Locations\LocationCode;
 use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockVariantCatalog;
 use Illuminate\Database\Eloquent\Builder;
@@ -191,6 +192,7 @@ class AjaxSearchController extends Controller
 
         $validated = $request->validate([
             'q' => ['nullable', 'string', 'max:100'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:20'],
         ]);
 
@@ -200,11 +202,12 @@ class AjaxSearchController extends Controller
             return response()->json(['data' => []]);
         }
 
-        $locations = $integrity->canonicalActiveLocations(Location::query()
-            ->with('warehouse')
-            ->where('active', true)
-            ->where('code', 'like', '%'.$query.'%')
-            ->get())
+        $normalizedQuery = LocationCode::normalize($query);
+        $locations = (isset($validated['client_id']) && (int) $validated['client_id'] > 0
+            ? $integrity->compatibleLocationOptionsForClient((int) $validated['client_id'])
+            : $integrity->activeCanonicalLocationOptions())
+            ->filter(fn ($location): bool => str_contains(LocationCode::normalize($location->code), $normalizedQuery)
+                || str_contains(LocationCode::normalize($location->displayLabel()), $normalizedQuery))
             ->take((int) ($validated['limit'] ?? 10))
             ->map(fn (Location $location): array => [
                 'id' => $location->id,

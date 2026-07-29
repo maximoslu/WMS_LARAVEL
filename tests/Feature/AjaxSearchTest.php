@@ -230,6 +230,55 @@ class AjaxSearchTest extends TestCase
         $this->assertSame('NAVE 38 - Calle 1', $data[0]['label']);
     }
 
+    public function test_locations_endpoint_filters_and_deduplicates_by_client(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $edelvives = Client::factory()->create(['code' => 'EDELVIVES', 'name' => 'EDELVIVES']);
+        $otherClient = Client::factory()->create(['code' => 'OTRO', 'name' => 'OTRO']);
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $edelvives->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $foreignWarehouse = Warehouse::factory()->create([
+            'client_id' => $otherClient->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $canonicalLocation = Location::factory()->create([
+            'warehouse_id' => $canonicalWarehouse->id,
+            'code' => '18',
+        ]);
+        $duplicateLocation = Location::factory()->create([
+            'warehouse_id' => $duplicateWarehouse->id,
+            'code' => '18',
+        ]);
+        $foreignLocation = Location::factory()->create([
+            'warehouse_id' => $foreignWarehouse->id,
+            'code' => '18',
+        ]);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+
+        $data = $this->actingAs($user)
+            ->getJson(route('ajax.locations', [
+                'q' => '18',
+                'client_id' => $edelvives->id,
+            ]))
+            ->assertOk()
+            ->json('data');
+
+        $this->assertSame([$canonicalLocation->id], collect($data)->pluck('id')->all());
+        $this->assertNotContains($duplicateLocation->id, collect($data)->pluck('id')->all());
+        $this->assertNotContains($foreignLocation->id, collect($data)->pluck('id')->all());
+        $this->assertSame('NAVE 38 - Calle 18', $data[0]['label']);
+    }
+
     public function test_lots_endpoint_finds_canonical_no_lot_by_alias(): void
     {
         [$client] = $this->seedClients();

@@ -9,7 +9,6 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Services\Audit\AuditLogService;
 use App\Services\Locations\LocationIntegrityService;
-use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,7 +58,7 @@ class ItemController extends Controller
     public function create(Request $request): View
     {
         $clients = Client::query()->orderBy('name')->get();
-        $locations = $this->locationOptions();
+        $locations = $this->locationOptions($this->selectedClientId($request));
 
         return view('items.create', [
             'item' => new Item([
@@ -96,7 +95,7 @@ class ItemController extends Controller
     public function edit(Request $request, Item $item): View
     {
         $clients = Client::query()->orderBy('name')->get();
-        $locations = $this->locationOptions();
+        $locations = $this->locationOptions($this->selectedClientId($request, $item));
 
         return view('items.edit', [
             'item' => $item,
@@ -175,12 +174,19 @@ class ItemController extends Controller
     }
 
     /** @return Collection<int, Location> */
-    private function locationOptions(): Collection
+    private function locationOptions(?int $clientId = null): Collection
     {
-        return app(LocationIntegrityService::class)->canonicalActiveLocations(
-            LocationCode::applyNaturalOrder(
-                Location::query()->where('active', true)->with('warehouse.client')
-            )->get()
-        );
+        $integrity = app(LocationIntegrityService::class);
+
+        return $clientId !== null && $clientId > 0
+            ? $integrity->compatibleLocationOptionsForClient($clientId)
+            : $integrity->activeCanonicalLocationOptions();
+    }
+
+    private function selectedClientId(Request $request, ?Item $item = null): ?int
+    {
+        $clientId = $request->old('client_id', $item?->client_id);
+
+        return is_numeric($clientId) && (int) $clientId > 0 ? (int) $clientId : null;
     }
 }

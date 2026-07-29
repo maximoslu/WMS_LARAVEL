@@ -303,6 +303,58 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('/value="'.$otherLocation->id.'"\\s+data-compatible-clients="'.$edelvives->id.'"/', $content);
     }
 
+    public function test_existing_edelvives_receipt_location_selector_deduplicates_equivalent_nave_38_warehouses(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $edelvives = Client::factory()->create(['code' => 'EDELVIVES', 'name' => 'EDELVIVES']);
+        $supplier = Supplier::factory()->create(['client_id' => $edelvives->id]);
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $edelvives->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $foreignWarehouse = Warehouse::factory()->create([
+            'client_id' => Client::factory()->create()->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+
+        $location1 = Location::factory()->create(['warehouse_id' => $canonicalWarehouse->id, 'code' => '1']);
+        $location2 = Location::factory()->create(['warehouse_id' => $canonicalWarehouse->id, 'code' => '2']);
+        $location10 = Location::factory()->create(['warehouse_id' => $canonicalWarehouse->id, 'code' => '10']);
+        $duplicateLocation = Location::factory()->create(['warehouse_id' => $duplicateWarehouse->id, 'code' => '10']);
+        $foreignLocation = Location::factory()->create(['warehouse_id' => $foreignWarehouse->id, 'code' => '10']);
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $edelvives->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $content = $this->actingAs($user)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('value="'.$location10->id.'"', false)
+            ->getContent();
+
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]+value="'.$duplicateLocation->id.'"[^>]*>\s*NAVE 38 - Calle 10\s*<\/option>/s', $content);
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]+value="'.$foreignLocation->id.'"[^>]*>\s*NAVE 38 - Calle 10\s*<\/option>/s', $content);
+
+        $position1 = strpos($content, 'NAVE 38 - Calle 1');
+        $position2 = strpos($content, 'NAVE 38 - Calle 2');
+        $position10 = strpos($content, 'NAVE 38 - Calle 10');
+
+        $this->assertNotFalse($position1);
+        $this->assertNotFalse($position2);
+        $this->assertNotFalse($position10);
+        $this->assertTrue($position1 < $position2 && $position2 < $position10);
+    }
+
     public function test_goods_receipt_rejects_location_from_another_client(): void
     {
         $this->seed(RoleSeeder::class);
@@ -340,6 +392,55 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->assertDatabaseMissing('goods_receipts', [
             'receipt_number' => 'ALB-LOC-OTHER',
+        ]);
+    }
+
+    public function test_goods_receipt_rejects_equivalent_duplicate_location_id_on_submit(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['code' => 'EDELVIVES', 'name' => 'EDELVIVES']);
+        $supplier = Supplier::factory()->create(['client_id' => $client->id]);
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        Location::factory()->create(['warehouse_id' => $canonicalWarehouse->id, 'code' => '11']);
+        $duplicateLocation = Location::factory()->create(['warehouse_id' => $duplicateWarehouse->id, 'code' => '11']);
+
+        $this->actingAs($user)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-LOC-DUP-WH',
+                'received_at' => '2026-07-21',
+                'lines' => [
+                    [
+                        'item_id' => '',
+                        'sku' => 'SKU-LOC-DUP-WH',
+                        'description' => 'Ubicacion duplicada equivalente',
+                        'lot' => 'LOT-DUP-WH',
+                        'quantity_units' => 100,
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 1,
+                        'pico_units' => '',
+                        'location_id' => $duplicateLocation->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors('lines.0.location_id');
+
+        $this->assertDatabaseMissing('goods_receipts', [
+            'receipt_number' => 'ALB-LOC-DUP-WH',
         ]);
     }
 

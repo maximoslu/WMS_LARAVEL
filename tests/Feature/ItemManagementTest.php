@@ -361,7 +361,7 @@ class ItemManagementTest extends TestCase
 
         $user = $this->makeUserWithRole(Role::ADMINISTRACION);
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
-        $warehouse = Warehouse::factory()->create();
+        $warehouse = Warehouse::factory()->create(['client_id' => null]);
         $location = Location::factory()->create([
             'warehouse_id' => $warehouse->id,
             'code' => 'A1-01',
@@ -416,6 +416,49 @@ class ItemManagementTest extends TestCase
         ]);
     }
 
+    public function test_item_rejects_equivalent_duplicate_default_location(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        Location::factory()->create([
+            'warehouse_id' => $canonicalWarehouse->id,
+            'code' => '12',
+        ]);
+        $duplicateLocation = Location::factory()->create([
+            'warehouse_id' => $duplicateWarehouse->id,
+            'code' => '12',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('items.create'))
+            ->post(route('items.store'), [
+                'client_id' => $client->id,
+                'sku' => 'SKU-LOC-DUP-CLIENT',
+                'description' => 'Ubicacion duplicada equivalente',
+                'units_per_pallet' => 500,
+                'status' => Item::STATUS_ACTIVE,
+                'default_location_id' => $duplicateLocation->id,
+            ])
+            ->assertRedirect(route('items.create'))
+            ->assertSessionHasErrors('default_location_id');
+
+        $this->assertDatabaseMissing('items', [
+            'sku' => 'SKU-LOC-DUP-CLIENT',
+        ]);
+    }
+
     public function test_item_form_marks_location_options_with_compatible_clients(): void
     {
         $this->seedBaseData();
@@ -440,6 +483,46 @@ class ItemManagementTest extends TestCase
             ->assertSee('data-item-location', false)
             ->assertSee('value="'.$location->id.'"', false)
             ->assertSee('data-compatible-clients="'.$client->id.'"', false);
+    }
+
+    public function test_item_edit_location_selector_deduplicates_equivalent_client_locations(): void
+    {
+        $this->seedBaseData();
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+        ]);
+        $canonicalLocation = Location::factory()->create([
+            'warehouse_id' => $canonicalWarehouse->id,
+            'code' => '10',
+        ]);
+        $duplicateLocation = Location::factory()->create([
+            'warehouse_id' => $duplicateWarehouse->id,
+            'code' => '10',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-LOC-EDIT',
+            'default_location_id' => $canonicalLocation->id,
+        ]);
+
+        $content = $this->actingAs($user)
+            ->get(route('items.edit', $item))
+            ->assertOk()
+            ->assertSee('value="'.$canonicalLocation->id.'"', false)
+            ->getContent();
+
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]+value="'.$duplicateLocation->id.'"[^>]*>\s*NAVE 38 - Calle 10\s*<\/option>/s', $content);
+        $this->assertSame(1, substr_count($content, 'NAVE 38 - Calle 10'));
     }
 
     private function seedBaseData(): void

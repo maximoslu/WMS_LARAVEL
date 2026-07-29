@@ -112,31 +112,42 @@ class LocationIntegrityService
             ->where('active', true)
             ->groupBy(fn (Location $location): string => $location->warehouse_id.'|'.LocationCode::normalize($location->code))
             ->map(fn (Collection $group): Location => $this->canonicalLocation($group))
-            ->sortBy(fn (Location $location): array => [
-                mb_strtoupper($location->warehouse?->name ?: $location->warehouse?->code ?: ''),
-                ...LocationCode::naturalSortKey($location->code),
-            ])
+            ->sortBy(fn (Location $location): array => $this->locationSortKey($location))
             ->values();
+    }
+
+    /** @return Collection<int, Location> */
+    public function activeCanonicalLocationOptions(): Collection
+    {
+        return $this->canonicalActiveLocations(
+            Location::query()
+                ->with('warehouse.client')
+                ->where('active', true)
+                ->whereHas('warehouse', fn (Builder $query) => $query->where('active', true))
+                ->get()
+        );
+    }
+
+    /** @return Collection<int, Location> */
+    public function compatibleLocationOptionsForClient(Client|int $client): Collection
+    {
+        $clientId = $client instanceof Client ? (int) $client->id : (int) $client;
+
+        if ($clientId <= 0) {
+            return collect();
+        }
+
+        return $this->deduplicateLocationOptionsForClient(
+            $this->activeCanonicalLocationOptions()
+                ->filter(fn (Location $location): bool => $this->isBaseLocationCompatibleWithClient($location, $clientId))
+                ->values(),
+        );
     }
 
     /** @return Collection<int, Location> */
     public function canonicalActiveLocationsForStock(StockPallet $stockPallet): Collection
     {
-        return $this->canonicalActiveLocations(
-            Location::query()
-                ->with('warehouse')
-                ->where('active', true)
-                ->whereHas('warehouse', function (Builder $query) use ($stockPallet): void {
-                    $query
-                        ->where('active', true)
-                        ->where(function (Builder $warehouseQuery) use ($stockPallet): void {
-                            $warehouseQuery
-                                ->whereNull('client_id')
-                                ->orWhere('client_id', $stockPallet->client_id);
-                        });
-                })
-                ->get()
-        );
+        return $this->compatibleLocationOptionsForClient((int) $stockPallet->client_id);
     }
 
     public function isLocationCompatibleWithClient(int|Location $location, int $clientId): bool
@@ -145,7 +156,19 @@ class LocationIntegrityService
             ? $location->loadMissing('warehouse')
             : Location::query()->with('warehouse')->find($location);
 
-        if (! $location instanceof Location || ! $location->active || ! $location->warehouse?->active) {
+        if (! $location instanceof Location || ! $this->isBaseLocationCompatibleWithClient($location, $clientId)) {
+            return false;
+        }
+
+        return $this->compatibleLocationOptionsForClient($clientId)
+            ->contains(fn (Location $candidate): bool => (int) $candidate->id === (int) $location->id);
+    }
+
+    private function isBaseLocationCompatibleWithClient(Location $location, int $clientId): bool
+    {
+        $location->loadMissing('warehouse');
+
+        if (! $location->active || ! $location->warehouse?->active) {
             return false;
         }
 
@@ -171,35 +194,29 @@ class LocationIntegrityService
      */
     public function clientIdsForLocationOptions(Collection $locations, Collection $clients): array
     {
-        $allClientIds = $clients
-            ->pluck('id')
-            ->map(fn (mixed $id): int => (int) $id)
-            ->filter()
-            ->values()
+        $locations->each(fn (Location $location): Location => $location->loadMissing('warehouse'));
+        $options = $locations
+            ->mapWithKeys(fn (Location $location): array => [(int) $location->id => []])
             ->all();
 
-        $locations->each(fn (Location $location): Location => $location->loadMissing('warehouse'));
+        foreach ($clients as $client) {
+            $clientId = (int) $client->id;
 
-        $warehouseUsage = $locations
-            ->pluck('warehouse_id')
-            ->filter()
-            ->unique()
-            ->mapWithKeys(fn (mixed $warehouseId): array => [
-                (int) $warehouseId => $this->clientIdsUsingWarehouse((int) $warehouseId),
-            ]);
+            if ($clientId <= 0) {
+                continue;
+            }
 
-        return $locations
-            ->mapWithKeys(function (Location $location) use ($allClientIds, $warehouseUsage): array {
-                $warehouseClientId = $location->warehouse?->client_id;
+            $this->deduplicateLocationOptionsForClient(
+                $locations
+                    ->filter(fn (Location $location): bool => $this->isBaseLocationCompatibleWithClient($location, $clientId))
+                    ->values()
+            )->each(function (Location $location) use (&$options, $clientId): void {
+                $options[(int) $location->id][] = $clientId;
+            });
+        }
 
-                if ($warehouseClientId !== null) {
-                    return [$location->id => [(int) $warehouseClientId]];
-                }
-
-                $clientIds = $warehouseUsage->get((int) $location->warehouse_id, []);
-
-                return [$location->id => $clientIds !== [] ? $clientIds : $allClientIds];
-            })
+        return collect($options)
+            ->map(fn (array $clientIds): array => collect($clientIds)->unique()->values()->all())
             ->all();
     }
 
@@ -366,5 +383,44 @@ class LocationIntegrityService
             ->unique()
             ->values()
             ->all();
+    }
+
+    /** @return Collection<int, Location> */
+    private function deduplicateLocationOptionsForClient(Collection $locations): Collection
+    {
+        return $locations
+            ->groupBy(fn (Location $location): string => $this->locationOptionGroupKey($location))
+            ->map(fn (Collection $group): Location => $this->canonicalLocation($group))
+            ->sortBy(fn (Location $location): array => $this->locationSortKey($location))
+            ->values();
+    }
+
+    private function locationOptionGroupKey(Location $location): string
+    {
+        $location->loadMissing('warehouse');
+
+        return $this->warehouseOptionIdentity($location->warehouse).'|'.LocationCode::normalize($location->code);
+    }
+
+    private function warehouseOptionIdentity(?Warehouse $warehouse): string
+    {
+        $warehouseName = trim((string) ($warehouse?->name ?: $warehouse?->code));
+        $warehouseIdentity = LocationCode::normalize(($warehouse?->code ?? '').' '.$warehouseName);
+
+        if (preg_match('/(^|\s)(NAVE\s*)?38($|\s)/u', $warehouseIdentity) === 1) {
+            return 'NAVE 38';
+        }
+
+        return LocationCode::normalize($warehouseName);
+    }
+
+    /** @return array<int|string, mixed> */
+    private function locationSortKey(Location $location): array
+    {
+        return [
+            mb_strtoupper($this->warehouseOptionIdentity($location->warehouse)),
+            ...LocationCode::naturalSortKey($location->code),
+            $location->id,
+        ];
     }
 }

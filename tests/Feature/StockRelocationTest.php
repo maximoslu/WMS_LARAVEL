@@ -324,6 +324,56 @@ class StockRelocationTest extends TestCase
             ->assertSessionHasErrors('destination_location_id');
     }
 
+    public function test_equivalent_warehouse_destination_is_hidden_and_rejected_on_submit(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture();
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $canonicalDestination = Location::factory()->create([
+            'warehouse_id' => $canonicalWarehouse->id,
+            'code' => '15',
+            'active' => true,
+        ]);
+        $duplicateDestination = Location::factory()->create([
+            'warehouse_id' => $duplicateWarehouse->id,
+            'code' => '15',
+            'active' => true,
+        ]);
+
+        $content = $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->get(route('stock.relocations.create', [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+            ]))
+            ->assertOk()
+            ->assertSee('value="'.$canonicalDestination->id.'"', false)
+            ->getContent();
+
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]+value="'.$duplicateDestination->id.'"[^>]*>\s*NAVE 38 - Calle 15\s*<\/option>/s', $content);
+        $this->assertSame(1, substr_count($content, 'NAVE 38 - Calle 15'));
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->post(route('stock.relocations.store'), [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'stock_pallet_id' => $stockPallet->id,
+                'destination_location_id' => $duplicateDestination->id,
+            ])
+            ->assertSessionHasErrors('destination_location_id');
+
+        $this->assertNotSame($duplicateDestination->id, $stockPallet->fresh()->location_id);
+    }
+
     public function test_stock_navigation_exposes_relocation_for_internal_roles_only(): void
     {
         [$client] = $this->stockFixture();

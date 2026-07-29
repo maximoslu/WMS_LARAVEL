@@ -143,7 +143,15 @@
                             <select name="lines[{{ $index }}][location_id]" class="auth-input">
                                 <option value="">Sin ubicacion</option>
                                 @foreach ($locations as $location)
-                                    <option value="{{ $location->id }}" @selected((string) ($line['location_id'] ?? '') === (string) $location->id)>
+                                    @php
+                                        $compatibleClients = array_map('intval', $locationClientOptions[$location->id] ?? []);
+                                    @endphp
+                                    @continue($receipt->client_id && ! in_array((int) $receipt->client_id, $compatibleClients, true))
+                                    <option
+                                        value="{{ $location->id }}"
+                                        data-compatible-clients="{{ implode(',', $compatibleClients) }}"
+                                        @selected((string) ($line['location_id'] ?? '') === (string) $location->id)
+                                    >
                                         {{ $location->displayLabel() }}
                                     </option>
                                 @endforeach

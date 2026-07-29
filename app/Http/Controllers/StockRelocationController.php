@@ -11,7 +11,6 @@ use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
 use App\Services\Inventory\InventoryMovementService;
 use App\Services\Locations\LocationIntegrityService;
-use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -161,18 +160,7 @@ class StockRelocationController extends Controller
     /** @return Collection<int, Location> */
     private function destinationLocations(int $clientId): Collection
     {
-        $locations = LocationCode::applyNaturalOrder(
-            Location::query()
-                ->with('warehouse')
-                ->where('active', true)
-                ->whereHas('warehouse', fn (Builder $query) => $query
-                    ->where('active', true)
-                    ->where(fn (Builder $scope) => $scope
-                        ->whereNull('client_id')
-                        ->orWhere('client_id', $clientId)))
-        )->get();
-
-        return $this->locations->canonicalActiveLocations($locations);
+        return $this->locations->compatibleLocationOptionsForClient($clientId);
     }
 
     private function relocatableScope(Builder $query): void

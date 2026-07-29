@@ -67,6 +67,78 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-29 - FIX UBICACIONES - Catalogo compatible y deduplicado por cliente
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `2a03662f fix: reconcile daily operations stock totals`, sincronizado con `origin/main`.
+
+### Objetivo
+- Prioridad absoluta: corregir ubicaciones repetidas e incompatibles en selectores operativos, especialmente EDELVIVES / NAVE 38.
+- Mantener que una ubicacion visible sea compatible con el cliente seleccionado y que el backend rechace cualquier `location_id` incompatible o no canonico aunque se fuerce el POST.
+- No tocar stock, importador, datos reales, `.env`, `.claude/`, `tmp/`, `vendor/`, `node_modules` ni `public/build`.
+
+### Diagnostico
+- La base local no reproduce duplicados fisicos:
+  - `locations`: 55 filas.
+  - duplicados por `warehouse_id + codigo normalizado`: 0 grupos.
+  - almacenes duplicados por cliente/codigo/nombre: 0 grupos.
+  - NAVE 38 local: 1 almacen, ID `1`, cliente `GLOBAL`, 54 ubicaciones activas.
+- Auditoria solo lectura EDELVIVES / NAVE 38:
+  - `php artisan wms:locations:audit --client=EDELVIVES --warehouse="NAVE 38"`: 0 duplicados, 0 faltantes, extras conservados `FONDO` y `SIN UBICACION`, 178 partidas de stock, sin cambios.
+  - `php artisan wms:locations:deduplicate --client=EDELVIVES --warehouse="NAVE 38" --dry-run`: 0 grupos duplicados, 0 ubicaciones por crear, sin cambios.
+  - `php artisan wms:warehouses:deduplicate --client=EDELVIVES --warehouse-code=38 --dry-run`: 1 almacen detectado, sin consolidacion aplicable, sin cambios.
+- Causa raiz corregida en codigo:
+  - `LocationIntegrityService::canonicalActiveLocations()` canonizaba solo dentro del mismo `warehouse_id`.
+  - Si existia una NAVE 38 global y otra asignada al cliente, o datos historicos equivalentes, el frontend podia recibir varias opciones con la misma etiqueta.
+  - Varios controladores construian consultas propias de ubicaciones en vez de usar una unica fuente de compatibilidad.
+  - El panel IA de entradas tenia un selector propio sin metadatos de compatibilidad.
+  - El autocompletado de articulo podia intentar rellenar `default_location_id` sin comprobar la compatibilidad con el cliente activo.
+
+### Cambios aplicados
+- `LocationIntegrityService` queda como fuente central:
+  - `activeCanonicalLocationOptions()` para catalogo activo/canonico global.
+  - `compatibleLocationOptionsForClient()` para catalogo activo, canonico, compatible y deduplicado por identidad visible de almacen + codigo natural.
+  - `isLocationCompatibleWithClient()` exige que la ubicacion pertenezca al catalogo deduplicado del cliente, no solo que sea activa.
+  - `clientIdsForLocationOptions()` asigna compatibilidad por cliente despues de deduplicar, evitando opciones repetidas al cambiar cliente en frontend.
+- Entradas, articulos, stock, reubicacion y regularizacion usan el mismo catalogo compatible.
+- El endpoint `ajax.locations` acepta `client_id` y filtra/deduplica con el mismo servicio.
+- El selector de propuesta IA de entradas filtra ubicaciones por el cliente de la entrada y conserva `data-compatible-clients`.
+- JS:
+  - sin cliente seleccionado, los selects de ubicacion no muestran opciones no vacias;
+  - la ubicacion por defecto de un articulo solo se autoselecciona si la opcion existe y es compatible con el cliente actual.
+
+### Tests y validaciones
+- `php artisan test --filter=GoodsReceiptManagementTest`: OK, `114 passed`, `616 assertions`.
+- `php artisan test --filter=ItemManagementTest`: OK, `20 passed`, `76 assertions`.
+- `php artisan test --filter=StockRelocationTest`: OK, `12 passed`, `83 assertions`.
+- `php artisan test --filter=StockAdjustmentTest`: OK, `9 passed`, `88 assertions`.
+- `php artisan test --filter=AjaxSearchTest`: OK, `12 passed`, `37 assertions`.
+- `php artisan test --filter=StockOverviewTest`: OK, `54 passed`, `394 assertions`.
+- `php artisan test --filter=LocationDeduplicationCommandTest`: OK, `4 passed`, `47 assertions`.
+- `php artisan test --filter=WarehouseDeduplicationCommandTest`: OK, `3 passed`, `23 assertions`.
+- `php artisan test --filter=StockImportTest`: OK, `36 passed`, `398 assertions`.
+- `php artisan test`: OK, `812 passed`, `4461 assertions`.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Alcance y seguridad
+- No se ejecuto ninguna migracion.
+- No se ejecuto ningun `--apply` de deduplicacion, purga o fusion.
+- No se modificaron datos de stock ni la correccion manual de BOBINAS.
+- No se modifico el importador.
+- No se modificaron datos reales ni produccion.
+- No se tocaron `.env`, secretos, `.claude/`, `tmp/`, `vendor/`, `node_modules` ni `public/build`.
+- No se uso `migrate:fresh`, `db:wipe`, force push ni comandos destructivos.
+- Produccion/Forge queda pendiente de despliegue normal y, si alli aparecen duplicados reales, ejecutar primero dry-run y revisar IDs antes de cualquier `--apply`.
+
+### Cierre preparado
+- Commit sugerido: `fix: normalize warehouse location compatibility`.
+- Push normal a `origin/main`, sin `force push`.
+
+---
+
 ## 2026-07-29 - FIX OPERACIONES DIARIAS - Reconciliacion stock EDELVIVES y entradas multilocacion
 
 **Equipo:** PC trabajo.

@@ -271,7 +271,7 @@ class GoodsReceiptController extends Controller
             'stockPallets.location',
         ]);
 
-        $locations = $this->locationOptions();
+        $locations = $this->locationOptions((int) $goodsReceipt->client_id);
         $clients = Client::query()->where('active', true)->orderBy('name')->get();
 
         return view('goods-receipts.show', [
@@ -613,7 +613,7 @@ class GoodsReceiptController extends Controller
             'receipt' => $receipt,
             'clients' => $clients = Client::query()->where('active', true)->orderBy('name')->get(),
             'suppliers' => Supplier::query()->where('active', true)->orderBy('name')->get(),
-            'locations' => $locations = $this->locationOptions(),
+            'locations' => $locations = $this->locationOptions($this->selectedClientId($request, $receipt)),
             'locationClientOptions' => $this->locationIntegrityService->clientIdsForLocationOptions($locations, $clients),
             'lineValues' => $this->lineValues($request, $receipt),
             'searchEndpoint' => route('ajax.items'),
@@ -622,11 +622,18 @@ class GoodsReceiptController extends Controller
     }
 
     /** @return Collection<int, Location> */
-    private function locationOptions(): Collection
+    private function locationOptions(?int $clientId = null): Collection
     {
-        return $this->locationIntegrityService->canonicalActiveLocations(
-            Location::query()->where('active', true)->with('warehouse.client')->get(),
-        );
+        return $clientId !== null && $clientId > 0
+            ? $this->locationIntegrityService->compatibleLocationOptionsForClient($clientId)
+            : $this->locationIntegrityService->activeCanonicalLocationOptions();
+    }
+
+    private function selectedClientId(Request $request, GoodsReceipt $receipt): ?int
+    {
+        $clientId = $request->old('client_id', $receipt->client_id);
+
+        return is_numeric($clientId) && (int) $clientId > 0 ? (int) $clientId : null;
     }
 
     /**

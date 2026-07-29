@@ -11,7 +11,6 @@ use App\Models\Role;
 use App\Models\StockPallet;
 use App\Services\Locations\LocationIntegrityService;
 use App\Services\Stock\StockAdjustmentService;
-use App\Support\Locations\LocationCode;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -110,18 +109,7 @@ class StockAdjustmentController extends Controller
     /** @return Collection<int, Location> */
     private function locations(int $clientId): Collection
     {
-        $locations = LocationCode::applyNaturalOrder(
-            Location::query()
-                ->with('warehouse')
-                ->where('active', true)
-                ->whereHas('warehouse', fn (Builder $query) => $query
-                    ->where('active', true)
-                    ->where(fn (Builder $scope) => $scope
-                        ->whereNull('client_id')
-                        ->orWhere('client_id', $clientId)))
-        )->get();
-
-        return $this->locations->canonicalActiveLocations($locations);
+        return $this->locations->compatibleLocationOptionsForClient($clientId);
     }
 
     /** @return Collection<int, InventoryMovement> */

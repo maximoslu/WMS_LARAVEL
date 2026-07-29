@@ -1141,6 +1141,60 @@ class StockOverviewTest extends TestCase
         $this->assertNull($stockPallet->fresh()->location_id);
     }
 
+    public function test_stock_batch_edit_hides_and_rejects_equivalent_warehouse_duplicate_location(): void
+    {
+        [$client] = $this->seedBaseData();
+        $canonicalWarehouse = Warehouse::factory()->create([
+            'client_id' => $client->id,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $duplicateWarehouse = Warehouse::factory()->create([
+            'client_id' => null,
+            'code' => '38',
+            'name' => 'NAVE 38',
+            'active' => true,
+        ]);
+        $canonicalLocation = Location::factory()->create([
+            'warehouse_id' => $canonicalWarehouse->id,
+            'code' => '17',
+            'active' => true,
+        ]);
+        $duplicateLocation = Location::factory()->create([
+            'warehouse_id' => $duplicateWarehouse->id,
+            'code' => '17',
+            'active' => true,
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-LOC-DUP-WH',
+        ]);
+        $stockPallet = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+        ]);
+
+        $content = $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->get(route('stock.batches.edit', $stockPallet))
+            ->assertOk()
+            ->assertSee('value="'.$canonicalLocation->id.'"', false)
+            ->getContent();
+
+        $this->assertDoesNotMatchRegularExpression('/<option[^>]+value="'.$duplicateLocation->id.'"[^>]*>\s*NAVE 38 - Calle 17\s*<\/option>/s', $content);
+        $this->assertSame(1, substr_count($content, 'NAVE 38 - Calle 17'));
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->from(route('stock.batches.edit', $stockPallet))
+            ->put(route('stock.batches.update', $stockPallet), [
+                'location_id' => $duplicateLocation->id,
+            ])
+            ->assertRedirect(route('stock.batches.edit', $stockPallet))
+            ->assertSessionHasErrors('location_id');
+
+        $this->assertNull($stockPallet->fresh()->location_id);
+    }
+
     public function test_internal_user_can_update_only_stock_batch_location(): void
     {
         [$client] = $this->seedBaseData();
