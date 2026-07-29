@@ -58,7 +58,7 @@ class DailyOperationRecalculationService
                 ->get();
 
             foreach ($receipts as $receipt) {
-                $receiptPallets = $this->receiptLogisticUnits($receipt);
+                $receiptPallets = $this->totalsService->receiptLogisticUnits($receipt);
                 $inboundPallets += $receiptPallets;
 
                 if ($receiptPallets > 0) {
@@ -121,7 +121,7 @@ class DailyOperationRecalculationService
                 ->get();
 
             foreach ($dispatches as $dispatch) {
-                $dispatchPallets = $this->dispatchLogisticUnits($dispatch);
+                $dispatchPallets = $this->totalsService->dispatchLogisticUnits($dispatch);
                 $outboundPallets += $dispatchPallets;
 
                 if ($dispatchPallets > 0) {
@@ -165,8 +165,12 @@ class DailyOperationRecalculationService
                 }
             }
 
-            $currentStock = $this->totalsService->stockBaseForClient($clientId);
-            $openingPallets = max(0, $currentStock + $outboundPallets - $inboundPallets);
+            $openingPallets = $this->totalsService->openingPalletsForDate(
+                $date,
+                $clientId,
+                $inboundPallets,
+                $outboundPallets,
+            );
             $billableStoragePallets = $openingPallets + $inboundPallets;
 
             if ($billableStoragePallets > 0) {
@@ -185,24 +189,6 @@ class DailyOperationRecalculationService
 
             return $this->totalsService->syncDay($day, $openingPallets, $day->notes, $userId);
         });
-    }
-
-    private function receiptLogisticUnits(GoodsReceipt $receipt): int
-    {
-        return max(0, (int) $receipt->lines->sum(
-            fn ($line): int => (int) $line->pallet_count + (((int) ($line->pico_units ?? 0) > 0) ? 1 : 0)
-        ));
-    }
-
-    private function dispatchLogisticUnits(GoodsDispatch $dispatch): int
-    {
-        $dispatchPallets = max(0, $dispatch->loadedPalletsCount() + $dispatch->loadedPeaksCount());
-
-        if ($dispatchPallets === 0) {
-            $dispatchPallets = max(0, $dispatch->palletsCount() + $dispatch->peaksCount());
-        }
-
-        return $dispatchPallets;
     }
 
     private function createAutoLine(

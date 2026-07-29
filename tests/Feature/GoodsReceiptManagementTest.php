@@ -3671,6 +3671,91 @@ class GoodsReceiptManagementTest extends TestCase
         ]);
     }
 
+    public function test_entrada_bobinas_100_con_dos_lineas_y_ubicaciones_genera_dos_partidas(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $otherLocation = Location::factory()->create([
+            'warehouse_id' => $location->warehouse_id,
+            'code' => 'ENT-B-02',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'BOBINAS-100',
+            'description' => 'Bobinas 100',
+            'units_per_pallet' => 100,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-BOBINAS-100',
+                'received_at' => '2026-07-29',
+                'lines' => [
+                    [
+                        'item_id' => $item->id,
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => 'BOB-100',
+                        'quantity_units' => '',
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 11,
+                        'pico_units' => '',
+                        'location_id' => $location->id,
+                    ],
+                    [
+                        'item_id' => $item->id,
+                        'sku' => '',
+                        'description' => '',
+                        'lot' => 'BOB-100',
+                        'quantity_units' => '',
+                        'units_per_pallet' => 100,
+                        'pallet_count' => 10,
+                        'pico_units' => '',
+                        'location_id' => $otherLocation->id,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()
+            ->where('receipt_number', 'ALB-BOBINAS-100')
+            ->firstOrFail();
+
+        $this->assertSame(2, $receipt->lines()->count());
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $batches = StockPallet::query()
+            ->where('goods_receipt_id', $receipt->id)
+            ->where('item_id', $item->id)
+            ->get()
+            ->keyBy('location_id');
+
+        $this->assertSame(2, $batches->count());
+        $this->assertSame(1100, $batches[$location->id]->quantity_units);
+        $this->assertSame(11, $batches[$location->id]->full_pallets);
+        $this->assertSame('11.00', (string) $batches[$location->id]->warehouse_pallets);
+        $this->assertSame(1000, $batches[$otherLocation->id]->quantity_units);
+        $this->assertSame(10, $batches[$otherLocation->id]->full_pallets);
+        $this->assertSame('10.00', (string) $batches[$otherLocation->id]->warehouse_pallets);
+
+        $movementDeltas = InventoryMovement::query()
+            ->where('source_type', $receipt->getMorphClass())
+            ->where('source_id', $receipt->id)
+            ->where('movement_type', InventoryMovement::RECEIPT)
+            ->pluck('warehouse_pallets_delta')
+            ->map(fn ($delta): string => (string) $delta)
+            ->all();
+
+        $this->assertEqualsCanonicalizing(['11.00', '10.00'], $movementDeltas);
+    }
+
     public function test_autocomplete_entrada_renderiza_sin_mojibake_y_con_contenedor_visible(): void
     {
         $this->seed(RoleSeeder::class);

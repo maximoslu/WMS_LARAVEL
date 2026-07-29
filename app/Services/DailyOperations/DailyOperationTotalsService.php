@@ -4,7 +4,13 @@ namespace App\Services\DailyOperations;
 
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
+use App\Models\GoodsDispatch;
+use App\Models\GoodsDispatchLine;
+use App\Models\GoodsReceipt;
+use App\Models\GoodsReceiptLine;
+use App\Models\InventoryMovement;
 use App\Models\StockPallet;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class DailyOperationTotalsService
@@ -58,5 +64,107 @@ class DailyOperationTotalsService
             ->whereHas('item')
             ->withPhysicalStock()
             ->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'));
+    }
+
+    public function openingPalletsForDate(string $operationDate, int $clientId, int $inboundPallets, int $outboundPallets): int
+    {
+        $date = Carbon::parse($operationDate)->toDateString();
+        $previousDate = Carbon::parse($date)->subDay()->toDateString();
+        $previousDay = DailyOperationDay::query()
+            ->whereDate('operation_date', $previousDate)
+            ->where('client_id', $clientId)
+            ->first();
+
+        if ($previousDay instanceof DailyOperationDay) {
+            return max(0, (int) $previousDay->expected_pallets_tomorrow);
+        }
+
+        return max(0, $this->stockBaseForClient($clientId) + $outboundPallets - $inboundPallets);
+    }
+
+    public function receiptLogisticUnits(GoodsReceipt $receipt): int
+    {
+        $receipt->loadMissing('lines');
+
+        $lineUnits = (int) $receipt->lines->sum(function (GoodsReceiptLine $line) use ($receipt): int {
+            $movementUnits = $this->movementWarehousePalletsForLine($receipt, $line, InventoryMovement::RECEIPT);
+
+            return $movementUnits > 0 ? $movementUnits : $this->receiptLineLogisticUnits($line);
+        });
+
+        return max(
+            0,
+            $lineUnits,
+            $this->movementWarehousePallets($receipt, InventoryMovement::RECEIPT),
+        );
+    }
+
+    public function dispatchLogisticUnits(GoodsDispatch $dispatch): int
+    {
+        $dispatch->loadMissing('lines.allocations');
+        $documentMovementPallets = $this->movementWarehousePallets($dispatch, InventoryMovement::DISPATCH);
+        $dispatchPallets = max(0, (int) $dispatch->lines->sum(function (GoodsDispatchLine $line) use ($dispatch): int {
+            $movementUnits = $this->movementWarehousePalletsForLine($dispatch, $line, InventoryMovement::DISPATCH);
+
+            return $movementUnits > 0 ? $movementUnits : $this->dispatchLineLogisticUnits($line);
+        }));
+
+        if ($dispatchPallets === 0) {
+            $dispatchPallets = $documentMovementPallets;
+        } else {
+            $dispatchPallets = max(
+                $dispatchPallets,
+                $documentMovementPallets,
+            );
+        }
+
+        if ($dispatchPallets === 0) {
+            $dispatchPallets = max(0, $dispatch->palletsCount() + $dispatch->peaksCount());
+        }
+
+        return $dispatchPallets;
+    }
+
+    private function receiptLineLogisticUnits(GoodsReceiptLine $line): int
+    {
+        return (int) $line->pallet_count + ($line->peakUnits() !== [] ? count($line->peakUnits()) : 0);
+    }
+
+    private function dispatchLineLogisticUnits(GoodsDispatchLine $line): int
+    {
+        $pallets = $line->loadedPallets();
+
+        if ($line->isPeakLine()) {
+            return $pallets + $line->loadedPeaks();
+        }
+
+        return $pallets + ($line->loadedPartialUnits() > 0 ? 1 : 0);
+    }
+
+    private function movementWarehousePallets(GoodsReceipt|GoodsDispatch $source, string $movementType): int
+    {
+        $delta = (float) InventoryMovement::query()
+            ->where('source_type', $source->getMorphClass())
+            ->where('source_id', $source->getKey())
+            ->where('movement_type', $movementType)
+            ->sum('warehouse_pallets_delta');
+
+        return (int) round(abs($delta));
+    }
+
+    private function movementWarehousePalletsForLine(
+        GoodsReceipt|GoodsDispatch $source,
+        GoodsReceiptLine|GoodsDispatchLine $line,
+        string $movementType,
+    ): int {
+        $delta = (float) InventoryMovement::query()
+            ->where('source_type', $source->getMorphClass())
+            ->where('source_id', $source->getKey())
+            ->where('source_line_type', $line->getMorphClass())
+            ->where('source_line_id', $line->getKey())
+            ->where('movement_type', $movementType)
+            ->sum('warehouse_pallets_delta');
+
+        return (int) round(abs($delta));
     }
 }

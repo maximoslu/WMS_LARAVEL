@@ -9,6 +9,7 @@ use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
@@ -661,6 +662,148 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(0, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
     }
 
+    public function test_edelvives_daily_operations_reconcile_closed_july_29_case(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create([
+            'name' => 'EDELVIVES',
+            'code' => 'EDELVIVES',
+        ]);
+        $supplier = Supplier::factory()->create([
+            'client_id' => $client->id,
+            'name' => 'EDELVIVES proveedor',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 1,
+        ]);
+
+        DailyOperationDay::query()->create([
+            'operation_date' => '2026-07-28',
+            'client_id' => $client->id,
+            'opening_pallets' => 1026,
+            'stored_pallets_today' => 1026,
+            'moved_pallets_today' => 0,
+            'expected_pallets_tomorrow' => 1026,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+        $this->createStockPallet($client, 1079, StockPallet::STATUS_AVAILABLE, $item);
+
+        $this->createConfirmedReceipt($client, $supplier, $item, $user, 'EDE-029-1', '2026-07-29', [9]);
+        $this->createConfirmedReceipt($client, $supplier, $item, $user, 'EDE-029-2', '2026-07-29', [9]);
+        $this->createConfirmedReceipt($client, $supplier, $item, $user, 'EDE-029-3', '2026-07-29', [7, 11]);
+        [$receipt40, $receipt40Line] = $this->createConfirmedReceipt($client, $supplier, $item, $user, 'EDE-040', '2026-07-29', [29]);
+        $this->recordReceiptWarehouseMovement($receipt40, $receipt40Line, 31, $user);
+
+        foreach ([10, 4] as $index => $pallets) {
+            $dispatch = GoodsDispatch::factory()->create([
+                'client_id' => $client->id,
+                'status' => GoodsDispatch::STATUS_SENT,
+                'sent_at' => '2026-07-29 1'.$index.':00:00',
+                'created_by' => $user->id,
+                'camion_propio' => false,
+            ]);
+
+            GoodsDispatchLine::query()->create([
+                'goods_dispatch_id' => $dispatch->id,
+                'item_id' => $item->id,
+                'line_type' => WmsLineType::PALLET,
+                'sku' => 'EDE-OUT-'.$pallets,
+                'description' => 'Salida EDELVIVES '.$pallets,
+                'units_per_pallet' => 1,
+                'pallets' => $pallets,
+                'requested_units' => $pallets,
+                'requested_pallets' => $pallets,
+                'requested_peaks' => 0,
+                'loaded_pallets' => $pallets,
+                'loaded_peaks' => 0,
+                'is_extra_line' => false,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-29',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-29', 'client_id' => $client->id]));
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-29')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(1026, $day->opening_pallets);
+        $this->assertSame(1093, $day->stored_pallets_today);
+        $this->assertSame(81, $day->moved_pallets_today);
+        $this->assertSame(1079, $day->expected_pallets_tomorrow);
+        $this->assertSame(1079, app(\App\Services\DailyOperations\DailyOperationTotalsService::class)->stockBaseForClient($client->id));
+        $this->assertSame(67, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
+        $this->assertSame(14, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
+
+        $this->assertDatabaseHas('daily_operation_lines', [
+            'day_id' => $day->id,
+            'section' => DailyOperationLine::SECTION_DESCARGA,
+            'source_type' => DailyOperationLine::SOURCE_GOODS_RECEIPT,
+            'source_id' => $receipt40->id,
+            'pallets' => 31,
+        ]);
+        $this->assertSame(29, $receipt40Line->fresh()->pallet_count);
+    }
+
+    public function test_recalculate_does_not_drop_receipt_lines_without_individual_stock_movement(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create([
+            'name' => 'EDELVIVES',
+            'code' => 'EDELVIVES',
+        ]);
+        $supplier = Supplier::factory()->create([
+            'client_id' => $client->id,
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'BOBINAS-100',
+            'description' => 'Bobinas 100',
+            'units_per_pallet' => 1,
+        ]);
+        $this->createStockPallet($client, 21, StockPallet::STATUS_AVAILABLE, $item);
+
+        [$receipt, $firstLine] = $this->createConfirmedReceipt(
+            $client,
+            $supplier,
+            $item,
+            $user,
+            'ALB-BOBINAS-100',
+            '2026-07-29',
+            [11, 10],
+        );
+        $secondLine = $receipt->lines()->whereKeyNot($firstLine->id)->firstOrFail();
+        $this->recordReceiptWarehouseMovement($receipt, $firstLine, 11, $user);
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-07-29',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-29', 'client_id' => $client->id]));
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-07-29')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(0, $day->opening_pallets);
+        $this->assertSame(21, $day->stored_pallets_today);
+        $this->assertSame(21, $day->moved_pallets_today);
+        $this->assertSame(21, $day->expected_pallets_tomorrow);
+        $this->assertSame(21, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
+        $this->assertSame(10, $secondLine->fresh()->pallet_count);
+    }
+
     public function test_recalculate_counts_trips_only_for_receipts_and_dispatches_marked_as_own_truck(): void
     {
         $this->seed(RoleSeeder::class);
@@ -1022,6 +1165,84 @@ class DailyOperationsTest extends TestCase
         if ($pallets > 0) {
             $this->createStockPallet($client, $pallets, StockPallet::STATUS_AVAILABLE);
         }
+    }
+
+    private function createConfirmedReceipt(
+        Client $client,
+        Supplier $supplier,
+        Item $item,
+        User $user,
+        string $receiptNumber,
+        string $date,
+        array $linePallets,
+    ): array {
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'supplier_id' => $supplier->id,
+            'receipt_number' => $receiptNumber,
+            'status' => GoodsReceipt::STATUS_CONFIRMED,
+            'received_at' => $date,
+            'created_by' => $user->id,
+            'confirmed_by' => $user->id,
+            'confirmed_at' => now(),
+        ]);
+        $firstLine = null;
+
+        foreach ($linePallets as $index => $pallets) {
+            $line = GoodsReceiptLine::query()->create([
+                'goods_receipt_id' => $receipt->id,
+                'item_id' => $item->id,
+                'sku' => $receiptNumber.'-'.$index,
+                'description' => 'Entrada EDELVIVES '.$pallets,
+                'lot' => 'LOT-'.$receiptNumber,
+                'quantity_units' => $pallets,
+                'units_per_pallet' => 1,
+                'pallet_count' => $pallets,
+                'pico_units' => null,
+            ]);
+
+            $firstLine ??= $line;
+        }
+
+        return [$receipt, $firstLine];
+    }
+
+    private function recordReceiptWarehouseMovement(GoodsReceipt $receipt, GoodsReceiptLine $line, int $warehousePallets, User $user): void
+    {
+        InventoryMovement::query()->create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'correlation_id' => (string) \Illuminate\Support\Str::uuid(),
+            'idempotency_key' => 'daily-ops-test-receipt-'.$receipt->id.'-'.$line->id,
+            'client_id' => $receipt->client_id,
+            'client_name' => $receipt->client?->name,
+            'item_id' => $line->item_id,
+            'sku' => $line->sku,
+            'description' => $line->description,
+            'lot' => $line->lot,
+            'movement_type' => InventoryMovement::RECEIPT,
+            'source_type' => $receipt->getMorphClass(),
+            'source_id' => $receipt->id,
+            'source_line_type' => $line->getMorphClass(),
+            'source_line_id' => $line->id,
+            'user_id' => $user->id,
+            'user_name' => $user->name,
+            'units_before' => 0,
+            'units_delta' => $warehousePallets,
+            'units_after' => $warehousePallets,
+            'full_pallets_before' => 0,
+            'full_pallets_delta' => $warehousePallets,
+            'full_pallets_after' => $warehousePallets,
+            'warehouse_pallets_before' => 0,
+            'warehouse_pallets_delta' => $warehousePallets,
+            'warehouse_pallets_after' => $warehousePallets,
+            'peaks_before' => [],
+            'peaks_delta' => [],
+            'peaks_after' => [],
+            'metadata' => ['receipt_number' => $receipt->receipt_number],
+            'effective_at' => $receipt->received_at?->copy()->startOfDay() ?? now(),
+            'recorded_at' => now(),
+            'created_at' => now(),
+        ]);
     }
 
     private function createStockPallet(

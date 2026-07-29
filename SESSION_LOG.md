@@ -67,6 +67,73 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-29 - FIX OPERACIONES DIARIAS - Reconciliacion stock EDELVIVES y entradas multilocacion
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `655403d9 fix: correct partial dispatch line progress`, alineado con `origin/main`.
+
+### Objetivo
+- Reconciliar Operaciones diarias para el caso cerrado EDELVIVES del 29/07/2026:
+  - base inicio `1026`;
+  - descargas `67`;
+  - envios `14`;
+  - facturable hoy `1093`;
+  - movido hoy `81`;
+  - base manana `1079`.
+- Mantener intacta la regla de pedidos parciales: un pedido conserva siempre la solicitud original, cada camion es una salida independiente y las cantidades solicitadas no se falsean.
+- Auditar el reporte posterior de BOBINAS-100: dos lineas de entrada, `11` pallets en una ubicacion y `10` en otra, donde no debe perderse la segunda linea.
+
+### Diagnostico
+- La base local no contenia la entrada real de BOBINAS-100 ni los movimientos reales de EDELVIVES del 29/07/2026, asi que el caso se reprodujo con regresiones automatizadas.
+- Causa del descuadre `1018 / 1083 / 79 / 1069`: el recalc reconstruia la apertura desde el stock actual (`stock actual + envios - descargas`). Si el stock actual ya venia descuadrado, la apertura heredaba el error.
+- Causa del `65` frente a `67`: el recalc no tenia una reconciliacion suficientemente robusta entre lineas de entrada y trazas de movimientos. Una entrada podia quedar en `29` por linea cuando la traza operativa indicaba `31`, o podia contar solo la linea con movimiento si otra linea del mismo albaran no tenia traza individual.
+- Auditoria de parciales: `GoodsDispatchManagementTest` sigue cubriendo que una linea ya cargada completa queda pendiente `0`, no se reabre y no descuenta stock dos veces.
+- Auditoria de ubicaciones: `WarehouseLocationManagementTest` y entradas siguen cubriendo selector canonico, orden natural y rechazo backend de ubicaciones incompatibles.
+
+### Cambios aplicados
+- `DailyOperationRecalculationService` delega el calculo de unidades logisticas y apertura en `DailyOperationTotalsService`; la formula queda centralizada.
+- `DailyOperationTotalsService` usa como base de apertura el cierre esperado del dia anterior del mismo cliente cuando existe; si no existe, conserva el fallback historico de reconstruccion desde stock actual.
+- Descargas y envios se calculan por linea: se usa `inventory_movements.warehouse_pallets_delta` de esa linea si existe, y si falta se usa la cantidad logistica de la linea. El total nunca queda por debajo de la traza agregada del documento.
+- Entradas con multiples picos cuentan cada pico separado en vez de colapsar todo a un unico pico.
+- Se agrego una regresion de BOBINAS-100 desde formulario: dos lineas de la misma referencia en ubicaciones distintas generan dos partidas de stock y dos movimientos, `11` y `10`.
+
+### Formula final
+- `base_inicio = cierre_esperado_dia_anterior` si existe; si no, `stock_actual + envios_dia - descargas_dia`.
+- `descargas_dia = suma por linea de entrada confirmada` usando movimiento de la linea si existe, o fallback de linea.
+- `envios_dia = suma por linea de salida enviada/completada` usando movimiento de la linea si existe, o fallback de carga real.
+- `facturable_hoy = base_inicio + descargas_dia`.
+- `movido_hoy = descargas_dia + envios_dia`.
+- `base_manana = facturable_hoy - envios_dia`.
+
+### Tests y validaciones
+- `php artisan test --filter=edelvives_daily_operations_reconcile_closed_july_29_case`: OK, `1 passed`, `11 assertions`.
+- `php artisan test --filter=does_not_drop_receipt_lines_without_individual_stock_movement`: OK, `1 passed`, `8 assertions`.
+- `php artisan test --filter=bobinas_100_con_dos_lineas_y_ubicaciones`: OK, `1 passed`, `12 assertions`.
+- `php artisan test --filter=DailyOperationsTest`: OK, `24 passed`, `162 assertions`.
+- `php artisan test --filter=GoodsReceiptManagementTest`: OK, `112 passed`, `603 assertions`.
+- `php artisan test --filter=GoodsDispatchManagementTest`: OK, `64 passed`, `512 assertions`.
+- `php artisan test --filter=WarehouseLocationManagementTest`: OK, `24 passed`, `114 assertions`.
+- `php artisan test --filter=StockOverview`: OK, `61 passed`, `414 assertions`.
+- `php artisan test --filter=StockExport`: OK, `22 passed`, `117 assertions`.
+- `php artisan test`: OK, `804 passed`, `4411 assertions`.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Alcance y seguridad
+- No se modifico el importador.
+- No se modificaron datos de stock ni se ejecuto ninguna migracion.
+- No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/`, `node_modules/` ni `public/build`.
+- No se uso `migrate:fresh`, `db:wipe`, comandos destructivos ni `force push`.
+- Produccion/Forge queda pendiente de despliegue normal y validacion visual/operativa con el caso real de EDELVIVES.
+
+### Cierre preparado
+- Commit sugerido: `fix: reconcile daily operations stock totals`.
+- Push normal a `origin/main`, sin `force push`.
+
+---
+
 ## 2026-07-29 - FIX PEDIDOS - Progreso acumulado en salidas parciales
 
 **Equipo:** PC trabajo.
