@@ -67,6 +67,92 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-30 - HOTFIX OPERACIONES DIARIAS - Base diaria EDELVIVES con reubicaciones internas
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `0b99c7a1 fix: prevent duplicated receipt movements on edit`, alineado con `origin/main`.
+
+### Incidencia
+- En Operaciones diarias / facturacion diaria de EDELVIVES para el 30/07/2026 se reporto:
+  - stock real antes de salida: `1.079` pales;
+  - entradas externas: `0`;
+  - salida externa #41: `10` pales, camion propio;
+  - stock real final: `1.069`;
+  - resultado correcto: base inicio `1.079`, facturable `1.079`, movido `10`, gestion `1`, viaje `1`, base manana `1.069`.
+- El sistema mostraba base/facturable `1.131` y base manana `1.121`, un desfase de `52` pales.
+- La base local no contiene los dias reales de operaciones EDELVIVES del 29/07/2026 ni 30/07/2026, ni movimientos ledger locales del 30/07/2026 para ese cliente. No se tocaron datos reales ni produccion.
+
+### Causa raiz
+- `DailyOperationRecalculationService` clasifica correctamente operaciones externas: entradas confirmadas (`goods_receipts`) y salidas enviadas/completadas (`goods_dispatches`).
+- La reubicacion actual (`StockRelocationController`) modifica solo ubicacion y registra `InventoryMovement::TRANSFER` con `warehouse_pallets_delta = 0.00`; no crea entrada, salida, gestion, viaje ni cambia stock global.
+- El fallo de calculo estaba en `DailyOperationTotalsService::openingPalletsForDate()`:
+  - si existia un dia anterior, usaba siempre `expected_pallets_tomorrow` de ese dia como apertura;
+  - para el dia operativo actual eso podia arrastrar un cierre anterior contaminado o stale (`1.131`) aunque el stock vivo ya estuviera correcto (`1.069`) y las operaciones externas del dia indicaran apertura `1.079`;
+  - al usar `1.131` como apertura, la salida externa de `10` producia `1.121` como base manana.
+- Dominio cerrado: las reubicaciones internas son trazas de inventario neutras; la apertura del dia actual debe reconstruirse desde stock vivo + salidas externas - entradas externas, no desde un cierre diario anterior que puede estar obsoleto.
+
+### Solucion
+- Para la fecha operativa actual, `openingPalletsForDate()` usa:
+  - `stock actual + salidas externas del dia - entradas externas del dia`.
+- Para fechas historicas, se conserva la regla anterior:
+  - usar cierre esperado del dia anterior si existe;
+  - si no existe, usar la reconstruccion desde stock actual.
+- No se hardcodeo EDELVIVES ni el 30/07/2026 en produccion; la fecha actual se resuelve con `config('app.timezone')`.
+- No se modificaron migraciones, importadores, entradas, salidas, stock, reubicacion, vistas ni `.env`.
+
+### Regresion anadida
+- `test_current_day_recalculate_excludes_internal_relocations_from_edelvives_billing_base` reproduce:
+  - cliente EDELVIVES;
+  - cierre anterior contaminado en `1.131`;
+  - stock inicial total `1.079`;
+  - reubicacion interna de `52` pales entre ubicaciones, con stock global intacto;
+  - salida externa #41 de `10` pales, camion propio;
+  - stock final real `1.069`;
+  - doble pulsacion de `Recalcular`.
+- La prueba valida exactamente:
+  - base inicio `1.079`;
+  - almacenaje/facturable `1.079`;
+  - movido `10`;
+  - descargas `0`;
+  - envios facturables `10`;
+  - gestion camion `1`;
+  - viaje camion `1`;
+  - base manana `1.069`;
+  - reubicacion `TRANSFER` con `warehouse_pallets_before=52`, `warehouse_pallets_after=52` y delta `0.00`;
+  - lineas automaticas idempotentes tras recalcular dos veces.
+
+### Archivos modificados
+- `app/Services/DailyOperations/DailyOperationTotalsService.php`.
+- `tests/Feature/DailyOperationsTest.php`.
+- `SESSION_LOG.md`.
+
+### Validacion ejecutada
+- `php artisan test --filter=current_day_recalculate_excludes_internal_relocations`: OK, `1 passed`, `21 assertions`.
+- `php artisan test --filter=StockRelocationTest`: OK, `12 passed`, `83 assertions`.
+- `php artisan test --filter=DailyOperationsTest`: OK, `26 passed`, `298 assertions`.
+- `php artisan test --filter=GoodsDispatchManagementTest`: OK, `64 passed`, `512 assertions`.
+- `php artisan test --filter=StockOverviewTest`: OK, `54 passed`, `394 assertions`.
+- `php artisan test`: OK, `814 passed`, `4597 assertions`.
+- `npm run build`: OK (`vite 7.3.5`, 55 modulos transformados).
+- `git diff --check`: OK.
+
+### Resultado
+- La logica nueva evita que el dia actual herede una base anterior stale de `1.131`.
+- Con stock real final `1.069`, entradas externas `0` y salida externa `10`, el recalc obtiene `1.069 + 10 - 0 = 1.079`.
+- Las reubicaciones internas quedan fuera de facturacion diaria y permanecen como trazabilidad historica de inventario.
+- La base local no permite afirmar que los `52` reales de produccion correspondan exactamente a una reubicacion concreta: esa comprobacion debe hacerse tras deploy revisando los movimientos/acciones reales del 30/07/2026 en produccion.
+
+### Git / despliegue
+- Commit final previsto: `fix: exclude relocations from daily stock base`.
+- Push previsto: normal a `origin/main`, sin force push.
+- Estado de despliegue: pendiente de Forge/produccion.
+- Tras deploy no hay migraciones nuevas ni comandos adicionales de base de datos.
+- Accion operativa post-deploy: abrir Operaciones diarias de EDELVIVES para `30/07/2026`, pulsar `Recalcular` y validar base inicio `1.079`, facturable `1.079`, movido `10`, gestion `1`, viaje `1`, base manana `1.069`, stock actual `1.069`.
+
+---
+
 ## 2026-07-29 - FIX OPERACIONES DIARIAS - Edicion idempotente de entradas confirmadas
 
 **Equipo:** PC trabajo.

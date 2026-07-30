@@ -69,6 +69,12 @@ class DailyOperationTotalsService
     public function openingPalletsForDate(string $operationDate, int $clientId, int $inboundPallets, int $outboundPallets): int
     {
         $date = Carbon::parse($operationDate)->toDateString();
+        $openingFromCurrentStock = $this->openingPalletsFromCurrentStock($clientId, $inboundPallets, $outboundPallets);
+
+        if ($this->usesLiveStockBaseForDate($date)) {
+            return $openingFromCurrentStock;
+        }
+
         $previousDate = Carbon::parse($date)->subDay()->toDateString();
         $previousDay = DailyOperationDay::query()
             ->whereDate('operation_date', $previousDate)
@@ -79,7 +85,17 @@ class DailyOperationTotalsService
             return max(0, (int) $previousDay->expected_pallets_tomorrow);
         }
 
+        return $openingFromCurrentStock;
+    }
+
+    private function openingPalletsFromCurrentStock(int $clientId, int $inboundPallets, int $outboundPallets): int
+    {
         return max(0, $this->stockBaseForClient($clientId) + $outboundPallets - $inboundPallets);
+    }
+
+    private function usesLiveStockBaseForDate(string $operationDate): bool
+    {
+        return $operationDate === Carbon::now(config('app.timezone', 'UTC'))->toDateString();
     }
 
     public function receiptLogisticUnits(GoodsReceipt $receipt): int

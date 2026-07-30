@@ -21,6 +21,7 @@ use App\Models\Warehouse;
 use App\Support\WmsLineType;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class DailyOperationsTest extends TestCase
@@ -555,6 +556,166 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(1035, $day->expected_pallets_tomorrow);
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
         $this->assertSame(0, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+    }
+
+    public function test_current_day_recalculate_excludes_internal_relocations_from_edelvives_billing_base(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-30 12:00:00', 'Europe/Madrid'));
+
+        try {
+            $this->seed(RoleSeeder::class);
+            $user = $this->makeUserWithRole(Role::ALMACEN);
+            $client = Client::factory()->create([
+                'name' => 'EDELVIVES',
+                'code' => 'EDELVIVES',
+            ]);
+            $warehouse = Warehouse::factory()->create([
+                'client_id' => $client->id,
+                'code' => '38',
+                'name' => 'NAVE 38',
+                'active' => true,
+            ]);
+            $source = Location::factory()->create([
+                'warehouse_id' => $warehouse->id,
+                'code' => '10',
+                'active' => true,
+            ]);
+            $destination = Location::factory()->create([
+                'warehouse_id' => $warehouse->id,
+                'code' => '12',
+                'active' => true,
+            ]);
+            $dispatchLocation = Location::factory()->create([
+                'warehouse_id' => $warehouse->id,
+                'code' => '14',
+                'active' => true,
+            ]);
+            $item = Item::factory()->create([
+                'client_id' => $client->id,
+                'sku' => 'EDELVIVES-30-07',
+                'units_per_pallet' => 1,
+            ]);
+
+            DailyOperationDay::query()->create([
+                'operation_date' => '2026-07-29',
+                'client_id' => $client->id,
+                'opening_pallets' => 1131,
+                'stored_pallets_today' => 1131,
+                'moved_pallets_today' => 0,
+                'expected_pallets_tomorrow' => 1131,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+            ]);
+
+            $relocatedStock = StockPallet::factory()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'location_id' => $source->id,
+                'quantity_units' => 52,
+                'units_per_pallet' => 1,
+                'full_pallets' => 52,
+                'warehouse_pallets' => 52,
+                'active' => true,
+                'status' => StockPallet::STATUS_AVAILABLE,
+            ]);
+            $dispatchStock = StockPallet::factory()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'location_id' => $dispatchLocation->id,
+                'quantity_units' => 1027,
+                'units_per_pallet' => 1,
+                'full_pallets' => 1027,
+                'warehouse_pallets' => 1027,
+                'active' => true,
+                'status' => StockPallet::STATUS_AVAILABLE,
+            ]);
+            $totals = app(\App\Services\DailyOperations\DailyOperationTotalsService::class);
+
+            $this->assertSame(1079, $totals->stockBaseForClient($client->id));
+
+            $this->actingAs($user)
+                ->post(route('stock.relocations.store'), [
+                    'client_id' => $client->id,
+                    'item_id' => $item->id,
+                    'stock_pallet_id' => $relocatedStock->id,
+                    'destination_location_id' => $destination->id,
+                ])
+                ->assertRedirect();
+
+            $transfer = InventoryMovement::query()
+                ->where('movement_type', InventoryMovement::TRANSFER)
+                ->firstOrFail();
+
+            $this->assertSame(52.0, (float) $transfer->warehouse_pallets_before);
+            $this->assertSame(52.0, (float) $transfer->warehouse_pallets_after);
+            $this->assertSame('0.00', (string) $transfer->warehouse_pallets_delta);
+            $this->assertSame(1079, $totals->stockBaseForClient($client->id));
+
+            $dispatch = GoodsDispatch::factory()->create([
+                'id' => 41,
+                'client_id' => $client->id,
+                'status' => GoodsDispatch::STATUS_SENT,
+                'sent_at' => '2026-07-30 09:00:00',
+                'created_by' => $user->id,
+                'camion_propio' => true,
+                'stock_applied_at' => '2026-07-30 09:00:00',
+                'stock_applied_by' => $user->id,
+                'warehouse_stock_applied_at' => '2026-07-30 09:00:00',
+                'warehouse_stock_applied_by' => $user->id,
+            ]);
+
+            GoodsDispatchLine::query()->create([
+                'goods_dispatch_id' => $dispatch->id,
+                'item_id' => $item->id,
+                'stock_pallet_id' => $dispatchStock->id,
+                'line_type' => WmsLineType::PALLET,
+                'sku' => 'EDELVIVES-30-07',
+                'description' => 'Salida EDELVIVES 30/07',
+                'units_per_pallet' => 1,
+                'pallets' => 10,
+                'requested_units' => 10,
+                'requested_pallets' => 10,
+                'requested_peaks' => 0,
+                'loaded_pallets' => 10,
+                'loaded_peaks' => 0,
+                'is_extra_line' => false,
+            ]);
+
+            $dispatchStock->forceFill([
+                'quantity_units' => 1017,
+                'full_pallets' => 1017,
+                'warehouse_pallets' => 1017,
+            ])->save();
+
+            $this->assertSame(1069, $totals->stockBaseForClient($client->id));
+
+            foreach (range(1, 2) as $_) {
+                $this->actingAs($user)
+                    ->post(route('daily-operations.recalculate'), [
+                        'operation_date' => '2026-07-30',
+                        'client_id' => $client->id,
+                    ])
+                    ->assertRedirect(route('daily-operations.index', ['date' => '2026-07-30', 'client_id' => $client->id]));
+            }
+
+            $day = DailyOperationDay::query()
+                ->whereDate('operation_date', '2026-07-30')
+                ->where('client_id', $client->id)
+                ->firstOrFail();
+
+            $this->assertSame(1079, $day->opening_pallets);
+            $this->assertSame(1079, $day->stored_pallets_today);
+            $this->assertSame(10, $day->moved_pallets_today);
+            $this->assertSame(1069, $day->expected_pallets_tomorrow);
+            $this->assertSame(0, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
+            $this->assertSame(10, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
+            $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+            $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+            $this->assertSame(1079, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ALMACENAJE)->sum('pallets'));
+            $this->assertSame(4, DailyOperationLine::query()->where('day_id', $day->id)->where('is_auto_generated', true)->count());
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_recalculate_uses_logistic_units_for_storage_movements_and_tomorrow_base(): void
