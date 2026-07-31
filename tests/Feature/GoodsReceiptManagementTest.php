@@ -254,6 +254,63 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('data-compatible-clients="'.$otherClient->id.'"', false);
     }
 
+    public function test_goods_receipt_create_form_builds_location_compatibility_in_bulk(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $clients = collect(range(1, 6))
+            ->map(fn (int $index): Client => Client::factory()->create([
+                'code' => 'CLIENTE-'.$index,
+                'name' => 'Cliente '.$index,
+            ]));
+        $firstLocation = null;
+        $lastLocation = null;
+
+        foreach ($clients as $index => $client) {
+            $warehouse = Warehouse::factory()->create([
+                'client_id' => $client->id,
+                'code' => 'WH-'.$index,
+                'name' => 'Almacen '.$index,
+            ]);
+
+            foreach (range(1, 12) as $code) {
+                $location = Location::factory()->create([
+                    'warehouse_id' => $warehouse->id,
+                    'code' => (string) $code,
+                ]);
+
+                $firstLocation ??= $location;
+                $lastLocation = $location;
+            }
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $response = $this->actingAs($user)->get(route('goods-receipts.create'));
+        $queryCount = count(DB::getQueryLog());
+
+        DB::disableQueryLog();
+
+        $content = $response
+            ->assertOk()
+            ->assertSee('data-goods-receipt-form', false)
+            ->assertSee('value="'.$firstLocation->id.'"', false)
+            ->assertSee('value="'.$lastLocation->id.'"', false)
+            ->getContent();
+
+        $this->assertLessThan(300, $queryCount);
+        $this->assertMatchesRegularExpression(
+            '/value="'.$firstLocation->id.'"\\s+data-compatible-clients="'.$clients->first()->id.'"/',
+            $content
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/value="'.$firstLocation->id.'"\\s+data-compatible-clients="[^"]*'.$clients->last()->id.'[^"]*"/',
+            $content
+        );
+    }
+
     public function test_edelvives_location_options_are_nave_38_client_scoped_and_naturally_sorted(): void
     {
         $this->seed(RoleSeeder::class);

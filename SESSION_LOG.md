@@ -67,6 +67,87 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-31 - HOTFIX ENTRADAS - Nueva entrada dejaba la pantalla cargando
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `639723a4 fix: exclude relocations from daily stock base`, alineado con `origin/main`.
+
+### Incidencia
+- En `Entradas de mercancia`, el boton `Nueva entrada` no llegaba a abrir el formulario y dejaba la pantalla cargando indefinidamente.
+- La ruta afectada era `GET entradas/crear` (`goods-receipts.create`), servida por `GoodsReceiptController@create`.
+- No habia excepcion reciente en `storage/logs/laravel.log`; el fallo era una respuesta extremadamente lenta antes de renderizar el HTML.
+- La operativa de BOBINAS con dos lineas en ubicaciones distintas ya estaba corregida manualmente a `21` pales; no se tocaron datos ni correcciones manuales.
+
+### Diagnostico
+- `GoodsReceiptController::create()` llamaba a `formData()` y este construia el selector de ubicaciones con `LocationIntegrityService`.
+- El cuello de botella estaba en `LocationIntegrityService::clientIdsForLocationOptions()`:
+  - recorria cada cliente contra cada ubicacion;
+  - cada comprobacion recalculaba canonicalidad de la ubicacion;
+  - `canonicalLocation()` llamaba a `referenceCounts()` incluso para grupos de una sola ubicacion;
+  - se repetian consultas a `stock_pallets`, `goods_receipt_lines`, `items` e `inventory_movements` miles de veces.
+- Medicion local antes del parche:
+  - `55` ubicaciones activas y `5` clientes activos;
+  - compatibilidad de ubicaciones: `60.413` consultas y unos `20,0162` s;
+  - render completo sintetico de `goods-receipts.create`: `60.437` consultas y unos `17,2569` s.
+- Causa raiz real: problema de query/algoritmo N x M con recalculo repetido, no JavaScript, no Blade y no modificacion de stock.
+
+### Solucion
+- Se centralizo el calculo de compatibilidad en bloque dentro de `LocationIntegrityService`:
+  - `clientIdsUsingWarehouses()` obtiene en tres consultas los clientes que usan cada almacen por stock, articulos y lineas de entrada;
+  - `locationIsCompatibleForClient()` reutiliza ese mapa para pintar opciones y mantener la misma regla de compatibilidad;
+  - `compatibleLocationOptionsForClient()` y `clientIdsForLocationOptions()` usan el mapa bulk;
+  - `canonicalLocation()` ya no consulta referencias cuando el grupo tiene una sola ubicacion.
+- Se mantiene la validacion backend:
+  - ubicacion inactiva o almacen inactivo se rechaza;
+  - ubicacion de otro cliente se rechaza;
+  - ubicacion duplicada/equivalente no canonica se rechaza aunque manipulen el POST.
+- No se cambiaron importadores, calculos de stock, migraciones, datos, seeders, Blade ni JavaScript.
+
+### Comprobacion local
+- Medicion local despues del parche:
+  - `55` ubicaciones activas y `5` clientes activos;
+  - compatibilidad de ubicaciones: `6` consultas y `0,0249` s;
+  - render completo sintetico de `goods-receipts.create`: `31` consultas y `0,0788` s;
+  - el HTML contiene `data-goods-receipt-form`.
+- La pantalla de nueva entrada conserva cliente, proveedor, transporte, documento, lineas, selector de ubicaciones y orden natural.
+- EDELVIVES / NAVE 38 conserva ubicaciones compatibles, sin duplicados visuales y con orden `1, 2, 10`.
+
+### Regresion anadida
+- `test_goods_receipt_create_form_builds_location_compatibility_in_bulk` crea varios clientes y decenas de ubicaciones, abre `goods-receipts.create`, valida el formulario y limita el numero de consultas.
+- La prueba falla contra el comportamiento anterior por explosion de consultas y protege el boton `Nueva entrada`.
+- Se mantienen las regresiones existentes:
+  - BOBINAS 100 con dos lineas y ubicaciones genera dos partidas;
+  - ubicacion de otro cliente se rechaza;
+  - duplicado equivalente no canonico se rechaza;
+  - selector de EDELVIVES / NAVE 38 se deduplica y ordena naturalmente.
+
+### Validacion ejecutada
+- `php -l app\Services\Locations\LocationIntegrityService.php`: OK.
+- `php -l tests\Feature\GoodsReceiptManagementTest.php`: OK.
+- `php artisan test --filter=GoodsReceiptManagementTest`: `115 passed`, `623 assertions`.
+- `php artisan test --filter=ItemManagementTest`: `20 passed`, `76 assertions`.
+- `php artisan test --filter=StockRelocationTest`: `12 passed`, `83 assertions`.
+- `php artisan test --filter=StockAdjustmentTest`: `9 passed`, `88 assertions`.
+- `php artisan test --filter=AjaxSearchTest`: `12 passed`, `37 assertions`.
+- `php artisan test --filter=WarehouseLocationManagementTest`: `24 passed`, `114 assertions`.
+- `php artisan test --filter=LocationDeduplicationCommandTest`: `4 passed`, `47 assertions`.
+- `php artisan test --filter=WarehouseDeduplicationCommandTest`: `3 passed`, `23 assertions`.
+- `php artisan test --filter=Location`: `91 passed`, `624 assertions`.
+- `php artisan test`: `815 passed`, `4604 assertions`.
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- Pendiente al redactar esta entrada: commit y push.
+
+### Produccion / Forge
+- No se ha tocado produccion directamente.
+- Cuando el cambio quede en `origin/main`, Forge debera desplegarlo segun su flujo habitual.
+- No hay migraciones nuevas en este hotfix.
+- Pendiente validar en produccion que `Entradas de mercancia > Nueva entrada` abre inmediatamente.
+
+---
+
 ## 2026-07-30 - HOTFIX OPERACIONES DIARIAS - Base diaria EDELVIVES con reubicaciones internas
 
 **Equipo:** PC trabajo.

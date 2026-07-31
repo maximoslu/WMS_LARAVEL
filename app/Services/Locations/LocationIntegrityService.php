@@ -88,6 +88,10 @@ class LocationIntegrityService
     /** @param Collection<int, Location> $group */
     public function canonicalLocation(Collection $group): Location
     {
+        if ($group->count() === 1) {
+            return $group->first();
+        }
+
         $normalized = LocationCode::normalize($group->first()->code);
 
         return $group
@@ -137,9 +141,12 @@ class LocationIntegrityService
             return collect();
         }
 
+        $locations = $this->activeCanonicalLocationOptions();
+        $warehouseClientIds = $this->clientIdsUsingWarehouses($locations->pluck('warehouse_id'));
+
         return $this->deduplicateLocationOptionsForClient(
-            $this->activeCanonicalLocationOptions()
-                ->filter(fn (Location $location): bool => $this->isBaseLocationCompatibleWithClient($location, $clientId))
+            $locations
+                ->filter(fn (Location $location): bool => $this->locationIsCompatibleForClient($location, $clientId, $warehouseClientIds))
                 ->values(),
         );
     }
@@ -176,15 +183,11 @@ class LocationIntegrityService
             return false;
         }
 
-        $warehouseClientId = $location->warehouse?->client_id;
-
-        if ($warehouseClientId !== null) {
-            return (int) $warehouseClientId === $clientId;
-        }
-
-        $clientIds = $this->clientIdsUsingWarehouse((int) $location->warehouse_id);
-
-        return $clientIds === [] || in_array($clientId, $clientIds, true);
+        return $this->locationIsCompatibleForClient(
+            $location,
+            $clientId,
+            $this->clientIdsUsingWarehouses(collect([(int) $location->warehouse_id])),
+        );
     }
 
     /**
@@ -195,6 +198,7 @@ class LocationIntegrityService
     public function clientIdsForLocationOptions(Collection $locations, Collection $clients): array
     {
         $locations->each(fn (Location $location): Location => $location->loadMissing('warehouse'));
+        $warehouseClientIds = $this->clientIdsUsingWarehouses($locations->pluck('warehouse_id'));
         $options = $locations
             ->mapWithKeys(fn (Location $location): array => [(int) $location->id => []])
             ->all();
@@ -208,7 +212,7 @@ class LocationIntegrityService
 
             $this->deduplicateLocationOptionsForClient(
                 $locations
-                    ->filter(fn (Location $location): bool => $this->isBaseLocationCompatibleWithClient($location, $clientId))
+                    ->filter(fn (Location $location): bool => $this->locationIsCompatibleForClient($location, $clientId, $warehouseClientIds))
                     ->values()
             )->each(function (Location $location) use (&$options, $clientId): void {
                 $options[(int) $location->id][] = $clientId;
@@ -359,30 +363,84 @@ class LocationIntegrityService
     /** @return list<int> */
     private function clientIdsUsingWarehouse(int $warehouseId): array
     {
-        $locationIds = Location::query()
-            ->where('warehouse_id', $warehouseId)
-            ->pluck('id');
+        return $this->clientIdsUsingWarehouses(collect([$warehouseId]))[$warehouseId] ?? [];
+    }
 
-        if ($locationIds->isEmpty()) {
+    /**
+     * @param  Collection<int, int>  $warehouseIds
+     * @return array<int, list<int>>
+     */
+    private function clientIdsUsingWarehouses(Collection $warehouseIds): array
+    {
+        $warehouseIds = $warehouseIds
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($warehouseIds->isEmpty()) {
             return [];
         }
 
-        return collect()
-            ->merge(DB::table('stock_pallets')
-                ->whereIn('location_id', $locationIds)
-                ->pluck('client_id'))
-            ->merge(DB::table('items')
-                ->whereIn('default_location_id', $locationIds)
-                ->pluck('client_id'))
-            ->merge(DB::table('goods_receipt_lines')
-                ->join('goods_receipts', 'goods_receipts.id', '=', 'goods_receipt_lines.goods_receipt_id')
-                ->whereIn('goods_receipt_lines.location_id', $locationIds)
-                ->pluck('goods_receipts.client_id'))
-            ->map(fn (mixed $id): int => (int) $id)
-            ->filter()
-            ->unique()
-            ->values()
+        $usage = array_fill_keys($warehouseIds->all(), []);
+        $append = function (object $row) use (&$usage): void {
+            $warehouseId = (int) $row->warehouse_id;
+            $clientId = (int) $row->client_id;
+
+            if ($warehouseId > 0 && $clientId > 0) {
+                $usage[$warehouseId][] = $clientId;
+            }
+        };
+
+        DB::table('stock_pallets')
+            ->join('locations', 'locations.id', '=', 'stock_pallets.location_id')
+            ->whereIn('locations.warehouse_id', $warehouseIds)
+            ->get(['locations.warehouse_id as warehouse_id', 'stock_pallets.client_id as client_id'])
+            ->each($append);
+
+        DB::table('items')
+            ->join('locations', 'locations.id', '=', 'items.default_location_id')
+            ->whereIn('locations.warehouse_id', $warehouseIds)
+            ->get(['locations.warehouse_id as warehouse_id', 'items.client_id as client_id'])
+            ->each($append);
+
+        DB::table('goods_receipt_lines')
+            ->join('goods_receipts', 'goods_receipts.id', '=', 'goods_receipt_lines.goods_receipt_id')
+            ->join('locations', 'locations.id', '=', 'goods_receipt_lines.location_id')
+            ->whereIn('locations.warehouse_id', $warehouseIds)
+            ->get(['locations.warehouse_id as warehouse_id', 'goods_receipts.client_id as client_id'])
+            ->each($append);
+
+        return collect($usage)
+            ->map(fn (array $clientIds): array => collect($clientIds)
+                ->unique()
+                ->sort()
+                ->values()
+                ->all())
             ->all();
+    }
+
+    /**
+     * @param  array<int, list<int>>  $warehouseClientIds
+     */
+    private function locationIsCompatibleForClient(Location $location, int $clientId, array $warehouseClientIds): bool
+    {
+        $location->loadMissing('warehouse');
+
+        if ($clientId <= 0 || ! $location->active || ! $location->warehouse?->active) {
+            return false;
+        }
+
+        $warehouseClientId = $location->warehouse?->client_id;
+
+        if ($warehouseClientId !== null) {
+            return (int) $warehouseClientId === $clientId;
+        }
+
+        $clientIds = $warehouseClientIds[(int) $location->warehouse_id]
+            ?? $this->clientIdsUsingWarehouse((int) $location->warehouse_id);
+
+        return $clientIds === [] || in_array($clientId, $clientIds, true);
     }
 
     /** @return Collection<int, Location> */
