@@ -4308,6 +4308,26 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     grid-column: span 6;
 }
 
+@media (min-width: 1101px) {
+    .goods-receipt-line-field--article,
+    .goods-receipt-line-field--description {
+        grid-column: span 4;
+    }
+
+    .goods-receipt-line-field--sku,
+    .goods-receipt-line-field--lot,
+    .goods-receipt-line-field--quantity,
+    .goods-receipt-line-field--units,
+    .goods-receipt-line-field--pallets,
+    .goods-receipt-line-field--location {
+        grid-column: span 2;
+    }
+
+    .goods-receipt-line-field--peaks {
+        grid-column: span 4;
+    }
+}
+
 .goods-receipt-peaks {
     align-self: start;
 }

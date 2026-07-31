@@ -16,6 +16,7 @@ use App\Models\Warehouse;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractionResult;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractorInterface;
+use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -3926,8 +3927,8 @@ class GoodsReceiptManagementTest extends TestCase
 
         $firstItem = Item::factory()->create([
             'client_id' => $client->id,
-            'sku' => 'CAJA0031',
-            'description' => 'CAJA0031',
+            'sku' => 'CAJA32',
+            'description' => 'CAJA32',
             'units_per_pallet' => 700,
         ]);
         $secondItem = Item::factory()->create([
@@ -3950,7 +3951,7 @@ class GoodsReceiptManagementTest extends TestCase
                         'quantity_units' => 3500,
                         'units_per_pallet' => 700,
                         'pallet_count' => 5,
-                        'location_id' => $location->id,
+                        'location_id' => null,
                     ],
                     [
                         'item_id' => $secondItem->id,
@@ -4015,10 +4016,14 @@ class GoodsReceiptManagementTest extends TestCase
         $this->actingAs($superadmin)
             ->get(route('stock.index', ['client_id' => $client->id]))
             ->assertOk()
-            ->assertSee('CAJA0031')
+            ->assertSee('CAJA32')
             ->assertSee('CAJA0075')
             ->assertSee('30.100')
             ->assertSee('43');
+
+        $overview = app(StockOverviewBuilder::class)->build($superadmin, ['client_id' => $client->id]);
+        $this->assertSame(33600, $overview['summary']['total_units']);
+        $this->assertSame(48.0, $overview['summary']['total_warehouse_pallets']);
     }
 
     public function test_confirmed_receipt_without_stock_tracking_applies_stock_when_edited(): void
@@ -4113,6 +4118,95 @@ class GoodsReceiptManagementTest extends TestCase
             'full_pallets' => 43,
             'warehouse_pallets' => 43,
             'location_id' => null,
+        ]);
+    }
+
+    public function test_new_receipt_adds_pallets_when_merging_existing_friesland_stock(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+        $client->update(['code' => 'FRIESLAND', 'name' => 'FRIESLAND']);
+
+        $firstItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'CAJA0075-MERGE',
+            'description' => 'CAJA0075',
+            'units_per_pallet' => 700,
+        ]);
+        $secondItem = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'CAJA32-MERGE',
+            'description' => 'CAJA32',
+            'units_per_pallet' => 700,
+        ]);
+
+        foreach ([$firstItem, $secondItem] as $item) {
+            StockPallet::factory()->create([
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'goods_receipt_id' => null,
+                'location_id' => null,
+                'location_text' => null,
+                'lot' => 'NO LOTE',
+                'quantity_units' => 700,
+                'units_per_pallet' => 700,
+                'full_pallets' => 1,
+                'peaks_count' => 0,
+                'warehouse_pallets' => 1,
+                'stock_category' => StockPallet::CATEGORY_IN_USE,
+                'active' => true,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-FRIESLAND-MERGE',
+                'received_at' => '2026-07-31',
+                'lines' => [
+                    [
+                        'item_id' => $firstItem->id,
+                        'lot' => 'NO LOTE',
+                        'quantity_units' => 30100,
+                        'units_per_pallet' => 700,
+                        'pallet_count' => 43,
+                        'location_id' => null,
+                    ],
+                    [
+                        'item_id' => $secondItem->id,
+                        'lot' => 'NO LOTE',
+                        'quantity_units' => 3500,
+                        'units_per_pallet' => 700,
+                        'pallet_count' => 5,
+                        'location_id' => null,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-FRIESLAND-MERGE')->firstOrFail();
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $overview = app(StockOverviewBuilder::class)->build($user, ['client_id' => $client->id]);
+        $this->assertSame(33600 + 1400, $overview['summary']['total_units']);
+        $this->assertSame(50.0, $overview['summary']['total_warehouse_pallets']);
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $firstItem->id,
+            'quantity_units' => 30800,
+            'warehouse_pallets' => 44,
+        ]);
+        $this->assertDatabaseHas('stock_pallets', [
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $secondItem->id,
+            'quantity_units' => 4200,
+            'warehouse_pallets' => 6,
         ]);
     }
 

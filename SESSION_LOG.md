@@ -4,6 +4,42 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-31 - FIX ENTRADAS - Acumulacion de palets al reutilizar stock existente
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+
+### Incidencia y causa raiz
+- Se reprodujo por HTTP una entrada nueva FRIESLAND con dos lineas: `CAJA0075` (`43` palets, `30100` uds) y `CAJA32` (`5` palets, `3500` uds), ambas con `NO LOTE` y sin ubicacion.
+- La confirmacion creaba las lineas, partidas y movimientos `receipt`, pero al coincidir con partidas de stock ya existentes solo sumaba unidades, `full_pallets` y picos.
+- `warehouse_pallets` conservaba el valor anterior de la partida reutilizada, por lo que el resumen de Stock no reflejaba los `48` palets nuevos aunque las lineas y unidades existieran.
+
+### Solucion
+- `GoodsReceiptStockApplicationService` suma los palets completos y picos de cada linea a `warehouse_pallets` al reutilizar o crear la partida.
+- Se mantiene la puerta unica e idempotente de aplicacion al confirmar: una confirmacion no duplica y una edicion confirmada revierte y reaplica una sola vez.
+- No se tocaron importadores, calculo de stock de entradas, datos reales, migraciones ni EDELVIVES.
+- Se ajusto solo la cuadrícula CSS/Blade del formulario de entradas para alinear los campos en escritorio. Se conservaron nombres de inputs y hooks JavaScript.
+
+### Regresiones
+- El caso `43 + 5` termina confirmado, con dos lineas, dos partidas, movimientos positivos y `+33600` uds / `+48` palets.
+- Al fusionar con un stock inicial de `2` palets, el resumen pasa a `50` y las partidas quedan en `44` y `6` palets.
+- Se mantienen idempotencia, edicion confirmada, sin ubicacion, `NO LOTE`, aislamiento por cliente e importacion FRIESLAND/EDELVIVES.
+
+### Validacion
+- Tests focalizados: GoodsReceiptManagement `118/660`, StockOverview `54/394`, DailyOperations `26/298`, GoodsDispatchManagement `64/512`, StockRelocation `12/83`, StockImport `36/398`, StockExport `22/117`.
+- Suite completa: **818 passed**, **4641 assertions**.
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- Comprobacion visual local: la ruta de crear entrada redirige al login; no se usaron credenciales desconocidas. El ajuste visual queda validado por Blade/CSS y regresiones de formulario.
+
+### Produccion / Forge
+- No se modifico produccion ni se ejecutaron migraciones.
+- El commit en GitHub no demuestra por si solo que Forge haya desplegado el cambio.
+- Pendiente Deploy Now en Forge y validacion con la entrada real de FRIESLAND, confirmando `stock_applied_at`, movimientos, partidas y total de Stock.
+
+---
+
 ## 2026-07-31 - HOTFIX ENTRADAS - Confirmada sin impacto en stock tras editar
 
 **Equipo:** PC trabajo.

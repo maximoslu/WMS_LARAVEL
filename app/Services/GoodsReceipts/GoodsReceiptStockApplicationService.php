@@ -161,6 +161,10 @@ class GoodsReceiptStockApplicationService
         $stockPallet = $this->resolveTargetBatch($receipt, $item, $line, $unitsPerPallet);
         $before = $this->movements->snapshot($stockPallet);
         $nextQuantityUnits = (int) ($stockPallet->quantity_units ?? 0) + $quantityUnits;
+        $existingWarehousePallets = $stockPallet->exists
+            ? (float) ($stockPallet->warehouse_pallets ?? ((int) $stockPallet->full_pallets + (int) $stockPallet->peaks_count))
+            : 0.0;
+        $nextWarehousePallets = $existingWarehousePallets + $fullPallets + count($peakUnits);
 
         $stockPeaks = $this->mergedStockPeaks($stockPallet, $peakUnits, $line);
 
@@ -175,6 +179,7 @@ class GoodsReceiptStockApplicationService
             'received_at' => $receipt->received_at,
             'status' => StockPallet::STATUS_AVAILABLE,
             'active' => true,
+            'warehouse_pallets' => $nextWarehousePallets,
             'notes' => $line->notes,
             'quantity_units' => $nextQuantityUnits,
             ...$this->peakAttributes($stockPeaks),

@@ -24,7 +24,7 @@
     </div>
 
     <div class="goods-receipt-line-grid">
-        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--wide">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--wide goods-receipt-line-field--article">
             <span>Articulo</span>
             <div
                 class="ajax-autocomplete goods-receipt-line-picker"
@@ -66,7 +66,7 @@
             </div>
         </label>
 
-        <label class="auth-field goods-receipt-line-field">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--sku">
             <span>SKU</span>
             <input
                 type="text"
@@ -83,7 +83,7 @@
             @enderror
         </label>
 
-        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--wide">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--wide goods-receipt-line-field--description">
             <span>Descripcion</span>
             <input
                 type="text"
@@ -100,7 +100,7 @@
             @enderror
         </label>
 
-        <label class="auth-field goods-receipt-line-field">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--lot">
             <span>Lote</span>
             <input
                 type="text"
@@ -116,7 +116,7 @@
             @enderror
         </label>
 
-        <label class="auth-field goods-receipt-line-field">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--quantity">
             <span>Total uds</span>
             <input
                 type="number"
@@ -131,7 +131,7 @@
             @enderror
         </label>
 
-        <label class="auth-field goods-receipt-line-field">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--units">
             <span>Uds/palet</span>
             <input
                 type="number"
@@ -148,7 +148,7 @@
             @enderror
         </label>
 
-        <label class="auth-field goods-receipt-line-field">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--pallets">
             <span>Pallets completos</span>
             <input
                 type="number"
@@ -163,7 +163,7 @@
             @enderror
         </label>
 
-        <div class="auth-field goods-receipt-line-field goods-receipt-line-field--wide goods-receipt-peaks" data-line-peaks>
+        <div class="auth-field goods-receipt-line-field goods-receipt-line-field--wide goods-receipt-line-field--peaks goods-receipt-peaks" data-line-peaks>
             <div class="goods-receipt-peaks-head">
                 <span>Picos</span>
                 <button type="button" class="button-secondary compact-button btn-table" data-add-peak>Añadir pico</button>
@@ -194,7 +194,7 @@
             <small class="helper-text">Hasta 10 picos separados. El total de la línea se actualiza automáticamente.</small>
         </div>
 
-        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--wide">
+        <label class="auth-field goods-receipt-line-field goods-receipt-line-field--wide goods-receipt-line-field--location">
             <span>Ubicacion</span>
             <select name="lines[{{ $index }}][location_id]" class="auth-input" data-line-location>
                 <option value="">Sin ubicacion</option>
