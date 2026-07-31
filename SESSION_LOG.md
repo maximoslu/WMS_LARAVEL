@@ -4,6 +4,55 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-07-31 - HOTFIX ENTRADAS - Confirmada sin impacto en stock tras editar
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `main`.
+**Punto de partida:** `496cc009 fix: prevent new receipt form from hanging`, alineado con `origin/main`.
+
+### Incidencia
+- Se investigo la entrada FRIESLAND reportada como `763863`, con proveedor SMURFIT, dos lineas y dos partidas visibles, incluyendo CAJA0031 y CAJA0075 (`30100` uds, `700` uds/pallet, `43` pallets, `NO LOTE`, sin ubicacion).
+- La pantalla podia mostrar la entrada como `CONFIRMADA` y, al editarla, informar que el stock se habia revertido y reaplicado aunque Stock actual no recibiera el impacto.
+- La base local no contiene el registro real `763863`; no se consulto ni modifico produccion.
+
+### Diagnostico reproducido
+- La confirmacion normal de una entrada nueva si llama a `GoodsReceiptStockApplicationService::apply()` y genera una partida por linea.
+- La causa exacta estaba en `GoodsReceiptController::update()`:
+  - solo ejecutaba revertir/reaplicar cuando la entrada era confirmada y tenia `stock_applied_at`;
+  - una entrada confirmada heredada o inconsistente con `stock_applied_at = null` y sin partidas generadas sincronizaba sus lineas, pero no aplicaba stock;
+  - el mensaje final usaba solo `isConfirmed()`, por lo que afirmaba una reversa/reaplicacion que no habia ocurrido.
+- Esto explica que el detalle conservara las dos lineas y el estado confirmado mientras Stock actual no recibia CAJA0031 ni CAJA0075. La condicion debe verificarse en produccion para `763863` revisando `stock_applied_at`, `stock_pallets` e `inventory_movements`.
+
+### Solucion
+- `update()` distingue tres estados:
+  - confirmada con stock previo: revierte y reaplica, manteniendo la idempotencia actual;
+  - confirmada sin marca ni partidas previas: aplica stock una sola vez y guarda `stock_applied_at`/`stock_applied_by`;
+  - borrador: conserva el comportamiento de no aplicar stock hasta confirmar.
+- La deteccion considera la marca de aplicacion o la existencia de partidas vinculadas a la entrada para evitar duplicidades.
+- Los mensajes y eventos de auditoria ahora describen si se aplico stock por primera vez o si se revirtio y reaplico.
+- No se modificaron `GoodsReceiptStockApplicationService`, `LocationIntegrityService`, importadores, salidas, operaciones diarias, stock real, migraciones ni datos.
+
+### Regresiones
+- Escenario FRIESLAND equivalente: dos articulos, 5 + 43 pallets, CAJA0075 con `30100` uds, `NO LOTE`, sin ubicacion; confirma dos partidas, dos movements `receipt` positivos y ambos articulos aparecen en Stock tras editar la confirmada.
+- Entrada confirmada sin `stock_applied_at` ni partidas: falla antes del parche y tras el parche aplica las dos lineas, guarda trazabilidad y conserva el estado confirmado.
+- Se mantienen las regresiones existentes de confirmacion idempotente, edicion confirmada con reversa/reaplicacion, entradas multilocacion, lotes sin lote y aislamiento de cliente.
+
+### Validacion
+- `php artisan test --filter=GoodsReceiptManagementTest`: **117 passed**, **650 assertions**.
+- `php artisan test --filter=StockOverviewTest`: **54 passed**, **394 assertions**.
+- `php artisan test --filter=DailyOperationsTest`: **26 passed**, **298 assertions**.
+- `php artisan test --filter=GoodsDispatchManagementTest`: **64 passed**, **512 assertions**.
+- `php artisan test`: **817 passed**, **4631 assertions**.
+- `npm run build`: OK.
+- `git diff --check`: OK.
+- Commit y push: pendientes al redactar esta entrada.
+
+### Produccion / Forge
+- No se modifico produccion ni se ejecutaron migraciones; este cambio no añade migraciones.
+- Pendiente Deploy Now en Forge y validacion operativa de la entrada `763863`: confirmar `stock_applied_at`, dos movimientos receipt positivos, dos partidas activas, CAJA0031 y CAJA0075 visibles en Stock FRIESLAND y total de 48 pallets.
+- Revisar tambien que EDELVIVES conserva sus cantidades y que guardar dos veces una confirmada no duplica stock.
+
 ## ESTADO ACTUAL CONSOLIDADO
 
 **Fecha:** 2026-07-24.

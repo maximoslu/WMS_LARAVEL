@@ -313,12 +313,16 @@ class GoodsReceiptController extends Controller
         $documentPayload = $documentReplaced
             ? $this->documentStorage->store($request->file('document'), $goodsReceipt)
             : [];
+        $wasConfirmed = $goodsReceipt->isConfirmed();
+        $hadStockApplied = $goodsReceipt->hasStockApplied()
+            || $goodsReceipt->stockPallets()->exists();
 
         try {
-            DB::transaction(function () use ($request, $validated, $goodsReceipt, $documentPayload): void {
+            DB::transaction(function () use ($request, $validated, $goodsReceipt, $documentPayload, $wasConfirmed, $hadStockApplied): void {
                 $correlationId = $this->audit->correlationId();
                 $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status']);
-                $mustReapplyStock = $goodsReceipt->isConfirmed() && $goodsReceipt->hasStockApplied();
+                $mustReapplyStock = $wasConfirmed && $hadStockApplied;
+                $mustApplyConfirmedStock = $wasConfirmed && ! $hadStockApplied;
 
                 if ($mustReapplyStock) {
                     $this->stockApplicationService->revert($goodsReceipt, $request->user(), $correlationId);
@@ -341,12 +345,17 @@ class GoodsReceiptController extends Controller
                 $goodsReceipt->update($payload);
                 $this->syncLines($goodsReceipt, $validated['lines']);
 
-                if ($mustReapplyStock) {
+                if ($mustReapplyStock || $mustApplyConfirmedStock) {
                     $this->stockApplicationService->apply(
                         $goodsReceipt->fresh(['lines.item', 'lines.location']),
                         $request->user(),
                         $correlationId,
                     );
+
+                    $goodsReceipt->forceFill([
+                        'stock_applied_at' => $goodsReceipt->stock_applied_at ?? now(),
+                        'stock_applied_by' => $goodsReceipt->stock_applied_by ?? $request->user()->id,
+                    ])->save();
                 }
 
                 $this->audit->record(
@@ -354,7 +363,9 @@ class GoodsReceiptController extends Controller
                     module: 'goods_receipts',
                     description: $mustReapplyStock
                         ? 'Entrada confirmada editada; stock revertido y reaplicado.'
-                        : 'Entrada editada.',
+                        : ($mustApplyConfirmedStock
+                            ? 'Entrada confirmada editada; stock aplicado.'
+                            : 'Entrada editada.'),
                     auditable: $goodsReceipt,
                     user: $request->user(),
                     clientId: $goodsReceipt->client_id,
@@ -386,8 +397,10 @@ class GoodsReceiptController extends Controller
 
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)
-            ->with('status', $goodsReceipt->isConfirmed()
-                ? 'Entrada confirmada actualizada. El stock se ha revertido y vuelto a aplicar con los datos nuevos.'
+            ->with('status', $wasConfirmed
+                ? ($hadStockApplied
+                    ? 'Entrada confirmada actualizada. El stock se ha revertido y vuelto a aplicar con los datos nuevos.'
+                    : 'Entrada confirmada actualizada. El stock se ha aplicado correctamente.')
                 : 'Entrada actualizada correctamente.');
     }
 
