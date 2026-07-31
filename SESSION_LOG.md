@@ -4,6 +4,32 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## ESTADO ACTUAL CONSOLIDADO
+
+**Fecha:** 2026-07-31. **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `main`.
+**HEAD de validacion al iniciar esta sesion:** `8791bfabe9b6c515007a81d2662596666f095af0` (`8791bfab fix: apply new receipt stock and align form`). **HEAD y `origin/main` coincidian en la validacion inicial.**
+
+### Incidencia de stock FRIESLAND
+- La causa raiz de las partidas duplicadas era que `GoodsReceiptStockApplicationService::resolveTargetBatch()` exigia `goods_receipt_id` nulo o igual a la entrada actual. Una entrada posterior no podia reutilizar una partida fisicamente compatible de una entrada anterior.
+- El duplicado detectado en auditoria local fue fisico, no solo visual: `stock_pallets` IDs `246,247`, cliente `1`, articulo `260` (`FILM0395`), lote `OFA0004644`, ubicacion sin ubicacion, estado `available`, categoria `in_use`, `9461` unidades y `6` pallets. El caso CAJA0031 de produccion no se inspecciono directamente porque no se accedio a produccion. El comando se ejecuto en dry-run y no modifico datos.
+- La identidad fisica ahora usa cliente, articulo, lote normalizado, ubicacion/almacen, unidades por pallet, estado, categoria y motivo de bloqueo. No usa `goods_receipt_id`, `stock_import_id`, proveedor, documento, fecha ni codigo de pallet.
+
+### Solucion y trazabilidad
+- Las entradas nuevas reutilizan la partida compatible aunque proceda de otra entrada; si hay varias, conserva la mas antigua, suma unidades, pallets y picos, marca las demas como `obsolete` sin borrarlas y redirige sus movimientos.
+- El ledger de `inventory_movements` conserva la contribucion de cada entrada. Las reversiones usan ese ledger y las ediciones confirmadas siguen siendo idempotentes.
+- `wms:consolidate-stock-batches` es dry-run por defecto; `--apply` es explicito y admite `--client` y `--sku`. Informa IDs concretos, no borra movimientos ni datos y omite conflictos que excedan los diez picos disponibles.
+- No se creo migracion ni se aplico ninguna consolidacion sobre datos reales. La correccion manual de BOBINAS `11 + 10 = 21` no se modifico.
+
+### Regresiones y validacion
+- Se cubrieron por HTTP tres entradas consecutivas del mismo stock, consolidacion a `382000` unidades y `546` pallets, edicion confirmada a `383000` y `548`, separacion por lote/ubicacion/estado/categoria, y reasignacion segura de movimientos.
+- EDELVIVES, importaciones, exportaciones, stock, reubicaciones, regularizaciones, entradas y salidas mantienen sus reglas y aislamiento por cliente.
+- Suite completa: **821 passed, 4691 assertions**. `npm run build`: OK. `git diff --check`: OK. Sintaxis PHP modificada: OK.
+
+### Produccion y archivos locales
+- Forge/produccion no se ha verificado; estar en `origin/main` no demuestra un despliegue. Queda pendiente validar en produccion antes de aplicar cualquier consolidacion, empezando por dry-run.
+- `.claude/` y `tmp/` son carpetas locales fuera de Git y no se incluyen en el commit. No se tocaron `.env`, secretos, `vendor`, `node_modules` ni `public/build`.
+
+
 ## 2026-07-31 - FIX ENTRADAS - Acumulacion de palets al reutilizar stock existente
 
 **Equipo:** PC trabajo.

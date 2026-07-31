@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\GoodsReceipt;
 use App\Models\Item;
+use App\Models\InventoryMovement;
 use App\Models\StockPallet;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class ConsolidateStockBatchesCommandTest extends TestCase
@@ -18,8 +20,8 @@ class ConsolidateStockBatchesCommandTest extends TestCase
     {
         [$client, $item] = $this->makeLegacyRows();
 
-        $this->artisan('wms:consolidate-stock-batches --dry-run')
-            ->expectsOutputToContain('filas=3')
+        $this->artisan('wms:consolidate-stock-batches')
+            ->expectsOutputToContain('ids=')
             ->expectsOutputToContain('Dry-run completado')
             ->assertSuccessful();
 
@@ -31,12 +33,14 @@ class ConsolidateStockBatchesCommandTest extends TestCase
     {
         [, $item] = $this->makeLegacyRows();
 
-        $this->artisan('wms:consolidate-stock-batches')
+        $this->artisan('wms:consolidate-stock-batches --apply')
             ->expectsOutputToContain('Consolidacion completada correctamente.')
             ->assertSuccessful();
 
         $this->assertSame(1, StockPallet::query()->where('item_id', $item->id)->where('active', true)->count());
         $this->assertSame(2, StockPallet::query()->where('item_id', $item->id)->where('active', false)->count());
+        $keeperId = StockPallet::query()->where('item_id', $item->id)->where('active', true)->value('id');
+        $this->assertSame($keeperId, InventoryMovement::query()->where('idempotency_key', 'test:consolidation-reference')->value('stock_pallet_id'));
 
         $this->assertDatabaseHas('stock_pallets', [
             'item_id' => $item->id,
@@ -63,13 +67,15 @@ class ConsolidateStockBatchesCommandTest extends TestCase
             'sku' => 'SKU-LEGACY',
             'units_per_pallet' => 1000,
         ]);
-        $receipt = GoodsReceipt::factory()->create([
-            'client_id' => $client->id,
-            'supplier_id' => null,
-        ]);
+        $rows = collect();
 
         foreach ([1000, 1000, 500] as $index => $quantity) {
-            StockPallet::query()->create([
+            $receipt = GoodsReceipt::factory()->create([
+                'client_id' => $client->id,
+                'supplier_id' => null,
+            ]);
+
+            $rows->push(StockPallet::query()->create([
                 'client_id' => $client->id,
                 'item_id' => $item->id,
                 'goods_receipt_id' => $receipt->id,
@@ -81,8 +87,25 @@ class ConsolidateStockBatchesCommandTest extends TestCase
                 'received_at' => '2026-06-26',
                 'status' => StockPallet::STATUS_AVAILABLE,
                 'active' => true,
-            ]);
+            ]));
         }
+
+        InventoryMovement::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'correlation_id' => (string) Str::uuid(),
+            'idempotency_key' => 'test:consolidation-reference',
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $rows[1]->id,
+            'movement_type' => InventoryMovement::RECEIPT,
+            'source' => 'test',
+            'units_delta' => 1000,
+            'full_pallets_delta' => 1,
+            'warehouse_pallets_delta' => 1,
+            'effective_at' => now(),
+            'recorded_at' => now(),
+            'created_at' => now(),
+        ]);
 
         return [$client, $item];
     }

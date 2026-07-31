@@ -3,203 +3,201 @@
 namespace App\Console\Commands;
 
 use App\Models\StockPallet;
-use App\Support\Stock\StockBatchCalculator;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ConsolidateStockBatchesCommand extends Command
 {
-    protected $signature = 'wms:consolidate-stock-batches {--dry-run : Muestra las consolidaciones sin guardar cambios}';
+    protected $signature = 'wms:consolidate-stock-batches
+        {--apply : Aplica las consolidaciones compatibles}
+        {--dry-run : Muestra las consolidaciones sin guardar cambios}
+        {--client= : Limita la auditoria a un cliente}
+        {--sku= : Limita la auditoria a un SKU}';
 
-    protected $description = 'Consolida lineas historicas de stock creadas una por pallet en una sola partida agregada por lote.';
+    protected $description = 'Audita y consolida partidas activas con la misma identidad fisica de stock.';
 
     public function handle(): int
     {
+        if ($this->option('apply') && $this->option('dry-run')) {
+            $this->error('No se pueden usar --apply y --dry-run a la vez.');
+
+            return self::INVALID;
+        }
+
         $candidates = $this->candidateGroups();
 
         if ($candidates->isEmpty()) {
-            $this->info('No hay lineas candidatas a consolidacion.');
+            $this->info('No hay partidas duplicadas compatibles para consolidacion.');
 
             return self::SUCCESS;
         }
 
         foreach ($candidates as $candidate) {
             $this->line(sprintf(
-                'Grupo receipt=%s item=%d lote=%s fecha=%s ubicacion=%s filas=%d total=%d uds/pallet=%d',
-                $candidate['goods_receipt_id'] !== null ? (string) $candidate['goods_receipt_id'] : 'sin-recepcion',
+                'ids=%s cliente=%d item=%d lote=%s ubicacion=%s estado=%s categoria=%s filas=%d unidades=%d pales=%.2f%s',
+                $candidate['rows']->pluck('id')->implode(','),
+                $candidate['client_id'],
                 $candidate['item_id'],
-                $candidate['lot'] ?: 'sin-lote',
-                $candidate['received_at'] ?: 'sin-fecha',
+                $candidate['lot'] ?: 'NO LOTE',
                 $candidate['location_label'] ?: 'sin-ubicacion',
+                $candidate['status'],
+                $candidate['stock_category'],
                 $candidate['rows']->count(),
                 $candidate['quantity_units'],
-                $candidate['units_per_pallet'],
+                $candidate['warehouse_pallets'],
+                $candidate['conflict'] !== null ? ' conflicto='.$candidate['conflict'] : '',
             ));
         }
 
-        if ($this->option('dry-run')) {
-            $this->info('Dry-run completado. No se ha modificado ninguna linea.');
+        if (! $this->option('apply')) {
+            $this->info('Dry-run completado. No se ha modificado ninguna partida ni movimiento.');
 
             return self::SUCCESS;
         }
 
-        DB::transaction(function () use ($candidates): void {
-            foreach ($candidates as $candidate) {
+        $mergeable = $candidates->filter(fn (array $candidate): bool => $candidate['conflict'] === null);
+
+        DB::transaction(function () use ($mergeable): void {
+            foreach ($mergeable as $candidate) {
                 $this->consolidateCandidate($candidate);
             }
         });
 
-        $this->info('Consolidacion completada correctamente.');
+        $this->info(sprintf('Consolidacion completada correctamente. Grupos aplicados: %d.', $mergeable->count()));
 
         return self::SUCCESS;
     }
 
-    /**
-     * @return Collection<int, array{
-     *     goods_receipt_id: int|null,
-     *     item_id: int,
-     *     lot: string|null,
-     *     received_at: string|null,
-     *     location_id: int|null,
-     *     location_text: string|null,
-     *     location_label: string|null,
-     *     client_id: int,
-     *     status: string,
-     *     blocked_reason: string|null,
-     *     units_per_pallet: int,
-     *     quantity_units: int,
-     *     rows: Collection<int, StockPallet>
-     * }>
-     */
+    /** @return Collection<int, array<string, mixed>> */
     private function candidateGroups(): Collection
     {
         return StockPallet::query()
-            ->with('item')
+            ->with(['item', 'location.warehouse'])
             ->where('active', true)
-            ->whereNotNull('goods_receipt_id')
+            ->whereHas('item')
+            ->when($this->option('client'), fn ($query, $clientId) => $query->where('client_id', (int) $clientId))
+            ->when($this->option('sku'), fn ($query, $sku) => $query->whereHas('item', fn ($itemQuery) => $itemQuery->where('sku', $sku)))
             ->orderBy('id')
             ->get()
-            ->groupBy(function (StockPallet $row): string {
-                return implode('|', [
-                    $row->client_id,
-                    $row->item_id,
-                    $row->goods_receipt_id,
-                    $row->lot ?? '',
-                    optional($row->received_at)->format('Y-m-d') ?? '',
-                    $row->location_id ?? '',
-                    $row->location_text ?? '',
-                    $row->status ?? '',
-                    $row->blocked_reason ?? '',
-                ]);
-            })
-            ->map(function (Collection $rows): ?array {
-                if ($rows->count() < 2) {
-                    return null;
-                }
-
-                $unitsPerPallet = (int) $rows->pluck('units_per_pallet')
-                    ->filter(fn (mixed $value): bool => (int) $value > 0)
-                    ->first();
-
-                if ($unitsPerPallet <= 0) {
-                    $unitsPerPallet = (int) ($rows->first()?->item?->units_per_pallet ?? 0);
-                }
-
-                if ($unitsPerPallet <= 0) {
-                    return null;
-                }
-
-                $hasLegacyPalletRows = $rows->contains(fn (StockPallet $row): bool => filled($row->pallet_code))
-                    || $rows->every(fn (StockPallet $row): bool => (int) $row->quantity_units <= $unitsPerPallet);
-
-                if (! $hasLegacyPalletRows) {
-                    return null;
-                }
-
-                /** @var StockPallet $first */
-                $first = $rows->first();
-
-                return [
-                    'goods_receipt_id' => $first->goods_receipt_id,
-                    'item_id' => $first->item_id,
-                    'lot' => $first->lot,
-                    'received_at' => optional($first->received_at)->format('Y-m-d'),
-                    'location_id' => $first->location_id,
-                    'location_text' => $first->location_text,
-                    'location_label' => $first->location?->code ?? $first->location_text,
-                    'client_id' => $first->client_id,
-                    'status' => $first->status,
-                    'blocked_reason' => $first->blocked_reason,
-                    'units_per_pallet' => $unitsPerPallet,
-                    'quantity_units' => (int) $rows->sum('quantity_units'),
-                    'rows' => $rows->values(),
-                ];
-            })
+            ->groupBy(fn (StockPallet $row): string => $this->identityKey($row))
+            ->map(fn (Collection $rows): ?array => $this->describeCandidate($rows))
             ->filter()
             ->values();
     }
 
-    /**
-     * @param  array{
-     *     goods_receipt_id: int|null,
-     *     item_id: int,
-     *     lot: string|null,
-     *     received_at: string|null,
-     *     location_id: int|null,
-     *     location_text: string|null,
-     *     client_id: int,
-     *     status: string,
-     *     blocked_reason: string|null,
-     *     units_per_pallet: int,
-     *     quantity_units: int,
-     *     rows: Collection<int, StockPallet>
-     * }  $candidate
-     */
+    private function identityKey(StockPallet $row): string
+    {
+        $locationKey = $row->location_id !== null
+            ? 'warehouse:'.($row->location?->warehouse_id ?? 'unknown').'|location:'.$row->location_id
+            : 'text:'.mb_strtoupper(trim((string) $row->location_text));
+
+        return implode('|', [
+            (int) $row->client_id,
+            (int) $row->item_id,
+            LotNormalizer::normalize($row->lot),
+            $locationKey,
+            (int) $row->units_per_pallet,
+            (string) ($row->status ?? StockPallet::STATUS_AVAILABLE),
+            (string) ($row->stock_category ?? StockPallet::CATEGORY_IN_USE),
+            trim((string) ($row->blocked_reason ?? '')),
+        ]);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function describeCandidate(Collection $rows): ?array
+    {
+        if ($rows->count() < 2) {
+            return null;
+        }
+
+        /** @var StockPallet $first */
+        $first = $rows->first();
+        $peaks = $rows
+            ->flatMap(fn (StockPallet $row): Collection => collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+                ->map(fn (int $number): int => (int) ($row->{'peak_'.$number} ?? 0))
+                ->filter(fn (int $value): bool => $value > 0))
+            ->values()
+            ->all();
+
+        return [
+            'client_id' => (int) $first->client_id,
+            'item_id' => (int) $first->item_id,
+            'lot' => LotNormalizer::normalize($first->lot),
+            'location_label' => $first->location?->displayLabel() ?? trim((string) $first->location_text),
+            'status' => (string) ($first->status ?? StockPallet::STATUS_AVAILABLE),
+            'stock_category' => (string) ($first->stock_category ?? StockPallet::CATEGORY_IN_USE),
+            'units_per_pallet' => (int) $first->units_per_pallet,
+            'quantity_units' => (int) $rows->sum(fn (StockPallet $row): int => (int) $row->quantity_units),
+            'warehouse_pallets' => (float) $rows->sum(fn (StockPallet $row): float => (float) ($row->warehouse_pallets ?? 0)),
+            'peaks' => $peaks,
+            'conflict' => count($peaks) > StockPallet::MAX_PEAK_COLUMNS ? 'mas de 10 picos' : null,
+            'rows' => $rows->values(),
+        ];
+    }
+
+    /** @param array<string, mixed> $candidate */
     private function consolidateCandidate(array $candidate): void
     {
-        $breakdown = StockBatchCalculator::calculateBreakdown($candidate['quantity_units'], $candidate['units_per_pallet']);
+        /** @var Collection<int, StockPallet> $candidateRows */
+        $candidateRows = $candidate['rows'];
+        $ids = $candidateRows->pluck('id')->all();
+        $rows = StockPallet::query()
+            ->whereIn('id', $ids)
+            ->where('active', true)
+            ->lockForUpdate()
+            ->orderBy('id')
+            ->get();
+
+        if ($rows->count() < 2) {
+            return;
+        }
+
+        $peaks = $rows
+            ->flatMap(fn (StockPallet $row): Collection => collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+                ->map(fn (int $number): int => (int) ($row->{'peak_'.$number} ?? 0))
+                ->filter(fn (int $value): bool => $value > 0))
+            ->values()
+            ->all();
+
+        if (count($peaks) > StockPallet::MAX_PEAK_COLUMNS) {
+            return;
+        }
 
         /** @var StockPallet $keeper */
-        $keeper = $candidate['rows']->first();
+        $keeper = $rows->first();
+        $duplicateIds = $rows->slice(1)->pluck('id')->all();
 
         $keeper->forceFill([
             'pallet_code' => null,
-            'quantity_units' => $candidate['quantity_units'],
-            'units_per_pallet' => $candidate['units_per_pallet'],
-            'full_pallets' => $breakdown['full_pallets'],
-            'peaks_count' => $breakdown['peaks_count'],
-            'peak_1' => $breakdown['peak_1'],
-            'peak_2' => $breakdown['peak_2'],
-            'peak_3' => $breakdown['peak_3'],
-            'peak_4' => $breakdown['peak_4'],
-            'peak_5' => $breakdown['peak_5'],
-            'peak_6' => $breakdown['peak_6'],
-            'peak_7' => $breakdown['peak_7'],
-            'peak_8' => $breakdown['peak_8'],
-            'notes' => $this->appendNote($keeper->notes, 'Partida consolidada desde lineas historicas por pallet.'),
+            'quantity_units' => (int) $rows->sum(fn (StockPallet $row): int => (int) $row->quantity_units),
+            'warehouse_pallets' => (float) $rows->sum(fn (StockPallet $row): float => (float) ($row->warehouse_pallets ?? 0)),
+            ...collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+                ->mapWithKeys(fn (int $number): array => ['peak_'.$number => $peaks[$number - 1] ?? 0])
+                ->all(),
+            'notes' => $this->appendNote($keeper->notes, 'Partida consolidada desde IDs: '.implode(', ', $duplicateIds).'.'),
         ])->save();
 
-        $duplicateIds = $candidate['rows']->slice(1)->pluck('id');
+        DB::table('inventory_movements')
+            ->whereIn('stock_pallet_id', $duplicateIds)
+            ->update(['stock_pallet_id' => $keeper->id]);
 
-        if ($duplicateIds->isNotEmpty()) {
-            StockPallet::query()
-                ->whereIn('id', $duplicateIds)
-                ->update([
-                    'active' => false,
-                    'status' => StockPallet::STATUS_OBSOLETE,
-                    'blocked_reason' => 'Linea legacy consolidada en la partida #'.$keeper->id,
-                    'notes' => 'Legacy: consolidada automaticamente en la partida #'.$keeper->id,
-                ]);
-        }
+        StockPallet::query()
+            ->whereIn('id', $duplicateIds)
+            ->update([
+                'active' => false,
+                'status' => StockPallet::STATUS_OBSOLETE,
+                'blocked_reason' => 'Partida consolidada en la partida #'.$keeper->id,
+                'notes' => 'Historica: consolidada en la partida #'.$keeper->id,
+                'updated_at' => now(),
+            ]);
     }
 
     private function appendNote(?string $currentNotes, string $note): string
     {
         $currentNotes = trim((string) $currentNotes);
 
-        return $currentNotes === ''
-            ? $note
-            : $currentNotes."\n".$note;
+        return $currentNotes === '' ? $note : $currentNotes."\n".$note;
     }
 }

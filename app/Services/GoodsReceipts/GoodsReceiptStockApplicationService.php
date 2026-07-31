@@ -12,6 +12,7 @@ use App\Services\Inventory\InventoryMovementService;
 use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class GoodsReceiptStockApplicationService
@@ -52,11 +53,21 @@ class GoodsReceiptStockApplicationService
 
         $receipt->loadMissing(['lines.item']);
 
-        // The direct FK is the reliable link between this receipt and the stock
-        // batches it generated (see resolveTargetBatch() below). Matching by
-        // client/item/location/lot heuristics instead is fragile: a null
-        // location_id, a manually edited batch, or a later consolidation
-        // breaks the match and blocks reversion even when it is perfectly safe.
+        $receiptMovements = InventoryMovement::query()
+            ->where('source_type', $receipt->getMorphClass())
+            ->where('source_id', $receipt->id)
+            ->where('movement_type', InventoryMovement::RECEIPT)
+            ->whereIn('source_line_id', $receipt->lines->pluck('id'))
+            ->latest('id')
+            ->lockForUpdate()
+            ->get()
+            ->groupBy('source_line_id');
+
+        // The movement ledger is authoritative once a receipt has been applied:
+        // a consolidated batch can contain several receipts, so its direct FK
+        // cannot identify the contribution that must be reverted. The FK query
+        // below remains a compatibility fallback for legacy rows without a
+        // receipt movement.
         $batchesByItem = StockPallet::query()
             ->where('goods_receipt_id', $receipt->id)
             ->lockForUpdate()
@@ -64,8 +75,98 @@ class GoodsReceiptStockApplicationService
             ->groupBy('item_id');
 
         foreach ($receipt->lines as $line) {
+            $movement = $receiptMovements->get($line->id)?->first();
+
+            if ($movement instanceof InventoryMovement) {
+                $this->revertMovement($receipt, $line, $movement, $user, $correlationId);
+
+                continue;
+            }
+
             $this->revertLine($receipt, $line, $batchesByItem->get($line->item_id, collect()), $user, $correlationId);
         }
+    }
+
+    private function revertMovement(
+        GoodsReceipt $receipt,
+        GoodsReceiptLine $line,
+        InventoryMovement $movement,
+        User $user,
+        string $correlationId,
+    ): void {
+        $stockPallet = StockPallet::query()
+            ->whereKey($movement->stock_pallet_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $stockPallet instanceof StockPallet) {
+            throw ValidationException::withMessages([
+                'goods_receipt' => "No se puede revertir la linea {$line->id}: la partida consolidada ya no existe.",
+            ]);
+        }
+
+        $quantityUnits = (int) $movement->units_delta;
+        $warehousePallets = (float) $movement->warehouse_pallets_delta;
+
+        if ($quantityUnits <= 0 || $warehousePallets < 0) {
+            throw ValidationException::withMessages([
+                'goods_receipt' => "No se puede revertir la linea {$line->id}: el movimiento de entrada no tiene deltas validos.",
+            ]);
+        }
+
+        $availableUnits = (int) $stockPallet->quantity_units;
+        $availableWarehousePallets = (float) ($stockPallet->warehouse_pallets ?? 0);
+
+        if ($availableUnits < $quantityUnits || $availableWarehousePallets + 0.0001 < $warehousePallets) {
+            throw ValidationException::withMessages([
+                'goods_receipt' => "No se puede continuar: revertir la linea {$line->id} dejaria stock negativo.",
+            ]);
+        }
+
+        $before = $this->movements->snapshot($stockPallet);
+        $remainingUnits = $availableUnits - $quantityUnits;
+        $remainingWarehousePallets = max(0, $availableWarehousePallets - $warehousePallets);
+        $remainingPeaks = $this->subtractPeakDelta($stockPallet, $movement);
+
+        if ($remainingUnits <= 0 && $remainingWarehousePallets <= 0) {
+            $stockPallet->delete();
+            $stockPallet->quantity_units = 0;
+
+            $this->recordReversal($receipt, $line, $stockPallet, $before, $user, $correlationId, $movement->id);
+
+            return;
+        }
+
+        $stockPallet->forceFill([
+            'quantity_units' => $remainingUnits,
+            'warehouse_pallets' => $remainingWarehousePallets,
+            ...$this->peakAttributes($remainingPeaks),
+        ])->save();
+
+        $this->recordReversal($receipt, $line, $stockPallet, $before, $user, $correlationId, $movement->id);
+    }
+
+    /** @return list<int> */
+    private function subtractPeakDelta(StockPallet $stockPallet, InventoryMovement $movement): array
+    {
+        $deltas = is_array($movement->peaks_delta) ? array_values($movement->peaks_delta) : [];
+
+        return collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->map(function (int $number) use ($stockPallet, $deltas): int {
+                $current = (int) ($stockPallet->{'peak_'.$number} ?? 0);
+                $delta = max(0, (int) ($deltas[$number - 1] ?? 0));
+
+                if ($current < $delta) {
+                    throw ValidationException::withMessages([
+                        'goods_receipt' => 'No se puede revertir la entrada porque uno de sus picos ya no esta disponible.',
+                    ]);
+                }
+
+                return $current - $delta;
+            })
+            ->filter(fn (int $value): bool => $value > 0)
+            ->values()
+            ->all();
     }
 
     private function revertLine(
@@ -171,7 +272,8 @@ class GoodsReceiptStockApplicationService
         $stockPallet->fill([
             'client_id' => $receipt->client_id,
             'item_id' => $item->id,
-            'goods_receipt_id' => $receipt->id,
+            'goods_receipt_id' => $stockPallet->goods_receipt_id
+                ?? ($stockPallet->stock_import_id === null ? $receipt->id : null),
             'location_id' => $line->location_id,
             'location_text' => $line->location?->code,
             'lot' => LotNormalizer::normalize($line->lot),
@@ -220,6 +322,7 @@ class GoodsReceiptStockApplicationService
         array $before,
         User $user,
         string $correlationId,
+        ?int $reversalOfId = null,
     ): void {
         $after = $this->movements->snapshot($stockPallet->exists
             ? $stockPallet->fresh(['client', 'item', 'location.warehouse'])
@@ -250,6 +353,7 @@ class GoodsReceiptStockApplicationService
             sourceLine: $line,
             user: $user,
             metadata: ['reason' => 'Reversion de entrada confirmada antes de editar o eliminar.'],
+            reversalOfId: $reversalOfId,
         );
     }
 
@@ -261,20 +365,24 @@ class GoodsReceiptStockApplicationService
             ->where('location_id', $line->location_id)
             ->where('lot', LotNormalizer::normalize($line->lot))
             ->where('units_per_pallet', $unitsPerPallet)
+            ->where(function ($query) use ($item): void {
+                $query
+                    ->where('stock_category', $item->stock_category ?? StockPallet::CATEGORY_IN_USE)
+                    ->orWhereNull('stock_category');
+            })
             ->where('active', true)
             ->where('status', StockPallet::STATUS_AVAILABLE)
-            ->where(function ($query) use ($receipt): void {
-                $query
-                    ->whereNull('goods_receipt_id')
-                    ->orWhere('goods_receipt_id', $receipt->id);
-            })
             ->lockForUpdate()
             ->orderByDesc('id');
 
-        $existing = $query->first();
+        $existing = $query->get();
 
-        if ($existing instanceof StockPallet) {
-            return $existing;
+        if ($existing->count() > 1) {
+            return $this->consolidateTargetBatches($existing);
+        }
+
+        if ($existing->isNotEmpty()) {
+            return $existing->first();
         }
 
         return new StockPallet([
@@ -293,6 +401,53 @@ class GoodsReceiptStockApplicationService
             'peak_9' => 0,
             'peak_10' => 0,
         ]);
+    }
+
+    /** @param Collection<int, StockPallet> $batches */
+    private function consolidateTargetBatches(Collection $batches): StockPallet
+    {
+        $batches = $batches->sortBy('id')->values();
+
+        /** @var StockPallet $keeper */
+        $keeper = $batches->first();
+        $duplicateIds = $batches->slice(1)->pluck('id')->all();
+        $peaks = $batches
+            ->flatMap(fn (StockPallet $batch): Collection => collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+                ->map(fn (int $number): int => (int) ($batch->{'peak_'.$number} ?? 0))
+                ->filter(fn (int $value): bool => $value > 0))
+            ->values()
+            ->all();
+
+        if (count($peaks) > StockPallet::MAX_PEAK_COLUMNS) {
+            throw ValidationException::withMessages([
+                'goods_receipt' => 'No se pueden consolidar las partidas compatibles porque superan el maximo de 10 picos.',
+            ]);
+        }
+
+        $keeper->forceFill([
+            'pallet_code' => null,
+            'quantity_units' => (int) $batches->sum(fn (StockPallet $batch): int => (int) $batch->quantity_units),
+            'warehouse_pallets' => (float) $batches->sum(fn (StockPallet $batch): float => (float) ($batch->warehouse_pallets ?? 0)),
+            ...$this->peakAttributes($peaks),
+        ])->save();
+
+        if ($duplicateIds !== []) {
+            DB::table('inventory_movements')
+                ->whereIn('stock_pallet_id', $duplicateIds)
+                ->update(['stock_pallet_id' => $keeper->id]);
+
+            StockPallet::query()
+                ->whereIn('id', $duplicateIds)
+                ->update([
+                    'active' => false,
+                    'status' => StockPallet::STATUS_OBSOLETE,
+                    'blocked_reason' => 'Partida consolidada en la partida #'.$keeper->id,
+                    'notes' => 'Historica: consolidada en la partida #'.$keeper->id,
+                    'updated_at' => now(),
+                ]);
+        }
+
+        return $keeper->fresh(['client', 'item', 'location.warehouse']);
     }
 
     private function resolveItem(GoodsReceipt $receipt, GoodsReceiptLine $line): Item

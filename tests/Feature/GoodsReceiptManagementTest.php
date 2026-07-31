@@ -4210,6 +4210,303 @@ class GoodsReceiptManagementTest extends TestCase
         ]);
     }
 
+    public function test_new_receipt_consolidates_compatible_historical_batches_before_applying(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier] = $this->makeReceiptContext();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-HISTORICAL-DUPLICATES',
+            'units_per_pallet' => 1000,
+        ]);
+        $oldReceiptA = GoodsReceipt::factory()->create(['client_id' => $client->id, 'supplier_id' => $supplier->id]);
+        $oldReceiptB = GoodsReceipt::factory()->create(['client_id' => $client->id, 'supplier_id' => $supplier->id]);
+
+        $firstDuplicate = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'goods_receipt_id' => $oldReceiptA->id,
+            'lot' => 'NO LOTE',
+            'location_id' => null,
+            'quantity_units' => 1000,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 1,
+            'peaks_count' => 0,
+            'peak_1' => 0,
+            'warehouse_pallets' => 1,
+            'pallet_code' => 'HIST-1',
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'status' => StockPallet::STATUS_AVAILABLE,
+        ]);
+        $secondDuplicate = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'goods_receipt_id' => $oldReceiptB->id,
+            'lot' => 'Sin Lote',
+            'location_id' => null,
+            'quantity_units' => 500,
+            'units_per_pallet' => 1000,
+            'full_pallets' => 0,
+            'peaks_count' => 1,
+            'peak_1' => 500,
+            'warehouse_pallets' => 1,
+            'pallet_code' => 'HIST-2',
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'status' => StockPallet::STATUS_AVAILABLE,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-HISTORICAL-DUPLICATES',
+                'received_at' => '2026-07-31',
+                'lines' => [[
+                    'item_id' => $item->id,
+                    'lot' => 'NO LOTE',
+                    'quantity_units' => 1000,
+                    'units_per_pallet' => 1000,
+                    'pallet_count' => 1,
+                    'location_id' => null,
+                ]],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-HISTORICAL-DUPLICATES')->firstOrFail();
+
+        $this->actingAs($user)
+            ->patch(route('goods-receipts.confirm', $receipt))
+            ->assertRedirect(route('goods-receipts.show', $receipt));
+
+        $this->assertSame(1, StockPallet::query()
+            ->where('item_id', $item->id)
+            ->where('active', true)
+            ->count());
+        $active = StockPallet::query()->where('item_id', $item->id)->where('active', true)->firstOrFail();
+        $this->assertSame($firstDuplicate->id, $active->id);
+        $this->assertSame(2500, (int) $active->quantity_units);
+        $this->assertSame(3.0, (float) $active->warehouse_pallets);
+        $this->assertSame(1, (int) $active->peaks_count);
+        $this->assertSame(500, (int) $active->peak_1);
+        $this->assertFalse((bool) $secondDuplicate->fresh()->active);
+        $this->assertDatabaseHas('inventory_movements', [
+            'source_id' => $receipt->id,
+            'stock_pallet_id' => $active->id,
+            'movement_type' => InventoryMovement::RECEIPT,
+            'units_delta' => 1000,
+        ]);
+    }
+
+    public function test_repeated_http_receipts_consolidate_same_friesland_stock_and_keep_traceability(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        [$client, $supplier] = $this->makeReceiptContext();
+        $client->update(['code' => 'FRIESLAND', 'name' => 'FRIESLAND']);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'CAJA0031',
+            'description' => 'CAJA 0031',
+            'units_per_pallet' => 700,
+        ]);
+
+        $confirmReceipt = function (string $receiptNumber, array $line) use ($user, $client, $supplier): GoodsReceipt {
+            $this->actingAs($user)
+                ->post(route('goods-receipts.store'), [
+                    'client_id' => $client->id,
+                    'supplier_id' => $supplier->id,
+                    'receipt_number' => $receiptNumber,
+                    'received_at' => '2026-07-31',
+                    'lines' => [$line],
+                ])
+                ->assertRedirect();
+
+            $receipt = GoodsReceipt::query()->where('receipt_number', $receiptNumber)->firstOrFail();
+
+            $this->actingAs($user)
+                ->patch(route('goods-receipts.confirm', $receipt))
+                ->assertRedirect(route('goods-receipts.show', $receipt));
+
+            return $receipt->fresh(['lines']);
+        };
+
+        $firstReceipt = $confirmReceipt('ALB-CAJA0031-1', [
+            'item_id' => $item->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 44800,
+            'units_per_pallet' => 700,
+            'pallet_count' => 64,
+            'pico_units' => '',
+            'location_id' => null,
+        ]);
+        $secondReceipt = $confirmReceipt('ALB-CAJA0031-2', [
+            'item_id' => $item->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 291000,
+            'units_per_pallet' => 700,
+            'pallet_count' => 415,
+            'pico_units' => 500,
+            'location_id' => null,
+        ]);
+        $thirdReceipt = $confirmReceipt('ALB-CAJA0031-3', [
+            'item_id' => $item->id,
+            'lot' => 'Sin Lote',
+            'quantity_units' => 46200,
+            'units_per_pallet' => 700,
+            'pallet_count' => 66,
+            'pico_units' => '',
+            'location_id' => null,
+        ]);
+
+        $stockRows = StockPallet::query()
+            ->where('client_id', $client->id)
+            ->where('item_id', $item->id)
+            ->where('active', true)
+            ->get();
+
+        $this->assertCount(1, $stockRows);
+        $this->assertSame(382000, (int) $stockRows->first()->quantity_units);
+        $this->assertSame(546.0, (float) $stockRows->first()->warehouse_pallets);
+        $this->assertSame(1, (int) $stockRows->first()->peaks_count);
+        $this->assertSame(500, (int) $stockRows->first()->peak_1);
+        $this->assertSame(3, InventoryMovement::query()
+            ->where('movement_type', InventoryMovement::RECEIPT)
+            ->whereIn('source_id', [$firstReceipt->id, $secondReceipt->id, $thirdReceipt->id])
+            ->count());
+
+        $overview = app(StockOverviewBuilder::class)->build($superadmin, [
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+        ]);
+        $this->assertCount(1, $overview['rows']);
+        $this->assertSame(382000, $overview['summary']['total_units']);
+        $this->assertSame(546.0, $overview['summary']['total_warehouse_pallets']);
+
+        $secondLine = $secondReceipt->lines->first();
+
+        $this->actingAs($superadmin)
+            ->put(route('goods-receipts.update', $secondReceipt), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => $secondReceipt->receipt_number,
+                'received_at' => '2026-07-31',
+                'lines' => [[
+                    'item_id' => $item->id,
+                    'sku' => $item->sku,
+                    'description' => $item->description,
+                    'lot' => 'NO LOTE',
+                    'quantity_units' => 292000,
+                    'units_per_pallet' => 700,
+                    'pallet_count' => 417,
+                    'pico_units' => 100,
+                    'location_id' => null,
+                ]],
+            ])
+            ->assertRedirect(route('goods-receipts.show', $secondReceipt));
+
+        $stock = $stockRows->first()->fresh();
+        $this->assertSame(383000, (int) $stock->quantity_units);
+        $this->assertSame(548.0, (float) $stock->warehouse_pallets);
+        $this->assertSame(1, (int) $stock->peaks_count);
+        $this->assertSame(100, (int) $stock->peak_1);
+        $this->assertSame(1, StockPallet::query()
+            ->where('client_id', $client->id)
+            ->where('item_id', $item->id)
+            ->where('active', true)
+            ->count());
+        $this->assertNotNull($secondLine);
+    }
+
+    public function test_receipt_consolidation_keeps_lot_location_status_and_category_separate(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+        $otherLocation = Location::factory()->create([
+            'warehouse_id' => $location->warehouse_id,
+            'code' => 'B2-02',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-CANONICAL-IDENTITY',
+            'units_per_pallet' => 700,
+        ]);
+
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-A',
+            'location_id' => $location->id,
+            'quantity_units' => 700,
+            'units_per_pallet' => 700,
+            'stock_category' => StockPallet::CATEGORY_MISC,
+            'status' => StockPallet::STATUS_AVAILABLE,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => 'LOT-A',
+            'location_id' => $location->id,
+            'quantity_units' => 700,
+            'units_per_pallet' => 700,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'status' => StockPallet::STATUS_BLOCKED,
+        ]);
+
+        foreach ([
+            ['number' => 'ALB-IDENTITY-A', 'lot' => 'LOT-A', 'location_id' => $location->id],
+            ['number' => 'ALB-IDENTITY-B', 'lot' => 'LOT-B', 'location_id' => $location->id],
+            ['number' => 'ALB-IDENTITY-C', 'lot' => 'LOT-A', 'location_id' => $otherLocation->id],
+        ] as $entry) {
+            $this->actingAs($user)
+                ->post(route('goods-receipts.store'), [
+                    'client_id' => $client->id,
+                    'supplier_id' => $supplier->id,
+                    'receipt_number' => $entry['number'],
+                    'received_at' => '2026-07-31',
+                    'lines' => [[
+                        'item_id' => $item->id,
+                        'lot' => $entry['lot'],
+                        'quantity_units' => 700,
+                        'units_per_pallet' => 700,
+                        'pallet_count' => 1,
+                        'location_id' => $entry['location_id'],
+                    ]],
+                ])
+                ->assertRedirect();
+
+            $receipt = GoodsReceipt::query()->where('receipt_number', $entry['number'])->firstOrFail();
+
+            $this->actingAs($user)
+                ->patch(route('goods-receipts.confirm', $receipt))
+                ->assertRedirect(route('goods-receipts.show', $receipt));
+        }
+
+        $this->assertSame(3, StockPallet::query()
+            ->where('item_id', $item->id)
+            ->where('lot', 'LOT-A')
+            ->where('location_id', $location->id)
+            ->where('active', true)
+            ->count());
+        $this->assertSame(1, StockPallet::query()
+            ->where('item_id', $item->id)
+            ->where('lot', 'LOT-B')
+            ->where('location_id', $location->id)
+            ->where('active', true)
+            ->count());
+        $this->assertSame(1, StockPallet::query()
+            ->where('item_id', $item->id)
+            ->where('lot', 'LOT-A')
+            ->where('location_id', $otherLocation->id)
+            ->where('active', true)
+            ->count());
+    }
+
     public function test_autocomplete_entrada_renderiza_sin_mojibake_y_con_contenedor_visible(): void
     {
         $this->seed(RoleSeeder::class);
