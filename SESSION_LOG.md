@@ -46,7 +46,8 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 - `php artisan test`: **817 passed**, **4631 assertions**.
 - `npm run build`: OK.
 - `git diff --check`: OK.
-- Commit y push: pendientes al redactar esta entrada.
+- Commit funcional: `b8352e0 fix: apply confirmed receipts to stock`.
+- Push normal: pendiente al cerrar esta sesion.
 
 ### Produccion / Forge
 - No se modifico produccion ni se ejecutaron migraciones; este cambio no añade migraciones.
