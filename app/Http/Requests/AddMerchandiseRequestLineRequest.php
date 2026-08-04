@@ -27,7 +27,8 @@ class AddMerchandiseRequestLineRequest extends FormRequest
  *     requested_pallets:int,
  *     requested_peaks:int,
   *     requested_units:int,
-  *     required_units:int|null
+  *     required_units:int|null,
+  *     fill_truck:bool
   * }> | null
      */
     private ?array $resolvedLines = null;
@@ -67,6 +68,7 @@ class AddMerchandiseRequestLineRequest extends FormRequest
                             ? trim((string) $payload['destination_location'])
                             : null,
                         'required_units' => ($payload['required_units'] ?? '') === '' ? null : ($payload['required_units'] ?? null),
+                        'fill_truck' => filter_var($payload['fill_truck'] ?? false, FILTER_VALIDATE_BOOL),
                     ];
                 })
                 ->all(),
@@ -83,6 +85,7 @@ class AddMerchandiseRequestLineRequest extends FormRequest
             'lines.*.stock_peak_index' => ['nullable', 'integer', 'min:1'],
             'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
             'lines.*.destination_location' => ['nullable', 'string', 'max:255'],
+            'lines.*.fill_truck' => ['boolean'],
             'lines.*.required_units' => $this->allowsRequiredUnits()
                 ? ['nullable', 'integer', 'min:1', 'max:9223372036854775807']
                 : ['prohibited'],
@@ -120,7 +123,8 @@ class AddMerchandiseRequestLineRequest extends FormRequest
  *     requested_pallets:int,
  *     requested_peaks:int,
   *     requested_units:int,
-  *     required_units:int|null
+  *     required_units:int|null,
+  *     fill_truck:bool
   * }>
      */
     public function validatedLines(): array
@@ -140,6 +144,7 @@ class AddMerchandiseRequestLineRequest extends FormRequest
                 $line['required_units'] = $this->allowsRequiredUnits()
                     ? ($submittedLines->get($index)['required_units'] ?? null)
                     : null;
+                $line['fill_truck'] = filter_var($submittedLines->get($index)['fill_truck'] ?? false, FILTER_VALIDATE_BOOL);
 
                 return $line;
             })

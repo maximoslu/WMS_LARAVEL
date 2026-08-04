@@ -14,6 +14,7 @@ class WmsStatus
     public static function merchandiseRequestLabels(): array
     {
         return [
+            MerchandiseRequest::STATUS_DRAFT => 'Borrador',
             MerchandiseRequest::STATUS_PENDING => 'Pendiente',
             MerchandiseRequest::STATUS_PREPARING => 'En preparación',
             MerchandiseRequest::STATUS_SENT => 'Enviado',

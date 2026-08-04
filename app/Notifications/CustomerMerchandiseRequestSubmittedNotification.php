@@ -34,9 +34,10 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
         $request = $this->merchandiseRequest;
         $lines = $request->lines
             ->map(fn ($line) => sprintf(
-                '%s | %d pallets',
+                '%s | %d pallets%s',
                 $line->item?->sku ?? 'Articulo eliminado',
-                $line->requested_pallets
+                $line->requested_pallets,
+                $line->fill_truck ? ' | PARA RELLENAR CAMION' : ''
             ))
             ->all();
 
@@ -47,7 +48,13 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             ->line('Referencia: '.$request->referenceCode())
             ->line('Fecha de solicitud: '.$request->submittedAt()?->format('d/m/Y H:i'))
             ->line('Estado inicial: '.$request->statusLabel())
-            ->line('Total de pallets: '.number_format($request->requestedPalletsCount(), 0, ',', '.'))
+            ->line('Total de pallets: '.number_format($request->requestedPalletsCount(), 0, ',', '.'));
+
+        if (filled($request->notes)) {
+            $message->line('Comentarios del pedido: '.$request->notes);
+        }
+
+        $message
             ->line('Lineas solicitadas:')
             ->line(implode(PHP_EOL, $lines))
             ->action('Ver solicitud', route('merchandise-requests.show', $request));
@@ -73,6 +80,7 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             'reference' => $request->referenceCode(),
             'status' => $request->status,
             'status_label' => $request->statusLabel(),
+            'notes' => $request->notes,
             'submitted_at' => $request->submittedAt()?->toDateTimeString(),
         ];
     }

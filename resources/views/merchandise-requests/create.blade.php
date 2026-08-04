@@ -1,14 +1,17 @@
 @extends('layouts.dashboard')
 
-@section('title', 'NUEVO PEDIDO | MAXIMO WMS')
-@section('topbar_title', 'NUEVO PEDIDO')
+@php
+    $pageTitle = $pageTitle ?? 'NUEVO PEDIDO';
+@endphp
+@section('title', $pageTitle.' | MAXIMO WMS')
+@section('topbar_title', $pageTitle)
 
 @section('content')
     @php
         $breadcrumbs = [
             ['label' => 'Panel de control', 'href' => route('dashboard'), 'icon' => 'dashboard'],
             ['label' => 'PEDIDOS', 'href' => route('merchandise-requests.index')],
-            ['label' => 'NUEVO PEDIDO'],
+            ['label' => $pageTitle],
         ];
     @endphp
 
@@ -17,7 +20,7 @@
     <div class="wms-list-page wms-request-create">
     <section class="surface-card ops-page-header page-header-compact compact-card merchandise-request-page-head">
         <div class="ops-page-headline">
-            <h2 class="ops-page-title page-title-compact">NUEVO PEDIDO</h2>
+            <h2 class="ops-page-title page-title-compact">{{ $pageTitle }}</h2>
             <span class="ops-page-meta">{{ $client?->name ?? 'Cliente no asignado' }}</span>
         </div>
     </section>
@@ -65,14 +68,19 @@
     @else
         <form
             method="POST"
-            action="{{ route('merchandise-requests.store') }}"
+            action="{{ $formAction ?? route('merchandise-requests.store') }}"
             data-merchandise-request-form
             data-search-endpoint="{{ $searchEndpoint }}"
             data-client-id="{{ $client?->id }}"
             data-allow-required-units="{{ $allowRequiredUnits ? '1' : '0' }}"
         >
             @csrf
+            @if (($formMethod ?? 'POST') !== 'POST')
+                @method($formMethod)
+            @endif
             @if ($canChooseClient)
+                <input type="hidden" name="client_id" value="{{ $client->id }}">
+            @elseif (($draft ?? null) !== null)
                 <input type="hidden" name="client_id" value="{{ $client->id }}">
             @endif
 
@@ -134,6 +142,11 @@
                 <div class="merchandise-request-hidden-inputs" data-request-hidden-inputs></div>
                 <script type="application/json" data-request-selected-items>@json($selectedItems)</script>
 
+                <label class="auth-field merchandise-request-notes-field">
+                    <span>Comentarios del pedido</span>
+                    <textarea name="notes" maxlength="2000" rows="3" class="auth-input" placeholder="Opcional">{{ old('notes', $draft->notes ?? '') }}</textarea>
+                </label>
+
                 <div class="merchandise-request-lines-head">
                     <strong>Líneas</strong>
                     <div class="merchandise-request-totals-inline" aria-label="Resumen del pedido">
@@ -151,6 +164,7 @@
                     @if ($allowRequiredUnits)
                         <span>Necesidad</span>
                     @endif
+                    <span>Rellenar camión</span>
                     <span>Ubicación destino</span>
                     <span></span>
                 </div>
@@ -162,7 +176,10 @@
                 <div class="merchandise-request-summary-list merchandise-request-line-list" data-request-summary-rows></div>
 
                 <div class="item-filter-actions action-buttons page-actions-compact merchandise-request-submit merchandise-request-submit--inline">
-                    <button type="submit" class="button-primary compact-button btn-compact" data-request-submit disabled>
+                    <button type="submit" name="submit_action" value="draft" class="button-secondary compact-button btn-compact">
+                        GUARDAR BORRADOR
+                    </button>
+                    <button type="submit" name="submit_action" value="submit" class="button-primary compact-button btn-compact" data-request-submit disabled>
                         ENVIAR PEDIDO
                     </button>
                     <a href="{{ route('merchandise-requests.index') }}" class="button-secondary compact-button btn-compact">Cancelar</a>
@@ -206,7 +223,11 @@
                                     {{ number_format($pendingRequest->requestedPalletsCount(), 0, ',', '.') }} pallets
                                 </td>
                                 <td class="table-actions-cell">
-                                    <a href="{{ route('merchandise-requests.show', $pendingRequest) }}" class="button-secondary compact-button btn-table">Ver</a>
+                                    @if ($pendingRequest->isDraft())
+                                        <a href="{{ route('merchandise-requests.draft.edit', $pendingRequest) }}" class="button-secondary compact-button btn-table">Editar borrador</a>
+                                    @else
+                                        <a href="{{ route('merchandise-requests.show', $pendingRequest) }}" class="button-secondary compact-button btn-table">Ver</a>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach

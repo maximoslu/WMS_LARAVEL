@@ -27,6 +27,7 @@ class MerchandiseRequestLine extends Model
         'requested_peaks',
         'requested_units',
         'required_units',
+        'fill_truck',
         'prepared_pallets',
         'prepared_peaks',
         'prepared_units',
@@ -40,6 +41,7 @@ class MerchandiseRequestLine extends Model
             'stock_peak_index' => 'integer',
             'requested_units' => 'integer',
             'required_units' => 'integer',
+            'fill_truck' => 'boolean',
             'units_per_pallet' => 'integer',
             'units_per_peak' => 'integer',
             'requested_pallets' => 'integer',
@@ -142,6 +144,11 @@ class MerchandiseRequestLine extends Model
         return $requiredUnits === null
             ? null
             : 'Necesidad a cubrir: '.number_format($requiredUnits, 0, ',', '.').' uds.';
+    }
+
+    public function fillTruckLabel(): ?string
+    {
+        return $this->fill_truck ? 'PARA RELLENAR CAMION' : null;
     }
 
     public function unitsLabel(): string

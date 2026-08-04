@@ -159,6 +159,7 @@ class StockVariantCatalog
                 $variant['required_units'] = is_numeric((string) ($payload['required_units'] ?? null))
                     ? (int) $payload['required_units']
                     : null;
+                $variant['fill_truck'] = filter_var($payload['fill_truck'] ?? false, FILTER_VALIDATE_BOOL);
 
                 return $variant;
             })

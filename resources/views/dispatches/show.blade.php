@@ -139,6 +139,17 @@
         </div>
     </section>
 
+    @if (filled($dispatch->notes))
+        <section class="surface-card compact-card wms-flow-card merchandise-request-comments">
+            <div class="wms-section-head">
+                <div>
+                    <strong>Comentarios del pedido</strong>
+                    <p>{{ $dispatch->notes }}</p>
+                </div>
+            </div>
+        </section>
+    @endif
+
     <section class="wms-detail-grid">
         <article class="surface-card compact-card wms-flow-card">
             <div class="wms-section-head">
@@ -286,6 +297,9 @@
 
                     <div class="wms-line-card-meta">
                         <span>Solicitado {{ method_exists($requestedLine, 'requestedQuantityLabel') ? $requestedLine->requestedQuantityLabel() : number_format($requestedLine->requested_pallets ?? 0, 0, ',', '.').' pallets' }}</span>
+                        @if ($requestedLine->fill_truck ?? false)
+                            <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
+                        @endif
                         <span>{{ method_exists($requestedLine, 'unitsLabel') ? $requestedLine->unitsLabel() : number_format($requestedLine->units_per_pallet ?? 0, 0, ',', '.').' uds/pallet' }}</span>
                         <span>{{ $requestedLine->lot ? 'Lote '.$requestedLine->lot : 'NO LOTE' }}</span>
                         @if ($requestedLine->stockPallet?->location_text ?? false)
@@ -343,11 +357,17 @@
                             <div class="wms-line-card-badges">
                                 <span class="ops-status">{{ $line->lineOriginLabel() }}</span>
                                 <span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span>
+                                @if ($line->fill_truck)
+                                    <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
+                                @endif
                             </div>
                         </div>
 
                         <div class="wms-line-card-meta">
                             <span>Solicitado {{ $line->requestedQuantityLabel() }}</span>
+                            @if ($line->fill_truck)
+                                <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
+                            @endif
                             @if ($line->requiredUnitsLabel())
                                 <span>{{ $line->requiredUnitsLabel() }}</span>
                             @endif
@@ -602,11 +622,17 @@
                         <div class="wms-line-card-badges">
                             <span class="ops-status">{{ $line->lineOriginLabel() }}</span>
                             <span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span>
+                            @if ($line->fill_truck)
+                                <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
+                            @endif
                         </div>
                     </div>
 
                     <div class="wms-line-card-meta">
                         <span>Solicitado {{ $line->requestedQuantityLabel() }}</span>
+                        @if ($line->fill_truck)
+                            <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
+                        @endif
                         @if ($line->requiredUnitsLabel())
                             <span>{{ $line->requiredUnitsLabel() }}</span>
                             <span>{{ $line->requiredUnitsCoverageLabel() }}</span>

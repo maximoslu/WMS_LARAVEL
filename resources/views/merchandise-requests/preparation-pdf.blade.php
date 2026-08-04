@@ -20,6 +20,7 @@
             .brand-logo { width: 140px; }
             .brand strong { display: block; font-size: 18px; }
             .notes { margin-top: 24px; border: 1px solid #cdd7df; min-height: 120px; padding: 12px; }
+            .fill-truck { display: inline-block; margin-top: 4px; padding: 2px 4px; border: 1px solid #0a5f70; color: #0a5f70; font-size: 9px; font-weight: bold; }
         </style>
     </head>
     <body>
@@ -71,6 +72,11 @@
             </tr>
         </table>
 
+        @if (filled($merchandiseRequest->notes))
+            <h2>Comentarios del pedido</h2>
+            <div class="notes">{{ $merchandiseRequest->notes }}</div>
+        @endif
+
         <table>
             <thead>
                 <tr>
@@ -108,6 +114,9 @@
                         <td>
                             <strong>{{ $line->item?->sku ?? 'Articulo eliminado' }}</strong><br>
                             {{ $line->item?->description ?? 'Sin descripción' }}
+                            @if ($line->fill_truck)
+                                <br><span class="fill-truck">PARA RELLENAR CAMION</span>
+                            @endif
                         </td>
                         <td>{{ $line->lot ?: 'NO LOTE' }}</td>
                         <td>{{ $line->unitsLabel() }}</td>

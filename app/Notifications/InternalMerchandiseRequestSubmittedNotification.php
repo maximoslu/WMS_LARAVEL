@@ -20,7 +20,13 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
     {
         return array_values(array_filter($this->channels, function (string $channel) use ($notifiable): bool {
             if ($channel === 'mail') {
-                return filter_var($notifiable->email ?? null, FILTER_VALIDATE_EMAIL) !== false;
+                $email = $notifiable->email ?? null;
+
+                if (! $email && method_exists($notifiable, 'routeNotificationFor')) {
+                    $email = $notifiable->routeNotificationFor('mail');
+                }
+
+                return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
             }
 
             return $channel === 'database';
@@ -33,23 +39,30 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
         $clientLabel = $request->client?->code ?: $request->client?->name ?: 'CLIENTE';
         $lines = $request->lines
             ->map(fn ($line) => sprintf(
-                '%s | %d pallets | lote %s',
+                '%s | %d pallets | lote %s%s',
                 $line->item?->sku ?? 'Articulo eliminado',
                 $line->requested_pallets,
-                $line->lot ?: 'NO LOTE'
+                $line->lot ?: 'NO LOTE',
+                $line->fill_truck ? ' | PARA RELLENAR CAMION' : ''
             ))
             ->implode('; ');
 
-        return (new MailMessage)
+        $message = (new MailMessage)
             ->subject('Nuevo pedido de '.$clientLabel)
             ->greeting('Nuevo pedido de '.$clientLabel)
             ->line('El cliente ha realizado un pedido.')
             ->line('Solicitud: '.$request->referenceCode())
             ->line('Cliente: '.$request->client?->name)
-            ->line('Solicitante: '.$request->requestedBy?->name ?? 'Sin usuario')
+            ->line('Solicitante: '.($request->requestedBy?->name ?? 'Sin usuario'))
             ->line('Fecha: '.$request->submittedAt()?->format('d/m/Y H:i'))
             ->line('Referencia: '.$request->referenceCode())
-            ->line('Estado: '.$request->statusLabel())
+            ->line('Estado: '.$request->statusLabel());
+
+        if (filled($request->notes)) {
+            $message->line('Comentarios del pedido: '.$request->notes);
+        }
+
+        return $message
             ->line('Lineas: '.$lines)
             ->line('Total de pallets: '.number_format($request->requestedPalletsCount(), 0, ',', '.'))
             ->action('Abrir solicitud', route('dispatches.requests.show', $request));
@@ -73,6 +86,7 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             'status' => $request->status,
             'status_label' => $request->statusLabel(),
             'requested_by' => $request->requestedBy?->name,
+            'notes' => $request->notes,
             'submitted_at' => $request->submittedAt()?->toDateTimeString(),
         ];
     }

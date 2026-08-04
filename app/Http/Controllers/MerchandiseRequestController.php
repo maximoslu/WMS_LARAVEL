@@ -118,6 +118,7 @@ class MerchandiseRequestController extends Controller
             ->when($selectedClient instanceof Client, fn (Builder $query) => $query->where('client_id', $selectedClient->id))
             ->when(! ($selectedClient instanceof Client), fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->whereIn('status', [
+                MerchandiseRequest::STATUS_DRAFT,
                 MerchandiseRequest::STATUS_PENDING,
                 MerchandiseRequest::STATUS_PREPARING,
                 MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
@@ -142,6 +143,10 @@ class MerchandiseRequestController extends Controller
             'searchEndpoint' => route('merchandise-requests.items.search'),
             'contractualWindowWarning' => $scheduleService->preSubmissionWarning(),
             'pendingRequests' => $pendingRequests,
+            'draft' => null,
+            'formAction' => route('merchandise-requests.store'),
+            'formMethod' => 'POST',
+            'pageTitle' => 'NUEVO PEDIDO',
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
@@ -186,14 +191,16 @@ class MerchandiseRequestController extends Controller
         $user = $request->user();
         $requestedLines = $request->validatedLines();
         $clientId = $request->effectiveClientId();
+        $isDraft = $request->isDraftSubmission();
 
-        $merchandiseRequest = DB::transaction(function () use ($request, $requestedLines, $user, $clientId, $audit): MerchandiseRequest {
+        $merchandiseRequest = DB::transaction(function () use ($request, $requestedLines, $user, $clientId, $audit, $isDraft): MerchandiseRequest {
             $requestModel = MerchandiseRequest::query()->create([
                 'client_id' => $clientId,
                 'requested_by' => $user->id,
-                'status' => MerchandiseRequest::STATUS_PENDING,
+                'status' => $isDraft ? MerchandiseRequest::STATUS_DRAFT : MerchandiseRequest::STATUS_PENDING,
                 'requested_date' => now()->toDateString(),
                 'camion_propio' => $request->boolean('camion_propio'),
+                'notes' => $request->input('notes'),
             ]);
 
             foreach ($requestedLines as $line) {
@@ -210,13 +217,14 @@ class MerchandiseRequestController extends Controller
                     'requested_peaks' => $line['requested_peaks'],
                     'requested_units' => $line['requested_units'],
                     'required_units' => $line['required_units'],
+                    'fill_truck' => $line['fill_truck'],
                 ]);
             }
 
             $audit->record(
-                event: 'merchandise_request_created',
+                event: $isDraft ? 'merchandise_request_draft_saved' : 'merchandise_request_created',
                 module: 'merchandise_requests',
-                description: 'Pedido de mercancia creado.',
+                description: $isDraft ? 'Borrador de pedido guardado.' : 'Pedido de mercancia creado.',
                 auditable: $requestModel,
                 user: $user,
                 clientId: $clientId,
@@ -226,19 +234,147 @@ class MerchandiseRequestController extends Controller
                     'requested_pallets' => collect($requestedLines)->sum('requested_pallets'),
                     'requested_peaks' => collect($requestedLines)->sum('requested_peaks'),
                     'requested_units' => collect($requestedLines)->sum('requested_units'),
+                    'has_notes' => filled($requestModel->notes),
                 ],
             );
 
             return $requestModel;
         });
 
-        $notificationService->notifySubmitted($merchandiseRequest);
+        if (! $isDraft) {
+            $notificationService->notifySubmitted($merchandiseRequest);
+        }
 
         $response = redirect()
             ->route('merchandise-requests.show', $merchandiseRequest)
-            ->with('status', 'Solicitud registrada y notificada correctamente.');
+            ->with('status', $isDraft ? 'Borrador guardado correctamente.' : 'Solicitud registrada y notificada correctamente.');
 
-        $outsideWindowWarning = $scheduleService->postSubmissionWarning($merchandiseRequest->submittedAt());
+        $outsideWindowWarning = $isDraft ? null : $scheduleService->postSubmissionWarning($merchandiseRequest->submittedAt());
+
+        if ($outsideWindowWarning !== null) {
+            $response
+                ->with('warning', $outsideWindowWarning)
+                ->with('scheduleWarning', true);
+        }
+
+        return $response;
+    }
+
+    public function editDraft(
+        Request $request,
+        MerchandiseRequest $merchandiseRequest,
+        StockVariantCatalog $variantCatalog,
+        MerchandiseRequestScheduleService $scheduleService,
+    ): View {
+        $this->authorizeDraftAccess($request, $merchandiseRequest);
+
+        $merchandiseRequest->load(['client', 'lines.item', 'lines.stockPallet']);
+        $client = $merchandiseRequest->client;
+
+        return view('merchandise-requests.create', [
+            'hasActiveItems' => Item::query()
+                ->where('client_id', $merchandiseRequest->client_id)
+                ->where('active', true)
+                ->exists(),
+            'selectedItems' => $variantCatalog->hydrateSelections(
+                old('lines', $this->linePayloadForBuilder($merchandiseRequest)),
+                (int) $merchandiseRequest->client_id
+            ),
+            'client' => $client,
+            'clients' => Client::query()->where('active', true)->orderBy('name')->get(),
+            'canChooseClient' => false,
+            'selectedClientId' => $merchandiseRequest->client_id,
+            'allowRequiredUnits' => (bool) ($client?->allow_order_line_required_units ?? false),
+            'searchEndpoint' => route('merchandise-requests.items.search'),
+            'contractualWindowWarning' => $scheduleService->preSubmissionWarning(),
+            'pendingRequests' => collect(),
+            'draft' => $merchandiseRequest,
+            'formAction' => route('merchandise-requests.draft.update', $merchandiseRequest),
+            'formMethod' => 'PATCH',
+            'pageTitle' => 'EDITAR BORRADOR',
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
+        ]);
+    }
+
+    public function updateDraft(
+        StoreMerchandiseRequestRequest $request,
+        MerchandiseRequest $merchandiseRequest,
+        MerchandiseRequestScheduleService $scheduleService,
+        MerchandiseRequestNotificationService $notificationService,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        $this->authorizeDraftAccess($request, $merchandiseRequest);
+
+        $requestedLines = $request->validatedLines();
+        $isDraft = $request->isDraftSubmission();
+        $submittedNow = false;
+
+        $updatedRequest = DB::transaction(function () use ($request, $merchandiseRequest, $requestedLines, $audit, $isDraft, &$submittedNow): MerchandiseRequest {
+            $lockedRequest = MerchandiseRequest::query()
+                ->whereKey($merchandiseRequest->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $lockedRequest->isDraft()) {
+                return $lockedRequest;
+            }
+
+            $lockedRequest->update([
+                'status' => $isDraft ? MerchandiseRequest::STATUS_DRAFT : MerchandiseRequest::STATUS_PENDING,
+                'requested_date' => $isDraft ? $lockedRequest->requested_date : now()->toDateString(),
+                'camion_propio' => $request->boolean('camion_propio'),
+                'notes' => $request->input('notes'),
+            ]);
+            $submittedNow = ! $isDraft;
+            $lockedRequest->lines()->delete();
+
+            foreach ($requestedLines as $line) {
+                $lockedRequest->lines()->create([
+                    'item_id' => $line['item_id'],
+                    'stock_pallet_id' => $line['stock_pallet_id'],
+                    'line_type' => $line['line_type'],
+                    'stock_peak_index' => $line['stock_peak_index'],
+                    'lot' => $line['lot'],
+                    'destination_location' => $line['destination_location'],
+                    'units_per_pallet' => $line['units_per_pallet'],
+                    'units_per_peak' => $line['units_per_peak'],
+                    'requested_pallets' => $line['requested_pallets'],
+                    'requested_peaks' => $line['requested_peaks'],
+                    'requested_units' => $line['requested_units'],
+                    'required_units' => $line['required_units'],
+                    'fill_truck' => $line['fill_truck'],
+                ]);
+            }
+
+            $audit->record(
+                event: $isDraft ? 'merchandise_request_draft_saved' : 'merchandise_request_draft_submitted',
+                module: 'merchandise_requests',
+                description: $isDraft ? 'Borrador de pedido actualizado.' : 'Borrador de pedido enviado como pedido definitivo.',
+                auditable: $lockedRequest,
+                user: $request->user(),
+                clientId: $lockedRequest->client_id,
+                newValues: [
+                    'status' => $lockedRequest->status,
+                    'line_count' => count($requestedLines),
+                    'requested_pallets' => collect($requestedLines)->sum('requested_pallets'),
+                    'requested_peaks' => collect($requestedLines)->sum('requested_peaks'),
+                    'requested_units' => collect($requestedLines)->sum('requested_units'),
+                    'has_notes' => filled($lockedRequest->notes),
+                ],
+            );
+
+            return $lockedRequest;
+        });
+
+        if ($submittedNow) {
+            $notificationService->notifySubmitted($updatedRequest);
+        }
+
+        $response = redirect()
+            ->route('merchandise-requests.show', $updatedRequest)
+            ->with('status', $isDraft ? 'Borrador guardado correctamente.' : 'Pedido enviado correctamente.');
+
+        $outsideWindowWarning = $isDraft ? null : $scheduleService->postSubmissionWarning($updatedRequest->submittedAt());
 
         if ($outsideWindowWarning !== null) {
             $response
@@ -278,11 +414,15 @@ class MerchandiseRequestController extends Controller
         $canAddInternalLine = ! $user->hasRole(Role::CLIENTE)
             && $user->canAccessRole(Role::ALMACEN)
             && $this->canAcceptInternalLines($merchandiseRequest);
+        $canEditDraft = $merchandiseRequest->isDraft()
+            && $user->hasRole(Role::CLIENTE)
+            && (int) $user->client_id === (int) $merchandiseRequest->client_id;
 
         return view('merchandise-requests.show', [
             'merchandiseRequest' => $merchandiseRequest,
             'isClient' => $user->hasRole(Role::CLIENTE),
             'canAddInternalLine' => $canAddInternalLine,
+            'canEditDraft' => $canEditDraft,
             'selectedItems' => $canAddInternalLine
                 ? app(StockVariantCatalog::class)->hydrateSelections(old('lines', []), (int) $merchandiseRequest->client_id)
                 : [],
@@ -335,6 +475,7 @@ class MerchandiseRequestController extends Controller
                     'requested_peaks' => $line['requested_peaks'],
                     'requested_units' => $line['requested_units'],
                     'required_units' => $line['required_units'],
+                    'fill_truck' => $line['fill_truck'],
                 ]);
 
                 $createdLines->push($createdLine);
@@ -374,6 +515,14 @@ class MerchandiseRequestController extends Controller
         $validated = $request->validate([
             'status' => ['required', Rule::in(MerchandiseRequest::statuses())],
         ]);
+
+        if ($validated['status'] === MerchandiseRequest::STATUS_DRAFT || $merchandiseRequest->isDraft()) {
+            return redirect()
+                ->route('merchandise-requests.show', $merchandiseRequest)
+                ->withErrors([
+                    'status' => 'Los borradores solo pueden enviarse desde la edicion del borrador.',
+                ]);
+        }
 
         $previousStatus = $merchandiseRequest->status;
 
@@ -525,7 +674,40 @@ class MerchandiseRequestController extends Controller
             'requested_pallets' => $requestLine->requestedPalletsCount(),
             'requested_peaks' => $requestLine->requestedPeaksCount(),
             'source_request_line_id' => $requestLine->id,
+            'fill_truck' => $requestLine->fill_truck,
             'notes' => $requestLine->notes,
         ]);
+    }
+
+    private function authorizeDraftAccess(Request $request, MerchandiseRequest $merchandiseRequest): void
+    {
+        $user = $request->user();
+
+        abort_unless($merchandiseRequest->isDraft(), 404);
+
+        abort_unless(
+            $user->hasRole(Role::CLIENTE) && (int) $user->client_id === (int) $merchandiseRequest->client_id,
+            403
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function linePayloadForBuilder(MerchandiseRequest $merchandiseRequest): array
+    {
+        return $merchandiseRequest->lines
+            ->map(fn (MerchandiseRequestLine $line): array => [
+                'item_id' => $line->item_id,
+                'stock_pallet_id' => $line->stock_pallet_id,
+                'line_type' => $line->lineType(),
+                'stock_peak_index' => $line->stock_peak_index,
+                'quantity' => $line->requestedQuantity(),
+                'destination_location' => $line->destination_location,
+                'required_units' => $line->required_units,
+                'fill_truck' => (bool) $line->fill_truck,
+            ])
+            ->values()
+            ->all();
     }
 }

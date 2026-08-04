@@ -250,6 +250,12 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/solicitudes-mercancia', [MerchandiseRequestController::class, 'store'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.store');
+    Route::get('/solicitudes-mercancia/{merchandiseRequest}/editar-borrador', [MerchandiseRequestController::class, 'editDraft'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('merchandise-requests.draft.edit');
+    Route::patch('/solicitudes-mercancia/{merchandiseRequest}/borrador', [MerchandiseRequestController::class, 'updateDraft'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('merchandise-requests.draft.update');
     Route::post('/solicitudes-mercancia/{merchandiseRequest}/lineas', [MerchandiseRequestController::class, 'storeLine'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('merchandise-requests.lines.store');

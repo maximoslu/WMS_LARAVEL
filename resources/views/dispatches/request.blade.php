@@ -169,6 +169,17 @@
         </div>
     </section>
 
+    @if (filled($merchandiseRequest->notes))
+        <section class="surface-card compact-card wms-flow-card merchandise-request-comments">
+            <div class="wms-section-head">
+                <div>
+                    <strong>Comentarios del pedido</strong>
+                    <p>{{ $merchandiseRequest->notes }}</p>
+                </div>
+            </div>
+        </section>
+    @endif
+
     <section class="surface-card compact-card warehouse-request-lines wms-load-lines" data-request-lines-section>
         <div class="warehouse-request-lines-head">
             <strong>LÍNEAS DEL PEDIDO Y CARGA REAL</strong>
@@ -264,6 +275,9 @@
                         <div>
                             <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
                             <span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span>
+                            @if ($line->fill_truck)
+                                <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
+                            @endif
                             <p>{{ $line->item?->description ?? 'Sin descripción' }}</p>
                             @if ($line->destination_location)
                                 <p>Ubicación destino: {{ $line->destination_location }}</p>

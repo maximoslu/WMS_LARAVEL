@@ -42,6 +42,7 @@ class GoodsDispatchLineFactory extends Factory
             'confirmed_at' => null,
             'is_extra_line' => false,
             'source_request_line_id' => null,
+            'fill_truck' => false,
             'notes' => null,
         ];
     }

@@ -84,6 +84,7 @@
                     <span>Estado</span>
                     <select name="status" class="auth-input">
                         <option value="all" @selected($filters['status'] === 'all')>Todos</option>
+                        <option value="draft" @selected($filters['status'] === 'draft')>Borrador</option>
                         <option value="pending" @selected($filters['status'] === 'pending')>Pendiente</option>
                         <option value="preparing" @selected($filters['status'] === 'preparing')>En preparacion</option>
                         <option value="sent" @selected($filters['status'] === 'sent')>Enviado</option>
@@ -171,6 +172,9 @@
                                         <div class="wms-request-code">
                                             <strong>{{ $merchandiseRequest->referenceCode() }}</strong>
                                             <span>{{ $merchandiseRequest->lines->count() }} lineas</span>
+                                            @if ($merchandiseRequest->isDraft())
+                                                <span class="wms-line-type-pill wms-line-type-pill--peak">Borrador</span>
+                                            @endif
                                         </div>
                                     </td>
                                     @unless ($isClient)
@@ -214,7 +218,12 @@
                                             <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
                                                 Ver
                                             </a>
-                                            @unless ($isClient)
+                                            @if ($isClient && $merchandiseRequest->isDraft())
+                                                <a href="{{ route('merchandise-requests.draft.edit', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
+                                                    Editar borrador
+                                                </a>
+                                            @endif
+                                            @unless ($isClient || $merchandiseRequest->isDraft())
                                                 <a href="{{ route('dispatches.requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
                                                     Gestionar
                                                 </a>

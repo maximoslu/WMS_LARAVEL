@@ -751,6 +751,7 @@ const setupMerchandiseRequestBuilder = () => {
                 `<input type="hidden" name="lines[${key}][stock_peak_index]" value="${escapeHtml(item.stock_peak_index ?? '')}">`,
                 `<input type="hidden" name="lines[${key}][quantity]" value="${escapeHtml(item.selected_quantity)}">`,
                 `<input type="hidden" name="lines[${key}][destination_location]" value="${escapeHtml(item.destination_location ?? '')}">`,
+                `<input type="hidden" name="lines[${key}][fill_truck]" value="${item.fill_truck ? '1' : '0'}">`,
                 allowRequiredUnits ? `<input type="hidden" name="lines[${key}][required_units]" value="${escapeHtml(item.required_units ?? '')}">` : '',
             ].join('');
         }).join('');
@@ -822,6 +823,13 @@ const setupMerchandiseRequestBuilder = () => {
                     <input type="number" min="1" step="1" ${line.line_type === 'peak' ? maxAttribute : 'disabled'} value="${escapeHtml(peakValue)}" class="auth-input merchandise-request-summary-input" ${line.line_type === 'peak' ? `data-request-summary-quantity data-line-key="${key}"` : ''}>
                 </label>
                 ${requiredUnitsMarkup}
+                <label class="auth-field merchandise-request-line-fill-truck">
+                    <span>Rellenar camión</span>
+                    <label class="wms-checkbox-inline">
+                        <input type="checkbox" ${line.fill_truck ? 'checked' : ''} data-request-summary-fill-truck data-line-key="${key}">
+                        <span>PARA RELLENAR CAMIÓN</span>
+                    </label>
+                </label>
                 <label class="auth-field merchandise-request-line-destination">
                     <span>Ubicación destino</span>
                     <input type="text" maxlength="255" value="${escapeHtml(destinationLocation)}" class="auth-input" placeholder="Opcional" data-request-summary-destination data-line-key="${key}">
@@ -921,6 +929,23 @@ const setupMerchandiseRequestBuilder = () => {
                 lines.set(lineKey, {
                     ...item,
                     required_units: Number.isFinite(requiredUnits) && requiredUnits > 0 ? requiredUnits : '',
+                });
+                syncHiddenInputs();
+            }
+
+            return;
+        }
+
+        const fillTruckInput = event.target.closest('[data-request-summary-fill-truck]');
+
+        if (fillTruckInput) {
+            const lineKey = String(fillTruckInput.dataset.lineKey ?? '');
+            const item = lines.get(lineKey);
+
+            if (item) {
+                lines.set(lineKey, {
+                    ...item,
+                    fill_truck: fillTruckInput.checked,
                 });
                 syncHiddenInputs();
             }

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\ProcessGoodsDispatchStatusChangedJob;
 use App\Jobs\ProcessMerchandiseRequestStatusChangedJob;
 use App\Jobs\ProcessMerchandiseRequestSubmittedNotificationsJob;
+use App\Models\ClientDispatchEmailRecipient;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
@@ -175,6 +176,38 @@ class MerchandiseRequestNotificationTest extends TestCase
 
         Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 1);
         Notification::assertNotSentTo($internalCreator, CustomerMerchandiseRequestSubmittedNotification::class);
+    }
+
+    public function test_creation_hito_also_reaches_additional_dispatch_email_recipients_once(): void
+    {
+        Notification::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $cliente->update(['email' => 'carretillero@edelvives.test']);
+        ClientDispatchEmailRecipient::factory()->create([
+            'client_id' => $client->id,
+            'email' => 'carretillero@edelvives.test',
+        ]);
+        ClientDispatchEmailRecipient::factory()->create([
+            'client_id' => $client->id,
+            'email' => 'operaciones@edelvives.test',
+        ]);
+        $merchandiseRequest = $this->createMerchandiseRequestWithLine($client, $cliente);
+
+        (new ProcessMerchandiseRequestSubmittedNotificationsJob($merchandiseRequest->id))
+            ->handle(app(MerchandiseRequestNotificationService::class));
+
+        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 1);
+        Notification::assertSentOnDemand(
+            InternalMerchandiseRequestSubmittedNotification::class,
+            function ($notification, array $channels, object $notifiable): bool {
+                return $channels === ['mail']
+                    && $notifiable->routeNotificationFor('mail') === 'operaciones@edelvives.test';
+            }
+        );
+        Notification::assertSentOnDemandTimes(InternalMerchandiseRequestSubmittedNotification::class, 1);
     }
 
     public function test_preparation_status_change_does_not_queue_or_send_communications(): void

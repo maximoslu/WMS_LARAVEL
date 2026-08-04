@@ -33,7 +33,8 @@ class StoreMerchandiseRequestRequest extends FormRequest
  *     requested_pallets:int,
  *     requested_peaks:int,
   *     requested_units:int,
-  *     required_units:int|null
+ *     required_units:int|null,
+ *     fill_truck:bool
   * }> | null
      */
     private ?array $resolvedLines = null;
@@ -80,6 +81,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
         $this->merge([
             'camion_propio' => $this->boolean('camion_propio'),
             'client_id' => $this->input('client_id') === '' ? null : $this->input('client_id'),
+            'submit_action' => $this->input('submit_action') === 'draft' ? 'draft' : 'submit',
             'lines' => collect($submittedLines)
                 ->map(function ($payload) {
                     if (! is_array($payload)) {
@@ -96,6 +98,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
                             ? trim((string) $payload['destination_location'])
                             : null,
                         'required_units' => ($payload['required_units'] ?? '') === '' ? null : ($payload['required_units'] ?? null),
+                        'fill_truck' => filter_var($payload['fill_truck'] ?? false, FILTER_VALIDATE_BOOL),
                     ];
                 })
                 ->all(),
@@ -111,7 +114,9 @@ class StoreMerchandiseRequestRequest extends FormRequest
                 'integer',
                 Rule::exists('clients', 'id')->where('active', true),
             ],
-            'lines' => ['required', 'array'],
+            'submit_action' => ['required', 'string', 'in:draft,submit'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+            'lines' => [Rule::requiredIf(fn (): bool => ! $this->isDraftSubmission()), 'array'],
             'camion_propio' => ['boolean'],
             'lines.*.item_id' => ['nullable', 'integer'],
             'lines.*.line_type' => ['required', 'string'],
@@ -119,6 +124,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
             'lines.*.stock_peak_index' => ['nullable', 'integer', 'min:1'],
             'lines.*.quantity' => ['nullable', 'integer', 'min:0'],
             'lines.*.destination_location' => ['nullable', 'string', 'max:255'],
+            'lines.*.fill_truck' => ['boolean'],
             'lines.*.required_units' => $this->allowsRequiredUnits()
                 ? ['nullable', 'integer', 'min:1', 'max:9223372036854775807']
                 : ['prohibited'],
@@ -131,7 +137,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
             $this->mirrorLegacyValidationErrors($validator);
             $lines = $this->validatedLines();
 
-            if ($lines === []) {
+            if ($lines === [] && ! $this->isDraftSubmission()) {
                 $message = 'Debes seleccionar al menos una linea valida con pallets o picos.';
                 $validator->errors()->add('lines', $message);
                 $this->addLegacyQuantitiesError($validator, $message);
@@ -162,7 +168,8 @@ class StoreMerchandiseRequestRequest extends FormRequest
  *     requested_pallets:int,
  *     requested_peaks:int,
   *     requested_units:int,
-  *     required_units:int|null
+ *     required_units:int|null,
+ *     fill_truck:bool
   * }>
      */
     public function validatedLines(): array
@@ -182,6 +189,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
                 $line['required_units'] = $this->allowsRequiredUnits()
                     ? ($submittedLines->get($index)['required_units'] ?? null)
                     : null;
+                $line['fill_truck'] = filter_var($submittedLines->get($index)['fill_truck'] ?? false, FILTER_VALIDATE_BOOL);
 
                 return $line;
             })
@@ -213,6 +221,11 @@ class StoreMerchandiseRequestRequest extends FormRequest
         return (bool) Client::query()
             ->whereKey($clientId)
             ->value('allow_order_line_required_units');
+    }
+
+    public function isDraftSubmission(): bool
+    {
+        return $this->input('submit_action') === 'draft';
     }
 
     /**

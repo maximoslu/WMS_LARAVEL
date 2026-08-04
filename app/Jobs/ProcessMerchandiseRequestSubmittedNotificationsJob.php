@@ -29,7 +29,7 @@ class ProcessMerchandiseRequestSubmittedNotificationsJob implements ShouldQueue
             ->with(['client', 'requestedBy.role', 'lines.item'])
             ->find($this->merchandiseRequestId);
 
-        if ($merchandiseRequest === null) {
+        if ($merchandiseRequest === null || $merchandiseRequest->isDraft()) {
             return;
         }
 

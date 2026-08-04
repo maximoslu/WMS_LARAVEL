@@ -34,6 +34,8 @@
             .totals .label { background: #eef3f6; color: #526675; font-size: 7px; text-transform: uppercase; }
             .totals .value { width: 24%; text-align: right; font-weight: bold; }
             .signature { margin-top: 12px; border: 1px solid #cdd7df; padding: 7px; min-height: 58px; }
+            .notes { margin-top: 9px; border: 1px solid #cdd7df; padding: 7px; }
+            .fill-truck { display: inline-block; margin-top: 3px; padding: 2px 4px; border: 1px solid #0a5f70; color: #0a5f70; font-size: 7px; font-weight: bold; }
         </style>
     </head>
     <body>
@@ -99,6 +101,12 @@
             </tr>
         </table>
 
+        @if (filled($dispatch->notes))
+            <div class="notes">
+                <strong>Comentarios del pedido:</strong> {{ $dispatch->notes }}
+            </div>
+        @endif
+
         <table class="delivery-lines">
             <colgroup>
                 <col style="width: 12%;">
@@ -126,6 +134,9 @@
                             {{ $line->deliveryNoteDescription() }}
                             @if ($line->requiredUnitsLabel())
                                 <br><small>{{ $line->requiredUnitsLabel() }}</small>
+                            @endif
+                            @if ($line->fill_truck)
+                                <br><span class="fill-truck">PARA RELLENAR CAMION</span>
                             @endif
                         </td>
                         <td class="col-lot">{{ $line->lot ?: 'NO LOTE' }}</td>

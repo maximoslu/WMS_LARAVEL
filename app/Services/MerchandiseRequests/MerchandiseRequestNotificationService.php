@@ -35,6 +35,7 @@ class MerchandiseRequestNotificationService
             'dispatch.lines.stockPallet.location.warehouse',
             'dispatch.lines.allocations.stockPallet.location.warehouse',
             'dispatch.lines.sourceRequestLine',
+            'client.dispatchEmailRecipients',
         ]);
 
         $preparationPdfContent = $this->shouldAttachPreparationPdfToClient($merchandiseRequest)
@@ -46,7 +47,9 @@ class MerchandiseRequestNotificationService
             ? 'preparacion-pedido-'.$merchandiseRequest->referenceCode().'.pdf'
             : null;
 
-        foreach ($this->clientRecipients($merchandiseRequest) as $recipient) {
+        $clientRecipients = $this->clientRecipients($merchandiseRequest);
+
+        foreach ($clientRecipients as $recipient) {
             $recipient->notify(new CustomerMerchandiseRequestSubmittedNotification(
                 $merchandiseRequest,
                 ['database', 'mail'],
@@ -55,9 +58,23 @@ class MerchandiseRequestNotificationService
             ));
         }
 
-        $this->notifyInternalUsers(
+        $internalRecipients = $this->notifyInternalUsers(
             new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['database', 'mail'])
         );
+        $additionalEmails = $this->dispatchEmailRecipients($merchandiseRequest, $clientRecipients->merge($internalRecipients));
+
+        foreach ($additionalEmails as $email) {
+            Notification::route('mail', $email)->notify(
+                new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['mail'])
+            );
+        }
+
+        Log::info('Notificaciones de pedido definitivo generadas.', [
+            'merchandise_request_id' => $merchandiseRequest->id,
+            'client_user_recipients' => $clientRecipients->pluck('id')->values()->all(),
+            'internal_user_recipients' => $internalRecipients->pluck('id')->values()->all(),
+            'dispatch_email_recipients' => $additionalEmails->values()->all(),
+        ]);
     }
 
     private function shouldAttachPreparationPdfToClient(MerchandiseRequest $merchandiseRequest): bool
@@ -240,19 +257,24 @@ class MerchandiseRequestNotificationService
             ->values();
     }
 
-    private function notifyInternalUsers(object $notification, ?User $excludeUser = null): void
+    /**
+     * @return Collection<int, User>
+     */
+    private function notifyInternalUsers(object $notification, ?User $excludeUser = null): Collection
     {
         $recipients = $this->internalRecipients()
             ->reject(fn (User $recipient): bool => $excludeUser !== null && $recipient->id === $excludeUser->id)
             ->values();
 
         if ($recipients->isEmpty()) {
-            return;
+            return $recipients;
         }
 
         foreach ($recipients as $recipient) {
             $recipient->notify($notification);
         }
+
+        return $recipients;
     }
 
     private function hasValidEmail(User $user): bool

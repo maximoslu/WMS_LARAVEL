@@ -14,6 +14,8 @@ class MerchandiseRequest extends Model
 {
     use HasFactory;
 
+    public const STATUS_DRAFT = 'draft';
+
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_PREPARING = 'preparing';
@@ -69,6 +71,7 @@ class MerchandiseRequest extends Model
     public static function statuses(): array
     {
         return [
+            self::STATUS_DRAFT,
             self::STATUS_PENDING,
             self::STATUS_PREPARING,
             self::STATUS_SENT,
@@ -123,7 +126,14 @@ class MerchandiseRequest extends Model
             return (string) $storedCode;
         }
 
-        return 'SOL-'.str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);
+        $prefix = $this->status === self::STATUS_DRAFT ? 'BOR' : 'SOL';
+
+        return $prefix.'-'.str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->status === self::STATUS_DRAFT;
     }
 
     public function submittedAt(): ?CarbonInterface

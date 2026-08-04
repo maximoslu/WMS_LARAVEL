@@ -42,6 +42,7 @@ class GoodsDispatchLine extends Model
         'confirmed_at',
         'is_extra_line',
         'source_request_line_id',
+        'fill_truck',
         'notes',
     ];
 
@@ -61,6 +62,7 @@ class GoodsDispatchLine extends Model
             'loaded_partial_units' => 'integer',
             'confirmed_at' => 'datetime',
             'is_extra_line' => 'boolean',
+            'fill_truck' => 'boolean',
         ];
     }
 
@@ -334,6 +336,11 @@ class GoodsDispatchLine extends Model
     public function lineOriginLabel(): string
     {
         return $this->is_extra_line ? 'Extra' : 'Pedido';
+    }
+
+    public function fillTruckLabel(): ?string
+    {
+        return $this->fill_truck ? 'PARA RELLENAR CAMION' : null;
     }
 
     public function unitsLabel(): string

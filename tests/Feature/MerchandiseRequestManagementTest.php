@@ -292,6 +292,217 @@ class MerchandiseRequestManagementTest extends TestCase
         );
     }
 
+    public function test_cliente_can_save_reopen_modify_and_submit_draft_without_operational_side_effects(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $foreignCliente = $this->makeUserWithRole(Role::CLIENTE, $otherClient);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'BORRADOR-001',
+            'description' => 'Referencia de borrador',
+            'units_per_pallet' => 100,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 1000,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+        ]);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'submit_action' => 'draft',
+                'notes' => 'Primer comentario del pedido',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $draft = MerchandiseRequest::query()->firstOrFail();
+
+        $this->assertSame(MerchandiseRequest::STATUS_DRAFT, $draft->status);
+        $this->assertSame('Primer comentario del pedido', $draft->notes);
+        $this->assertSame(0, $draft->lines()->count());
+        $this->assertSame(1000, $stock->fresh()->quantity_units);
+        $this->assertSame(10, (int) $stock->fresh()->warehouse_pallets);
+        $this->assertSame(0, GoodsDispatch::query()->count());
+        Bus::assertNotDispatched(ProcessMerchandiseRequestSubmittedNotificationsJob::class);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.index'))
+            ->assertOk()
+            ->assertDontSee($draft->referenceCode());
+
+        $this->actingAs($foreignCliente)
+            ->get(route('merchandise-requests.draft.edit', $draft))
+            ->assertForbidden();
+
+        $this->actingAs($foreignCliente)
+            ->patch(route('merchandise-requests.draft.update', $draft), [
+                'submit_action' => 'draft',
+                'notes' => 'Intento ajeno',
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.draft.edit', $draft))
+            ->assertOk()
+            ->assertSee('EDITAR BORRADOR')
+            ->assertSee('Primer comentario del pedido');
+
+        $this->actingAs($cliente)
+            ->patch(route('merchandise-requests.draft.update', $draft), [
+                'submit_action' => 'draft',
+                'notes' => 'Comentario actualizado',
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 3,
+                        'fill_truck' => '1',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $draft));
+
+        $draft->refresh();
+        $this->assertSame(MerchandiseRequest::STATUS_DRAFT, $draft->status);
+        $this->assertSame('Comentario actualizado', $draft->notes);
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $draft->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 3,
+            'fill_truck' => true,
+        ]);
+        $this->assertSame(1000, $stock->fresh()->quantity_units);
+        $this->assertSame(0, GoodsDispatch::query()->count());
+        Bus::assertNotDispatched(ProcessMerchandiseRequestSubmittedNotificationsJob::class);
+
+        $this->actingAs($cliente)
+            ->patch(route('merchandise-requests.draft.update', $draft), [
+                'submit_action' => 'submit',
+                'notes' => 'Enviar al final del dia',
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 3,
+                        'fill_truck' => '1',
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $draft));
+
+        $draft->refresh();
+        $this->assertSame(MerchandiseRequest::STATUS_PENDING, $draft->status);
+        $this->assertSame('Enviar al final del dia', $draft->notes);
+        $this->assertSame(1000, $stock->fresh()->quantity_units);
+        $this->assertSame(0, GoodsDispatch::query()->count());
+        Bus::assertDispatchedAfterResponse(
+            ProcessMerchandiseRequestSubmittedNotificationsJob::class,
+            fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $draft->id
+        );
+    }
+
+    public function test_submitting_draft_executes_normal_line_validation(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $draft = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_DRAFT,
+        ]);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.draft.edit', $draft))
+            ->patch(route('merchandise-requests.draft.update', $draft), [
+                'submit_action' => 'submit',
+            ])
+            ->assertRedirect(route('merchandise-requests.draft.edit', $draft))
+            ->assertSessionHasErrors('lines');
+
+        $this->assertSame(MerchandiseRequest::STATUS_DRAFT, $draft->fresh()->status);
+        Bus::assertNotDispatched(ProcessMerchandiseRequestSubmittedNotificationsJob::class);
+    }
+
+    public function test_comments_and_fill_truck_instruction_flow_to_preparation_and_loading(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'RELLENO-001',
+            'description' => 'Referencia para rellenar camion',
+            'units_per_pallet' => 250,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'quantity_units' => 2500,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+        ]);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'submit_action' => 'submit',
+                'notes' => 'Cargar junto al pedido principal',
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 2,
+                        'fill_truck' => '1',
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->with('lines')->firstOrFail();
+        $this->assertTrue((bool) $request->lines->first()->fill_truck);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('Comentarios del pedido')
+            ->assertSee('Cargar junto al pedido principal')
+            ->assertSee('PARA RELLENAR CAMION');
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $request))
+            ->assertRedirect();
+
+        $dispatch = GoodsDispatch::query()->with('lines')->firstOrFail();
+        $this->assertSame('Cargar junto al pedido principal', $dispatch->notes);
+        $this->assertTrue((bool) $dispatch->lines->first()->fill_truck);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $request))
+            ->assertOk()
+            ->assertSee('Comentarios del pedido')
+            ->assertSee('PARA RELLENAR CAMION');
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.show', $dispatch))
+            ->assertOk()
+            ->assertSee('Comentarios del pedido')
+            ->assertSee('PARA RELLENAR CAMION');
+    }
+
     public function test_cliente_can_add_optional_destination_location_per_request_line(): void
     {
         Bus::fake();

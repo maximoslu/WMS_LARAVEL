@@ -177,10 +177,10 @@ class GoodsDispatchController extends Controller
                 ->with('status', 'La solicitud ya tiene una carga abierta.');
         }
 
-        if (in_array($merchandiseRequest->status, [MerchandiseRequest::STATUS_COMPLETED, MerchandiseRequest::STATUS_CANCELLED], true)) {
+        if (in_array($merchandiseRequest->status, [MerchandiseRequest::STATUS_DRAFT, MerchandiseRequest::STATUS_COMPLETED, MerchandiseRequest::STATUS_CANCELLED], true)) {
             return redirect()
                 ->route('dispatches.requests.show', $merchandiseRequest)
-                ->withErrors(['dispatch' => 'No se puede generar otra carga para un pedido completado o cancelado.']);
+                ->withErrors(['dispatch' => 'No se puede generar una carga para un pedido en borrador, completado o cancelado.']);
         }
 
         $dispatch = DB::transaction(function () use ($request, $merchandiseRequest, $fulfillmentService): GoodsDispatch {
@@ -247,6 +247,7 @@ class GoodsDispatchController extends Controller
                     'requested_pallets' => $requestedPallets,
                     'requested_peaks' => $requestedPeaks,
                     'source_request_line_id' => $line->id,
+                    'fill_truck' => $line->fill_truck,
                     'notes' => $line->notes,
                 ]);
             }

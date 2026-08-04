@@ -159,7 +159,24 @@
                     @endif
                 </div>
             @endunless
+
+            @if ($canEditDraft)
+                <div class="wms-detail-actions order-primary-action">
+                    <a href="{{ route('merchandise-requests.draft.edit', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">Continuar pedido</a>
+                </div>
+            @endif
         </section>
+
+        @if (filled($merchandiseRequest->notes))
+            <section class="surface-card compact-card wms-flow-card merchandise-request-comments">
+                <div class="wms-section-head">
+                    <div>
+                        <strong>Comentarios del pedido</strong>
+                        <p>{{ $merchandiseRequest->notes }}</p>
+                    </div>
+                </div>
+            </section>
+        @endif
 
         <section class="surface-card compact-card order-track" aria-label="Seguimiento del pedido">
             <ol class="order-steps">
@@ -289,6 +306,7 @@
                         @if ($merchandiseRequest->client?->allow_order_line_required_units)
                             <span>Necesidad</span>
                         @endif
+                        <span>Rellenar camión</span>
                         <span>Ubicación destino</span>
                         <span></span>
                     </div>
@@ -369,7 +387,12 @@
                                 <td>{{ $line->item?->description ?? 'Sin descripción disponible' }}</td>
                                 <td>{{ $line->lot ?: 'NO LOTE' }}</td>
                                 <td>{{ $line->destination_location ?: '-' }}</td>
-                                <td>{{ $line->requestedQuantityLabel() }}</td>
+                                <td>
+                                    {{ $line->requestedQuantityLabel() }}
+                                    @if ($line->fill_truck)
+                                        <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
+                                    @endif
+                                </td>
                                 <td>{{ $line->requiredUnitsLabel() ?? '—' }}</td>
                                 <td>{{ $line->unitsLabel() }}</td>
                                 <td><span class="wms-line-type-pill wms-line-type-pill--{{ $line->lineType() }}">{{ $line->lineTypeLabel() }}</span></td>
