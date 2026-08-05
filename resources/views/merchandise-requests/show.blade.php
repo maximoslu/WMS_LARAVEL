@@ -414,7 +414,7 @@
             </div>
         </section>
 
-        @unless ($isClient)
+        @unless ($isClient || $merchandiseRequest->isDraft())
             <details class="surface-card compact-card order-secondary-actions" open>
                 <summary>
                     <div>

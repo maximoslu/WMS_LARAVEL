@@ -20,6 +20,7 @@ use App\Http\Controllers\ItemController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MerchandiseRequestController;
+use App\Http\Controllers\MerchandiseRequestForecastController;
 use App\Http\Controllers\ModulePlaceholderController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
@@ -241,6 +242,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/solicitudes-mercancia', [MerchandiseRequestController::class, 'index'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.index');
+    Route::get('/prevision-pedidos', [MerchandiseRequestForecastController::class, 'index'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('merchandise-requests.forecast.index');
+    Route::get('/prevision-pedidos/{merchandiseRequest}', [MerchandiseRequestForecastController::class, 'show'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('merchandise-requests.forecast.show');
     Route::get('/solicitudes-mercancia/crear', [MerchandiseRequestController::class, 'create'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.create');

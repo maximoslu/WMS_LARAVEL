@@ -172,6 +172,18 @@ return [
                     'active_patterns' => ['merchandise-requests.*'],
                 ],
                 [
+                    'key' => 'merchandise-request-forecast',
+                    'route' => 'merchandise-requests.forecast.index',
+                    'path' => '/prevision-pedidos',
+                    'title' => 'Previsión de pedidos',
+                    'icon' => 'orders',
+                    'summary' => 'Borradores de cliente para anticipar volumen, referencias y necesidades futuras.',
+                    'minimum_role' => 'almacen',
+                    'tag' => 'Planificación',
+                    'status' => 'ready',
+                    'active_patterns' => ['merchandise-requests.forecast.*'],
+                ],
+                [
                     'key' => 'entradas',
                     'route' => 'goods-receipts.index',
                     'path' => '/entradas',

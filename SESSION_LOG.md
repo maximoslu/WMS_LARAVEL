@@ -4,6 +4,39 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-05 - FEAT PREVISION DE PEDIDOS PARA BORRADORES DE CLIENTE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `main`.
+**Punto de partida:** `70192bcef60c84557584c81bb3b9ae3ce5724a1a` (`feat: add draft orders and loading instructions`), alineado con `origin/main`.
+
+### Alcance funcional
+- Se anadio la seccion interna `Prevision de pedidos`, accesible desde la navegacion de Operaciones en `/prevision-pedidos` para `administracion`, `almacen` y `superadmin`.
+- El listado consulta directamente `MerchandiseRequest` con `status = draft`; no crea una copia ni mezcla enviados, preparacion, cargas, expediciones o albaranes.
+- Incluye filtros por cliente, creador, fechas, comentarios y `PARA RELLENAR CAMION`, orden por ultima actualizacion, cliente, volumen o creacion, y paginacion con eager loading.
+- La vista muestra cliente, codigo provisional, creador, fechas, lineas, pales, picos, unidades, comentarios, marcas de relleno y estado visible `Borrador del cliente`.
+- El detalle es informativo, muestra todas las lineas y la advertencia de que cantidades y referencias pueden cambiar hasta el envio definitivo.
+- Los totales se calculan desde las lineas reales: pales completos, picos, unidades y lineas para rellenar camion. No se muestran viajes orientativos porque no existe una capacidad oficial de camion aprobada; no se ha inventado ninguna cifra.
+
+### Seguridad y efectos operativos
+- Las rutas de prevision son exclusivamente `GET` y tienen middleware de rol minimo `almacen` mas autorizacion en controlador.
+- Un cliente no puede acceder al listado global ni al detalle. El cliente propietario conserva su flujo existente de edicion y envio.
+- Las rutas internas de edicion, anadir lineas, cambio de estado, generacion de carga y documentos rechazan borradores; las vistas operativas de carga/documentacion tampoco aceptan un borrador.
+- Consultar la prevision no envia emails, no crea notificaciones, auditoria, cargas, expediciones ni movimientos, y no toca stock ni timestamps funcionales.
+- No se creo migracion ni tabla nueva. `.claude/` y `tmp/` siguen fuera de Git y no se incluyeron.
+
+### Archivos y validacion
+- Nuevos: `MerchandiseRequestForecastController`, `MerchandiseRequestForecastService`, vistas de listado/detalle y `MerchandiseRequestForecastTest`.
+- Modificados: rutas, `config/wms.php`, `WmsNavigation`, protecciones de pedidos/salidas y este registro.
+- Prevision focalizada: **7 passed, 117 assertions**.
+- Regresiones: MerchandiseRequest **55/387**, GoodsDispatch **64/512**, DailyOperations **26/298**, StockOverview **54/394**.
+- Suite completa: **832 passed, 4866 assertions**. `npm run build`: OK. `git diff --check`: OK. PHP lint: OK.
+- Laravel y Vite locales estaban activos en `127.0.0.1:8000` y `5173`. La comprobacion visual autenticada no se pudo completar porque no hay credenciales locales disponibles en esta sesion; no se usaron credenciales desconocidas.
+
+### Produccion / Forge
+- No se modifico produccion, no se ejecuto Forge y no se desplego. Queda pendiente validar con usuarios `administracion`, `almacen` y `superadmin` tras desplegar por el flujo habitual.
+- Commit previsto tras la revision final: `feat: add draft order forecasting view`.
+
+
 ## ESTADO ACTUAL CONSOLIDADO
 
 **Fecha:** 2026-07-31. **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `main`.

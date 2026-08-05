@@ -593,6 +593,7 @@ class MerchandiseRequestController extends Controller
         AuditLogService $audit,
     ) {
         abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
+        abort_unless(! $merchandiseRequest->isDraft(), 404);
 
         $merchandiseRequest->load([
             'client',

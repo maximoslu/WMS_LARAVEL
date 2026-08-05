@@ -12,15 +12,18 @@ class WmsNavigation
      */
     public static function sectionsForUser(User $user): array
     {
+        $user->loadMissing('role');
+        $roleLevels = Role::query()->pluck('level', 'slug')->all();
+
         return collect(config('wms.navigation_sections', []))
-            ->map(function (array $section) use ($user): ?array {
+            ->map(function (array $section) use ($user, $roleLevels): ?array {
                 $children = collect($section['children'] ?? [])
-                    ->filter(function (array $child) use ($user): bool {
+                    ->filter(function (array $child) use ($user, $roleLevels): bool {
                         if (isset($child['exact_role']) && ! $user->hasRole($child['exact_role'])) {
                             return false;
                         }
 
-                        return $user->canAccessRole($child['minimum_role']);
+                        return self::userCanAccessRole($user, $child['minimum_role'], $roleLevels);
                     })
                     ->map(fn (array $child): array => self::decorateChild($child, $user))
                     ->values()
@@ -88,6 +91,20 @@ class WmsNavigation
     {
         return collect(Role::defaults())
             ->firstWhere('slug', $slug)['name'] ?? ucfirst($slug);
+    }
+
+    /**
+     * @param  array<string, int|string>  $roleLevels
+     */
+    private static function userCanAccessRole(User $user, string $minimumRole, array $roleLevels): bool
+    {
+        if ($user->role === null || ! Role::slugExists($minimumRole)) {
+            return false;
+        }
+
+        $minimumLevel = $roleLevels[$minimumRole] ?? Role::defaultLevelFor($minimumRole);
+
+        return $minimumLevel !== null && $user->role->level >= $minimumLevel;
     }
 
     /**
