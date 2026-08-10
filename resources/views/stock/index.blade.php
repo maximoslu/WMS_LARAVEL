@@ -246,7 +246,7 @@
 
             @unless ($isClient)
                 <div class="auth-field">
-                    <span>Ubicacion</span>
+                    <span>Ubicación concreta</span>
                     <div
                         class="ajax-autocomplete"
                         data-ajax-autocomplete
@@ -278,6 +278,22 @@
                     </div>
                 </div>
             @endunless
+
+            <label class="auth-field">
+                <span>Asignación de ubicación</span>
+                <select name="location_state" class="auth-input">
+                    <option value="all" @selected(($filters['location_state'] ?? 'all') === 'all')>Todas</option>
+                    <option value="with_location" @selected(($filters['location_state'] ?? 'all') === 'with_location')>Con ubicación</option>
+                    <option value="without_location" @selected(($filters['location_state'] ?? 'all') === 'without_location')>Sin ubicación</option>
+                </select>
+            </label>
+
+            @if (($filters['location_state'] ?? 'all') === 'without_location' && ! $isClient)
+                <div class="helper-text" role="status">
+                    <strong>Stock sin ubicación</strong>
+                    <span>{{ number_format($summary['location_filter_references'] ?? 0, 0, ',', '.') }} referencias · {{ number_format($summary['location_filter_batches'] ?? 0, 0, ',', '.') }} partidas · {{ number_format($summary['location_filter_pallets'] ?? 0, 2, ',', '.') }} palés · {{ number_format($summary['location_filter_units'] ?? 0, 0, ',', '.') }} unidades</span>
+                </div>
+            @endif
 
             @unless ($isClient)
                 <label class="auth-field">

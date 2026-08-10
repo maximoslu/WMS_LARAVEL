@@ -4,6 +4,37 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-10 - FEAT STOCK SIN UBICACION PARA CONTROL INTERNO
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `main`.
+**Punto de partida:** `c534987e` (`feat: add draft order forecasting view`), alineado con `origin/main`.
+
+### Causa y fuente canónica
+- El estado actual del inventario se representa en filas activas y con existencia positiva de `stock_pallets`. `inventory_movements` conserva trazabilidad, pero no se usa como estado actual.
+- La ubicación canónica es `stock_pallets.location_id`; `location_text` se mantiene como texto histórico y no convierte una fila sin `location_id` en ubicada.
+- No se modificaron stock, entradas, movimientos, importadores ni datos, y no se creó migración.
+
+### Funcionalidad
+- Stock incorpora el filtro `Asignación de ubicación`: `Todas`, `Con ubicación` y `Sin ubicación`.
+- El filtro se resuelve en SQL mediante scopes de `StockPallet`, se combina con cliente, referencia, descripción, lote, estado, clasificación, picos y paginación, y se aplica también al inventario propio del cliente.
+- `Sin ubicación` muestra únicamente existencia actual con `location_id` nulo. Excluye filas a cero, partidas inactivas, stock reubicado completamente y movimientos históricos. Una distribución parcial conserva únicamente la partida actual que sigue sin ubicación.
+- El resumen de la vista filtrada calcula referencias, partidas, palés y unidades desde el mismo conjunto consultado, sin doble conteo. La consulta es solo lectura y no genera movimientos.
+- Se mantiene el aislamiento: un usuario cliente no puede forzar `client_id` para consultar otro cliente. No se introduce una regla que trate FRIESLAND como error; el filtro informa, sin bloquear operaciones.
+- No se añadió módulo independiente, migración, acción automática, contador de dashboard ni corrección de ubicaciones.
+
+### Validación comprobada
+- `php artisan test --filter=StockOverviewTest`: **56 passed, 414 assertions**.
+- `php artisan test --filter=StockOverviewBuilderTest`: **8 passed, 29 assertions**.
+- Suite completa `php artisan test`: **834 passed, 4886 assertions**.
+- `npm run build`: OK. `git diff --check`: OK.
+- MariaDB, Laravel (`127.0.0.1:8000`) y Vite (`5173`) estaban activos para la validación local. No se modificó producción ni se ejecutó Forge; queda pendiente la comprobación autenticada en producción.
+
+### Archivos
+- Modificados: `app/Models/StockPallet.php`, `app/Support/Stock/StockOverviewBuilder.php`, `app/Http/Controllers/StockController.php`, `resources/views/stock/index.blade.php`, `tests/Feature/StockOverviewTest.php` y este registro.
+- `.claude/` y `tmp/` siguen fuera de Git y no se incluyen.
+
+---
+
 ## 2026-08-05 - FEAT PREVISION DE PEDIDOS PARA BORRADORES DE CLIENTE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `main`.

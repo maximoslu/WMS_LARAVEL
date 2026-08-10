@@ -48,6 +48,7 @@ class StockController extends Controller
             'stock_category',
             'location',
             'location_id',
+            'location_state',
         ]));
         $isClient = $user?->hasRole(Role::CLIENTE) === true;
         $user?->loadMissing('client');

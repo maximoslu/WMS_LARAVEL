@@ -45,6 +45,10 @@ class StockOverviewBuilder
                 'total_physical_pallets' => (float) ((clone $physicalSummaryQuery)->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'))),
                 'occupied_storage_locations' => $this->countOccupiedStorageLocations(clone $summaryQuery),
                 'batches_with_peaks' => (clone $summaryQuery)->where('peaks_count', '>', 0)->count(),
+                'location_filter_references' => (clone $summaryQuery)->distinct('item_id')->count('item_id'),
+                'location_filter_batches' => (clone $summaryQuery)->count('id'),
+                'location_filter_units' => (int) (clone $summaryQuery)->sum('quantity_units'),
+                'location_filter_pallets' => (float) ((clone $summaryQuery)->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'))),
             ],
         ];
     }
@@ -122,6 +126,8 @@ class StockOverviewBuilder
                 $query->where('lot', 'like', '%'.$lot.'%');
             })
             ->when($filters['location_id'] !== null, fn (Builder $query) => $query->where('location_id', $filters['location_id']))
+            ->when($filters['location_state'] === 'with_location', fn (Builder $query) => $query->withLocation())
+            ->when($filters['location_state'] === 'without_location', fn (Builder $query) => $query->withoutLocation())
             ->when($filters['location'] !== '', function (Builder $query) use ($filters): void {
                 $query->where(function (Builder $query) use ($filters): void {
                     $query
@@ -226,6 +232,9 @@ class StockOverviewBuilder
                 : (isset($filters['location_id']) && (int) $filters['location_id'] > 0
                     ? (int) $filters['location_id']
                     : null),
+            'location_state' => in_array((string) ($filters['location_state'] ?? 'all'), ['all', 'with_location', 'without_location'], true)
+                ? (string) ($filters['location_state'] ?? 'all')
+                : 'all',
             'per_page' => in_array((int) ($filters['per_page'] ?? 25), [25, 50, 100], true)
                 ? (int) ($filters['per_page'] ?? 25)
                 : 25,
@@ -264,6 +273,8 @@ class StockOverviewBuilder
             $query['location'] = $filters['location'];
             $query['location_id'] = $filters['location_id'];
         }
+
+        $query['location_state'] = $filters['location_state'];
 
         return array_filter(
             $query,

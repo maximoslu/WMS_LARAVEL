@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
@@ -1708,6 +1709,149 @@ class StockOverviewTest extends TestCase
             ->assertSee('stock_state=with_stock', false)
             ->assertSee('per_page=25', false)
             ->assertSee('only_peaks=1', false);
+    }
+
+    public function test_stock_without_location_uses_current_stock_rows_and_excludes_zero_or_relocated_history(): void
+    {
+        [$edelvives] = $this->seedBaseData();
+        $locatedLocation = Location::factory()->create(['code' => 'NAVE-38-01']);
+
+        $located = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'REF-UBICADA']);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $located->id,
+            'location_id' => $locatedLocation->id,
+            'quantity_units' => 1000,
+            'units_per_pallet' => 100,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+            'peak_1' => 0,
+        ]);
+
+        $unlocated = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'REF-SIN-UBICAR']);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $unlocated->id,
+            'location_id' => null,
+            'quantity_units' => 400,
+            'units_per_pallet' => 100,
+            'full_pallets' => 4,
+            'warehouse_pallets' => 4,
+            'peak_1' => 0,
+        ]);
+
+        $zeroHistory = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'REF-HISTORICA-CERO']);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $zeroHistory->id,
+            'location_id' => null,
+            'quantity_units' => 0,
+            'units_per_pallet' => 100,
+            'full_pallets' => 0,
+            'warehouse_pallets' => 0,
+            'peak_1' => 0,
+            'active' => true,
+        ]);
+
+        $reallocated = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'REF-REUBICADA']);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $reallocated->id,
+            'location_id' => $locatedLocation->id,
+            'quantity_units' => 800,
+            'units_per_pallet' => 100,
+            'full_pallets' => 8,
+            'warehouse_pallets' => 8,
+            'peak_1' => 0,
+        ]);
+
+        $partial = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'REF-PARCIAL']);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $partial->id,
+            'location_id' => $locatedLocation->id,
+            'quantity_units' => 800,
+            'units_per_pallet' => 100,
+            'full_pallets' => 8,
+            'warehouse_pallets' => 8,
+            'peak_1' => 0,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $partial->id,
+            'location_id' => null,
+            'quantity_units' => 200,
+            'units_per_pallet' => 100,
+            'full_pallets' => 2,
+            'warehouse_pallets' => 2,
+            'peak_1' => 0,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $movementsBefore = InventoryMovement::query()->count();
+        $overview = app(StockOverviewBuilder::class)->build($user, [
+            'client_id' => $edelvives->id,
+            'location_state' => 'without_location',
+        ]);
+
+        $this->assertSame(['REF-PARCIAL', 'REF-SIN-UBICAR'], $overview['rows']->pluck('sku')->sort()->values()->all());
+        $this->assertSame(2, $overview['summary']['location_filter_references']);
+        $this->assertSame(2, $overview['summary']['location_filter_batches']);
+        $this->assertSame(600, $overview['summary']['location_filter_units']);
+        $this->assertSame(6.0, $overview['summary']['location_filter_pallets']);
+        $this->assertSame($movementsBefore, InventoryMovement::query()->count());
+
+        $this->actingAs($user)
+            ->get(route('stock.index', [
+                'client_id' => $edelvives->id,
+                'location_state' => 'without_location',
+            ]))
+            ->assertOk()
+            ->assertSee('Sin ubicación')
+            ->assertSee('REF-SIN-UBICAR')
+            ->assertSee('REF-PARCIAL')
+            ->assertDontSee('REF-UBICADA')
+            ->assertDontSee('REF-HISTORICA-CERO')
+            ->assertDontSee('REF-REUBICADA');
+        $this->assertSame($movementsBefore, InventoryMovement::query()->count());
+    }
+
+    public function test_location_state_filter_is_multiclient_safe_for_client_users(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+        $frieslandItem = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'FR-SIN-UBICACION']);
+        $edelvivesItem = Item::factory()->create(['client_id' => $edelvives->id, 'sku' => 'ED-SIN-UBICACION']);
+
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $frieslandItem->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'location_id' => null,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $edelvives->id,
+            'item_id' => $edelvivesItem->id,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'location_id' => null,
+        ]);
+
+        $user = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $overview = app(StockOverviewBuilder::class)->build($user, [
+            'client_id' => $edelvives->id,
+            'location_state' => 'without_location',
+        ]);
+
+        $this->assertSame(['FR-SIN-UBICACION'], $overview['rows']->pluck('sku')->all());
+        $this->assertSame($friesland->id, $overview['filters']['client_id']);
+
+        $this->actingAs($user)
+            ->get(route('stock.index', ['client_id' => $edelvives->id, 'location_state' => 'without_location']))
+            ->assertOk()
+            ->assertSee('FR-SIN-UBICACION')
+            ->assertDontSee('ED-SIN-UBICACION')
+            ->assertDontSee('name="client_id"', false);
     }
 
     public function test_stock_headers_do_not_show_peak_columns_and_detail_contains_peaks(): void

@@ -297,6 +297,16 @@ class StockPallet extends Model
             });
     }
 
+    public function scopeWithLocation(Builder $query): Builder
+    {
+        return $query->whereNotNull('location_id');
+    }
+
+    public function scopeWithoutLocation(Builder $query): Builder
+    {
+        return $query->whereNull('location_id');
+    }
+
     public function scopeOfficial(Builder $query): Builder
     {
         return $query
