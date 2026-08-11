@@ -6978,3 +6978,33 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Push normal previsto exclusivamente a `origin/audit/final-baseline-wms-2026-08-11`, sin force push.
 - Tag anotado local: `baseline-wms-2026-08-11`, apuntando al SHA final exacto.
 - Merge a `main`: NO. Tag remoto: NO. Deploy/Forge: NO. Cambios de produccion: **0**.
+
+## 2026-08-11 - PUBLICACION DE BASELINE EN MAIN, DESPLIEGUE PENDIENTE (PC trabajo)
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Baseline auditada:** `5460abd6725c54a7c994304a2ab129af49cb505c`, rama `audit/final-baseline-wms-2026-08-11`.
+**Main antes:** `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+**Merge local:** `a4ac7ff2c0b78a136adc475257c1dad9bfa710f6` (`merge: integrate audited WMS baseline`), merge normal sin squash ni rebase, con padres exactos `dd74878b...` y `5460abd...`.
+**Main final:** el commit documental que contiene esta entrada; SHA exacto informado al cerrar la tarea.
+
+### Integracion y validacion
+- `origin/audit/final-baseline-wms-2026-08-11` se verifico en el SHA exacto `5460abd6725c54a7c994304a2ab129af49cb505c` antes de integrar.
+- Validacion previa: `composer validate --strict` OK; `composer audit --locked` 0 advisories; `composer check-platform-reqs` OK; suite **872 passed, 5.087 assertions**; build Vite OK, 55 modulos; npm audit 0; `git diff --check` OK.
+- Merge `--no-ff` a `main` sin conflictos. La baseline auditada queda confirmada como ancestro del merge.
+- Validacion posterior: suite **872 passed, 5.087 assertions**; build Vite OK, 55 modulos; Composer audit 0; npm audit 0; `git diff --check` OK.
+- Push normal del merge a `origin/main`: OK (`dd74878b..a4ac7ff2`), sin force push.
+
+### Forge y produccion
+- La URL publica `https://wms.maximosl.com` responde y redirige correctamente a `/login`; titulo `Acceso | MAXIMO WMS`, formulario visible y sin errores de consola.
+- No existe CLI de Forge instalada en este equipo y el navegador integrado no dispone de sesion Forge; Chrome no estaba disponible para automatizacion.
+- GitHub confirma el commit remoto, pero no publica estados ni deployments para este SHA. Por tanto, **el despliegue no se da por iniciado ni finalizado**.
+- Migraciones `stock_batch_identity_locks` y `notification_deliveries`: estado productivo no comprobado.
+- `php artisan optimize:clear`: pendiente en produccion.
+- `php artisan queue:restart`: pendiente en produccion.
+- Smoke tests autenticados de dashboard, stock, entradas, ubicaciones, pedidos, expediciones, importaciones, documentos y aislamiento FRIESLAND/EDELVIVES: pendientes por falta de sesion productiva.
+- No se ejecuto ningun saneamiento, consolidacion, backfill ni limpieza documental en produccion.
+
+### Tag
+- El tag anotado local `baseline-wms-2026-08-11` sigue apuntando exactamente a `5460abd6725c54a7c994304a2ab129af49cb505c`.
+- No existen workflows versionados, pero las automatizaciones externas de Forge no son observables sin acceso. Estado: **TAG NO PUBLICADO POR SEGURIDAD**.
