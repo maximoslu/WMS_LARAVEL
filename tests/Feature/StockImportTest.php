@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
@@ -600,6 +601,44 @@ class StockImportTest extends TestCase
             'client_id' => $friesland->id,
             'lot' => 'LOT-C',
         ]);
+    }
+
+    public function test_repeated_import_rows_with_the_same_identity_create_one_stock_batch(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Pico 1'],
+                ['SKU-ID', 'Identidad compartida', 'LOT-ID', 800, 100, 8, 0],
+                ['SKU-ID', 'Identidad compartida', 'LOT-ID', 250, 100, 2, 50],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ])->assertOk();
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $stocks = StockPallet::query()
+            ->whereHas('item', fn ($query) => $query->where('client_id', $friesland->id)->where('sku', 'SKU-ID'))
+            ->where('lot', 'LOT-ID')
+            ->where('active', true)
+            ->get();
+
+        $this->assertCount(1, $stocks);
+        $this->assertSame(1050, (int) $stocks->first()->quantity_units);
+        $this->assertSame('10.00', (string) $stocks->first()->warehouse_pallets);
+        $this->assertSame(2, InventoryMovement::query()
+            ->where('movement_type', InventoryMovement::IMPORT)
+            ->where('stock_pallet_id', $stocks->first()->id)
+            ->count());
     }
 
     public function test_confirm_import_creates_item_masters_and_preserves_multi_peak_rows(): void

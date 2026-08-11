@@ -4,6 +4,89 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-11 - CIERRE DE IDENTIDAD Y CONCURRENCIA DE PARTIDAS PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-lot-concurrency-2026-08-11`.
+**SHA inicial:** `264b3a136c1309a8e9caa13567757cdd848aea84`, commit de cierre de dependencias PHP. La rama se creo exactamente desde ese SHA; `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+
+### Resultado
+
+**Bloqueo de identidad/creacion concurrente RESUELTO.** Dos transacciones que parten sin una fila de stock y representan la misma existencia fisica se serializan por una fila de coordinacion unica y terminan con una sola partida, cantidades exactas y un movimiento por operacion. Esto no convierte aun el WMS en APTO COMO BASELINE: siguen pendientes los bloqueos no relacionados listados al final.
+
+### Causa raiz y puntos revisados
+
+- Carrera original: `GoodsReceiptStockApplicationService::resolveTargetBatch()` hacia `first()/new StockPallet`. La consulta tenia `lockForUpdate()`, pero si devolvia cero filas no habia una partida existente que bloquear; dos conexiones podian observar ausencia y crear dos filas.
+- Creadores localizados: aplicacion de entradas, confirmacion de snapshot Excel y alta por regularizacion superadmin.
+- Modificadores de identidad localizados: reubicacion operativa y edicion manual de ubicacion. Salidas, reversiones y ajustes sobre partida existente modifican cantidades, pero no crean identidad nueva.
+- La confirmacion de importacion conserva su `lockForUpdate()` sobre el registro/importaciones del cliente. Las identidades activas e importadas se bloquean en orden antes de retirar el snapshot, evitando invertir el orden stock/identidad frente a entradas concurrentes.
+
+### Identidad fisica reconstruida
+
+- Campos: `client_id`, `item_id`, lote canonico, ubicacion, `units_per_pallet`, estado, categoria de stock y motivo de bloqueo normalizado.
+- Lote: `NULL`, vacio, espacios, `SIN LOTE` y `NO LOTE` convergen en `NO LOTE`; los lotes reales conservan texto/case salvo trim para presentacion, pero su clave de comparacion usa mayusculas de forma coherente con la collation case-insensitive de MySQL/MariaDB.
+- Ubicacion: con `location_id`, ese ID canonico identifica conjuntamente ubicacion y almacen; `location_text` no duplica la clave. Sin `location_id`, un `location_text` legacy no vacio sigue separando ubicaciones heredadas; solo ID nulo mas texto vacio es stock realmente sin ubicacion.
+- Mismo cliente/articulo/lote/ubicacion y misma particion operativa reutiliza partida. Ubicaciones distintas son entidades de stock distintas. Lotes distintos y clientes distintos quedan aislados.
+- Una reubicacion completa cambia el componente ubicacion en la identidad de la misma fila. El dominio actual no implementa una reubicacion parcial; repartir stock se representa mediante filas distintas por ubicacion. Una reubicacion hacia una identidad activa ya existente se rechaza sin fusionar datos.
+- No forman identidad: fechas, proveedor, documento/entrada, `goods_receipt_id`, `stock_import_id`, hoja de origen, notas, codigo de pallet ni procedencia. Esos campos mantienen trazabilidad/proveniencia.
+
+### Estrategia de locking y migracion
+
+- Nueva migracion reversible `2026_08_11_000001_create_stock_batch_identity_locks_table.php`.
+- `stock_batch_identity_locks.identity_hash` es `CHAR(64) PRIMARY KEY`. El SHA-256 procede de JSON versionado con todos los componentes canonicalizados; identidades iguales producen la misma clave y distintas identidades no comparten lock en la practica.
+- Dentro de la transaccion se ejecuta `INSERT IGNORE` de la clave y despues `SELECT ... FOR UPDATE` sobre la fila de coordinacion. La unicidad del registro serializa tambien la identidad que aun no tiene `stock_pallets`.
+- El lock es transaccional: commit y rollback lo liberan automaticamente; no depende de una sesion como `GET_LOCK`. Varias identidades se ordenan por hash para reducir deadlocks. Las transacciones operativas afectadas tienen un maximo de tres intentos ante deadlock.
+- Granularidad: una identidad exacta, nunca cliente global, tabla completa ni todo el WMS. Coste normal por identidad unica: un insert idempotente, un select de coordinacion bloqueante y el select de stock bloqueante. Identidades/lotes/clientes distintos progresan de forma independiente, demostrado con dos conexiones.
+- Entradas, importaciones y regularizaciones nuevas usan el mismo servicio/objeto de identidad. Filas equivalentes dentro de un Excel se agregan en una partida y conservan un movimiento de importacion por fila.
+- Reubicaciones bloquean origen y destino en orden determinista antes de bloquear/modificar la fila de stock.
+
+### Constraint sobre stock
+
+- No se anadio `UNIQUE` directamente a `stock_pallets`: existe al menos un duplicado historico y MySQL/MariaDB permite varios `NULL` en un unique convencional, por lo que un indice directo no expresaria de forma segura el stock sin ubicacion.
+- No se sanearon datos para forzarlo. Tras el futuro saneamiento puede estudiarse una clave materializada/versionada de identidad en `stock_pallets` como defensa adicional.
+- La constraint unica de la tabla de coordinacion si es compatible con los datos actuales porque no transforma ni valida retroactivamente las filas de stock.
+
+### Concurrencia real y regresiones
+
+- Ejecutor aislado `tests/Support/run-stock-concurrency-mysql.php`: usa MySQL/MariaDB local, rechaza produccion/hosts remotos, migra tablas con prefijo aleatorio no utilizado y elimina exclusivamente ese prefijo al finalizar. No toca las tablas funcionales.
+- Dos procesos PHP/dos conexiones y transacciones independientes: **6 passed, 47 assertions**.
+- Escenarios: partida inexistente sin ubicacion; 43 + 5 = 48 pallets con dos entradas y dos movimientos; lotes distintos sin bloqueo mutuo; clientes distintos sin bloqueo mutuo; partida existente sin lost update; alias `NO LOTE`; rollback que desbloquea a la segunda conexion.
+- Regresiones secuenciales nuevas: matriz/hash de identidad, unicidad de coordinacion, `up/down` de migracion, import rows equivalentes, regularizacion compatible y colision de reubicacion.
+
+### Diagnostico historico read-only
+
+- `php artisan wms:consolidate-stock-batches --dry-run`: 1 grupo duplicado, 2 filas afectadas.
+- IDs `246,247`, cliente 1, item 260, lote `OFA0004644`, sin ubicacion, `available/in_use`, 9.461 unidades y 6,00 pallets.
+- Cambios realizados sobre esos datos: **0**. No se ejecuto `--apply`, migracion local sobre tablas funcionales ni saneamiento.
+
+### Validaciones
+
+- Suites focalizadas de entradas, stock, importaciones, ubicaciones, reubicaciones y operaciones diarias: **311 passed, 2.253 assertions**.
+- Consolidacion/canonicalizacion de lotes: **11 passed, 72 assertions**.
+- Suite completa SQLite: **848 passed, 4.937 assertions**, 38,87 s.
+- Integracion MySQL/MariaDB de dos conexiones: **6 passed, 47 assertions**.
+- `composer validate --strict`: `./composer.json is valid`.
+- `composer audit --locked`: 0 advisories.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- `git diff --check`: OK.
+- Migracion `up/down`: probada; tablas MySQL aisladas eliminadas al terminar.
+
+### Git, datos y produccion
+
+- Commit: `fix: serialize concurrent stock lot creation` (commit que contiene esta entrada; SHA informado al cierre).
+- Push: rama `fix/baseline-lot-concurrency-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Merge a `main`: NO. Tag: NO. Deploy: NO. Produccion/Forge: NO TOCADA.
+- `.env`, secretos, `vendor/`, `node_modules/`, `.claude/` y `tmp/`: no modificados/versionados. `config/database.php` solo admite `DB_PREFIX` opcional en MySQL para aislar la prueba; sin la variable mantiene prefijo vacio.
+
+### Bloqueantes restantes para la baseline general
+
+1. Idempotencia persistente y reintento de notificaciones.
+2. Revision del reemplazo completo de snapshot y limite de tamano de importaciones.
+3. Saneamiento controlado de datos con dry-run/staging.
+4. Validacion en un entorno equivalente a produccion antes de cualquier tag o deploy.
+
+---
+
 ## 2026-08-11 - CIERRE DEL BLOQUEO DE DEPENDENCIAS PHP PARA BASELINE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-composer-security-2026-08-11`.

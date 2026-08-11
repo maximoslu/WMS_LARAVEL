@@ -84,6 +84,6 @@ class GoodsReceiptConfirmationService
             );
 
             return $receipt->refresh();
-        });
+        }, 3);
     }
 }

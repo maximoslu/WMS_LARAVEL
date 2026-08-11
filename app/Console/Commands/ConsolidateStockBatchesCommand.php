@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\StockPallet;
 use App\Support\Stock\LotNormalizer;
+use App\Support\Stock\StockBatchIdentity;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -89,20 +90,7 @@ class ConsolidateStockBatchesCommand extends Command
 
     private function identityKey(StockPallet $row): string
     {
-        $locationKey = $row->location_id !== null
-            ? 'warehouse:'.($row->location?->warehouse_id ?? 'unknown').'|location:'.$row->location_id
-            : 'text:'.mb_strtoupper(trim((string) $row->location_text));
-
-        return implode('|', [
-            (int) $row->client_id,
-            (int) $row->item_id,
-            LotNormalizer::normalize($row->lot),
-            $locationKey,
-            (int) $row->units_per_pallet,
-            (string) ($row->status ?? StockPallet::STATUS_AVAILABLE),
-            (string) ($row->stock_category ?? StockPallet::CATEGORY_IN_USE),
-            trim((string) ($row->blocked_reason ?? '')),
-        ]);
+        return StockBatchIdentity::fromStockPallet($row)->hash();
     }
 
     /** @return array<string, mixed>|null */

@@ -158,6 +158,37 @@ class StockAdjustmentTest extends TestCase
         ]);
     }
 
+    public function test_new_adjustment_reuses_a_compatible_active_batch(): void
+    {
+        [$client, $item, $stockPallet, $location] = $this->stockFixture([
+            'lot' => 'LOT-REUTILIZAR',
+            'quantity_units' => 100,
+            'units_per_pallet' => 100,
+            'location_id' => null,
+            'location_text' => null,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, null, [
+                'mode' => 'new',
+                'stock_pallet_id' => null,
+                'lot' => 'LOT-REUTILIZAR',
+                'location_id' => null,
+                'full_pallets' => 2,
+                'peak_units' => 0,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, StockPallet::query()
+            ->where('client_id', $client->id)
+            ->where('item_id', $item->id)
+            ->where('lot', 'LOT-REUTILIZAR')
+            ->whereNull('location_id')
+            ->where('active', true)
+            ->count());
+        $this->assertSame(300, (int) $stockPallet->fresh()->quantity_units);
+    }
+
     public function test_superadmin_removes_stock_without_negative_and_keeps_zero_batch(): void
     {
         [$client, $item, $stockPallet] = $this->stockFixture([

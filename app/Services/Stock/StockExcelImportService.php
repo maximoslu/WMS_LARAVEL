@@ -15,6 +15,7 @@ use App\Services\Inventory\InventoryMovementService;
 use App\Support\Locations\LocationCode;
 use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
+use App\Support\Stock\StockBatchIdentity;
 use DateTimeInterface;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Http\UploadedFile;
@@ -113,6 +114,7 @@ class StockExcelImportService
         private readonly DatabaseManager $db,
         private readonly InventoryMovementService $movements,
         private readonly AuditLogService $audit,
+        private readonly StockBatchIdentityService $batchIdentities,
     ) {}
 
     /**
@@ -248,8 +250,6 @@ class StockExcelImportService
                 'uploaded_by' => $user->id,
             ])->save();
 
-            $this->retireCurrentStockSnapshot($lockedImport, $user, $correlationId);
-
             $existingItems = Item::query()
                 ->where('client_id', $lockedImport->client_id)
                 ->get()
@@ -306,7 +306,24 @@ class StockExcelImportService
                 }
             }
 
+            $identities = StockPallet::query()
+                ->where('client_id', $lockedImport->client_id)
+                ->where('active', true)
+                ->get()
+                ->map(fn (StockPallet $stockPallet): StockBatchIdentity => StockBatchIdentity::fromStockPallet($stockPallet));
+
             foreach ($preview['rows'] as $row) {
+                $item = $existingItems[Str::upper($row['sku'])] ?? null;
+
+                if ($item instanceof Item) {
+                    $identities->push($this->importRowIdentity($lockedImport, $item, $row, $edelvivesLocations));
+                }
+            }
+
+            $this->batchIdentities->lockIdentities($identities);
+            $this->retireCurrentStockSnapshot($lockedImport, $user, $correlationId);
+
+            foreach ($preview['rows'] as $rowIndex => $row) {
                 $skuKey = Str::upper($row['sku']);
                 $item = $existingItems[$skuKey] ?? null;
 
@@ -348,9 +365,26 @@ class StockExcelImportService
                     $attributes['peak_'.$peakNumber] = $row['peak_'.$peakNumber];
                 }
 
-                $stockPallet = StockPallet::query()->create($attributes);
+                $identity = $this->importRowIdentity($lockedImport, $item, $row, $edelvivesLocations);
+                $existing = $this->batchIdentities->getAfterLock($identity);
+
+                if ($existing->count() > 1) {
+                    throw new InvalidArgumentException('La importacion ha encontrado varias partidas activas para una misma identidad fisica.');
+                }
+
+                $stockPallet = $existing->first();
+                $before = $stockPallet instanceof StockPallet
+                    ? $this->movements->snapshot($stockPallet)
+                    : null;
+
+                if ($stockPallet instanceof StockPallet) {
+                    $stockPallet->forceFill($this->mergeImportedStock($stockPallet, $attributes))->save();
+                } else {
+                    $stockPallet = StockPallet::query()->create($attributes);
+                }
+
                 $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
-                $before = [
+                $before ??= [
                     ...$after,
                     'units' => 0,
                     'full_pallets' => 0,
@@ -362,12 +396,12 @@ class StockExcelImportService
                     before: $before,
                     after: $after,
                     movementType: InventoryMovement::IMPORT,
-                    idempotencyKey: "stock-import:{$lockedImport->id}:stock:{$stockPallet->id}",
+                    idempotencyKey: "stock-import:{$lockedImport->id}:row:{$rowIndex}:stock:{$stockPallet->id}",
                     correlationId: $correlationId,
                     source: $lockedImport,
                     user: $user,
                     effectiveAt: $stockPallet->imported_at,
-                    metadata: ['filename' => $lockedImport->original_filename, 'source_sheet' => $stockPallet->source_sheet],
+                    metadata: ['filename' => $lockedImport->original_filename, 'source_sheet' => $row['source_sheet']],
                 );
                 $importedRows++;
             }
@@ -403,7 +437,66 @@ class StockExcelImportService
                 'created_items' => $createdItems,
                 'updated_items' => $updatedItems,
             ];
-        });
+        }, 3);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, Location>  $edelvivesLocations
+     */
+    private function importRowIdentity(StockImport $stockImport, Item $item, array $row, array $edelvivesLocations): StockBatchIdentity
+    {
+        $locationCode = isset($row['location_code'])
+            ? LocationCode::normalize($row['location_code'])
+            : null;
+        $locationId = $locationCode !== null && isset($edelvivesLocations[$locationCode])
+            ? (int) $edelvivesLocations[$locationCode]->id
+            : null;
+
+        return new StockBatchIdentity(
+            clientId: (int) $stockImport->client_id,
+            itemId: (int) $item->id,
+            lot: $row['lot'] ?? null,
+            locationId: $locationId,
+            locationText: $locationId === null ? ($row['location_text'] ?? null) : null,
+            unitsPerPallet: (int) $row['units_per_pallet'],
+            status: $row['status'] ?? null,
+            stockCategory: $row['stock_category'] ?? null,
+            blockedReason: $row['blocked_reason'] ?? null,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $incoming
+     * @return array<string, mixed>
+     */
+    private function mergeImportedStock(StockPallet $existing, array $incoming): array
+    {
+        $peaks = collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->map(fn (int $number): int => (int) ($existing->{'peak_'.$number} ?? 0))
+            ->merge(collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+                ->map(fn (int $number): int => (int) ($incoming['peak_'.$number] ?? 0)))
+            ->filter(fn (int $value): bool => $value > 0)
+            ->values();
+
+        if ($peaks->count() > StockPallet::MAX_PEAK_COLUMNS) {
+            throw new InvalidArgumentException('No se pueden combinar filas importadas de una misma partida porque superan el maximo de 10 picos.');
+        }
+
+        $merged = [
+            'quantity_units' => (int) $existing->quantity_units + (int) $incoming['quantity_units'],
+            'warehouse_pallets' => (float) ($existing->warehouse_pallets ?? 0) + (float) ($incoming['warehouse_pallets'] ?? 0),
+        ];
+
+        if ((int) $existing->units_per_pallet <= 0) {
+            $merged['full_pallets'] = (int) $existing->full_pallets + (int) ($incoming['full_pallets'] ?? 0);
+        }
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $merged['peak_'.$peakNumber] = $peaks[$peakNumber - 1] ?? 0;
+        }
+
+        return $merged;
     }
 
     private function retireCurrentStockSnapshot(StockImport $stockImport, User $user, string $correlationId): void

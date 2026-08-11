@@ -12,6 +12,7 @@ use App\Services\Audit\AuditLogService;
 use App\Services\Inventory\InventoryMovementService;
 use App\Services\Locations\LocationIntegrityService;
 use App\Services\Stock\StockExportService;
+use App\Services\Stock\StockBatchRelocationService;
 use App\Support\Stock\StockOverviewBuilder;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
@@ -28,6 +29,7 @@ class StockController extends Controller
         private readonly InventoryMovementService $movements,
         private readonly AuditLogService $audit,
         private readonly LocationIntegrityService $locations,
+        private readonly StockBatchRelocationService $relocations,
     ) {}
 
     public function index(Request $request): View
@@ -128,12 +130,12 @@ class StockController extends Controller
 
         DB::transaction(function () use ($request, $stockPallet): void {
             $correlationId = $this->audit->correlationId();
-            $stockPallet->loadMissing(['client', 'item', 'location.warehouse']);
-            $before = $this->movements->snapshot($stockPallet);
-            $oldValues = $stockPallet->only(['location_id', 'location_text']);
             $location = $request->locationId() !== null
                 ? Location::query()->findOrFail($request->locationId())
                 : null;
+            $stockPallet = $this->relocations->lockForRelocation((int) $stockPallet->id, $location, 'location_id');
+            $before = $this->movements->snapshot($stockPallet);
+            $oldValues = $stockPallet->only(['location_id', 'location_text']);
 
             DB::table('stock_pallets')->where('id', $stockPallet->id)->update([
                 'location_id' => $location?->id,
@@ -166,7 +168,7 @@ class StockController extends Controller
                 correlationId: $correlationId,
                 severity: 'important',
             );
-        });
+        }, 3);
 
         return redirect()
             ->route('stock.index', ['client_id' => $stockPallet->client_id])
