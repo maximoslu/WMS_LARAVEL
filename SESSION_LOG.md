@@ -6979,14 +6979,15 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Tag anotado local: `baseline-wms-2026-08-11`, apuntando al SHA final exacto.
 - Merge a `main`: NO. Tag remoto: NO. Deploy/Forge: NO. Cambios de produccion: **0**.
 
-## 2026-08-11 - PUBLICACION DE BASELINE EN MAIN, DESPLIEGUE PENDIENTE (PC trabajo)
+## 2026-08-11 - PUBLICACION Y VALIDACION FINAL EN PRODUCCION (PC trabajo)
 
 **Equipo:** PC trabajo.
 **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
 **Baseline auditada:** `5460abd6725c54a7c994304a2ab129af49cb505c`, rama `audit/final-baseline-wms-2026-08-11`.
-**Main antes:** `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+**Main antes de este cierre:** `e138b16385a1e0fc5ffab442158bca2df031ed20`.
 **Merge local:** `a4ac7ff2c0b78a136adc475257c1dad9bfa710f6` (`merge: integrate audited WMS baseline`), merge normal sin squash ni rebase, con padres exactos `dd74878b...` y `5460abd...`.
-**Main final:** el commit documental que contiene esta entrada; SHA exacto informado al cerrar la tarea.
+**Fix de estabilidad:** `79f37a9264fdf6e397e00328b2e4584901ac40d2` (`test: stabilize stock relocation warehouse fixtures`).
+**Main final:** el commit documental que contiene esta entrada; SHA exacto informado en el cierre de publicacion.
 
 ### Integracion y validacion
 - `origin/audit/final-baseline-wms-2026-08-11` se verifico en el SHA exacto `5460abd6725c54a7c994304a2ab129af49cb505c` antes de integrar.
@@ -7003,15 +7004,20 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Tooling posterior: Composer `validate --strict`, `audit --locked`, `install --dry-run` y `check-platform-reqs` OK; Vite build OK (55 modulos); npm audit 0; Pint y `git diff --check` OK.
 
 ### Forge y produccion
-- La URL publica `https://wms.maximosl.com` responde y redirige correctamente a `/login`; titulo `Acceso | MAXIMO WMS`, formulario visible y sin errores de consola.
-- No existe CLI de Forge instalada en este equipo y Chrome no estaba disponible para automatizacion. La ruta raiz de Forge redirigio inicialmente a la pagina publica, pero la ruta de acceso confirmo despues una sesion autenticada en la organizacion `Maximo Servicios Logisticos`; la pestana quedo preparada para continuar.
-- GitHub confirma el commit remoto, pero no publica estados ni deployments para este SHA. La sesion Forge no llego a inspeccionar ni ejecutar un deployment en este paso; por tanto, **el despliegue no se da por iniciado ni finalizado**.
-- Migraciones `stock_batch_identity_locks` y `notification_deliveries`: estado productivo no comprobado.
-- `php artisan optimize:clear`: pendiente en produccion.
-- `php artisan queue:restart`: pendiente en produccion.
-- Smoke tests autenticados de dashboard, stock, entradas, ubicaciones, pedidos, expediciones, importaciones, documentos y aislamiento FRIESLAND/EDELVIVES: pendientes por falta de sesion productiva.
+- El push normal del fix a `origin/main` fue correcto (`e138b163..79f37a92`), sin force push.
+- Forge ejecuto automaticamente el deployment `75213211` y lo marco `Deployed` con el SHA exacto `79f37a9264fdf6e397e00328b2e4584901ac40d2`.
+- El log de despliegue confirma `composer install`, generacion de caches, `Nothing to migrate`, build Vite, activacion de release y reinicio de workers.
+- `php artisan migrate:status` en produccion confirma todas las migraciones `Ran`, incluidas `2026_08_11_000001_create_stock_batch_identity_locks_table` y `2026_08_11_000002_create_notification_deliveries_table`.
+- `php artisan optimize:clear` finalizo correctamente mediante el comando Forge `12160742`.
+- `php artisan queue:restart` finalizo correctamente mediante el comando Forge `12160758`; el proceso `worker-911940_00` quedo `RUNNING` tras el reinicio.
+- Se creo en Forge el proceso permanente `Laravel Scheduler`, activo cada minuto con `php8.4 /home/forge/wms_production.on-forge.com/current/artisan schedule:run`. Su ejecucion automatica quedo demostrada por `INFO No scheduled commands are ready to run.`
+- `php artisan schedule:list` en produccion confirma las 5 tareas esperadas: evaluacion de alertas, snapshots de stock, backup de base de datos, poda de backups y poda de temporales de importacion.
+- Los procesos programados temporales usados solo para comprobar `migrate:status` y `schedule:list` fueron eliminados; Forge conserva unicamente `Laravel Scheduler`.
+- Smokes autenticados de superadministracion: login, dashboard, stock filtrado para FRIESLAND y EDELVIVES, entradas y nueva entrada, ubicaciones, pedidos, gestion de expedicion existente, importaciones y documentos privados cargaron correctamente. No se crearon ni modificaron registros de negocio.
+- Documentos: se comprobo descarga real de una entrada EDELVIVES y existencia de documento FRIESLAND desde superadministracion. En sesion de cliente EDELVIVES, `/mis-albaranes` mostro exclusivamente sus 61 documentos; la descarga propia de la entrada 56 estuvo disponible y la ruta de cliente para la entrada 47 de FRIESLAND devolvio `403 Forbidden`.
+- Los smokes no produjeron errores de consola. El log de la aplicacion no mostro `production.ERROR`, `SQLSTATE`, errores de migracion, cola, permisos ni respuestas 500 tras el despliegue y las comprobaciones.
 - No se ejecuto ningun saneamiento, consolidacion, backfill ni limpieza documental en produccion.
 
 ### Tag
 - El tag anotado local `baseline-wms-2026-08-11` sigue apuntando exactamente a `5460abd6725c54a7c994304a2ab129af49cb505c`.
-- No existen workflows versionados, pero las automatizaciones externas de Forge no son observables sin acceso. Estado: **TAG NO PUBLICADO POR SEGURIDAD**.
+- El tag no se publico: el deployment por push de `main` ya es trazable y no se arriesgaron efectos externos no demostrados asociados al push de tags. Estado: **TAG NO PUBLICADO POR SEGURIDAD**.
