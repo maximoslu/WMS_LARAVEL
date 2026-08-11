@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\TransientNotificationDeliveryException;
 use App\Jobs\SendStockAlertEmailJob;
 use App\Models\Client;
 use App\Models\ClientStockAlertEmailRecipient;
 use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
+use App\Models\NotificationDelivery;
 use App\Models\Role;
 use App\Models\StockAlertEvent;
 use App\Models\StockAlertRule;
@@ -277,6 +279,74 @@ class TraceabilityModuleTest extends TestCase
             'client_id' => $client->id,
         ]);
         Http::assertSentCount(1);
+        Http::assertSent(fn ($request): bool => Str::isUuid((string) $request['headers']['idempotencyKey']));
+        $this->assertDatabaseHas('notification_deliveries', [
+            'type' => 'stock_alert.triggered',
+            'source_id' => (string) $event->id,
+            'status' => NotificationDelivery::STATUS_SENT,
+            'attempts' => 1,
+            'provider_message_id' => 'stock-alert-1',
+        ]);
+    }
+
+    public function test_stock_alert_transient_failure_is_retried_with_one_stable_brevo_key(): void
+    {
+        config([
+            'services.brevo.key' => 'test-brevo-key',
+            'services.brevo.base_url' => 'https://api.brevo.com/v3',
+            'mail.from.address' => 'sistema@example.test',
+            'mail.from.name' => 'MAXIMO WMS',
+        ]);
+        Http::fake([
+            'https://api.brevo.com/*' => Http::sequence()
+                ->push(['code' => 'temporary'], 503)
+                ->push(['messageId' => 'stock-alert-retry'], 201),
+        ]);
+        $client = Client::factory()->create();
+        $item = Item::factory()->create(['client_id' => $client->id, 'sku' => 'ALERT-RETRY']);
+        $rule = StockAlertRule::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'active' => true,
+            'minimum_units' => 100,
+            'severity' => 'warning',
+            'cooldown_minutes' => 60,
+        ]);
+        $event = StockAlertEvent::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'stock_alert_rule_id' => $rule->id,
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'severity' => StockAlertEvent::STATUS_WARNING,
+            'status' => StockAlertEvent::STATUS_WARNING,
+            'reason' => 'Stock bajo transitorio.',
+            'recipients' => ['RETRY@example.test', ' retry@example.test '],
+            'notification_status' => 'queued',
+            'triggered_at' => now(),
+        ]);
+        $job = new SendStockAlertEmailJob($event->id);
+
+        try {
+            $job->handle(app(BrevoMailService::class), app(AuditLogService::class));
+            $this->fail('El HTTP 503 debe salir del job para que Laravel lo reintente.');
+        } catch (TransientNotificationDeliveryException) {
+            // Expected first queue attempt.
+        }
+
+        $this->assertSame('failed', $event->fresh()->notification_status);
+        $this->assertSame(NotificationDelivery::STATUS_FAILED, NotificationDelivery::query()->sole()->status);
+        $firstProviderKey = NotificationDelivery::query()->sole()->provider_idempotency_key;
+
+        $job->handle(app(BrevoMailService::class), app(AuditLogService::class));
+
+        $delivery = NotificationDelivery::query()->sole();
+        $this->assertSame(NotificationDelivery::STATUS_SENT, $delivery->status);
+        $this->assertSame(2, $delivery->attempts);
+        $this->assertSame($firstProviderKey, $delivery->provider_idempotency_key);
+        $this->assertSame('sent', $event->fresh()->notification_status);
+        Http::assertSentCount(2);
+        $keys = collect(Http::recorded())->map(fn (array $pair): string => (string) $pair[0]['headers']['idempotencyKey'])->unique();
+        $this->assertCount(1, $keys);
     }
 
     public function test_stock_alert_recipients_are_normalized_separate_and_audited(): void

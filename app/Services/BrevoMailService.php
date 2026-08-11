@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Exceptions\BrevoMailConfigurationException;
+use App\Exceptions\PermanentNotificationDeliveryException;
+use App\Exceptions\TransientNotificationDeliveryException;
 use App\Models\AccessRequest;
 use App\Models\Role;
 use App\Models\StockAlertEvent;
@@ -10,7 +12,6 @@ use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
-use RuntimeException;
 
 class BrevoMailService
 {
@@ -42,22 +43,43 @@ class BrevoMailService
     /**
      * @throws BrevoMailConfigurationException
      */
-    public function sendPasswordReset(string $recipientEmail, string $resetUrl): void
+    public function sendPasswordReset(string $recipientEmail, string $resetUrl, ?string $idempotencyKey = null): ?string
     {
-        $this->send(
+        return $this->send(
             toEmails: $recipientEmail,
             subject: 'Restablecer contrasena - MAXIMO WMS',
             htmlView: 'emails.brevo.password-reset',
             data: [
                 'resetUrl' => $resetUrl,
             ],
+            idempotencyKey: $idempotencyKey,
         );
     }
 
     /**
      * @throws BrevoMailConfigurationException
      */
-    public function sendAccessRequestNotification(AccessRequest $accessRequest): void
+    public function sendAccessRequestNotification(
+        AccessRequest $accessRequest,
+        ?array $recipientEmails = null,
+        ?string $idempotencyKey = null,
+    ): ?string {
+        $recipientEmails ??= $this->accessRequestNotificationRecipients();
+
+        return $this->send(
+            toEmails: $recipientEmails,
+            subject: 'MAXIMO WMS - Nueva solicitud de acceso',
+            htmlView: 'emails.brevo.access-request-submitted',
+            data: [
+                'accessRequest' => $accessRequest,
+                'reviewUrl' => route('access-requests.index'),
+            ],
+            idempotencyKey: $idempotencyKey,
+        );
+    }
+
+    /** @return list<string> */
+    public function accessRequestNotificationRecipients(): array
     {
         $recipientEmails = User::query()
             ->where('active', true)
@@ -80,24 +102,19 @@ class BrevoMailService
             }
         }
 
-        $this->send(
-            toEmails: $recipientEmails,
-            subject: 'MAXIMO WMS - Nueva solicitud de acceso',
-            htmlView: 'emails.brevo.access-request-submitted',
-            data: [
-                'accessRequest' => $accessRequest,
-                'reviewUrl' => route('access-requests.index'),
-            ],
-        );
+        return $recipientEmails;
     }
 
     /**
      * @throws BrevoMailConfigurationException
      */
-    public function sendAccessRequestApproved(AccessRequest $accessRequest): void
-    {
-        $this->send(
-            toEmails: $accessRequest->email,
+    public function sendAccessRequestApproved(
+        AccessRequest $accessRequest,
+        ?string $recipientEmail = null,
+        ?string $idempotencyKey = null,
+    ): ?string {
+        return $this->send(
+            toEmails: $recipientEmail ?? $accessRequest->email,
             subject: 'MAXIMO WMS - Tu acceso ha sido aprobado',
             htmlView: 'emails.brevo.access-request-approved',
             data: [
@@ -105,21 +122,26 @@ class BrevoMailService
                 'loginUrl' => route('login'),
                 'resetUrl' => route('password.request'),
             ],
+            idempotencyKey: $idempotencyKey,
         );
     }
 
     /**
      * @throws BrevoMailConfigurationException
      */
-    public function sendAccessRequestRejected(AccessRequest $accessRequest): void
-    {
-        $this->send(
-            toEmails: $accessRequest->email,
+    public function sendAccessRequestRejected(
+        AccessRequest $accessRequest,
+        ?string $recipientEmail = null,
+        ?string $idempotencyKey = null,
+    ): ?string {
+        return $this->send(
+            toEmails: $recipientEmail ?? $accessRequest->email,
             subject: 'MAXIMO WMS - Solicitud de acceso revisada',
             htmlView: 'emails.brevo.access-request-rejected',
             data: [
                 'accessRequest' => $accessRequest,
             ],
+            idempotencyKey: $idempotencyKey,
         );
     }
 
@@ -140,11 +162,11 @@ class BrevoMailService
     }
 
     /** @param list<string> $recipientEmails */
-    public function sendStockAlert(StockAlertEvent $event, array $recipientEmails): void
+    public function sendStockAlert(StockAlertEvent $event, array $recipientEmails, ?string $idempotencyKey = null): ?string
     {
         $event->loadMissing(['client', 'item', 'rule']);
 
-        $this->send(
+        return $this->send(
             toEmails: $recipientEmails,
             subject: sprintf('MAXIMO WMS - Alerta de stock %s - %s', strtoupper($event->severity), $event->item?->sku),
             htmlView: 'emails.brevo.stock-alert',
@@ -156,6 +178,7 @@ class BrevoMailService
                 ]),
                 'evaluatedAt' => $event->triggered_at,
             ],
+            idempotencyKey: $idempotencyKey,
         );
     }
 
@@ -164,19 +187,24 @@ class BrevoMailService
      *
      * @throws BrevoMailConfigurationException
      */
-    private function send(string|array $toEmails, string $subject, string $htmlView, array $data): void
-    {
+    private function send(
+        string|array $toEmails,
+        string $subject,
+        string $htmlView,
+        array $data,
+        ?string $idempotencyKey = null,
+    ): ?string {
         $this->assertConfigured();
 
         $recipients = collect(is_array($toEmails) ? $toEmails : [$toEmails])
-            ->filter(fn (?string $email) => filled($email))
-            ->map(fn (string $email): array => ['email' => trim($email)])
+            ->filter(fn (?string $email) => filled($email) && filter_var(trim($email), FILTER_VALIDATE_EMAIL) !== false)
+            ->map(fn (string $email): array => ['email' => Str::lower(trim($email))])
             ->unique('email')
             ->values()
             ->all();
 
         if ($recipients === []) {
-            throw new RuntimeException('No hay destinatarios validos para el envio de correo.');
+            throw new PermanentNotificationDeliveryException('No hay destinatarios validos para el envio de correo.');
         }
 
         $htmlContent = View::make($htmlView, $data)->render();
@@ -196,13 +224,28 @@ class BrevoMailService
                 'subject' => $subject,
                 'htmlContent' => $htmlContent,
                 'textContent' => $textContent,
+                'headers' => $idempotencyKey === null ? [] : [
+                    'idempotencyKey' => $idempotencyKey,
+                ],
             ]);
 
         if ($response->failed()) {
-            throw new RuntimeException(sprintf(
-                'Brevo API devolvio error al enviar el correo. HTTP %s.',
-                $response->status()
-            ));
+            $isDuplicate = $response->status() === 400
+                && str_contains(Str::lower((string) $response->body()), 'duplicate_parameter');
+
+            if ($isDuplicate) {
+                return 'duplicate-idempotency-key';
+            }
+
+            $message = sprintf('Brevo API devolvio error al enviar el correo. HTTP %s.', $response->status());
+
+            if ($response->status() === 408 || $response->status() === 425 || $response->status() === 429 || $response->serverError()) {
+                throw new TransientNotificationDeliveryException($message);
+            }
+
+            throw new PermanentNotificationDeliveryException($message);
         }
+
+        return is_string($response->json('messageId')) ? $response->json('messageId') : null;
     }
 }

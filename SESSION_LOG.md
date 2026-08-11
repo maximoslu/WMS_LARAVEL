@@ -4,6 +4,101 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-11 - CIERRE DE IDEMPOTENCIA Y REINTENTO DE NOTIFICACIONES PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-notification-idempotency-2026-08-11`.
+**SHA inicial:** `e3bf6376235db95e7ae18e0dc4f33e9bdf041776`, cierre acumulado de identidad y concurrencia de partidas. La rama se creo exactamente desde ese SHA; `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`. **SHA final:** commit que contiene esta entrada, informado en el cierre de la tarea.
+
+### Resultado
+
+**Bloqueo de idempotencia/reintento de notificaciones RESUELTO.** Las entregas funcionales relevantes quedan identificadas por evento de dominio, version, canal y destinatario; la constraint unica decide concurrentemente que worker puede enviar. Los fallos transitorios vuelven a Laravel y los permanentes terminan como failed sin invalidar la transaccion funcional ya confirmada. Esto no declara todavia el WMS APTO COMO BASELINE.
+
+### Mapa de notificaciones reconstruido
+
+- Pedido definitivo: `MerchandiseRequestController` -> `ProcessMerchandiseRequestSubmittedNotificationsJob` -> cliente solicitante o usuarios cliente, usuarios internos activos y emails adicionales de salida -> canales database y mail de Laravel. Los borradores y estados intermedios no comunican.
+- Expedicion completada/albaran: `GoodsDispatchWorkflowService` -> `ProcessGoodsDispatchStatusChangedJob` -> usuarios internos, cliente y emails adicionales -> database y mail de Laravel con PDF. La confirmacion de carga y el estado enviado intermedio no comunican.
+- Documento de entrada disponible o sustituido: `GoodsReceiptController` -> `ProcessGoodsReceiptDocumentNotificationsJob` -> usuarios del cliente y emails adicionales de entradas -> database y mail de Laravel; la version es el hash del documento actual.
+- Booking creado/cambio de estado: `BookingController` -> jobs de booking -> usuarios internos o solicitante/usuarios cliente -> database de Laravel. El job de cambio captura estado/version de la transicion y descarta payloads obsoletos.
+- Alerta de stock: evaluacion after-commit -> `SendStockAlertEmailJob` -> emails configurados del cliente -> Brevo API, una entrega por destinatario.
+- Solicitud de acceso enviada/aprobada/rechazada: `AccessRequestController` -> `ProcessAccessRequestEmailJob` -> administracion/superadmin/fallback o solicitante -> Brevo API.
+- Recuperacion de contrasena: `User::sendPasswordResetNotification()` -> `SendPasswordResetEmailJob` cifrado -> usuario -> Brevo API. Cada token representa un evento legitimo distinto y su version persistida es solo SHA-256.
+- `wms:test-mail`: envio manual de diagnostico por Brevo, clasificado NO APLICA a idempotencia de eventos de negocio ni retry automatico.
+- Google Calendar: solo lectura y sin envio de correo; fuera de alcance funcional.
+
+### Causa raiz confirmada
+
+- Siete jobs (`ProcessBooking*`, `ProcessGoodsReceiptDocumentNotificationsJob`, `ProcessMerchandiseRequest*` y `ProcessGoodsDispatch*`) capturaban `Throwable`, escribian warning y terminaban como exito. Laravel no reintentaba ni generaba `failed_jobs`.
+- Los servicios enviaban directamente con `notify()`/`Notification::route()` sin identidad persistente. Dos dispatches, workers o retries podian repetir bandeja y correo; una entrega parcial podia dejar destinatarios sin enviar o duplicar los ya procesados.
+- Acceso y password llamaban Brevo sin cola persistente. Stock ya relanzaba la excepcion, pero su unicidad era temporal/cache y no una evidencia por destinatario.
+- `delivery_note_sent_at` evitaba algunos dobles envios secuenciales, pero no coordinaba dos workers y solo se escribia despues de enviar a todos.
+
+### Estrategia persistente e identidad
+
+- Migracion reversible `2026_08_11_000002_create_notification_deliveries_table.php`; aplicada solo en local controlado y probada `up/down` en tests.
+- Tabla `notification_deliveries`, sin cuerpos, documentos, tokens ni emails en claro. Guarda tipo, origen, version, canal, hash de destinatario, estado, attempts, tiempos, error limitado, message ID y UUID de proveedor.
+- Clave logica SHA-256 determinista sobre JSON canonico: `tipo + source_type + source_id + event_version + channel + recipient_normalizado`.
+- Email se normaliza con trim y lowercase; se persiste solo SHA-256. Database usa `user:{id}`. Los canales mail/database se separan, de modo que un fallo SMTP no repite una notificacion interna ya confirmada.
+- `idempotency_key CHAR(64) UNIQUE` y `provider_idempotency_key UUID UNIQUE`. `insertOrIgnore` mas `SELECT ... FOR UPDATE` decide la adquisicion sin patron vulnerable `exists()+create()`.
+- Granularidad por evento/canal/destinatario; no hay lock global. Eventos y destinatarios distintos progresan en paralelo.
+
+### Estados y concurrencia
+
+- `pending`: fila creada atomica antes de reclamar el intento.
+- `processing`: identidad reclamada con token, timestamp y attempts incrementado. Lease de 90 s, alineado con timeout/retry de la cola; un segundo worker recibe excepcion transitoria y reintenta.
+- `sent`: solo despues del retorno correcto del transport/proveedor; se guarda `sent_at` y, si existe, message ID. Un retry posterior no ejecuta el callback.
+- `failed`: la excepcion se resume a 1.000 caracteres, se guarda `failed_at`, se libera el token y la excepcion se relanza.
+- Dos procesos PHP/dos conexiones MariaDB reales compitieron por la misma clave: una llamada simulada al proveedor, una fila, un attempt, un worker `sent` y el otro `in_progress`: **1 passed, 14 assertions**.
+
+### Retry, backoff y failed jobs
+
+- Trait comun `RetriesNotificationDelivery`: `tries=4`, `backoff=[30,120,300]`, `timeout=60` y `failed()` con evidencia operativa.
+- HTTP 408/425/429/5xx y conexion/timeout son transitorios; se relanzan. Configuracion Brevo ausente, destinatario/argumento invalido y HTTP 4xx permanente se marcan failed sin reintentos inutiles en un worker real.
+- `jobs`, `job_batches` y `failed_jobs` existen por migracion versionada. `queue.failed.driver=database-uuids` por defecto.
+- El retry real de alerta de stock probo HTTP 503 -> excepcion -> estado failed -> segundo intento 201 -> sent, attempts=2, una sola fila y la misma UUID Brevo.
+
+### Transacciones, borradores y destinatarios
+
+- Jobs funcionales de pedido, expedicion, booking y documento de entrada usan `afterCommit()`. La regresion con rollback verifica cero filas en `jobs` y cero deliveries.
+- Los controladores de pedido/entrada/expedicion llaman despues de sus transacciones. El correo se procesa en worker y no revierte stock, pedido, entrada, usuario ni expedicion.
+- El draft EDELVIVES no despacha job ni crea delivery; al pasar una sola vez a definitivo crea el evento `submitted`. El `lockForUpdate()` existente en la transicion de draft impide dos cambios de negocio concurrentes.
+- Destinatarios de usuario/configuracion se normalizan y deduplican case-insensitive. Mismo evento/email produce una entrega; dos emails o eventos distintos producen entregas independientes.
+- La tabla empieza vacia al desplegar la migracion: protege eventos procesados desde ese momento. No se backfilleo, marco ni reenvio historial.
+
+### Proveedor y garantia real
+
+- Laravel Notifications usa el mailer configurado; con SMTP no existe confirmacion end-to-end exactly-once. Si el servidor acepta el mensaje y se pierde la respuesta antes de `sent`, queda una ventana `unknown outcome` que puede producir duplicado fisico al retry.
+- Brevo API recibe la UUID persistida en `headers.idempotencyKey`; el retry usa la misma clave y trata `duplicate_parameter` como aceptacion previa. La documentacion vigente limita esa proteccion a una ventana TTL (30 minutos), por lo que tampoco se declara exactly-once fisico ilimitado.
+- Garantia cerrada: exactly-once logico y concurrente dentro del WMS mientras existe evidencia `sent`; exactly-once fisico externo global: NO.
+
+### Tests y validaciones
+
+- Focalizados de pedidos, expediciones, entradas, booking, acceso, password, alertas, jobs y bandeja: **422 passed, 2.448 assertions**.
+- Nuevas regresiones comunes: migracion, constraint, mismo/diferente evento y destinatario, retry transitorio, attempts, excepcion local posterior a sent, worker processing, privacidad, politica, clasificacion, failed jobs, rollback, acceso duplicado y password cifrado.
+- Suite completa SQLite: **861 passed, 4.999 assertions**, 40,48 s.
+- Integracion MariaDB aislada de dos workers: **1 passed, 14 assertions**.
+- `composer validate --strict`: `./composer.json is valid`.
+- `composer audit --locked`: 0 advisories.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- `git diff --check`: OK.
+- `php artisan migrate`: OK en entorno local; no se uso `migrate:fresh`.
+
+### Git, datos y produccion
+
+- Commit: `fix: make queued notifications idempotent` (SHA informado al cierre).
+- Push: rama `fix/baseline-notification-idempotency-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Merge a `main`: NO. Tag: NO. Deploy: NO. Produccion/Forge: NO TOCADA.
+- Datos historicos/funcionales modificados: NO. La base local solo recibio migraciones estructurales pendientes; los tests MariaDB usaron prefijo aleatorio aislado y eliminaron exclusivamente sus tablas.
+- `.env`, secretos, `vendor/`, `node_modules`, `.claude/` y `tmp/`: no modificados/versionados.
+
+### Bloqueantes restantes para la baseline general
+
+1. Revision del reemplazo completo de snapshot y limite de tamano de importaciones.
+2. Saneamiento controlado de datos con dry-run/staging.
+3. Validacion en staging o entorno equivalente a produccion antes de cualquier tag o deploy.
+
+---
+
 ## 2026-08-11 - CIERRE DE IDENTIDAD Y CONCURRENCIA DE PARTIDAS PARA BASELINE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-lot-concurrency-2026-08-11`.

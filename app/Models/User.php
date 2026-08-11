@@ -3,7 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use App\Services\BrevoMailService;
+use App\Jobs\SendPasswordResetEmailJob;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 class User extends Authenticatable
 {
@@ -158,17 +157,17 @@ class User extends Authenticatable
 
     public function sendPasswordResetNotification($token): void
     {
-        try {
-            app(BrevoMailService::class)->sendPasswordReset(
-                $this->email,
-                route('password.reset', [
-                    'token' => (string) $token,
-                    'email' => $this->getEmailForPasswordReset(),
-                ])
-            );
-        } catch (Throwable $exception) {
-            report($exception);
-        }
+        $resetUrl = route('password.reset', [
+            'token' => (string) $token,
+            'email' => $this->getEmailForPasswordReset(),
+        ]);
+
+        SendPasswordResetEmailJob::dispatch(
+            (int) $this->id,
+            (string) $this->email,
+            $resetUrl,
+            hash('sha256', (string) $token),
+        );
     }
 
     protected function avatarUrl(): Attribute

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\RetriesNotificationDelivery;
 use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
@@ -10,7 +11,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ProcessGoodsDispatchStatusChangedJob implements ShouldQueue
@@ -18,6 +18,7 @@ class ProcessGoodsDispatchStatusChangedJob implements ShouldQueue
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
+    use RetriesNotificationDelivery;
     use SerializesModels;
 
     public function __construct(
@@ -53,13 +54,7 @@ class ProcessGoodsDispatchStatusChangedJob implements ShouldQueue
                 $notificationService->sendDeliveryNoteToClient($dispatch, $this->currentStatus);
             }
         } catch (Throwable $exception) {
-            Log::warning('Fallo al procesar cambio de estado de salida.', [
-                'dispatch_id' => $this->goodsDispatchId,
-                'merchandise_request_id' => $this->merchandiseRequestId,
-                'previous_request_status' => $this->previousRequestStatus,
-                'current_status' => $this->currentStatus,
-                'message' => $exception->getMessage(),
-            ]);
+            $this->handleDeliveryException($exception);
         }
     }
 }

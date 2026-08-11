@@ -5,13 +5,14 @@ namespace Tests\Feature;
 use App\Jobs\ProcessGoodsDispatchStatusChangedJob;
 use App\Jobs\ProcessMerchandiseRequestStatusChangedJob;
 use App\Jobs\ProcessMerchandiseRequestSubmittedNotificationsJob;
-use App\Models\ClientDispatchEmailRecipient;
 use App\Models\Client;
+use App\Models\ClientDispatchEmailRecipient;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
+use App\Models\StockPallet;
 use App\Models\User;
 use App\Notifications\CustomerDispatchDeliveryNoteNotification;
 use App\Notifications\CustomerMerchandiseRequestStatusChangedNotification;
@@ -25,13 +26,14 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class MerchandiseRequestNotificationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_creating_request_dispatches_only_the_creation_notifications_job_after_response(): void
+    public function test_creating_request_dispatches_only_the_creation_notifications_job_after_commit(): void
     {
         Bus::fake();
         $this->seedBaseData();
@@ -53,9 +55,10 @@ class MerchandiseRequestNotificationTest extends TestCase
 
         $request = MerchandiseRequest::query()->firstOrFail();
 
-        Bus::assertDispatchedAfterResponse(
+        Bus::assertDispatched(
             ProcessMerchandiseRequestSubmittedNotificationsJob::class,
             fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $request->id
+                && $job->afterCommit === true
         );
         Bus::assertNotDispatched(ProcessMerchandiseRequestStatusChangedJob::class);
         Bus::assertNotDispatched(ProcessGoodsDispatchStatusChangedJob::class);
@@ -76,19 +79,29 @@ class MerchandiseRequestNotificationTest extends TestCase
         (new ProcessMerchandiseRequestSubmittedNotificationsJob($merchandiseRequest->id))
             ->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 1);
+        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 2);
         Notification::assertSentTo(
             $cliente,
             CustomerMerchandiseRequestSubmittedNotification::class,
-            fn ($notification, array $channels): bool => $channels === ['database', 'mail']
+            fn ($notification, array $channels): bool => $channels === ['database']
+        );
+        Notification::assertSentTo(
+            $cliente,
+            CustomerMerchandiseRequestSubmittedNotification::class,
+            fn ($notification, array $channels): bool => $channels === ['mail']
         );
 
         foreach ([$almacen, $administracion, $superadmin] as $internalUser) {
-            Notification::assertSentToTimes($internalUser, InternalMerchandiseRequestSubmittedNotification::class, 1);
+            Notification::assertSentToTimes($internalUser, InternalMerchandiseRequestSubmittedNotification::class, 2);
             Notification::assertSentTo(
                 $internalUser,
                 InternalMerchandiseRequestSubmittedNotification::class,
-                fn ($notification, array $channels): bool => $channels === ['database', 'mail']
+                fn ($notification, array $channels): bool => $channels === ['database']
+            );
+            Notification::assertSentTo(
+                $internalUser,
+                InternalMerchandiseRequestSubmittedNotification::class,
+                fn ($notification, array $channels): bool => $channels === ['mail']
             );
         }
     }
@@ -111,7 +124,7 @@ class MerchandiseRequestNotificationTest extends TestCase
             function ($notification, array $channels) use ($cliente, $merchandiseRequest): bool {
                 $mail = $notification->toMail($cliente);
 
-                return $channels === ['database', 'mail']
+                return $channels === ['mail']
                     && $mail instanceof MailMessage
                     && count($mail->rawAttachments) === 1
                     && $mail->rawAttachments[0]['name'] === 'preparacion-pedido-'.$merchandiseRequest->referenceCode().'.pdf'
@@ -139,7 +152,7 @@ class MerchandiseRequestNotificationTest extends TestCase
             function ($notification, array $channels) use ($cliente): bool {
                 $mail = $notification->toMail($cliente);
 
-                return $channels === ['database', 'mail']
+                return $channels === ['mail']
                     && $mail instanceof MailMessage
                     && count($mail->rawAttachments) === 0;
             }
@@ -174,7 +187,7 @@ class MerchandiseRequestNotificationTest extends TestCase
         (new ProcessMerchandiseRequestSubmittedNotificationsJob($request->id))
             ->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 1);
+        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 2);
         Notification::assertNotSentTo($internalCreator, CustomerMerchandiseRequestSubmittedNotification::class);
     }
 
@@ -199,7 +212,7 @@ class MerchandiseRequestNotificationTest extends TestCase
         (new ProcessMerchandiseRequestSubmittedNotificationsJob($merchandiseRequest->id))
             ->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 1);
+        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 2);
         Notification::assertSentOnDemand(
             InternalMerchandiseRequestSubmittedNotification::class,
             function ($notification, array $channels, object $notifiable): bool {
@@ -311,20 +324,25 @@ class MerchandiseRequestNotificationTest extends TestCase
             GoodsDispatch::STATUS_COMPLETED
         ))->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentToTimes($administracion, InternalGoodsDispatchCompletedNotification::class, 1);
+        Notification::assertSentToTimes($administracion, InternalGoodsDispatchCompletedNotification::class, 2);
         Notification::assertSentTo(
             $administracion,
             InternalGoodsDispatchCompletedNotification::class,
-            fn ($notification, array $channels): bool => $channels === ['database', 'mail']
+            fn ($notification, array $channels): bool => $channels === ['database']
         );
-        Notification::assertSentToTimes($cliente, CustomerDispatchDeliveryNoteNotification::class, 1);
+        Notification::assertSentTo(
+            $administracion,
+            InternalGoodsDispatchCompletedNotification::class,
+            fn ($notification, array $channels): bool => $channels === ['mail']
+        );
+        Notification::assertSentToTimes($cliente, CustomerDispatchDeliveryNoteNotification::class, 2);
         Notification::assertSentTo(
             $cliente,
             CustomerDispatchDeliveryNoteNotification::class,
             function ($notification, array $channels) use ($cliente): bool {
                 $mail = $notification->toMail($cliente);
 
-                return $channels === ['database', 'mail']
+                return $channels === ['mail']
                     && $mail instanceof MailMessage
                     && count($mail->rawAttachments) === 1;
             }
@@ -354,7 +372,7 @@ class MerchandiseRequestNotificationTest extends TestCase
             GoodsDispatch::STATUS_COMPLETED
         ))->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentToTimes($merchandiseRequest->requestedBy, CustomerDispatchDeliveryNoteNotification::class, 1);
+        Notification::assertSentToTimes($merchandiseRequest->requestedBy, CustomerDispatchDeliveryNoteNotification::class, 2);
     }
 
     public function test_existing_notification_history_is_not_modified_by_intermediate_changes(): void
@@ -367,7 +385,7 @@ class MerchandiseRequestNotificationTest extends TestCase
         $merchandiseRequest = $this->createMerchandiseRequestWithLine($client, $cliente);
 
         $cliente->notifications()->create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'id' => (string) Str::uuid(),
             'type' => CustomerMerchandiseRequestSubmittedNotification::class,
             'data' => ['type' => 'historico', 'reference' => $merchandiseRequest->referenceCode()],
         ]);
@@ -419,7 +437,7 @@ class MerchandiseRequestNotificationTest extends TestCase
     }
 
     /**
-     * @return array{0: MerchandiseRequest, 1: GoodsDispatch, 2: \App\Models\StockPallet}
+     * @return array{0: MerchandiseRequest, 1: GoodsDispatch, 2: StockPallet}
      */
     private function createConfirmedDispatch(string $status = GoodsDispatch::STATUS_PREPARING): array
     {
@@ -430,7 +448,7 @@ class MerchandiseRequestNotificationTest extends TestCase
             'client_id' => $client->id,
             'units_per_pallet' => 40,
         ]);
-        $stock = \App\Models\StockPallet::factory()->create([
+        $stock = StockPallet::factory()->create([
             'client_id' => $client->id,
             'item_id' => $item->id,
             'units_per_pallet' => 40,
