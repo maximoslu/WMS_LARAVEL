@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use InvalidArgumentException;
 use Throwable;
 
 class StockImportController extends Controller
@@ -35,19 +36,32 @@ class StockImportController extends Controller
         ]);
     }
 
-    public function preview(Request $request): View
+    public function preview(Request $request): View|RedirectResponse
     {
+        $maximumKilobytes = (int) config('wms.stock_imports.max_file_kilobytes', 2048);
         $validated = $request->validate([
             'client_id' => ['required', 'integer', Rule::exists('clients', 'id')],
-            'file' => ['required', 'file', 'mimes:xlsx'],
+            'file' => ['required', 'file', 'mimes:xlsx', 'max:'.$maximumKilobytes],
         ]);
 
         $client = Client::query()->findOrFail($validated['client_id']);
-        $result = $this->stockExcelImportService->createPreview(
-            $client,
-            $request->user(),
-            $request->file('file'),
-        );
+        try {
+            $result = $this->stockExcelImportService->createPreview(
+                $client,
+                $request->user(),
+                $request->file('file'),
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return redirect()
+                ->route('stock.import')
+                ->withErrors([
+                    'file' => $exception instanceof InvalidArgumentException
+                        ? $exception->getMessage()
+                        : 'No se ha podido leer el fichero Excel. Comprueba que no este corrupto y vuelve a intentarlo.',
+                ]);
+        }
 
         return view('stock.import', [
             'clients' => Client::query()->orderBy('name')->get(),
@@ -66,6 +80,7 @@ class StockImportController extends Controller
     {
         $validated = $request->validate([
             'stock_import_id' => ['required', 'integer', Rule::exists('stock_imports', 'id')],
+            'acknowledge_snapshot_replacement' => ['sometimes', 'accepted'],
         ]);
 
         $stockImport = StockImport::query()
@@ -75,7 +90,11 @@ class StockImportController extends Controller
         abort_unless($request->user()?->isSuperAdmin(), 403);
 
         try {
-            $result = $this->stockExcelImportService->confirm($stockImport, $request->user());
+            $result = $this->stockExcelImportService->confirm(
+                $stockImport,
+                $request->user(),
+                $request->boolean('acknowledge_snapshot_replacement'),
+            );
         } catch (Throwable $exception) {
             report($exception);
             $this->audit->record(

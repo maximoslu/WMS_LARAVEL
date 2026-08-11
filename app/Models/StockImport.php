@@ -21,6 +21,8 @@ class StockImport extends Model
 
     public const STATUS_FAILED = 'failed';
 
+    public const STATUS_STALE = 'stale';
+
     protected $fillable = [
         'client_id',
         'uploaded_by',
@@ -77,6 +79,7 @@ class StockImport extends Model
             self::STATUS_PREVIEWED => 'Previsualizada',
             self::STATUS_IMPORTED => 'Importada',
             self::STATUS_FAILED => 'Fallida',
+            self::STATUS_STALE => 'Obsoleta',
             self::STATUS_IMPORTING => 'Importando',
             default => 'Previsualizada',
         };

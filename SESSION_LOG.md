@@ -4,6 +4,74 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-11 - CIERRE DE SNAPSHOT Y LIMITES DE IMPORTACION PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-import-snapshot-limits-2026-08-11`.
+**SHA inicial:** `da7a83757653535713299a54f0609acf583e10e4`, cierre acumulado de idempotencia y reintento de notificaciones. La rama se creo exactamente desde ese SHA; `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`. **SHA final:** commit que contiene esta entrada, informado en el cierre de la tarea.
+
+### Resultado
+
+**Bloqueo de snapshot incompleto y limites de importacion RESUELTO.** La importacion queda definida y protegida como reemplazo completo del stock activo de un cliente: un fichero con errores no aplica ninguna fila, un preview obsoleto no puede sobrescribir cambios posteriores y las confirmaciones concurrentes del mismo cliente se serializan. Esto no declara todavia el WMS APTO COMO BASELINE.
+
+### Semantica y riesgo original
+
+- Flujo reconstruido: ruta superadmin -> validacion HTTP -> almacenamiento temporal local -> lectura XLSX con OpenSpout -> preview -> confirmacion -> transaccion -> retirada del stock activo anterior -> creacion o agregacion del nuevo stock -> movimientos de inventario -> auditoria -> eliminacion del temporal.
+- La semantica real es **snapshot completo por cliente**, no incremental: al confirmar se inactiva y pone a cero todo el stock activo previo del cliente y se aplica exclusivamente la fotografia del fichero.
+- Antes, las filas invalidas se omitian sin impedir la confirmacion. Un fichero esperado de 100 referencias con 10 filas erroneas podia sustituir el snapshot por solo 90 referencias validas y retirar silenciosamente las restantes.
+- Antes tampoco se persistia una version de la fotografia base; un preview antiguo podia confirmarse despues de otro cambio. No habia limite de aplicacion para bytes o filas y los temporales exitosos no se eliminaban.
+
+### Proteccion de snapshot, atomicidad y concurrencia
+
+- Cualquier error fatal o de fila deja la importacion `failed`, elimina el temporal y bloquea por completo la confirmacion. Las filas sin SKU con stock declarado son errores; las filas informativas sin stock se mantienen como aviso compatible.
+- El preview persiste SHA-256 del fichero y SHA-256 canonico del stock activo base. La confirmacion vuelve a leer el fichero, verifica su integridad y compara la fotografia base dentro de la transaccion.
+- Si el stock cambio desde el preview, la importacion pasa a `stale`, el temporal se elimina y no se crean articulos, partidas ni movimientos.
+- La fila `clients` se bloquea antes de la importacion como mutex transaccional por cliente. La misma importacion solo puede aplicarse una vez; dos snapshots del mismo cliente se serializan y el perdedor queda obsoleto; clientes distintos conservan paralelismo.
+- Retirada, catalogos, partidas, movimientos, estado de la importacion y auditoria siguen en una unica transaccion con tres intentos ante deadlock. Una excepcion provocada en la segunda fila demostro rollback completo, incluido el stock anterior y los movimientos.
+- No se introdujo un umbral comercial arbitrario. Toda desaparicion de referencia o partida, o cualquier reduccion de unidades/pallets, exige aceptacion explicita tanto en interfaz como en backend.
+
+### Limites, performance y temporales
+
+- Limite de aplicacion: **2 MB** por XLSX y **1.000 filas procesables**. El limite de bytes coincide con `upload_max_filesize=2M` del PHP local; el historico local observado llegaba a 574 filas y aproximadamente 146 KB.
+- La lectura de OpenSpout es streaming, pero las filas normalizadas se conservan para preview/confirmacion; el limite de filas acota esa memoria y la transaccion, que ejecuta aproximadamente 12 consultas por fila por trazabilidad e identidad.
+- Benchmark SQLite reproducible: 100 filas, 7.059 bytes, parse 33,95 ms / +2 MB, confirmacion 313,99 ms / +4 MB / 1.213 consultas; 500 filas, 16.788 bytes, 81,02 ms / +2 MB, 1.608,43 ms / +12 MB / 6.013 consultas; 1.000 filas, 28.675 bytes, 137,18 ms / +4 MB, 3.229 ms / +16 MB / 12.013 consultas.
+- Los temporales de previews confirmados, fallidos, obsoletos o manipulados se eliminan inmediatamente. Los previews confirmables se retienen hasta 24 horas para reintentos; el comando `wms:stock-imports:prune-temp` hace dry-run por defecto y su ejecucion diaria `--apply` expira previews antiguos. La limpieza manual de auditoria tambien elimina sus ficheros asociados con validacion de ruta.
+
+### Identidad, trazabilidad y multicliente
+
+- La confirmacion reutiliza `StockBatchIdentityService`: bloquea en orden las identidades activas e importadas y resuelve por cliente, articulo, lote canonico, ubicacion, unidades por pallet, estado, categoria y motivo. Filas equivalentes del mismo fichero convergen en una partida y conservan un movimiento por fila fuente.
+- Cada partida nueva conserva `stock_import_id`, `source_sheet`, `imported_at` y nombre de fichero; cada retirada y alta registra `InventoryMovement` con correlation ID e idempotency key determinista.
+- Rutas de preview/confirmacion siguen restringidas a superadmin. Las consultas, fotografia, mutex, catalogos, identidades y movimientos quedan acotados por `client_id`; pruebas HTTP impiden confirmar IDs ajenos y la integracion demuestra que dos clientes no comparten lock.
+
+### Migraciones y datos
+
+- Migraciones nuevas: **NO**. El nuevo estado `stale` utiliza la columna de estado de texto existente y los hashes/metricas se guardan en `summary_json` existente.
+- Datos historicos o funcionales modificados: **NO**. No se ejecuto saneamiento ni `migrate:fresh`; las pruebas MariaDB usaron tablas con prefijo aleatorio aislado y eliminaron exclusivamente ese prefijo.
+- Produccion/Forge: **NO TOCADA**.
+
+### Tests y validaciones
+
+- StockImport + auditoria: **53 passed, 500 assertions**. Regresiones nuevas para snapshot parcial, 2 MB, 1.000 filas, reducciones/aceptacion backend, preview obsoleto, rollback forzado, doble confirmacion, aislamiento multicliente, caducidad de temporales e integridad SHA-256.
+- Focalizados de importacion, stock, recepciones, ubicaciones, autorizacion, operaciones diarias, auditoria y backups: **453 passed, 2.800 assertions**.
+- Suite completa SQLite: **870 passed, 5.075 assertions**, 40,91 s.
+- Integracion MariaDB de importacion con dos procesos/conexiones: **3 passed, 30 assertions**. Regresiones MariaDB acumuladas de identidad: **6 passed, 47 assertions**; notificaciones: **1 passed, 14 assertions**.
+- Benchmark reproducible: 3 casos, todos correctos.
+- `composer validate --strict`: `./composer.json is valid`.
+- `composer audit --locked`: 0 advisories.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- Comando de limpieza registrado y visible en `schedule:list` a las 03:15.
+- `git diff --check`: OK.
+
+### Git y bloqueantes restantes
+
+- Commit: `fix: harden stock snapshot imports` (commit que contiene esta entrada; SHA informado al cierre).
+- Push: rama `fix/baseline-import-snapshot-limits-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Merge a `main`: NO. Tag: NO. Deploy: NO.
+- `.env`, secretos, `vendor/`, `node_modules`, `.claude/` y `tmp/`: no modificados/versionados.
+- Bloqueantes restantes para la baseline general: saneamiento controlado de datos mediante dry-run; validacion en staging o equivalente a produccion; repeticion final de auditoria antes del tag.
+
+---
+
 ## 2026-08-11 - CIERRE DE IDEMPOTENCIA Y REINTENTO DE NOTIFICACIONES PARA BASELINE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-notification-idempotency-2026-08-11`.
