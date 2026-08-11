@@ -2,9 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Support\WmsNavigation;
+use App\Models\Client;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\WmsNavigation;
 use Database\Seeders\RoleSeeder;
 use Database\Seeders\SuperAdminSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -417,7 +418,7 @@ class RoleAccessTest extends TestCase
         $clientId = null;
 
         if ($roleSlug === Role::CLIENTE) {
-            $clientId = \App\Models\Client::factory()->create()->id;
+            $clientId = Client::factory()->create()->id;
         }
 
         return User::factory()->create([

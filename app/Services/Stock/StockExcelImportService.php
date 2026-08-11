@@ -2,6 +2,7 @@
 
 namespace App\Services\Stock;
 
+use App\Exceptions\StaleStockImportException;
 use App\Models\Client;
 use App\Models\InventoryMovement;
 use App\Models\Item;
@@ -15,17 +16,20 @@ use App\Services\Inventory\InventoryMovementService;
 use App\Support\Locations\LocationCode;
 use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
+use App\Support\Stock\StockBatchIdentity;
 use DateTimeInterface;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Reader\Common\Creator\ReaderFactory;
+use Throwable;
 
 class StockExcelImportService
 {
@@ -112,6 +116,8 @@ class StockExcelImportService
         private readonly DatabaseManager $db,
         private readonly InventoryMovementService $movements,
         private readonly AuditLogService $audit,
+        private readonly StockBatchIdentityService $batchIdentities,
+        private readonly StockImportSnapshotGuard $snapshotGuard,
     ) {}
 
     /**
@@ -119,6 +125,12 @@ class StockExcelImportService
      */
     public function createPreview(Client $client, User $user, UploadedFile $file): array
     {
+        $maximumBytes = (int) config('wms.stock_imports.max_file_kilobytes', 2048) * 1024;
+
+        if (($file->getSize() ?: 0) > $maximumBytes) {
+            throw new InvalidArgumentException('El fichero de stock no puede superar '.number_format($maximumBytes / 1024 / 1024, 0, ',', '.').' MB.');
+        }
+
         $storedPath = $file->storeAs(
             'stock-imports',
             Str::uuid()->toString().'.'.$file->getClientOriginalExtension(),
@@ -129,55 +141,79 @@ class StockExcelImportService
             throw new InvalidArgumentException('No se ha podido guardar temporalmente el fichero de stock.');
         }
 
-        $preview = $this->parseWorkbook(Storage::disk('local')->path($storedPath), $client);
+        try {
+            $path = Storage::disk('local')->path($storedPath);
+            $preview = $this->parseWorkbook($path, $client);
+            $fileHash = hash_file('sha256', $path);
 
-        $status = $preview['fatal_errors'] !== []
-            ? StockImport::STATUS_FAILED
-            : StockImport::STATUS_PENDING_CONFIRMATION;
+            if (! is_string($fileHash)) {
+                throw new InvalidArgumentException('No se ha podido verificar la integridad del fichero temporal de stock.');
+            }
 
-        $stockImport = StockImport::query()->create([
-            'client_id' => $client->id,
-            'uploaded_by' => $user->id,
-            'original_filename' => $file->getClientOriginalName(),
-            'stored_path' => $storedPath,
-            'status' => $status,
-            'total_rows' => $preview['totals']['total_rows'],
-            'imported_rows' => 0,
-            'skipped_rows' => $preview['totals']['skipped_rows'],
-            'available_rows' => $preview['totals']['available_rows'],
-            'blocked_rows' => $preview['totals']['blocked_rows'],
-            'detected_sheets_json' => $preview['detected_sheets'],
-            'summary_json' => $preview['totals'],
-            'warnings_json' => $preview['warnings'],
-            'errors_json' => $preview['all_errors'],
-        ]);
+            $preview['file_sha256'] = $fileHash;
+            $preview['totals']['file_sha256'] = $fileHash;
+            $status = $preview['can_confirm'] === true
+                ? StockImport::STATUS_PENDING_CONFIRMATION
+                : StockImport::STATUS_FAILED;
 
-        $this->audit->record(
-            event: 'stock_import_started',
-            module: 'stock_imports',
-            description: 'Importacion de stock previsualizada.',
-            auditable: $stockImport,
-            user: $user,
-            clientId: $client->id,
-            newValues: ['filename' => $file->getClientOriginalName(), 'status' => $status, 'totals' => $preview['totals']],
-        );
+            $stockImport = $this->db->transaction(function () use ($client, $user, $file, $storedPath, $status, $preview): StockImport {
+                $stockImport = StockImport::query()->create([
+                    'client_id' => $client->id,
+                    'uploaded_by' => $user->id,
+                    'original_filename' => $file->getClientOriginalName(),
+                    'stored_path' => $storedPath,
+                    'status' => $status,
+                    'total_rows' => $preview['totals']['total_rows'],
+                    'imported_rows' => 0,
+                    'skipped_rows' => $preview['totals']['skipped_rows'],
+                    'available_rows' => $preview['totals']['available_rows'],
+                    'blocked_rows' => $preview['totals']['blocked_rows'],
+                    'detected_sheets_json' => $preview['detected_sheets'],
+                    'summary_json' => $preview['totals'],
+                    'warnings_json' => $preview['warnings'],
+                    'errors_json' => $preview['all_errors'],
+                ]);
 
-        return [
-            'stock_import' => $stockImport,
-            'preview' => $preview,
-        ];
+                $this->audit->record(
+                    event: 'stock_import_started',
+                    module: 'stock_imports',
+                    description: 'Importacion de stock previsualizada.',
+                    auditable: $stockImport,
+                    user: $user,
+                    clientId: $client->id,
+                    newValues: ['filename' => $file->getClientOriginalName(), 'status' => $status, 'totals' => $preview['totals']],
+                );
+
+                return $stockImport;
+            });
+
+            if ($status === StockImport::STATUS_FAILED) {
+                $this->deleteTemporaryFile($storedPath);
+            }
+
+            return [
+                'stock_import' => $stockImport,
+                'preview' => $preview,
+            ];
+        } catch (Throwable $exception) {
+            $this->deleteTemporaryFile($storedPath);
+
+            throw $exception;
+        }
     }
 
     /**
      * @return array{imported_rows: int, skipped_rows: int}
      */
-    public function confirm(StockImport $stockImport, User $user): array
+    public function confirm(StockImport $stockImport, User $user, bool $acknowledgeSnapshotReplacement = false): array
     {
+        $stockImport = StockImport::query()->with('client')->findOrFail($stockImport->id);
+
         if ($stockImport->status === StockImport::STATUS_IMPORTED) {
             throw new InvalidArgumentException('Esta importacion ya fue confirmada previamente.');
         }
 
-        if ($stockImport->status === StockImport::STATUS_FAILED) {
+        if (in_array($stockImport->status, [StockImport::STATUS_FAILED, StockImport::STATUS_STALE], true)) {
             throw new InvalidArgumentException('No se puede confirmar una importacion fallida.');
         }
 
@@ -186,205 +222,477 @@ class StockExcelImportService
         }
 
         if (! Storage::disk('local')->exists($stockImport->stored_path)) {
-            $stockImport->forceFill([
-                'status' => StockImport::STATUS_FAILED,
-                'errors_json' => ['El fichero temporal de la importacion ya no existe. Vuelve a subir el Excel.'],
-            ])->save();
+            $this->throwIfImportedAfterSynchronization($stockImport);
 
             throw new InvalidArgumentException('El fichero temporal de la importacion ya no existe. Vuelve a subir el Excel.');
         }
 
-        $path = Storage::disk('local')->path($stockImport->stored_path);
-        $preview = $this->parseWorkbook($path, $stockImport->client);
+        try {
+            $path = Storage::disk('local')->path($stockImport->stored_path);
+            $expectedFileHash = $stockImport->summary_json['file_sha256'] ?? null;
+            $currentFileHash = hash_file('sha256', $path);
+        } catch (Throwable $exception) {
+            $this->throwIfImportedAfterSynchronization($stockImport);
 
-        if ($preview['fatal_errors'] !== []) {
-            $stockImport->forceFill([
-                'status' => StockImport::STATUS_FAILED,
-                'errors_json' => $preview['all_errors'],
-                'warnings_json' => $preview['warnings'],
-                'summary_json' => $preview['totals'],
-            ])->save();
+            throw $exception;
+        }
 
-            throw new InvalidArgumentException('La importacion contiene errores fatales y no se puede confirmar.');
+        if (! is_string($expectedFileHash) || ! is_string($currentFileHash) || ! hash_equals($expectedFileHash, $currentFileHash)) {
+            $message = 'El fichero temporal no coincide con el que se previsualizo. Vuelve a subir el Excel.';
+            $this->markImportFailed($stockImport, $message);
+            $this->throwIfImportedAfterSynchronization($stockImport);
+
+            throw new InvalidArgumentException($message);
+        }
+
+        try {
+            $preview = $this->parseWorkbook($path, $stockImport->client);
+        } catch (Throwable $exception) {
+            $this->throwIfImportedAfterSynchronization($stockImport);
+
+            throw $exception;
+        }
+
+        if ($preview['fatal_errors'] !== [] || $preview['row_errors'] !== []) {
+            $message = 'La importacion contiene errores bloqueantes y no se puede confirmar.';
+            $this->markImportFailed($stockImport, $message, $preview);
+
+            throw new InvalidArgumentException($message);
         }
 
         if ($preview['can_confirm'] !== true) {
-            throw new InvalidArgumentException('No hay filas validas para importar.');
+            $message = 'No hay filas validas para importar.';
+            $this->markImportFailed($stockImport, $message, $preview);
+
+            throw new InvalidArgumentException($message);
         }
 
-        return $this->db->transaction(function () use ($stockImport, $user, $preview): array {
-            $correlationId = $this->audit->correlationId();
-            $lockedImport = StockImport::query()
-                ->whereKey($stockImport->id)
-                ->lockForUpdate()
-                ->firstOrFail();
+        $expectedBaseHash = $stockImport->summary_json['base_snapshot_hash'] ?? null;
 
-            StockImport::query()
-                ->where('client_id', $lockedImport->client_id)
-                ->lockForUpdate()
-                ->get();
+        try {
+            $result = $this->db->transaction(function () use ($stockImport, $user, $preview, $expectedBaseHash, $acknowledgeSnapshotReplacement): array {
+                $correlationId = $this->audit->correlationId();
+                $lockedClient = Client::query()
+                    ->whereKey($stockImport->client_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $lockedImport = StockImport::query()
+                    ->whereKey($stockImport->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            $lockedImport->forceFill([
-                'status' => StockImport::STATUS_IMPORTING,
-                'uploaded_by' => $user->id,
-            ])->save();
+                if ($lockedImport->status === StockImport::STATUS_IMPORTED) {
+                    throw new InvalidArgumentException('Esta importacion ya fue confirmada previamente.');
+                }
 
-            $this->retireCurrentStockSnapshot($lockedImport, $user, $correlationId);
+                if (in_array($lockedImport->status, [StockImport::STATUS_FAILED, StockImport::STATUS_STALE], true)) {
+                    throw new InvalidArgumentException('No se puede confirmar una importacion fallida.');
+                }
 
-            $existingItems = Item::query()
-                ->where('client_id', $lockedImport->client_id)
-                ->get()
-                ->keyBy(fn (Item $item): string => Str::upper(trim($item->sku)));
+                if (! in_array($lockedImport->status, [StockImport::STATUS_PREVIEWED, StockImport::STATUS_PENDING_CONFIRMATION], true)) {
+                    throw new InvalidArgumentException('Esta importacion no esta disponible para confirmar.');
+                }
 
-            $importedRows = 0;
-            $createdItems = 0;
-            $updatedItems = 0;
-            $edelvivesLocations = ($preview['profile'] ?? null) === self::PROFILE_EDELVIVES
-                ? $this->ensureEdelvivesLocations(
-                    $lockedImport->client,
-                    collect($preview['rows'])
-                        ->pluck('location_code')
-                        ->filter()
-                        ->unique()
-                        ->values()
-                        ->all(),
-                )
-                : [];
+                $currentSnapshot = $this->snapshotGuard->capture((int) $lockedClient->id);
 
-            foreach ($preview['catalog_items'] as $catalogItem) {
-                $skuKey = Str::upper($catalogItem['sku']);
-                $item = $existingItems[$skuKey] ?? null;
+                if (! is_string($expectedBaseHash) || ! hash_equals($expectedBaseHash, $currentSnapshot['hash'])) {
+                    throw new StaleStockImportException('La previsualizacion esta obsoleta porque el stock del cliente ha cambiado. Vuelve a subir y previsualizar el Excel.');
+                }
 
-                if ($item === null) {
-                    $itemStatus = $this->itemStatusForStockCategory($catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE);
-                    $item = Item::query()->create([
-                        'client_id' => $lockedImport->client_id,
-                        'sku' => $catalogItem['sku'],
-                        'description' => $catalogItem['description'],
-                        'lot' => null,
-                        'lot_key' => '',
-                        'units_per_pallet' => $catalogItem['units_per_pallet'] ?? 1,
-                        'active' => $itemStatus === Item::STATUS_ACTIVE,
-                        'status' => $itemStatus,
-                        'stock_category' => $catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
-                    ]);
+                $snapshotComparison = $this->snapshotGuard->compare($currentSnapshot, $preview['rows']);
 
-                    $existingItems[$skuKey] = $item;
-                    $createdItems++;
-                } else {
-                    $changes = [
-                        'description' => $catalogItem['description'],
-                        'status' => $this->itemStatusForStockCategory($catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE),
-                        'stock_category' => $catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
-                    ];
+                if ($snapshotComparison['requires_reduction_acknowledgement'] && ! $acknowledgeSnapshotReplacement) {
+                    throw new InvalidArgumentException('Debes confirmar expresamente que has revisado las reducciones y referencias que desapareceran del snapshot.');
+                }
 
-                    if (($catalogItem['units_per_pallet'] ?? 0) > 0) {
-                        $changes['units_per_pallet'] = $catalogItem['units_per_pallet'];
+                $lockedImport->forceFill([
+                    'status' => StockImport::STATUS_IMPORTING,
+                    'uploaded_by' => $user->id,
+                ])->save();
+
+                $existingItems = Item::query()
+                    ->where('client_id', $lockedImport->client_id)
+                    ->get()
+                    ->keyBy(fn (Item $item): string => Str::upper(trim($item->sku)));
+
+                $importedRows = 0;
+                $createdItems = 0;
+                $updatedItems = 0;
+                $edelvivesLocations = ($preview['profile'] ?? null) === self::PROFILE_EDELVIVES
+                    ? $this->ensureEdelvivesLocations(
+                        $lockedImport->client,
+                        collect($preview['rows'])
+                            ->pluck('location_code')
+                            ->filter()
+                            ->unique()
+                            ->values()
+                            ->all(),
+                    )
+                    : [];
+
+                foreach ($preview['catalog_items'] as $catalogItem) {
+                    $skuKey = Str::upper($catalogItem['sku']);
+                    $item = $existingItems[$skuKey] ?? null;
+
+                    if ($item === null) {
+                        $itemStatus = $this->itemStatusForStockCategory($catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE);
+                        $item = Item::query()->create([
+                            'client_id' => $lockedImport->client_id,
+                            'sku' => $catalogItem['sku'],
+                            'description' => $catalogItem['description'],
+                            'lot' => null,
+                            'lot_key' => '',
+                            'units_per_pallet' => $catalogItem['units_per_pallet'] ?? 1,
+                            'active' => $itemStatus === Item::STATUS_ACTIVE,
+                            'status' => $itemStatus,
+                            'stock_category' => $catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
+                        ]);
+
+                        $existingItems[$skuKey] = $item;
+                        $createdItems++;
+                    } else {
+                        $changes = [
+                            'description' => $catalogItem['description'],
+                            'status' => $this->itemStatusForStockCategory($catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE),
+                            'stock_category' => $catalogItem['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
+                        ];
+
+                        if (($catalogItem['units_per_pallet'] ?? 0) > 0) {
+                            $changes['units_per_pallet'] = $catalogItem['units_per_pallet'];
+                        }
+
+                        $item->forceFill($changes)->save();
+                        $updatedItems++;
+                    }
+                }
+
+                $identities = StockPallet::query()
+                    ->where('client_id', $lockedImport->client_id)
+                    ->where('active', true)
+                    ->get()
+                    ->map(fn (StockPallet $stockPallet): StockBatchIdentity => StockBatchIdentity::fromStockPallet($stockPallet));
+
+                foreach ($preview['rows'] as $row) {
+                    $item = $existingItems[Str::upper($row['sku'])] ?? null;
+
+                    if ($item instanceof Item) {
+                        $identities->push($this->importRowIdentity($lockedImport, $item, $row, $edelvivesLocations));
+                    }
+                }
+
+                $this->batchIdentities->lockIdentities($identities);
+                $this->retireCurrentStockSnapshot($lockedImport, $user, $correlationId);
+
+                foreach ($preview['rows'] as $rowIndex => $row) {
+                    $skuKey = Str::upper($row['sku']);
+                    $item = $existingItems[$skuKey] ?? null;
+
+                    if ($item === null) {
+                        throw new InvalidArgumentException('No se ha podido resolver el articulo maestro para SKU '.$row['sku'].'.');
                     }
 
-                    $item->forceFill($changes)->save();
-                    $updatedItems++;
+                    $locationCode = isset($row['location_code'])
+                        ? LocationCode::normalize($row['location_code'])
+                        : null;
+
+                    $attributes = [
+                        'client_id' => $lockedImport->client_id,
+                        'item_id' => $item->id,
+                        'stock_import_id' => $lockedImport->id,
+                        'goods_receipt_id' => null,
+                        'location_id' => $locationCode !== null && isset($edelvivesLocations[$locationCode])
+                            ? $edelvivesLocations[$locationCode]->id
+                            : null,
+                        'location_text' => $row['location_text'] ?? null,
+                        'pallet_code' => null,
+                        'lot' => LotNormalizer::normalize($row['lot'] ?? null),
+                        'quantity_units' => $row['quantity_units'],
+                        'units_per_pallet' => $row['units_per_pallet'],
+                        'full_pallets' => $row['full_pallets'],
+                        'peaks_count' => $row['peaks_count'],
+                        'warehouse_pallets' => $row['warehouse_pallets'] ?? null,
+                        'received_at' => $row['received_at'],
+                        'imported_at' => now(),
+                        'status' => $row['status'],
+                        'stock_category' => $row['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
+                        'blocked_reason' => $row['blocked_reason'],
+                        'source_sheet' => $row['source_sheet'],
+                        'notes' => 'Importado desde Excel: '.$lockedImport->original_filename,
+                        'active' => true,
+                    ];
+
+                    foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+                        $attributes['peak_'.$peakNumber] = $row['peak_'.$peakNumber];
+                    }
+
+                    $identity = $this->importRowIdentity($lockedImport, $item, $row, $edelvivesLocations);
+                    $existing = $this->batchIdentities->getAfterLock($identity);
+
+                    if ($existing->count() > 1) {
+                        throw new InvalidArgumentException('La importacion ha encontrado varias partidas activas para una misma identidad fisica.');
+                    }
+
+                    $stockPallet = $existing->first();
+                    $before = $stockPallet instanceof StockPallet
+                        ? $this->movements->snapshot($stockPallet)
+                        : null;
+
+                    if ($stockPallet instanceof StockPallet) {
+                        $stockPallet->forceFill($this->mergeImportedStock($stockPallet, $attributes))->save();
+                    } else {
+                        $stockPallet = StockPallet::query()->create($attributes);
+                    }
+
+                    $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
+                    $before ??= [
+                        ...$after,
+                        'units' => 0,
+                        'full_pallets' => 0,
+                        'warehouse_pallets' => 0,
+                        'peaks' => array_fill(0, StockPallet::MAX_PEAK_COLUMNS, 0),
+                        'active' => false,
+                    ];
+                    $this->movements->record(
+                        before: $before,
+                        after: $after,
+                        movementType: InventoryMovement::IMPORT,
+                        idempotencyKey: "stock-import:{$lockedImport->id}:row:{$rowIndex}:stock:{$stockPallet->id}",
+                        correlationId: $correlationId,
+                        source: $lockedImport,
+                        user: $user,
+                        effectiveAt: $stockPallet->imported_at,
+                        metadata: ['filename' => $lockedImport->original_filename, 'source_sheet' => $row['source_sheet']],
+                    );
+                    $importedRows++;
                 }
+
+                $lockedImport->forceFill([
+                    'status' => StockImport::STATUS_IMPORTED,
+                    'total_rows' => $preview['totals']['total_rows'],
+                    'imported_rows' => $importedRows,
+                    'skipped_rows' => $preview['totals']['skipped_rows'],
+                    'available_rows' => $preview['totals']['available_rows'],
+                    'blocked_rows' => $preview['totals']['blocked_rows'],
+                    'detected_sheets_json' => $preview['detected_sheets'],
+                    'summary_json' => $preview['totals'],
+                    'warnings_json' => $preview['warnings'],
+                    'errors_json' => $preview['row_errors'],
+                    'imported_at' => now(),
+                ])->save();
+
+                $this->audit->record(
+                    event: 'stock_import_completed',
+                    module: 'stock_imports',
+                    description: 'Importacion de stock confirmada y nueva fotografia aplicada.',
+                    auditable: $lockedImport,
+                    user: $user,
+                    clientId: $lockedImport->client_id,
+                    newValues: ['imported_rows' => $importedRows, 'created_items' => $createdItems, 'updated_items' => $updatedItems],
+                    correlationId: $correlationId,
+                );
+
+                return [
+                    'imported_rows' => $importedRows,
+                    'skipped_rows' => $preview['totals']['skipped_rows'],
+                    'created_items' => $createdItems,
+                    'updated_items' => $updatedItems,
+                ];
+            }, 3);
+        } catch (StaleStockImportException $exception) {
+            $this->markImportStale($stockImport, $exception->getMessage());
+
+            throw $exception;
+        }
+
+        $this->deleteTemporaryFile($stockImport->stored_path);
+
+        return $result;
+    }
+
+    /** @param array<string, mixed>|null $preview */
+    private function markImportFailed(StockImport $stockImport, string $message, ?array $preview = null): void
+    {
+        $this->markImportUnconfirmable($stockImport, StockImport::STATUS_FAILED, $message, $preview);
+    }
+
+    private function markImportStale(StockImport $stockImport, string $message): void
+    {
+        $this->markImportUnconfirmable($stockImport, StockImport::STATUS_STALE, $message);
+    }
+
+    private function throwIfImportedAfterSynchronization(StockImport $stockImport): void
+    {
+        $status = $this->db->transaction(function () use ($stockImport): ?string {
+            Client::query()->whereKey($stockImport->client_id)->lockForUpdate()->first();
+
+            return StockImport::query()
+                ->whereKey($stockImport->id)
+                ->lockForUpdate()
+                ->value('status');
+        });
+
+        if ($status === StockImport::STATUS_IMPORTED) {
+            throw new InvalidArgumentException('Esta importacion ya fue confirmada previamente.');
+        }
+    }
+
+    /** @param array<string, mixed>|null $preview */
+    private function markImportUnconfirmable(StockImport $stockImport, string $status, string $message, ?array $preview = null): void
+    {
+        $pathToDelete = $this->db->transaction(function () use ($stockImport, $status, $message, $preview): ?string {
+            Client::query()->whereKey($stockImport->client_id)->lockForUpdate()->first();
+            $lockedImport = StockImport::query()->whereKey($stockImport->id)->lockForUpdate()->first();
+
+            if (! $lockedImport instanceof StockImport
+                || ! in_array($lockedImport->status, [StockImport::STATUS_PREVIEWED, StockImport::STATUS_PENDING_CONFIRMATION], true)) {
+                return null;
             }
 
-            foreach ($preview['rows'] as $row) {
-                $skuKey = Str::upper($row['sku']);
-                $item = $existingItems[$skuKey] ?? null;
+            $summary = $lockedImport->summary_json ?? [];
 
-                if ($item === null) {
-                    throw new InvalidArgumentException('No se ha podido resolver el articulo maestro para SKU '.$row['sku'].'.');
-                }
-
-                $locationCode = isset($row['location_code'])
-                    ? LocationCode::normalize($row['location_code'])
-                    : null;
-
-                $attributes = [
-                    'client_id' => $lockedImport->client_id,
-                    'item_id' => $item->id,
-                    'stock_import_id' => $lockedImport->id,
-                    'goods_receipt_id' => null,
-                    'location_id' => $locationCode !== null && isset($edelvivesLocations[$locationCode])
-                        ? $edelvivesLocations[$locationCode]->id
-                        : null,
-                    'location_text' => $row['location_text'] ?? null,
-                    'pallet_code' => null,
-                    'lot' => LotNormalizer::normalize($row['lot'] ?? null),
-                    'quantity_units' => $row['quantity_units'],
-                    'units_per_pallet' => $row['units_per_pallet'],
-                    'full_pallets' => $row['full_pallets'],
-                    'peaks_count' => $row['peaks_count'],
-                    'warehouse_pallets' => $row['warehouse_pallets'] ?? null,
-                    'received_at' => $row['received_at'],
-                    'imported_at' => now(),
-                    'status' => $row['status'],
-                    'stock_category' => $row['stock_category'] ?? StockPallet::CATEGORY_IN_USE,
-                    'blocked_reason' => $row['blocked_reason'],
-                    'source_sheet' => $row['source_sheet'],
-                    'notes' => 'Importado desde Excel: '.$lockedImport->original_filename,
-                    'active' => true,
-                ];
-
-                foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-                    $attributes['peak_'.$peakNumber] = $row['peak_'.$peakNumber];
-                }
-
-                $stockPallet = StockPallet::query()->create($attributes);
-                $after = $this->movements->snapshot($stockPallet->fresh(['client', 'item', 'location.warehouse']));
-                $before = [
-                    ...$after,
-                    'units' => 0,
-                    'full_pallets' => 0,
-                    'warehouse_pallets' => 0,
-                    'peaks' => array_fill(0, StockPallet::MAX_PEAK_COLUMNS, 0),
-                    'active' => false,
-                ];
-                $this->movements->record(
-                    before: $before,
-                    after: $after,
-                    movementType: InventoryMovement::IMPORT,
-                    idempotencyKey: "stock-import:{$lockedImport->id}:stock:{$stockPallet->id}",
-                    correlationId: $correlationId,
-                    source: $lockedImport,
-                    user: $user,
-                    effectiveAt: $stockPallet->imported_at,
-                    metadata: ['filename' => $lockedImport->original_filename, 'source_sheet' => $stockPallet->source_sheet],
-                );
-                $importedRows++;
+            if ($preview !== null) {
+                $summary = array_merge($summary, $preview['totals'] ?? []);
             }
 
             $lockedImport->forceFill([
-                'status' => StockImport::STATUS_IMPORTED,
-                'total_rows' => $preview['totals']['total_rows'],
-                'imported_rows' => $importedRows,
-                'skipped_rows' => $preview['totals']['skipped_rows'],
-                'available_rows' => $preview['totals']['available_rows'],
-                'blocked_rows' => $preview['totals']['blocked_rows'],
-                'detected_sheets_json' => $preview['detected_sheets'],
-                'summary_json' => $preview['totals'],
-                'warnings_json' => $preview['warnings'],
-                'errors_json' => $preview['row_errors'],
-                'imported_at' => now(),
+                'status' => $status,
+                'summary_json' => $summary,
+                'warnings_json' => $preview['warnings'] ?? $lockedImport->warnings_json,
+                'errors_json' => $preview['all_errors'] ?? [$message],
             ])->save();
 
-            $this->audit->record(
-                event: 'stock_import_completed',
-                module: 'stock_imports',
-                description: 'Importacion de stock confirmada y nueva fotografia aplicada.',
-                auditable: $lockedImport,
-                user: $user,
-                clientId: $lockedImport->client_id,
-                newValues: ['imported_rows' => $importedRows, 'created_items' => $createdItems, 'updated_items' => $updatedItems],
-                correlationId: $correlationId,
-            );
-
-            return [
-                'imported_rows' => $importedRows,
-                'skipped_rows' => $preview['totals']['skipped_rows'],
-                'created_items' => $createdItems,
-                'updated_items' => $updatedItems,
-            ];
+            return $lockedImport->stored_path;
         });
+
+        if (is_string($pathToDelete)) {
+            $this->deleteTemporaryFile($pathToDelete);
+        }
+    }
+
+    private function deleteTemporaryFile(?string $storedPath): bool
+    {
+        $normalizedPath = str_replace('\\', '/', trim((string) $storedPath));
+
+        if (! str_starts_with($normalizedPath, 'stock-imports/') || str_contains($normalizedPath, '..')) {
+            if ($normalizedPath !== '') {
+                Log::warning('Unsafe stock import temporary path was not deleted.', [
+                    'path_hash' => hash('sha256', $normalizedPath),
+                ]);
+            }
+
+            return false;
+        }
+
+        if (! Storage::disk('local')->exists($normalizedPath)) {
+            return true;
+        }
+
+        $deleted = Storage::disk('local')->delete($normalizedPath);
+
+        if (! $deleted && Storage::disk('local')->exists($normalizedPath)) {
+            gc_collect_cycles();
+            $deleted = @unlink(Storage::disk('local')->path($normalizedPath));
+        }
+
+        if (! $deleted) {
+            Log::warning('Stock import temporary file could not be deleted.', [
+                'path_hash' => hash('sha256', $normalizedPath),
+            ]);
+        }
+
+        return $deleted;
+    }
+
+    /** @param array<string, mixed> $preview */
+    private function withSnapshotComparison(array $preview, Client $client): array
+    {
+        $current = $this->snapshotGuard->capture((int) $client->id);
+        $comparison = $this->snapshotGuard->compare($current, $preview['rows']);
+        $preview['snapshot'] = $comparison;
+        $preview['totals'] = array_merge($preview['totals'], [
+            'base_snapshot_hash' => $comparison['base_snapshot_hash'],
+            'current_rows' => $comparison['current_batches'],
+            'current_references' => $comparison['current_references'],
+            'imported_references' => $comparison['imported_references'],
+            'new_references' => $comparison['new_references'],
+            'disappearing_references' => $comparison['disappearing_references'],
+            'current_units' => $comparison['current_units'],
+            'difference_units' => $comparison['units_delta'],
+            'current_warehouse_pallets' => $comparison['current_warehouse_pallets'],
+            'difference_rows' => $comparison['imported_batches'] - $comparison['current_batches'],
+            'difference_warehouse_pallets' => $comparison['warehouse_pallets_delta'],
+            'requires_reduction_acknowledgement' => $comparison['requires_reduction_acknowledgement'],
+        ]);
+
+        return $preview;
+    }
+
+    private function assertRowLimit(int $rowCount): void
+    {
+        $maximumRows = (int) config('wms.stock_imports.max_rows', 1000);
+
+        if ($rowCount > $maximumRows) {
+            throw new InvalidArgumentException('El fichero supera el limite tecnico de '.number_format($maximumRows, 0, ',', '.').' filas procesables.');
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, Location>  $edelvivesLocations
+     */
+    private function importRowIdentity(StockImport $stockImport, Item $item, array $row, array $edelvivesLocations): StockBatchIdentity
+    {
+        $locationCode = isset($row['location_code'])
+            ? LocationCode::normalize($row['location_code'])
+            : null;
+        $locationId = $locationCode !== null && isset($edelvivesLocations[$locationCode])
+            ? (int) $edelvivesLocations[$locationCode]->id
+            : null;
+
+        return new StockBatchIdentity(
+            clientId: (int) $stockImport->client_id,
+            itemId: (int) $item->id,
+            lot: $row['lot'] ?? null,
+            locationId: $locationId,
+            locationText: $locationId === null ? ($row['location_text'] ?? null) : null,
+            unitsPerPallet: (int) $row['units_per_pallet'],
+            status: $row['status'] ?? null,
+            stockCategory: $row['stock_category'] ?? null,
+            blockedReason: $row['blocked_reason'] ?? null,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $incoming
+     * @return array<string, mixed>
+     */
+    private function mergeImportedStock(StockPallet $existing, array $incoming): array
+    {
+        $peaks = collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->map(fn (int $number): int => (int) ($existing->{'peak_'.$number} ?? 0))
+            ->merge(collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+                ->map(fn (int $number): int => (int) ($incoming['peak_'.$number] ?? 0)))
+            ->filter(fn (int $value): bool => $value > 0)
+            ->values();
+
+        if ($peaks->count() > StockPallet::MAX_PEAK_COLUMNS) {
+            throw new InvalidArgumentException('No se pueden combinar filas importadas de una misma partida porque superan el maximo de 10 picos.');
+        }
+
+        $merged = [
+            'quantity_units' => (int) $existing->quantity_units + (int) $incoming['quantity_units'],
+            'warehouse_pallets' => (float) ($existing->warehouse_pallets ?? 0) + (float) ($incoming['warehouse_pallets'] ?? 0),
+        ];
+
+        if ((int) $existing->units_per_pallet <= 0) {
+            $merged['full_pallets'] = (int) $existing->full_pallets + (int) ($incoming['full_pallets'] ?? 0);
+        }
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
+            $merged['peak_'.$peakNumber] = $peaks[$peakNumber - 1] ?? 0;
+        }
+
+        return $merged;
     }
 
     private function retireCurrentStockSnapshot(StockImport $stockImport, User $user, string $correlationId): void
@@ -581,6 +889,7 @@ class StockExcelImportService
                     }
 
                     $totals['total_rows']++;
+                    $this->assertRowLimit($totals['total_rows']);
 
                     $sheetConfig = self::IMPORTABLE_SHEETS[$canonicalName];
                     $parsedRow = $this->parseDataRow(
@@ -717,24 +1026,12 @@ class StockExcelImportService
             $warnings[] = 'Se han ignorado filas de resumen que empiezan por *.';
         }
 
-        $currentStockQuery = StockPallet::query()
-            ->where('client_id', $client->id)
-            ->where('active', true);
-        $totals['current_rows'] = (clone $currentStockQuery)->count();
-        $totals['current_warehouse_pallets'] = (float) (clone $currentStockQuery)
-            ->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'));
-        $totals['difference_rows'] = count($rows) - $totals['current_rows'];
-        $totals['difference_warehouse_pallets'] = round(
-            (float) $totals['total_warehouse_pallets'] - (float) $totals['current_warehouse_pallets'],
-            2,
-        );
-
         $compiledWarnings = array_values(array_unique(array_merge($warnings, $this->compileGroupedMessages($warningGroups))));
         $compiledRowErrors = array_values(array_unique(array_merge($rowErrors, $this->compileGroupedMessages($errorGroups))));
         $compiledFatalErrors = array_values(array_unique($fatalErrors));
-        $canConfirm = $rows !== [] && $compiledFatalErrors === [];
+        $canConfirm = $rows !== [] && $compiledFatalErrors === [] && $compiledRowErrors === [];
 
-        return [
+        return $this->withSnapshotComparison([
             'rows' => $rows,
             'catalog_items' => array_values($catalogItems),
             'sample_rows' => array_slice($rows, 0, 10),
@@ -749,7 +1046,7 @@ class StockExcelImportService
             'profile' => self::PROFILE_STANDARD,
             'profile_label' => 'Stock multihoja',
             'warehouse_name' => null,
-        ];
+        ], $client);
     }
 
     /**
@@ -860,6 +1157,7 @@ class StockExcelImportService
                     }
 
                     $totals['total_rows']++;
+                    $this->assertRowLimit($totals['total_rows']);
 
                     $parsedRow = $this->parseEdelvivesRow(
                         $row,
@@ -958,9 +1256,9 @@ class StockExcelImportService
         $compiledWarnings = array_values(array_unique(array_merge($warnings, $this->compileGroupedMessages($warningGroups))));
         $compiledRowErrors = array_values(array_unique(array_merge($rowErrors, $this->compileGroupedMessages($errorGroups))));
         $compiledFatalErrors = array_values(array_unique($fatalErrors));
-        $canConfirm = $rows !== [] && $compiledFatalErrors === [];
+        $canConfirm = $rows !== [] && $compiledFatalErrors === [] && $compiledRowErrors === [];
 
-        return [
+        return $this->withSnapshotComparison([
             'rows' => $rows,
             'catalog_items' => array_values($catalogItems),
             'sample_rows' => array_slice($rows, 0, 10),
@@ -975,7 +1273,7 @@ class StockExcelImportService
             'profile' => self::PROFILE_EDELVIVES,
             'profile_label' => 'Stock Edelvives',
             'warehouse_name' => self::EDELVIVES_WAREHOUSE_NAME,
-        ];
+        ], $client);
     }
 
     /**
@@ -1007,6 +1305,28 @@ class StockExcelImportService
 
         if ($sku === '') {
             if ($this->rowHasNonEmptyData($values, $headerMap, ['sku'])) {
+                $hasDeclaredStock = ($quantityFromFile ?? 0) > 0
+                    || ($this->decimalValue($values[$headerMap['full_pallets'] ?? -1] ?? null) ?? 0) > 0
+                    || ($this->decimalValue($values[$headerMap['peaks_count'] ?? -1] ?? null) ?? 0) > 0
+                    || $this->hasPositivePeakValues($values, $headerMap);
+
+                if ($hasDeclaredStock) {
+                    return [
+                        'row' => null,
+                        'catalog_item' => null,
+                        'skip' => false,
+                        'message' => null,
+                        'warning' => null,
+                        'warning_group' => null,
+                        'error' => 'Fila '.$lineNumber.' de '.$sheetName.' con stock declarado pero sin SKU.',
+                        'error_group' => [
+                            'key' => 'missing_sku_with_stock_'.$sheetName,
+                            'summary' => 'Se han encontrado :count filas con stock declarado pero sin SKU en '.$sheetName.'.',
+                            'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con stock declarado pero sin SKU.',
+                        ],
+                    ];
+                }
+
                 return [
                     'row' => null,
                     'catalog_item' => null,
@@ -1305,8 +1625,30 @@ class StockExcelImportService
     ): array {
         $values = $row->toArray();
         $sku = $this->normalizeSku($this->stringValue($values[$headerMap['sku']] ?? null));
+        $metrics = $this->parseEdelvivesMetrics($values, $headerMap);
 
         if ($sku === '') {
+            $hasDeclaredStock = ($metrics['quantity_units'] ?? 0) > 0
+                || ($metrics['full_pallets'] ?? 0) > 0
+                || ($metrics['peaks_count'] ?? 0) > 0
+                || ($metrics['reported_total_pallets'] ?? 0) > 0
+                || $metrics['peak_units'] > 0;
+
+            if ($hasDeclaredStock) {
+                return [
+                    'row' => null,
+                    'catalog_item' => null,
+                    'skip' => false,
+                    'warning_groups' => [],
+                    'error' => 'Fila '.$lineNumber.' de '.$sheetName.' con stock declarado pero sin SKU.',
+                    'error_group' => [
+                        'key' => 'missing_sku_with_stock_'.$sheetName,
+                        'summary' => 'Se han encontrado :count filas con stock declarado pero sin SKU en '.$sheetName.'.',
+                        'detail' => 'Fila '.$lineNumber.' de '.$sheetName.' con stock declarado pero sin SKU.',
+                    ],
+                ];
+            }
+
             return [
                 'row' => null,
                 'catalog_item' => null,
@@ -1326,7 +1668,6 @@ class StockExcelImportService
         $resolvedLocation = $this->resolveEdelvivesLocation($values[$headerMap['location_text']] ?? null, $sheetName, $sku, $lineNumber);
         $locationCode = $resolvedLocation['code'];
         $warningGroups = $resolvedLocation['warning_groups'];
-        $metrics = $this->parseEdelvivesMetrics($values, $headerMap);
         $unitsPerPallet = $metrics['units_per_pallet'] !== null
             ? max(0, $metrics['units_per_pallet'])
             : max(0, (int) ($existingItem?->units_per_pallet ?? 0));
@@ -1885,7 +2226,7 @@ class StockExcelImportService
 
         try {
             return Carbon::parse($string)->toDateString();
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }

@@ -286,7 +286,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'event' => 'merchandise_request_created',
             'auditable_id' => $request->id,
         ]);
-        Bus::assertDispatchedAfterResponse(
+        Bus::assertDispatched(
             ProcessMerchandiseRequestSubmittedNotificationsJob::class,
             fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $request->id
         );
@@ -333,6 +333,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->assertSame(10, (int) $stock->fresh()->warehouse_pallets);
         $this->assertSame(0, GoodsDispatch::query()->count());
         Bus::assertNotDispatched(ProcessMerchandiseRequestSubmittedNotificationsJob::class);
+        $this->assertDatabaseCount('notification_deliveries', 0);
 
         $this->actingAs($almacen)
             ->get(route('dispatches.requests.index'))
@@ -383,6 +384,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->assertSame(1000, $stock->fresh()->quantity_units);
         $this->assertSame(0, GoodsDispatch::query()->count());
         Bus::assertNotDispatched(ProcessMerchandiseRequestSubmittedNotificationsJob::class);
+        $this->assertDatabaseCount('notification_deliveries', 0);
 
         $this->actingAs($cliente)
             ->patch(route('merchandise-requests.draft.update', $draft), [
@@ -404,7 +406,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->assertSame('Enviar al final del dia', $draft->notes);
         $this->assertSame(1000, $stock->fresh()->quantity_units);
         $this->assertSame(0, GoodsDispatch::query()->count());
-        Bus::assertDispatchedAfterResponse(
+        Bus::assertDispatched(
             ProcessMerchandiseRequestSubmittedNotificationsJob::class,
             fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $draft->id
         );

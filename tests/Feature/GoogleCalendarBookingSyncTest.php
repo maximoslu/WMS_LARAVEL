@@ -20,7 +20,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_crear_booking_no_crea_evento_google_calendar(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
@@ -41,7 +41,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_crear_booking_mantiene_google_calendar_solo_lectura(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
@@ -63,7 +63,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_crear_booking_no_intenta_sincronizar_aunque_google_fallaria(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $service->shouldFail = true;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
@@ -87,7 +87,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_editar_booking_no_actualiza_evento_google_calendar(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
         $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
@@ -117,7 +117,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_cancelar_booking_no_elimina_evento_google_calendar(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
@@ -144,7 +144,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_reintentar_sincronizacion_informa_modo_solo_lectura(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
@@ -169,7 +169,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_reintentar_no_toca_evento_existente_en_modo_solo_lectura(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
@@ -193,7 +193,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_cliente_puede_crear_booking_y_queda_pendiente_si_google_falla(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $service->shouldFail = true;
         $this->app->instance(GoogleCalendarService::class, $service);
         [$client] = $this->seedBaseData();
@@ -242,7 +242,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_dashboard_sigue_mostrando_eventos_google_y_bookings_wms(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $service->events = collect([
             [
                 'source' => 'google',
@@ -276,7 +276,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_dashboard_hides_equivalent_google_event_when_wms_booking_exists(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $date = now()->startOfWeek(Carbon::MONDAY)->addDay();
         $service->events = collect([
             [
@@ -311,7 +311,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_booking_calendar_hides_equivalent_google_event_when_wms_booking_exists(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $date = Carbon::parse('2026-07-05');
         $service->events = collect([
             [
@@ -348,7 +348,7 @@ class GoogleCalendarBookingSyncTest extends TestCase
 
     public function test_dashboard_keeps_non_equivalent_google_event(): void
     {
-        $service = new FakeGoogleCalendarService();
+        $service = new FakeGoogleCalendarService;
         $date = now()->startOfWeek(Carbon::MONDAY)->addDay();
         $service->events = collect([
             [

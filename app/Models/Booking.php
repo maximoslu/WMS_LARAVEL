@@ -4,26 +4,36 @@ namespace App\Models;
 
 use App\Support\WmsStatus;
 use Carbon\CarbonInterface;
+use Database\Factories\BookingFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Booking extends Model
 {
-    /** @use HasFactory<\Database\Factories\BookingFactory> */
+    /** @use HasFactory<BookingFactory> */
     use HasFactory;
 
     public const TYPE_ENTRY = 'entrada';
+
     public const TYPE_EXIT = 'salida';
+
     public const TYPE_MIXED = 'mixto';
+
     public const TYPE_OTHER = 'otro';
 
     public const STATUS_REQUESTED = 'solicitado';
+
     public const STATUS_APPROVED = 'aprobado';
+
     public const STATUS_PLANNED = 'planificado';
+
     public const STATUS_IN_PROGRESS = 'en_curso';
+
     public const STATUS_COMPLETED = 'completado';
+
     public const STATUS_CANCELLED = 'cancelado';
+
     public const STATUS_REJECTED = 'rechazado';
 
     protected $fillable = [

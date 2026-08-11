@@ -10,6 +10,7 @@ use App\Models\StockPallet;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -211,7 +212,7 @@ class OldDocumentCleanupTest extends TestCase
         ]);
     }
 
-    private function createReceiptWithDocument(\Illuminate\Support\Carbon $receivedAt, string $originalName): GoodsReceipt
+    private function createReceiptWithDocument(Carbon $receivedAt, string $originalName): GoodsReceipt
     {
         $client = Client::factory()->create();
         $receipt = GoodsReceipt::factory()->create([

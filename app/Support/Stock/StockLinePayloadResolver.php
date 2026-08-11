@@ -4,7 +4,6 @@ namespace App\Support\Stock;
 
 use App\Models\Item;
 use App\Models\StockPallet;
-use App\Support\Stock\LotNormalizer;
 use App\Support\WmsLineType;
 
 class StockLinePayloadResolver

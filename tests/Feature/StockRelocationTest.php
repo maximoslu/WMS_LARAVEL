@@ -105,6 +105,39 @@ class StockRelocationTest extends TestCase
         $this->assertSame('0.00', (string) $movement->warehouse_pallets_delta);
     }
 
+    public function test_relocation_rejects_a_compatible_batch_already_at_destination(): void
+    {
+        [$client, $item, $stockPallet, $source, $destination] = $this->stockFixture([
+            'lot' => 'LOT-COLLISION',
+            'quantity_units' => 500,
+            'units_per_pallet' => 100,
+        ]);
+        $destinationStock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $destination->id,
+            'lot' => 'LOT-COLLISION',
+            'quantity_units' => 200,
+            'units_per_pallet' => 100,
+            'status' => $stockPallet->status,
+            'stock_category' => $stockPallet->stock_category,
+            'active' => true,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->post(route('stock.relocations.store'), [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'stock_pallet_id' => $stockPallet->id,
+                'destination_location_id' => $destination->id,
+            ])
+            ->assertSessionHasErrors('destination_location_id');
+
+        $this->assertSame($source->id, $stockPallet->fresh()->location_id);
+        $this->assertSame($destination->id, $destinationStock->fresh()->location_id);
+        $this->assertSame(0, InventoryMovement::query()->where('movement_type', InventoryMovement::TRANSFER)->count());
+    }
+
     public function test_same_location_is_rejected(): void
     {
         [$client, $item, $stockPallet, $source] = $this->stockFixture();

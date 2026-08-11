@@ -32,6 +32,7 @@ class AuditController extends Controller
             'cleanupTypes' => $this->cleanupTypes(),
             'importStatuses' => [
                 StockImport::STATUS_FAILED => StockImport::statusLabelFor(StockImport::STATUS_FAILED),
+                StockImport::STATUS_STALE => StockImport::statusLabelFor(StockImport::STATUS_STALE),
                 StockImport::STATUS_PENDING_CONFIRMATION => StockImport::statusLabelFor(StockImport::STATUS_PENDING_CONFIRMATION),
                 StockImport::STATUS_PREVIEWED => StockImport::statusLabelFor(StockImport::STATUS_PREVIEWED),
             ],

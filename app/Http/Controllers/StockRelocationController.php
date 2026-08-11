@@ -11,6 +11,7 @@ use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
 use App\Services\Inventory\InventoryMovementService;
 use App\Services\Locations\LocationIntegrityService;
+use App\Services\Stock\StockBatchRelocationService;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -25,6 +26,7 @@ class StockRelocationController extends Controller
         private readonly InventoryMovementService $movements,
         private readonly AuditLogService $audit,
         private readonly LocationIntegrityService $locations,
+        private readonly StockBatchRelocationService $relocations,
     ) {}
 
     public function create(Request $request): View
@@ -54,13 +56,10 @@ class StockRelocationController extends Controller
         $destination = null;
 
         DB::transaction(function () use ($request, &$stockPallet, &$destination): void {
-            $stockPallet = StockPallet::query()
-                ->with(['client', 'item', 'location.warehouse'])
-                ->lockForUpdate()
-                ->findOrFail($request->stockPalletId());
             $destination = Location::query()
                 ->with('warehouse')
                 ->findOrFail($request->destinationLocationId());
+            $stockPallet = $this->relocations->lockForRelocation($request->stockPalletId(), $destination);
             $correlationId = $this->audit->correlationId();
             $before = $this->movements->snapshot($stockPallet);
             $oldValues = [
@@ -110,7 +109,7 @@ class StockRelocationController extends Controller
                 correlationId: $correlationId,
                 severity: 'important',
             );
-        });
+        }, 3);
 
         return redirect()
             ->route('stock.relocations.create', [

@@ -246,8 +246,7 @@ class ClientController extends Controller
         bool $defaultStockTotalVisibility,
         bool $defaultSendOrderPreparationPdf,
         bool $defaultAllowOrderLineRequiredUnits,
-    ): array
-    {
+    ): array {
         return [
             'name' => $validated['name'],
             'code' => strtoupper(trim((string) $validated['code'])),

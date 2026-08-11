@@ -2,8 +2,8 @@
 
 namespace App\Support;
 
-use App\Models\GoodsDispatch;
 use App\Models\Booking;
+use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
 
 class WmsStatus

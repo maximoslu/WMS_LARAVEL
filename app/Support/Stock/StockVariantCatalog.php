@@ -4,10 +4,8 @@ namespace App\Support\Stock;
 
 use App\Models\Item;
 use App\Models\StockPallet;
-use App\Support\Stock\LotNormalizer;
 use App\Support\WmsLineType;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 
 class StockVariantCatalog
 {
@@ -141,10 +139,8 @@ class StockVariantCatalog
                 $stockPallet = $stockPalletId !== null ? $stockPallets->get($stockPalletId) : null;
 
                 $variant = match (true) {
-                    $lineType === WmsLineType::PEAK && $stockPallet instanceof StockPallet && $stockPeakIndex !== null
-                        => $this->buildPeakVariant($item, $stockPallet, $stockPeakIndex, max(0, (int) ($stockPallet->{'peak_'.$stockPeakIndex} ?? 0))),
-                    $lineType === WmsLineType::PALLET && $stockPallet instanceof StockPallet
-                        => $this->buildPalletVariant($item, $stockPallet),
+                    $lineType === WmsLineType::PEAK && $stockPallet instanceof StockPallet && $stockPeakIndex !== null => $this->buildPeakVariant($item, $stockPallet, $stockPeakIndex, max(0, (int) ($stockPallet->{'peak_'.$stockPeakIndex} ?? 0))),
+                    $lineType === WmsLineType::PALLET && $stockPallet instanceof StockPallet => $this->buildPalletVariant($item, $stockPallet),
                     default => $this->buildFallbackVariant($item),
                 };
 

@@ -4,6 +4,394 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-11 - CIERRE DE SNAPSHOT Y LIMITES DE IMPORTACION PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-import-snapshot-limits-2026-08-11`.
+**SHA inicial:** `da7a83757653535713299a54f0609acf583e10e4`, cierre acumulado de idempotencia y reintento de notificaciones. La rama se creo exactamente desde ese SHA; `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`. **SHA final:** commit que contiene esta entrada, informado en el cierre de la tarea.
+
+### Resultado
+
+**Bloqueo de snapshot incompleto y limites de importacion RESUELTO.** La importacion queda definida y protegida como reemplazo completo del stock activo de un cliente: un fichero con errores no aplica ninguna fila, un preview obsoleto no puede sobrescribir cambios posteriores y las confirmaciones concurrentes del mismo cliente se serializan. Esto no declara todavia el WMS APTO COMO BASELINE.
+
+### Semantica y riesgo original
+
+- Flujo reconstruido: ruta superadmin -> validacion HTTP -> almacenamiento temporal local -> lectura XLSX con OpenSpout -> preview -> confirmacion -> transaccion -> retirada del stock activo anterior -> creacion o agregacion del nuevo stock -> movimientos de inventario -> auditoria -> eliminacion del temporal.
+- La semantica real es **snapshot completo por cliente**, no incremental: al confirmar se inactiva y pone a cero todo el stock activo previo del cliente y se aplica exclusivamente la fotografia del fichero.
+- Antes, las filas invalidas se omitian sin impedir la confirmacion. Un fichero esperado de 100 referencias con 10 filas erroneas podia sustituir el snapshot por solo 90 referencias validas y retirar silenciosamente las restantes.
+- Antes tampoco se persistia una version de la fotografia base; un preview antiguo podia confirmarse despues de otro cambio. No habia limite de aplicacion para bytes o filas y los temporales exitosos no se eliminaban.
+
+### Proteccion de snapshot, atomicidad y concurrencia
+
+- Cualquier error fatal o de fila deja la importacion `failed`, elimina el temporal y bloquea por completo la confirmacion. Las filas sin SKU con stock declarado son errores; las filas informativas sin stock se mantienen como aviso compatible.
+- El preview persiste SHA-256 del fichero y SHA-256 canonico del stock activo base. La confirmacion vuelve a leer el fichero, verifica su integridad y compara la fotografia base dentro de la transaccion.
+- Si el stock cambio desde el preview, la importacion pasa a `stale`, el temporal se elimina y no se crean articulos, partidas ni movimientos.
+- La fila `clients` se bloquea antes de la importacion como mutex transaccional por cliente. La misma importacion solo puede aplicarse una vez; dos snapshots del mismo cliente se serializan y el perdedor queda obsoleto; clientes distintos conservan paralelismo.
+- Retirada, catalogos, partidas, movimientos, estado de la importacion y auditoria siguen en una unica transaccion con tres intentos ante deadlock. Una excepcion provocada en la segunda fila demostro rollback completo, incluido el stock anterior y los movimientos.
+- No se introdujo un umbral comercial arbitrario. Toda desaparicion de referencia o partida, o cualquier reduccion de unidades/pallets, exige aceptacion explicita tanto en interfaz como en backend.
+
+### Limites, performance y temporales
+
+- Limite de aplicacion: **2 MB** por XLSX y **1.000 filas procesables**. El limite de bytes coincide con `upload_max_filesize=2M` del PHP local; el historico local observado llegaba a 574 filas y aproximadamente 146 KB.
+- La lectura de OpenSpout es streaming, pero las filas normalizadas se conservan para preview/confirmacion; el limite de filas acota esa memoria y la transaccion, que ejecuta aproximadamente 12 consultas por fila por trazabilidad e identidad.
+- Benchmark SQLite reproducible: 100 filas, 7.059 bytes, parse 33,95 ms / +2 MB, confirmacion 313,99 ms / +4 MB / 1.213 consultas; 500 filas, 16.788 bytes, 81,02 ms / +2 MB, 1.608,43 ms / +12 MB / 6.013 consultas; 1.000 filas, 28.675 bytes, 137,18 ms / +4 MB, 3.229 ms / +16 MB / 12.013 consultas.
+- Los temporales de previews confirmados, fallidos, obsoletos o manipulados se eliminan inmediatamente. Los previews confirmables se retienen hasta 24 horas para reintentos; el comando `wms:stock-imports:prune-temp` hace dry-run por defecto y su ejecucion diaria `--apply` expira previews antiguos. La limpieza manual de auditoria tambien elimina sus ficheros asociados con validacion de ruta.
+
+### Identidad, trazabilidad y multicliente
+
+- La confirmacion reutiliza `StockBatchIdentityService`: bloquea en orden las identidades activas e importadas y resuelve por cliente, articulo, lote canonico, ubicacion, unidades por pallet, estado, categoria y motivo. Filas equivalentes del mismo fichero convergen en una partida y conservan un movimiento por fila fuente.
+- Cada partida nueva conserva `stock_import_id`, `source_sheet`, `imported_at` y nombre de fichero; cada retirada y alta registra `InventoryMovement` con correlation ID e idempotency key determinista.
+- Rutas de preview/confirmacion siguen restringidas a superadmin. Las consultas, fotografia, mutex, catalogos, identidades y movimientos quedan acotados por `client_id`; pruebas HTTP impiden confirmar IDs ajenos y la integracion demuestra que dos clientes no comparten lock.
+
+### Migraciones y datos
+
+- Migraciones nuevas: **NO**. El nuevo estado `stale` utiliza la columna de estado de texto existente y los hashes/metricas se guardan en `summary_json` existente.
+- Datos historicos o funcionales modificados: **NO**. No se ejecuto saneamiento ni `migrate:fresh`; las pruebas MariaDB usaron tablas con prefijo aleatorio aislado y eliminaron exclusivamente ese prefijo.
+- Produccion/Forge: **NO TOCADA**.
+
+### Tests y validaciones
+
+- StockImport + auditoria: **53 passed, 500 assertions**. Regresiones nuevas para snapshot parcial, 2 MB, 1.000 filas, reducciones/aceptacion backend, preview obsoleto, rollback forzado, doble confirmacion, aislamiento multicliente, caducidad de temporales e integridad SHA-256.
+- Focalizados de importacion, stock, recepciones, ubicaciones, autorizacion, operaciones diarias, auditoria y backups: **453 passed, 2.800 assertions**.
+- Suite completa SQLite: **870 passed, 5.075 assertions**, 40,91 s.
+- Integracion MariaDB de importacion con dos procesos/conexiones: **3 passed, 30 assertions**. Regresiones MariaDB acumuladas de identidad: **6 passed, 47 assertions**; notificaciones: **1 passed, 14 assertions**.
+- Benchmark reproducible: 3 casos, todos correctos.
+- `composer validate --strict`: `./composer.json is valid`.
+- `composer audit --locked`: 0 advisories.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- Comando de limpieza registrado y visible en `schedule:list` a las 03:15.
+- `git diff --check`: OK.
+
+### Git y bloqueantes restantes
+
+- Commit: `fix: harden stock snapshot imports` (commit que contiene esta entrada; SHA informado al cierre).
+- Push: rama `fix/baseline-import-snapshot-limits-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Merge a `main`: NO. Tag: NO. Deploy: NO.
+- `.env`, secretos, `vendor/`, `node_modules`, `.claude/` y `tmp/`: no modificados/versionados.
+- Bloqueantes restantes para la baseline general: saneamiento controlado de datos mediante dry-run; validacion en staging o equivalente a produccion; repeticion final de auditoria antes del tag.
+
+---
+
+## 2026-08-11 - CIERRE DE IDEMPOTENCIA Y REINTENTO DE NOTIFICACIONES PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-notification-idempotency-2026-08-11`.
+**SHA inicial:** `e3bf6376235db95e7ae18e0dc4f33e9bdf041776`, cierre acumulado de identidad y concurrencia de partidas. La rama se creo exactamente desde ese SHA; `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`. **SHA final:** commit que contiene esta entrada, informado en el cierre de la tarea.
+
+### Resultado
+
+**Bloqueo de idempotencia/reintento de notificaciones RESUELTO.** Las entregas funcionales relevantes quedan identificadas por evento de dominio, version, canal y destinatario; la constraint unica decide concurrentemente que worker puede enviar. Los fallos transitorios vuelven a Laravel y los permanentes terminan como failed sin invalidar la transaccion funcional ya confirmada. Esto no declara todavia el WMS APTO COMO BASELINE.
+
+### Mapa de notificaciones reconstruido
+
+- Pedido definitivo: `MerchandiseRequestController` -> `ProcessMerchandiseRequestSubmittedNotificationsJob` -> cliente solicitante o usuarios cliente, usuarios internos activos y emails adicionales de salida -> canales database y mail de Laravel. Los borradores y estados intermedios no comunican.
+- Expedicion completada/albaran: `GoodsDispatchWorkflowService` -> `ProcessGoodsDispatchStatusChangedJob` -> usuarios internos, cliente y emails adicionales -> database y mail de Laravel con PDF. La confirmacion de carga y el estado enviado intermedio no comunican.
+- Documento de entrada disponible o sustituido: `GoodsReceiptController` -> `ProcessGoodsReceiptDocumentNotificationsJob` -> usuarios del cliente y emails adicionales de entradas -> database y mail de Laravel; la version es el hash del documento actual.
+- Booking creado/cambio de estado: `BookingController` -> jobs de booking -> usuarios internos o solicitante/usuarios cliente -> database de Laravel. El job de cambio captura estado/version de la transicion y descarta payloads obsoletos.
+- Alerta de stock: evaluacion after-commit -> `SendStockAlertEmailJob` -> emails configurados del cliente -> Brevo API, una entrega por destinatario.
+- Solicitud de acceso enviada/aprobada/rechazada: `AccessRequestController` -> `ProcessAccessRequestEmailJob` -> administracion/superadmin/fallback o solicitante -> Brevo API.
+- Recuperacion de contrasena: `User::sendPasswordResetNotification()` -> `SendPasswordResetEmailJob` cifrado -> usuario -> Brevo API. Cada token representa un evento legitimo distinto y su version persistida es solo SHA-256.
+- `wms:test-mail`: envio manual de diagnostico por Brevo, clasificado NO APLICA a idempotencia de eventos de negocio ni retry automatico.
+- Google Calendar: solo lectura y sin envio de correo; fuera de alcance funcional.
+
+### Causa raiz confirmada
+
+- Siete jobs (`ProcessBooking*`, `ProcessGoodsReceiptDocumentNotificationsJob`, `ProcessMerchandiseRequest*` y `ProcessGoodsDispatch*`) capturaban `Throwable`, escribian warning y terminaban como exito. Laravel no reintentaba ni generaba `failed_jobs`.
+- Los servicios enviaban directamente con `notify()`/`Notification::route()` sin identidad persistente. Dos dispatches, workers o retries podian repetir bandeja y correo; una entrega parcial podia dejar destinatarios sin enviar o duplicar los ya procesados.
+- Acceso y password llamaban Brevo sin cola persistente. Stock ya relanzaba la excepcion, pero su unicidad era temporal/cache y no una evidencia por destinatario.
+- `delivery_note_sent_at` evitaba algunos dobles envios secuenciales, pero no coordinaba dos workers y solo se escribia despues de enviar a todos.
+
+### Estrategia persistente e identidad
+
+- Migracion reversible `2026_08_11_000002_create_notification_deliveries_table.php`; aplicada solo en local controlado y probada `up/down` en tests.
+- Tabla `notification_deliveries`, sin cuerpos, documentos, tokens ni emails en claro. Guarda tipo, origen, version, canal, hash de destinatario, estado, attempts, tiempos, error limitado, message ID y UUID de proveedor.
+- Clave logica SHA-256 determinista sobre JSON canonico: `tipo + source_type + source_id + event_version + channel + recipient_normalizado`.
+- Email se normaliza con trim y lowercase; se persiste solo SHA-256. Database usa `user:{id}`. Los canales mail/database se separan, de modo que un fallo SMTP no repite una notificacion interna ya confirmada.
+- `idempotency_key CHAR(64) UNIQUE` y `provider_idempotency_key UUID UNIQUE`. `insertOrIgnore` mas `SELECT ... FOR UPDATE` decide la adquisicion sin patron vulnerable `exists()+create()`.
+- Granularidad por evento/canal/destinatario; no hay lock global. Eventos y destinatarios distintos progresan en paralelo.
+
+### Estados y concurrencia
+
+- `pending`: fila creada atomica antes de reclamar el intento.
+- `processing`: identidad reclamada con token, timestamp y attempts incrementado. Lease de 90 s, alineado con timeout/retry de la cola; un segundo worker recibe excepcion transitoria y reintenta.
+- `sent`: solo despues del retorno correcto del transport/proveedor; se guarda `sent_at` y, si existe, message ID. Un retry posterior no ejecuta el callback.
+- `failed`: la excepcion se resume a 1.000 caracteres, se guarda `failed_at`, se libera el token y la excepcion se relanza.
+- Dos procesos PHP/dos conexiones MariaDB reales compitieron por la misma clave: una llamada simulada al proveedor, una fila, un attempt, un worker `sent` y el otro `in_progress`: **1 passed, 14 assertions**.
+
+### Retry, backoff y failed jobs
+
+- Trait comun `RetriesNotificationDelivery`: `tries=4`, `backoff=[30,120,300]`, `timeout=60` y `failed()` con evidencia operativa.
+- HTTP 408/425/429/5xx y conexion/timeout son transitorios; se relanzan. Configuracion Brevo ausente, destinatario/argumento invalido y HTTP 4xx permanente se marcan failed sin reintentos inutiles en un worker real.
+- `jobs`, `job_batches` y `failed_jobs` existen por migracion versionada. `queue.failed.driver=database-uuids` por defecto.
+- El retry real de alerta de stock probo HTTP 503 -> excepcion -> estado failed -> segundo intento 201 -> sent, attempts=2, una sola fila y la misma UUID Brevo.
+
+### Transacciones, borradores y destinatarios
+
+- Jobs funcionales de pedido, expedicion, booking y documento de entrada usan `afterCommit()`. La regresion con rollback verifica cero filas en `jobs` y cero deliveries.
+- Los controladores de pedido/entrada/expedicion llaman despues de sus transacciones. El correo se procesa en worker y no revierte stock, pedido, entrada, usuario ni expedicion.
+- El draft EDELVIVES no despacha job ni crea delivery; al pasar una sola vez a definitivo crea el evento `submitted`. El `lockForUpdate()` existente en la transicion de draft impide dos cambios de negocio concurrentes.
+- Destinatarios de usuario/configuracion se normalizan y deduplican case-insensitive. Mismo evento/email produce una entrega; dos emails o eventos distintos producen entregas independientes.
+- La tabla empieza vacia al desplegar la migracion: protege eventos procesados desde ese momento. No se backfilleo, marco ni reenvio historial.
+
+### Proveedor y garantia real
+
+- Laravel Notifications usa el mailer configurado; con SMTP no existe confirmacion end-to-end exactly-once. Si el servidor acepta el mensaje y se pierde la respuesta antes de `sent`, queda una ventana `unknown outcome` que puede producir duplicado fisico al retry.
+- Brevo API recibe la UUID persistida en `headers.idempotencyKey`; el retry usa la misma clave y trata `duplicate_parameter` como aceptacion previa. La documentacion vigente limita esa proteccion a una ventana TTL (30 minutos), por lo que tampoco se declara exactly-once fisico ilimitado.
+- Garantia cerrada: exactly-once logico y concurrente dentro del WMS mientras existe evidencia `sent`; exactly-once fisico externo global: NO.
+
+### Tests y validaciones
+
+- Focalizados de pedidos, expediciones, entradas, booking, acceso, password, alertas, jobs y bandeja: **422 passed, 2.448 assertions**.
+- Nuevas regresiones comunes: migracion, constraint, mismo/diferente evento y destinatario, retry transitorio, attempts, excepcion local posterior a sent, worker processing, privacidad, politica, clasificacion, failed jobs, rollback, acceso duplicado y password cifrado.
+- Suite completa SQLite: **861 passed, 4.999 assertions**, 40,48 s.
+- Integracion MariaDB aislada de dos workers: **1 passed, 14 assertions**.
+- `composer validate --strict`: `./composer.json is valid`.
+- `composer audit --locked`: 0 advisories.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- `git diff --check`: OK.
+- `php artisan migrate`: OK en entorno local; no se uso `migrate:fresh`.
+
+### Git, datos y produccion
+
+- Commit: `fix: make queued notifications idempotent` (SHA informado al cierre).
+- Push: rama `fix/baseline-notification-idempotency-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Merge a `main`: NO. Tag: NO. Deploy: NO. Produccion/Forge: NO TOCADA.
+- Datos historicos/funcionales modificados: NO. La base local solo recibio migraciones estructurales pendientes; los tests MariaDB usaron prefijo aleatorio aislado y eliminaron exclusivamente sus tablas.
+- `.env`, secretos, `vendor/`, `node_modules`, `.claude/` y `tmp/`: no modificados/versionados.
+
+### Bloqueantes restantes para la baseline general
+
+1. Revision del reemplazo completo de snapshot y limite de tamano de importaciones.
+2. Saneamiento controlado de datos con dry-run/staging.
+3. Validacion en staging o entorno equivalente a produccion antes de cualquier tag o deploy.
+
+---
+
+## 2026-08-11 - CIERRE DE IDENTIDAD Y CONCURRENCIA DE PARTIDAS PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-lot-concurrency-2026-08-11`.
+**SHA inicial:** `264b3a136c1309a8e9caa13567757cdd848aea84`, commit de cierre de dependencias PHP. La rama se creo exactamente desde ese SHA; `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+
+### Resultado
+
+**Bloqueo de identidad/creacion concurrente RESUELTO.** Dos transacciones que parten sin una fila de stock y representan la misma existencia fisica se serializan por una fila de coordinacion unica y terminan con una sola partida, cantidades exactas y un movimiento por operacion. Esto no convierte aun el WMS en APTO COMO BASELINE: siguen pendientes los bloqueos no relacionados listados al final.
+
+### Causa raiz y puntos revisados
+
+- Carrera original: `GoodsReceiptStockApplicationService::resolveTargetBatch()` hacia `first()/new StockPallet`. La consulta tenia `lockForUpdate()`, pero si devolvia cero filas no habia una partida existente que bloquear; dos conexiones podian observar ausencia y crear dos filas.
+- Creadores localizados: aplicacion de entradas, confirmacion de snapshot Excel y alta por regularizacion superadmin.
+- Modificadores de identidad localizados: reubicacion operativa y edicion manual de ubicacion. Salidas, reversiones y ajustes sobre partida existente modifican cantidades, pero no crean identidad nueva.
+- La confirmacion de importacion conserva su `lockForUpdate()` sobre el registro/importaciones del cliente. Las identidades activas e importadas se bloquean en orden antes de retirar el snapshot, evitando invertir el orden stock/identidad frente a entradas concurrentes.
+
+### Identidad fisica reconstruida
+
+- Campos: `client_id`, `item_id`, lote canonico, ubicacion, `units_per_pallet`, estado, categoria de stock y motivo de bloqueo normalizado.
+- Lote: `NULL`, vacio, espacios, `SIN LOTE` y `NO LOTE` convergen en `NO LOTE`; los lotes reales conservan texto/case salvo trim para presentacion, pero su clave de comparacion usa mayusculas de forma coherente con la collation case-insensitive de MySQL/MariaDB.
+- Ubicacion: con `location_id`, ese ID canonico identifica conjuntamente ubicacion y almacen; `location_text` no duplica la clave. Sin `location_id`, un `location_text` legacy no vacio sigue separando ubicaciones heredadas; solo ID nulo mas texto vacio es stock realmente sin ubicacion.
+- Mismo cliente/articulo/lote/ubicacion y misma particion operativa reutiliza partida. Ubicaciones distintas son entidades de stock distintas. Lotes distintos y clientes distintos quedan aislados.
+- Una reubicacion completa cambia el componente ubicacion en la identidad de la misma fila. El dominio actual no implementa una reubicacion parcial; repartir stock se representa mediante filas distintas por ubicacion. Una reubicacion hacia una identidad activa ya existente se rechaza sin fusionar datos.
+- No forman identidad: fechas, proveedor, documento/entrada, `goods_receipt_id`, `stock_import_id`, hoja de origen, notas, codigo de pallet ni procedencia. Esos campos mantienen trazabilidad/proveniencia.
+
+### Estrategia de locking y migracion
+
+- Nueva migracion reversible `2026_08_11_000001_create_stock_batch_identity_locks_table.php`.
+- `stock_batch_identity_locks.identity_hash` es `CHAR(64) PRIMARY KEY`. El SHA-256 procede de JSON versionado con todos los componentes canonicalizados; identidades iguales producen la misma clave y distintas identidades no comparten lock en la practica.
+- Dentro de la transaccion se ejecuta `INSERT IGNORE` de la clave y despues `SELECT ... FOR UPDATE` sobre la fila de coordinacion. La unicidad del registro serializa tambien la identidad que aun no tiene `stock_pallets`.
+- El lock es transaccional: commit y rollback lo liberan automaticamente; no depende de una sesion como `GET_LOCK`. Varias identidades se ordenan por hash para reducir deadlocks. Las transacciones operativas afectadas tienen un maximo de tres intentos ante deadlock.
+- Granularidad: una identidad exacta, nunca cliente global, tabla completa ni todo el WMS. Coste normal por identidad unica: un insert idempotente, un select de coordinacion bloqueante y el select de stock bloqueante. Identidades/lotes/clientes distintos progresan de forma independiente, demostrado con dos conexiones.
+- Entradas, importaciones y regularizaciones nuevas usan el mismo servicio/objeto de identidad. Filas equivalentes dentro de un Excel se agregan en una partida y conservan un movimiento de importacion por fila.
+- Reubicaciones bloquean origen y destino en orden determinista antes de bloquear/modificar la fila de stock.
+
+### Constraint sobre stock
+
+- No se anadio `UNIQUE` directamente a `stock_pallets`: existe al menos un duplicado historico y MySQL/MariaDB permite varios `NULL` en un unique convencional, por lo que un indice directo no expresaria de forma segura el stock sin ubicacion.
+- No se sanearon datos para forzarlo. Tras el futuro saneamiento puede estudiarse una clave materializada/versionada de identidad en `stock_pallets` como defensa adicional.
+- La constraint unica de la tabla de coordinacion si es compatible con los datos actuales porque no transforma ni valida retroactivamente las filas de stock.
+
+### Concurrencia real y regresiones
+
+- Ejecutor aislado `tests/Support/run-stock-concurrency-mysql.php`: usa MySQL/MariaDB local, rechaza produccion/hosts remotos, migra tablas con prefijo aleatorio no utilizado y elimina exclusivamente ese prefijo al finalizar. No toca las tablas funcionales.
+- Dos procesos PHP/dos conexiones y transacciones independientes: **6 passed, 47 assertions**.
+- Escenarios: partida inexistente sin ubicacion; 43 + 5 = 48 pallets con dos entradas y dos movimientos; lotes distintos sin bloqueo mutuo; clientes distintos sin bloqueo mutuo; partida existente sin lost update; alias `NO LOTE`; rollback que desbloquea a la segunda conexion.
+- Regresiones secuenciales nuevas: matriz/hash de identidad, unicidad de coordinacion, `up/down` de migracion, import rows equivalentes, regularizacion compatible y colision de reubicacion.
+
+### Diagnostico historico read-only
+
+- `php artisan wms:consolidate-stock-batches --dry-run`: 1 grupo duplicado, 2 filas afectadas.
+- IDs `246,247`, cliente 1, item 260, lote `OFA0004644`, sin ubicacion, `available/in_use`, 9.461 unidades y 6,00 pallets.
+- Cambios realizados sobre esos datos: **0**. No se ejecuto `--apply`, migracion local sobre tablas funcionales ni saneamiento.
+
+### Validaciones
+
+- Suites focalizadas de entradas, stock, importaciones, ubicaciones, reubicaciones y operaciones diarias: **311 passed, 2.253 assertions**.
+- Consolidacion/canonicalizacion de lotes: **11 passed, 72 assertions**.
+- Suite completa SQLite: **848 passed, 4.937 assertions**, 38,87 s.
+- Integracion MySQL/MariaDB de dos conexiones: **6 passed, 47 assertions**.
+- `composer validate --strict`: `./composer.json is valid`.
+- `composer audit --locked`: 0 advisories.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- `git diff --check`: OK.
+- Migracion `up/down`: probada; tablas MySQL aisladas eliminadas al terminar.
+
+### Git, datos y produccion
+
+- Commit: `fix: serialize concurrent stock lot creation` (commit que contiene esta entrada; SHA informado al cierre).
+- Push: rama `fix/baseline-lot-concurrency-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Merge a `main`: NO. Tag: NO. Deploy: NO. Produccion/Forge: NO TOCADA.
+- `.env`, secretos, `vendor/`, `node_modules/`, `.claude/` y `tmp/`: no modificados/versionados. `config/database.php` solo admite `DB_PREFIX` opcional en MySQL para aislar la prueba; sin la variable mantiene prefijo vacio.
+
+### Bloqueantes restantes para la baseline general
+
+1. Idempotencia persistente y reintento de notificaciones.
+2. Revision del reemplazo completo de snapshot y limite de tamano de importaciones.
+3. Saneamiento controlado de datos con dry-run/staging.
+4. Validacion en un entorno equivalente a produccion antes de cualquier tag o deploy.
+
+---
+
+## 2026-08-11 - CIERRE DEL BLOQUEO DE DEPENDENCIAS PHP PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-composer-security-2026-08-11`.
+**SHA inicial:** `3f657714090e9393b3792c2751dcb32b0eb16ae4`, conservando el commit de la auditoria integral. La rama se creo exactamente desde ese SHA. `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+
+### Resultado
+
+**Bloqueo de dependencias PHP RESUELTO.** `composer.json` y `composer.lock` quedan sincronizados, `composer validate --strict` pasa sin warnings y `composer audit --locked` devuelve cero advisories. Esto no cambia el dictamen general del WMS: todavia no debe declararse APTO COMO BASELINE mientras permanezcan los bloqueos no relacionados con Composer.
+
+### Diagnostico inicial
+
+- `composer validate --strict`: fallo porque el `content-hash` del lock estaba obsoleto y por el constraint exacto `openspout/openspout: 4.28`. Un `composer update --lock --dry-run` no proponia cambios de versiones, confirmando que el desfase inicial era de metadatos.
+- `composer audit --locked`: 20 advisories en 5 paquetes: 6 en Dompdf, 1 en Firebase JWT, 6 en Guzzle, 1 en Laravel y 6 en CommonMark.
+- `composer outdated --direct`: Google API Client podia actualizarse de 2.18.0 a 2.19.4 dentro de `^2.18`; Laravel 13, Tinker 3, OpenSpout 5 y PHPUnit 13 eran saltos mayores ajenos al objetivo y no se incorporaron.
+- La simulacion inicial con `--with-all-dependencies` proponia 37 updates y 3 removals. Se rechazo por alcance excesivo. La resolucion final se hizo sin `-W`, fijando en el comando solo los ocho paquetes necesarios y sus versiones minimas corregidas.
+
+### Dependencias y advisories cerrados
+
+- `laravel/framework`: `12.61.0` -> `12.61.1`. Dependencia directa. Resuelve GHSA-crmm-hgp2-wgrp / PKSA-m5cs-t1y6-qpcs (medium), confusion de path en URLs temporales firmadas. Impacta framework, rutas firmadas, auth, filesystem, colas y excepciones; la subida es un parche dentro de Laravel 12.
+- `dompdf/dompdf`: `3.1.5` -> `3.1.6`. Transitiva por `barryvdh/laravel-dompdf`. Resuelve CVE-2026-59943, CVE-2026-59942, CVE-2026-59941, CVE-2026-56722, CVE-2026-55555 y CVE-2026-55554 (4 medium, 2 low), relacionados con SVG/BMP, lectura/oraculo de ficheros, chroot y agotamiento de recursos. Impacta albaranes, etiquetas, preparaciones y export PDF.
+- `guzzlehttp/guzzle`: `7.13.1` -> `7.15.2`. Transitiva por Laravel, Google API Client y Google Auth. Resuelve CVE-2026-69246 (high), CVE-2026-69245, CVE-2026-67354, CVE-2026-67355, CVE-2026-67353 y CVE-2026-67339 (medium), sobre hosts/cookies no canonicos, Referer, consumo de cookies y Proxy-Authorization. Impacta Laravel HTTP/Brevo y Google Calendar/OAuth.
+- `league/commonmark`: `2.8.2` -> `2.9.0`. Transitiva por Laravel. Resuelve GHSA-mj63-m3rc-8ppr (medium), GHSA-mh25-x5hq-wrqp, GHSA-jfm3-95jq-q3rf, GHSA-g2gp-3wwq-f4ph y CVE-2026-71488 (high), y CVE-2026-71478 (medium). No se encontro uso directo de Markdown/CommonMark en la aplicacion.
+- `firebase/php-jwt`: `6.11.1` -> `7.0.0`. Transitiva por `google/apiclient`. Resuelve CVE-2025-45769 / GHSA-2x45-7fc3-mxwq (low), cifrado debil. La aplicacion no usa JWT directamente; Google API Client 2.18 lo limitaba a `^6`, por lo que se actualizo a 2.19.4, que declara compatibilidad explicita con `^6 || ^7`. PHP 8.4 satisface el requisito de JWT 7.
+
+### Cambios auxiliares estrictamente necesarios
+
+- `google/apiclient`: `2.18.0` -> `2.19.4`, dependencia directa y habilitador compatible de JWT 7. No se actualizaron `google/auth` ni `google/apiclient-services` porque sus versiones bloqueadas ya cumplian los nuevos constraints.
+- `guzzlehttp/promises`: `2.5.0` -> `2.5.1` y `guzzlehttp/psr7`: `2.12.3` -> `2.13.0`, minimos requeridos por Guzzle 7.15.2.
+- `paragonie/constant_time_encoding`, `paragonie/random_compat` y `phpseclib/phpseclib` salen del lock porque Google API Client 2.19.4/JWT 7 ya no las requieren. No existe uso directo en `app/`.
+- OpenSpout cambia solo el constraint directo `4.28` -> `^4.28`; la version bloqueada se mantiene en `4.28.0` y no se permite OpenSpout 5.
+- La instalacion de Google API Client 2.19.4 muestra deprecations upstream por parametros implicitamente nullable bajo PHP 8.4. No son advisories ni fallos y los flujos focalizados pasan; se conserva como observacion para futuras actualizaciones, sin editar `vendor/`.
+
+### Uso real revisado
+
+- Dompdf se usa en albaranes de entrada/salida, preparacion de pedidos, etiquetas y exportacion de stock.
+- Guzzle se usa a traves de Laravel `Http` para Brevo y dentro del cliente de Google.
+- Google API Client se usa en `GoogleCalendarService` para OAuth y Calendar; Firebase JWT solo es transitiva de esa integracion.
+- CommonMark no tiene invocaciones directas en el codigo del WMS.
+
+### Validacion
+
+- Tests focalizados de autenticacion/autorizacion, documentos privados y firmados, PDFs, entradas, stock/import/export, Google Calendar/OAuth, notificaciones, pedidos y salidas: **530 passed, 3.293 assertions**.
+- Suite completa: **837 passed, 4.896 assertions**, 39,00 s.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- `composer validate --strict`: `./composer.json is valid`, exit 0.
+- `composer audit --locked`: 0 advisories, 0 paquetes abandonados, exit 0.
+- `composer install --dry-run --no-interaction`: lock verificable y `Nothing to install, update or remove`.
+- `composer check-platform-reqs`: todos los requisitos pasan con PHP 8.4.22.
+- `git diff --check`: OK. Diff manual limitado a `composer.json`, `composer.lock` y este registro.
+
+### Git, datos y produccion
+
+- Commit: `fix: secure composer dependencies for baseline` (`HEAD` que contiene esta entrada; SHA informado al cierre).
+- Push: rama `fix/baseline-composer-security-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Migraciones: NO. Cambios de datos: NO. Produccion/Forge: NO TOCADA. Deploy: NO. Tag: NO. Merge a `main`: NO.
+- `.claude/` y `tmp/` permanecen locales, no versionados y fuera del commit. No se modificaron manualmente `vendor/` ni `node_modules/`.
+
+### Bloqueantes restantes para la baseline general
+
+1. Identidad y concurrencia transaccional de partidas.
+2. Idempotencia persistente y reintento de notificaciones.
+3. Revision del reemplazo completo de snapshot y limite de tamano de importaciones.
+4. Saneamiento controlado de lotes, duplicados, backfill y documentos mediante dry-run/staging.
+5. Validacion en un entorno equivalente a produccion antes de cualquier tag o deploy.
+
+---
+
+## 2026-08-11 - AUDITORIA INTEGRAL Y CANDIDATO DE BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `audit/baseline-wms-2026-08-11`.
+**Punto de partida:** `dd74878b0833fa4e1918e2a68a6309f552e39fcc` (`feat: add unlocated stock visibility`), con `main` alineada con `origin/main` antes de crear la rama. `git pull origin main` indico que ya estaba actualizado. `.claude/` y `tmp/` eran y siguen siendo directorios locales no versionados y excluidos del alcance.
+
+### Decision de baseline
+
+**NO APTO para etiquetar como baseline estable.** El codigo funcional pasa la suite completa y las correcciones objetivas de esta auditoria quedan cubiertas, pero permanecen bloqueos de seguridad, concurrencia y saneamiento de datos. No se creo tag, no se hizo merge ni push, no se desplego y no se accedio a Forge o produccion.
+
+### Modelo operativo reconstruido
+
+- `stock_pallets` es la fuente del estado actual; solo cuentan filas activas y con existencia fisica/logistica positiva segun la vista. `inventory_movements` es el ledger inmutable de trazabilidad, no el stock vivo.
+- La identidad de una partida usa cliente, articulo, lote normalizado, ubicacion, unidades por palet, estado y categoria. `goods_receipt_id` y `stock_import_id` expresan procedencia, no identidad fisica.
+- Un borrador de entrada o pedido no cambia stock. La entrada confirmada incrementa stock una vez y la salida solo descuenta al enviarse/completarse, con marcadores de aplicacion y movimientos idempotentes. La confirmacion de carga no descuenta.
+- El stock sin ubicacion se representa por `location_id = NULL`; `location_text` es historico. Pedidos parciales, multiples asignaciones, picos, stock bloqueado/obsoleto/varios y metricas fisicas frente a oficiales mantienen reglas separadas y cubiertas por pruebas.
+- La importacion Excel es un reemplazo completo del snapshot activo del cliente seleccionado. No se interpreta como un delta y por ello requiere control operativo estricto frente a datos mas recientes.
+
+### Correcciones seguras aplicadas
+
+- Al borrar una entrada, su documento privado se elimina solo despues de completar la transaccion de base de datos. Si la reversion de stock falla y hay rollback, el documento se conserva.
+- Si un Excel no puede leerse al crear la previsualizacion, se elimina el temporal ya almacenado y no queda un fichero huerfano sin registro de importacion.
+- La confirmacion de una importacion vuelve a validar el estado despues de adquirir `lockForUpdate()`. Una instancia obsoleta no puede reaplicar una importacion que otro proceso ya completo.
+- No hubo migraciones ni cambios de datos. Se anadieron cuatro regresiones especificas para exito, rollback, fichero corrupto y estado concurrente obsoleto.
+
+### Auditoria de datos local, solo lectura
+
+- Volumen inspeccionado: 5 clientes, 11 usuarios, 386 articulos, 2 almacenes, 55 ubicaciones, 346 partidas, 5 entradas, 3 lineas de entrada, 1 pedido, 1 linea de pedido, 2 salidas, 1 linea de salida, 0 asignaciones, 168 movimientos y 2 importaciones.
+- No se detectaron cantidades negativas, partidas activas vacias, desgloses de picos incoherentes, referencias huerfanas, cruces cliente-articulo/ubicacion/salida, movimientos sin cliente ni claves de idempotencia duplicadas.
+- `wms:consolidate-stock-batches --dry-run` confirma un grupo fisico duplicado: IDs `246,247`, cliente 1, articulo 260, lote `OFA0004644`, sin ubicacion, `available/in_use`, 9.461 unidades y 6 palets. No se consolido.
+- `wms:lots:canonicalize --dry-run` propone normalizar 191 partidas, 3 lineas de entrada, 1 linea de pedido, 1 linea de salida y 12 movimientos hacia `NO LOTE`; no detecta colisiones y no se aplico.
+- `wms:traceability:backfill --dry-run` propone 344 saldos iniciales y una entrada cierta. El historico local no esta totalmente materializado en el ledger; no se aplico el backfill.
+- Existe una entrada confirmada historica sin lineas, marcador de stock ni movimientos (`goods_receipts.id = 7`, `ALB-OLD-001`) y una partida logistica de prueba con cero unidades y 731 unidades en picos (`stock_pallets.id = 186`). Requieren clasificacion funcional antes de sanear.
+- De 1.096 ficheros en el almacen privado de entradas, solo 3 estan referenciados: 1.093 quedan sin referencia local. El proceso existente de antiguedad limpia documentos referenciados, no estos huerfanos. No se borro ninguno.
+- `wms:locations:audit` no encontro ubicaciones faltantes, extras o grupos equivalentes duplicados. `wms:dispatches:apply-missing-stock --dry-run` no encontro salidas enviadas/completadas pendientes de descuento.
+
+### Bloqueos tecnicos y de seguridad
+
+1. `composer audit --locked` falla con 20 avisos sobre 5 paquetes. Hay severidad alta en Guzzle y CommonMark, ademas de avisos en Laravel, Dompdf y Firebase JWT. Versiones bloqueadas observadas: Laravel `12.61.0`, Dompdf `3.1.5`, Guzzle `7.13.1`, CommonMark `2.8.2` y Firebase JWT `6.11.1`.
+2. `composer validate --strict` informa que `composer.lock` no esta sincronizado con `composer.json`; tambien advierte de la restriccion exacta de OpenSpout `4.28`.
+3. La busqueda y consolidacion de partidas de entrada bloquea filas existentes, pero la creacion concurrente cuando aun no existe ninguna partida compatible no esta protegida por una clave unica o un cerrojo por identidad. Dos entradas simultaneas pueden crear duplicados. La edicion de una entrada confirmada tampoco vuelve a obtener la propia entrada con bloqueo al comenzar su transaccion.
+4. Los jobs de notificaciones capturan excepciones y las convierten en log, de modo que la cola puede marcarlos como correctos sin reintento. Los hitos de comunicacion general no tienen una clave persistente de idempotencia; el marcador de albaran de salida se escribe despues de enviar y no protege dos workers simultaneos.
+5. La importacion reemplaza el snapshot completo del cliente y acepta el Excel sin limite explicito de tamano. Es necesaria una regla operativa/tecnica antes de considerarla segura frente a cargas grandes o snapshots obsoletos.
+6. No se verifico produccion ni una replica de datos de produccion. La base local contiene los residuos anteriores y no puede certificarse como dataset limpio.
+
+### Validacion ejecutada
+
+- Regresiones nuevas: **4 passed, 18 assertions**.
+- Modulos modificados completos: **160 passed, 1.117 assertions**.
+- Tres bloques funcionales focalizados previos: **531 passed, 3.595 assertions**.
+- Suite completa final: **837 passed, 4.896 assertions**, 46,61 s.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: **0 vulnerabilidades**.
+- `git diff --check`: OK. Todas las migraciones locales constan como aplicadas hasta `2026_08_04_000001`.
+- `vendor/bin/pint --test`: falla por deuda de estilo transversal ya presente en numerosos archivos, incluidos archivos no modificados. No se aplico un reformateo masivo durante la auditoria.
+- `php artisan db:show --counts` no pudo leer `performance_schema.session_status` por permisos del usuario MySQL local; las consultas de diagnostico de las tablas WMS si se ejecutaron correctamente y solo en lectura.
+
+### Condiciones minimas antes de etiquetar
+
+1. Actualizar y volver a bloquear dependencias en una rama dedicada hasta que `composer validate --strict` y `composer audit --locked` pasen, seguido de suite y build completos.
+2. Disenar una identidad fisica transaccional para partidas (clave materializada unica o advisory lock por identidad), bloquear la entrada durante edicion confirmada y anadir pruebas reales con dos conexiones.
+3. Incorporar idempotencia persistente/reintentos en notificaciones y decidir el limite de tamano y control de vigencia de importaciones.
+4. Sobre copia o staging, revisar y aprobar explicitamente consolidacion de IDs 246/247, canonizacion de lotes, backfill, entrada historica y huerfanos documentales. Hacer backup antes de cualquier `--apply`.
+5. Repetir integridad, suite, build, auditorias de dependencias y smoke tests por rol en un entorno equivalente a Forge. Solo entonces crear un tag candidato y promoverlo por GitHub -> Forge.
+
+### Archivos versionados de esta auditoria
+
+- `app/Services/GoodsReceipts/GoodsReceiptDeletionService.php`
+- `app/Services/Stock/StockExcelImportService.php`
+- `tests/Feature/GoodsReceiptManagementTest.php`
+- `tests/Feature/StockImportTest.php`
+- `SESSION_LOG.md`
+
+---
+
 ## 2026-08-10 - FEAT STOCK SIN UBICACION PARA CONTROL INTERNO
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `main`.
@@ -6505,3 +6893,88 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/` ni `node_modules/`.
 - No se uso `migrate:fresh`, `db:wipe`, force push ni `git add .`.
 - Pendiente en este momento: revisar diff final, commit y push normal a `origin/main` si todo sigue correcto.
+
+## 2026-08-11 - CIERRE DEFINITIVO DE BASELINE WMS (PC trabajo)
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `audit/final-baseline-wms-2026-08-11`.
+**SHA inicial exacto:** `cc3b817fc453ae733e3875bc24f5e481a29f29e3`. La rama se creo desde ese commit acumulativo, no desde `main`.
+**SHA de `origin/main` durante la auditoria:** `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+**SHA final:** el commit que contiene esta entrada, informado en el dictamen y fijado por el tag local `baseline-wms-2026-08-11`.
+
+### Dictamen
+- **APTO COMO BASELINE**: no queda ningun bloqueante conocido de integridad, concurrencia, seguridad, migraciones, dependencias, recuperacion o funcionamiento.
+- La baseline queda validada antes del despliegue. No se hizo merge a `main`, no se desplego y no se modifico produccion.
+- El tag se prepara localmente. No se publica porque no existe automatizacion versionada que permita descartar con certeza efectos externos asociados a tags.
+
+### Entorno equivalente y recuperacion
+- No habia staging versionado o accesible. Se uso un equivalente local: PHP `8.4.22`, Laravel `12.61.1`, MariaDB `10.4.32`, colas `database`, filesystem privado `local` y mailer `array`.
+- Se valido desde cero la cadena completa de migraciones con prefijo MySQL `02`; todas quedaron `Ran` sin usar `migrate:fresh`, `db:wipe` ni tocar las tablas fuente.
+- Antes del saneamiento se clono el estado representativo a las tablas de backup prefijo `03` y se generaron recuentos y checksums por tabla.
+- Manifiesto privado: `storage/app/private/baseline-validation/20260811_121935_stage_02_backup_03.json`; SHA-256 `15f614f961adee58c186bdb0be05352cb29523f9584e039bf48e5ffd60b0d3fe`.
+- Restauracion comprobable: vaciar exclusivamente las tablas aisladas `02` con FK desactivadas y reinsertar desde sus homologas `03`. Git, el SHA y el tag son el mecanismo de recuperacion del codigo.
+
+### Clasificacion y saneamiento de datos
+- **Seguro y demostrable en copia:** consolidacion de partidas `246/247`; canonizacion de 208 referencias de lote; backfill de 177 movimientos de saldo inicial.
+- **Ambiguo y conservado:** linea `goods_receipt_line` 8 de la entrada 4, creada 23 segundos despues de la confirmacion y sin partida equivalente; no se reconstruyo movimiento.
+- `ALB-OLD-001`: entrada historica confirmada sin lineas, stock ni movimiento, con documento privado existente. Se conserva como legado ambiguo; no se inventan datos ni se elimina.
+- Documentos privados: 1.208 ficheros, 3 referenciados presentes, 0 referenciados ausentes, 0 temporales demostrables y 0 huerfanos demostrables; los 1.205 no referenciados se conservan por falta de prueba suficiente.
+- Dry-run fuente: un grupo compatible (`246/247`), 208 alias/NULL de lote, 0 colisiones, 177 saldos iniciales exactos y una recepcion parcial ambigua. No hubo cambios en las tablas fuente.
+- Aplicacion solo en copia `02`: 1 grupo consolidado, 208 referencias canonizadas y 177 movimientos de apertura creados. Segundo dry-run: 0 consolidaciones, 0 lotes pendientes y 0 aperturas pendientes; la unica ambiguedad siguio intacta.
+
+### Reconciliacion
+- Partidas activas: `346 -> 345`, unica diferencia esperada por consolidar `246/247`.
+- Unidades: `12.558.781 -> 12.558.781` (diferencia 0).
+- Pallets completos: `3.102 -> 3.102` (diferencia 0).
+- Picos: `188 -> 188` (diferencia 0).
+- Pallets de almacen: `3.306 -> 3.306` (diferencia 0).
+- FRIESLAND conserva 7.407.703 unidades y 2.338 pallets de almacen; EDELVIVES conserva 5.149.956 y 954. No aparecieron negativos, orfandades ni cruces de cliente.
+
+### Correcciones realizadas durante la certificacion
+- `TraceabilityBackfillService`: seleccion exacta e idempotente, deteccion de movimientos ya existentes, saldos iniciales realmente pendientes y exclusion explicita de recepciones parciales ambiguas.
+- Migraciones historicas de operaciones diarias y multiples salidas: deteccion correcta de indices con `DB_PREFIX` en MySQL para instalaciones recuperadas desde cero; sin nuevas migraciones ni efecto sobre esquemas ya aplicados.
+- `StockExcelImportService`: el reintento concurrente que pierde la carrera despues de borrarse el temporal devuelve de forma estable "ya fue confirmada", manteniendo aplicacion exactamente una vez.
+- Pint oficial aplicado al arbol completo para eliminar deuda de formato acumulada; segunda suite completa verde despues del formateo.
+
+### E2E, colas y concurrencia
+- Suite focalizada de entradas, stock, ubicaciones, pedidos, salidas, importacion, documentos, notificaciones, multicliente, operaciones y facturacion: **717 passed, 4.510 assertions**.
+- Suite completa final, repetida despues de Pint: **872 passed, 5.087 assertions**, 44,66 s.
+- Concurrencia MySQL de identidad de partidas: **6 passed, 47 assertions**.
+- Concurrencia MySQL de snapshots de importacion: **3 passed, 30 assertions**; repetida tres veces consecutivas antes del cierre sin recurrencia de la carrera corregida.
+- Concurrencia MySQL de notificaciones: **1 passed, 14 assertions**.
+- Worker real `queue:work --once` sobre copia: el job aparece solo despues del commit de DB; primera ejecucion crea 8 entregas y 8 notificaciones, reintento conserva 8/8 y 0 fallidos. Mailer `array`, sin correo externo.
+- Operaciones diarias y facturacion incluyen las regresiones EDELVIVES y multiples salidas; todos los casos pasan.
+
+### Seguridad y limites
+- Composer: `validate --strict` OK, `audit --locked` 0 advisories, `install --dry-run` sin cambios, `check-platform-reqs` OK.
+- npm: build Vite OK (55 modulos), `npm audit --omit=dev` 0 vulnerabilidades.
+- Autenticacion y multicliente cubiertos por HTTP: rutas operativas protegidas por `auth`/rol; los POST publicos son login, reset y solicitud de acceso.
+- Documentos de entrada se almacenan en disco privado; descarga de cliente exige tenant, y enlace sin sesion exige firma valida/temporal. Backups rechazan path traversal.
+- Uploads de entradas limitados a 50 MiB y tipos permitidos; importaciones tienen limite explicito de bytes/filas, hash del temporal, aislamiento de cliente, rollback y proteccion contra snapshot obsoleto.
+- No se versionaron `.env`, secretos, dumps, `vendor`, `node_modules`, `.claude/` ni `tmp/`.
+
+### Rendimiento observado
+- Nueva entrada (6 clientes/72 ubicaciones): 86,34 ms, 15 queries, +4 MiB.
+- Stock (500 partidas): 53,52 ms, 81 queries, +6 MiB.
+- Dashboard (200 partidas): 27,58 ms, 9 queries, sin incremento medido.
+- Importacion: 100 filas 335,55 ms/1.213 queries; 500 filas 1.620,17 ms/6.013; 1.000 filas 3.179,32 ms/12.013. Escalado lineal observado, sin bloqueo de baseline.
+
+### Tooling final
+- `vendor/bin/pint --test`: OK.
+- `git diff --check`: OK.
+- `php artisan migrate:status`: todas las migraciones `Ran`.
+- `php artisan schedule:list`: 5 tareas registradas (alertas, snapshots, backup DB y dos podas controladas).
+- Diff acumulado desde `origin/main` revisado; no contiene secretos, artefactos generados ni depuracion accidental.
+
+### Incidencias observadas y resueltas durante la tarea
+- La primera migracion prefijada descubrio dos migraciones antiguas que consultaban nombres no prefijados; se corrigieron y la cadena completa paso.
+- La primera carrera de importacion confirmo stock una sola vez, pero el perdedor devolvio error de temporal ausente; se corrigio la semantica, se agrego sincronizacion y las repeticiones pasaron.
+- Pint inicialmente detecto 40 archivos con formato pendiente; el formateador oficial lo corrigio y la suite completa se repitio con exito.
+- Un primer smoke de cola uso por error la DB `:memory:` de testing y no altero datos; se repitio con la base/prefijo correctos y paso.
+
+### Git y produccion
+- Commit final previsto: `chore: finalize stable WMS baseline`.
+- Push normal previsto exclusivamente a `origin/audit/final-baseline-wms-2026-08-11`, sin force push.
+- Tag anotado local: `baseline-wms-2026-08-11`, apuntando al SHA final exacto.
+- Merge a `main`: NO. Tag remoto: NO. Deploy/Forge: NO. Cambios de produccion: **0**.

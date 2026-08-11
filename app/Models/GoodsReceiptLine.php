@@ -12,6 +12,7 @@ class GoodsReceiptLine extends Model
 {
     /** @use HasFactory<GoodsReceiptLineFactory> */
     use HasFactory;
+
     use NormalizesLotAttribute;
 
     public const MAX_PEAK_COLUMNS = 10;

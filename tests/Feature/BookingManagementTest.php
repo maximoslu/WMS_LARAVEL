@@ -14,6 +14,7 @@ use App\Services\Bookings\BookingNotificationService;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
@@ -44,9 +45,10 @@ class BookingManagementTest extends TestCase
         $this->assertSame(Booking::STATUS_REQUESTED, $booking->status);
         $this->assertSame('Proveedor Norte', $booking->carrier_name);
         $this->assertSame('BK-000001', $booking->referenceCode());
-        Bus::assertDispatchedAfterResponse(
+        Bus::assertDispatched(
             ProcessBookingSubmittedNotificationsJob::class,
             fn (ProcessBookingSubmittedNotificationsJob $job): bool => $job->bookingId === $booking->id
+                && $job->afterCommit === true
         );
     }
 
@@ -188,7 +190,7 @@ class BookingManagementTest extends TestCase
             ->assertRedirect();
 
         $this->assertSame(Booking::STATUS_REJECTED, $rejectedBooking->fresh()->status);
-        Bus::assertDispatchedAfterResponse(ProcessBookingStatusChangedJob::class);
+        Bus::assertDispatched(ProcessBookingStatusChangedJob::class);
     }
 
     public function test_pending_client_booking_shows_only_approve_and_reject_to_internal_users(): void
@@ -376,7 +378,7 @@ class BookingManagementTest extends TestCase
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
         Booking::factory()->create([
             'client_id' => $client->id,
-            'scheduled_date' => now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->toDateString(),
+            'scheduled_date' => now()->startOfWeek(Carbon::MONDAY)->toDateString(),
         ]);
 
         $this->actingAs($almacen)
@@ -389,7 +391,7 @@ class BookingManagementTest extends TestCase
     {
         [$client] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
-        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
+        $calendarDate = now()->startOfWeek(Carbon::MONDAY)->addDay()->toDateString();
         $booking = Booking::factory()->create([
             'client_id' => $client->id,
             'booking_code' => 'BK-200001',
@@ -408,7 +410,7 @@ class BookingManagementTest extends TestCase
     {
         [$client] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
-        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
+        $calendarDate = now()->startOfWeek(Carbon::MONDAY)->addDay()->toDateString();
         $approved = Booking::factory()->create([
             'client_id' => $client->id,
             'booking_code' => 'BK-230001',
@@ -452,7 +454,7 @@ class BookingManagementTest extends TestCase
     {
         [$friesland, $edelvives] = $this->seedBaseData();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $friesland);
-        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
+        $calendarDate = now()->startOfWeek(Carbon::MONDAY)->addDay()->toDateString();
 
         $ownBooking = Booking::factory()->create([
             'client_id' => $friesland->id,
@@ -478,7 +480,7 @@ class BookingManagementTest extends TestCase
     {
         [$friesland, $edelvives] = $this->seedBaseData();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
-        $calendarDate = now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->addDay()->toDateString();
+        $calendarDate = now()->startOfWeek(Carbon::MONDAY)->addDay()->toDateString();
 
         Booking::factory()->create([
             'client_id' => $friesland->id,

@@ -9,8 +9,10 @@ use App\Models\Item;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Services\Inventory\InventoryMovementService;
+use App\Services\Stock\StockBatchIdentityService;
 use App\Support\Stock\LotNormalizer;
 use App\Support\Stock\StockBatchCalculator;
+use App\Support\Stock\StockBatchIdentity;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -20,6 +22,7 @@ class GoodsReceiptStockApplicationService
     public function __construct(
         private readonly GoodsReceiptItemResolver $itemResolver,
         private readonly InventoryMovementService $movements,
+        private readonly StockBatchIdentityService $batchIdentities,
     ) {}
 
     /**
@@ -32,6 +35,14 @@ class GoodsReceiptStockApplicationService
             'lines.item',
             'lines.location',
         ]);
+
+        $identities = $receipt->lines->map(function (GoodsReceiptLine $line) use ($receipt): StockBatchIdentity {
+            $item = $this->resolveItem($receipt, $line);
+            $unitsPerPallet = (int) ($line->units_per_pallet ?? $item->units_per_pallet);
+
+            return $this->identityForLine($receipt, $item, $line, $unitsPerPallet);
+        });
+        $this->batchIdentities->lockIdentities($identities);
 
         foreach ($receipt->lines as $line) {
             $this->applyLine($receipt, $line, $user, $correlationId);
@@ -359,23 +370,7 @@ class GoodsReceiptStockApplicationService
 
     private function resolveTargetBatch(GoodsReceipt $receipt, Item $item, GoodsReceiptLine $line, int $unitsPerPallet): StockPallet
     {
-        $query = StockPallet::query()
-            ->where('client_id', $receipt->client_id)
-            ->where('item_id', $item->id)
-            ->where('location_id', $line->location_id)
-            ->where('lot', LotNormalizer::normalize($line->lot))
-            ->where('units_per_pallet', $unitsPerPallet)
-            ->where(function ($query) use ($item): void {
-                $query
-                    ->where('stock_category', $item->stock_category ?? StockPallet::CATEGORY_IN_USE)
-                    ->orWhereNull('stock_category');
-            })
-            ->where('active', true)
-            ->where('status', StockPallet::STATUS_AVAILABLE)
-            ->lockForUpdate()
-            ->orderByDesc('id');
-
-        $existing = $query->get();
+        $existing = $this->batchIdentities->getAfterLock($this->identityForLine($receipt, $item, $line, $unitsPerPallet));
 
         if ($existing->count() > 1) {
             return $this->consolidateTargetBatches($existing);
@@ -401,6 +396,21 @@ class GoodsReceiptStockApplicationService
             'peak_9' => 0,
             'peak_10' => 0,
         ]);
+    }
+
+    private function identityForLine(GoodsReceipt $receipt, Item $item, GoodsReceiptLine $line, int $unitsPerPallet): StockBatchIdentity
+    {
+        return new StockBatchIdentity(
+            clientId: (int) $receipt->client_id,
+            itemId: (int) $item->id,
+            lot: $line->lot,
+            locationId: $line->location_id !== null ? (int) $line->location_id : null,
+            locationText: $line->location?->code,
+            unitsPerPallet: $unitsPerPallet,
+            status: StockPallet::STATUS_AVAILABLE,
+            stockCategory: $item->stock_category ?? StockPallet::CATEGORY_IN_USE,
+            blockedReason: null,
+        );
     }
 
     /** @param Collection<int, StockPallet> $batches */

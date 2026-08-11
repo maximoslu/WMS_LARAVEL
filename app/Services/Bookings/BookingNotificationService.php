@@ -9,14 +9,19 @@ use App\Models\Role;
 use App\Models\User;
 use App\Notifications\CustomerBookingStatusChangedNotification;
 use App\Notifications\InternalBookingSubmittedNotification;
+use App\Services\Notifications\NotificationDeliveryService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class BookingNotificationService
 {
+    public function __construct(
+        private readonly NotificationDeliveryService $deliveries,
+    ) {}
+
     public function notifySubmitted(Booking $booking): void
     {
-        ProcessBookingSubmittedNotificationsJob::dispatch($booking->id)->afterResponse();
+        ProcessBookingSubmittedNotificationsJob::dispatch($booking->id)->afterCommit();
     }
 
     public function deliverSubmittedNotifications(Booking $booking): void
@@ -34,17 +39,33 @@ class BookingNotificationService
         }
 
         foreach ($recipients as $recipient) {
-            $recipient->notify(new InternalBookingSubmittedNotification($booking, ['database']));
+            $this->deliveries->deliverToUser(
+                'booking.submitted',
+                'booking',
+                $booking->id,
+                'submitted',
+                $recipient,
+                ['database'],
+                fn (array $channels) => new InternalBookingSubmittedNotification($booking, $channels),
+            );
         }
     }
 
     public function notifyStatusChanged(Booking $booking, string $previousStatus): void
     {
-        ProcessBookingStatusChangedJob::dispatch($booking->id, $previousStatus)->afterResponse();
+        ProcessBookingStatusChangedJob::dispatch(
+            $booking->id,
+            $previousStatus,
+            (string) $booking->status,
+            $this->statusEventVersion($booking, $previousStatus),
+        )->afterCommit();
     }
 
-    public function deliverStatusChangedNotifications(Booking $booking, string $previousStatus): void
-    {
+    public function deliverStatusChangedNotifications(
+        Booking $booking,
+        string $previousStatus,
+        ?string $eventVersion = null,
+    ): void {
         $booking->loadMissing(['client.users.role', 'requestedBy']);
 
         if ($booking->status === $previousStatus) {
@@ -63,9 +84,22 @@ class BookingNotificationService
         }
 
         foreach ($recipients as $recipient) {
-            $recipient->notify(new CustomerBookingStatusChangedNotification($booking, $previousStatus, ['database']));
+            $this->deliveries->deliverToUser(
+                'booking.status_changed',
+                'booking',
+                $booking->id,
+                $eventVersion ?? $this->statusEventVersion($booking, $previousStatus),
+                $recipient,
+                ['database'],
+                fn (array $channels) => new CustomerBookingStatusChangedNotification($booking, $previousStatus, $channels),
+            );
         }
 
+    }
+
+    private function statusEventVersion(Booking $booking, string $previousStatus): string
+    {
+        return $previousStatus.'>'.$booking->status.':'.$booking->updated_at?->format('Y-m-d H:i:s.u');
     }
 
     /**
@@ -100,5 +134,4 @@ class BookingNotificationService
             ->unique('id')
             ->values() ?? collect();
     }
-
 }

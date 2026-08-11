@@ -8,15 +8,19 @@ use App\Models\GoodsReceipt;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\ClientGoodsReceiptDocumentAvailableNotification;
+use App\Services\Notifications\NotificationDeliveryService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 
 class GoodsReceiptDocumentNotificationService
 {
+    public function __construct(
+        private readonly NotificationDeliveryService $deliveries,
+    ) {}
+
     public function notifyDocumentAvailable(GoodsReceipt $receipt): void
     {
-        ProcessGoodsReceiptDocumentNotificationsJob::dispatch($receipt->id)->afterResponse();
+        ProcessGoodsReceiptDocumentNotificationsJob::dispatch($receipt->id)->afterCommit();
     }
 
     public function deliverDocumentAvailableNotifications(GoodsReceipt $receipt): void
@@ -25,7 +29,7 @@ class GoodsReceiptDocumentNotificationService
 
         $userRecipients = $this->clientRecipients($receipt);
         $userEmails = $userRecipients
-            ->map(fn (User $user): string => mb_strtolower((string) $user->email))
+            ->map(fn (User $user): string => mb_strtolower(trim((string) $user->email)))
             ->filter()
             ->all();
 
@@ -40,13 +44,29 @@ class GoodsReceiptDocumentNotificationService
             return;
         }
 
+        $eventVersion = hash('sha256', (string) $receipt->document_path);
+
         foreach ($userRecipients as $recipient) {
-            $recipient->notify(new ClientGoodsReceiptDocumentAvailableNotification($receipt));
+            $this->deliveries->deliverToUser(
+                'goods_receipt.document_available',
+                'goods_receipt',
+                $receipt->id,
+                $eventVersion,
+                $recipient,
+                ['database', 'mail'],
+                fn (array $channels) => new ClientGoodsReceiptDocumentAvailableNotification($receipt, $channels),
+            );
         }
 
         foreach ($additionalEmails as $email) {
-            Notification::route('mail', $email)
-                ->notify(new ClientGoodsReceiptDocumentAvailableNotification($receipt, ['mail']));
+            $this->deliveries->deliverToEmail(
+                'goods_receipt.document_available',
+                'goods_receipt',
+                $receipt->id,
+                $eventVersion,
+                $email,
+                fn (array $channels) => new ClientGoodsReceiptDocumentAvailableNotification($receipt, $channels),
+            );
         }
     }
 
@@ -85,7 +105,7 @@ class GoodsReceiptDocumentNotificationService
         return ClientReceiptEmailRecipient::query()
             ->where('client_id', $receipt->client_id)
             ->pluck('email')
-            ->map(fn (string $email): string => mb_strtolower($email))
+            ->map(fn (string $email): string => mb_strtolower(trim($email)))
             ->unique()
             ->reject(fn (string $email): bool => in_array($email, $excludeEmails, true))
             ->values();

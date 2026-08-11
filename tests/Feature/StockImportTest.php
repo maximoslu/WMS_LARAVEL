@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
 use App\Models\Role;
@@ -12,6 +13,7 @@ use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Stock\StockExcelImportService;
 use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
@@ -450,10 +452,11 @@ class StockImportTest extends TestCase
             ->assertDontSee('Confirmar importacion');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
-        $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->status);
+        $this->assertSame(StockImport::STATUS_FAILED, $stockImport->status);
+        Storage::disk('local')->assertMissing($stockImport->stored_path);
     }
 
-    public function test_invalid_rows_do_not_block_confirmation_when_valid_rows_exist(): void
+    public function test_invalid_rows_block_the_entire_snapshot_even_when_valid_rows_exist(): void
     {
         [$friesland] = $this->seedBaseData();
         Storage::fake('local');
@@ -474,24 +477,28 @@ class StockImportTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Errores bloqueantes en filas')
-            ->assertSee('Confirmar importacion');
+            ->assertDontSee('Confirmar importacion');
 
         $stockImport = StockImport::query()->latest('id')->firstOrFail();
         $this->assertSame(1, $stockImport->summary_json['invalid_rows_ignored']);
+        $this->assertSame(StockImport::STATUS_FAILED, $stockImport->status);
+        Storage::disk('local')->assertMissing($stockImport->stored_path);
 
         $this->actingAs($user)->post(route('stock.import.confirm'), [
             'stock_import_id' => $stockImport->id,
-        ])->assertRedirect();
+        ])->assertSessionHasErrors();
 
-        $this->assertDatabaseHas('items', [
+        $this->assertDatabaseMissing('items', [
             'client_id' => $friesland->id,
             'sku' => 'FR-VALID',
         ]);
 
-        $this->assertDatabaseHas('items', [
+        $this->assertDatabaseMissing('items', [
             'client_id' => $friesland->id,
             'sku' => 'FR-INVALID',
         ]);
+        $this->assertDatabaseCount('stock_pallets', 0);
+        $this->assertDatabaseCount('inventory_movements', 0);
     }
 
     public function test_bobinas_positive_quantity_without_units_per_pallet_is_imported_as_operational_stock(): void
@@ -599,6 +606,44 @@ class StockImportTest extends TestCase
             'client_id' => $friesland->id,
             'lot' => 'LOT-C',
         ]);
+    }
+
+    public function test_repeated_import_rows_with_the_same_identity_create_one_stock_batch(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets', 'Pico 1'],
+                ['SKU-ID', 'Identidad compartida', 'LOT-ID', 800, 100, 8, 0],
+                ['SKU-ID', 'Identidad compartida', 'LOT-ID', 250, 100, 2, 50],
+            ],
+        ]);
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ])->assertOk();
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $stocks = StockPallet::query()
+            ->whereHas('item', fn ($query) => $query->where('client_id', $friesland->id)->where('sku', 'SKU-ID'))
+            ->where('lot', 'LOT-ID')
+            ->where('active', true)
+            ->get();
+
+        $this->assertCount(1, $stocks);
+        $this->assertSame(1050, (int) $stocks->first()->quantity_units);
+        $this->assertSame('10.00', (string) $stocks->first()->warehouse_pallets);
+        $this->assertSame(2, InventoryMovement::query()
+            ->where('movement_type', InventoryMovement::IMPORT)
+            ->where('stock_pallet_id', $stocks->first()->id)
+            ->count());
     }
 
     public function test_confirm_import_creates_item_masters_and_preserves_multi_peak_rows(): void
@@ -718,6 +763,7 @@ class StockImportTest extends TestCase
 
         $this->actingAs($superadmin)->post(route('stock.import.confirm'), [
             'stock_import_id' => $stockImport->id,
+            'acknowledge_snapshot_replacement' => '1',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('stock_pallets', [
@@ -802,7 +848,54 @@ class StockImportTest extends TestCase
             ->assertSessionHasErrors();
     }
 
-    public function test_grouped_warnings_are_limited_to_five_examples(): void
+    public function test_create_preview_removes_temporary_file_when_workbook_cannot_be_read(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = UploadedFile::fake()->createWithContent('corrupt.xlsx', 'not-an-xlsx-file');
+
+        try {
+            app(StockExcelImportService::class)->createPreview($friesland, $user, $file);
+            $this->fail('La previsualizacion corrupta debio fallar.');
+        } catch (\Throwable) {
+            Storage::disk('local')->assertDirectoryEmpty('stock-imports');
+            $this->assertDatabaseCount('stock_imports', 0);
+        }
+    }
+
+    public function test_confirm_rechecks_import_status_after_acquiring_database_lock(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-RACE', 'Carrera de confirmacion', 'LOT-RACE', 10, 10, 1],
+            ],
+        ]);
+        $result = app(StockExcelImportService::class)->createPreview($friesland, $user, $file);
+        $staleImport = $result['stock_import'];
+
+        StockImport::query()->whereKey($staleImport->id)->update([
+            'status' => StockImport::STATUS_IMPORTED,
+        ]);
+
+        try {
+            app(StockExcelImportService::class)->confirm($staleImport, $user);
+            $this->fail('Una confirmacion concurrente ya completada no debe reaplicarse.');
+        } catch (\InvalidArgumentException $exception) {
+            $this->assertSame('Esta importacion ya fue confirmada previamente.', $exception->getMessage());
+        }
+
+        $this->assertDatabaseCount('stock_pallets', 0);
+        $this->assertDatabaseCount('inventory_movements', 0);
+    }
+
+    public function test_grouped_blocking_errors_are_limited_to_five_examples(): void
     {
         [$friesland] = $this->seedBaseData();
         Storage::fake('local');
@@ -826,9 +919,13 @@ class StockImportTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertSee('Se han ignorado 8 filas sin SKU valido en STOCK.')
+            ->assertSee('Se han encontrado 8 filas con stock declarado pero sin SKU en STOCK.')
             ->assertSee('y 3 mas.')
-            ->assertDontSee('Fila 8 de STOCK ignorada por no tener SKU.');
+            ->assertDontSee('Fila 8 de STOCK con stock declarado pero sin SKU.')
+            ->assertDontSee('Confirmar importacion');
+
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $this->assertSame(StockImport::STATUS_FAILED, $stockImport->status);
     }
 
     public function test_edelvives_preview_accepts_real_header_positions_and_ignores_grammage_as_functional_property(): void
@@ -1522,6 +1619,7 @@ class StockImportTest extends TestCase
 
         $this->actingAs($user)->post(route('stock.import.confirm'), [
             'stock_import_id' => $secondImport->id,
+            'acknowledge_snapshot_replacement' => '1',
         ])->assertRedirect();
 
         $this->assertSame(1, StockPallet::query()->where('client_id', $edelvives->id)->where('active', true)->count());
@@ -1599,6 +1697,7 @@ class StockImportTest extends TestCase
 
             $this->actingAs($superadmin)->post(route('stock.import.confirm'), [
                 'stock_import_id' => $stockImport->id,
+                'acknowledge_snapshot_replacement' => '1',
             ])->assertRedirect();
 
             $this->assertSame(StockImport::STATUS_IMPORTED, $stockImport->fresh()->status, 'Import '.$importNumber.' was not completed.');
@@ -1683,6 +1782,311 @@ class StockImportTest extends TestCase
             ->assertOk()
             ->assertSee('FR-VISIBLE')
             ->assertDontSee('ED-VISIBLE');
+    }
+
+    public function test_preview_rejects_files_above_the_explicit_application_size_limit(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = UploadedFile::fake()->create(
+            'oversized.xlsx',
+            (int) config('wms.stock_imports.max_file_kilobytes') + 1,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $file,
+        ])->assertSessionHasErrors('file');
+
+        $this->assertDatabaseCount('stock_imports', 0);
+        Storage::disk('local')->assertDirectoryEmpty('stock-imports');
+    }
+
+    public function test_preview_rejects_more_than_the_explicit_row_limit_and_removes_the_temporary_file(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $rows = [['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets']];
+
+        foreach (range(1, (int) config('wms.stock_imports.max_rows') + 1) as $index) {
+            $rows[] = ['LIMIT-'.$index, 'Fila '.$index, 'NO LOTE', 100, 100, 1];
+        }
+
+        $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $this->makeWorkbookUpload(['STOCK' => $rows]),
+        ])->assertRedirect(route('stock.import'))
+            ->assertSessionHasErrors('file');
+
+        $this->assertDatabaseCount('stock_imports', 0);
+        Storage::disk('local')->assertDirectoryEmpty('stock-imports');
+    }
+
+    public function test_snapshot_reduction_is_visible_and_requires_explicit_backend_acknowledgement(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $itemA = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'A-KEEP', 'units_per_pallet' => 100]);
+        $itemB = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'B-DISAPPEARS', 'units_per_pallet' => 50]);
+        StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $itemA->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 100,
+            'units_per_pallet' => 100,
+            'warehouse_pallets' => 1,
+        ]);
+        $stockB = StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $itemB->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 50,
+            'units_per_pallet' => 50,
+            'warehouse_pallets' => 1,
+        ]);
+
+        $response = $this->actingAs($user)->post(route('stock.import.preview'), [
+            'client_id' => $friesland->id,
+            'file' => $this->makeWorkbookUpload([
+                'STOCK' => [
+                    ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                    ['A-KEEP', 'A permanece', 'NO LOTE', 100, 100, 1],
+                ],
+            ]),
+        ]);
+
+        $response->assertOk()
+            ->assertSee('Referencias que desaparecen')
+            ->assertSee('B-DISAPPEARS')
+            ->assertSee('acknowledge_snapshot_replacement', false);
+        $stockImport = StockImport::query()->latest('id')->firstOrFail();
+        $this->assertSame(1, $stockImport->summary_json['disappearing_references']);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertSessionHasErrors('file');
+
+        $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->fresh()->status);
+        $this->assertTrue($stockB->fresh()->active);
+        $this->assertSame(50, $stockB->fresh()->quantity_units);
+        $this->assertDatabaseCount('inventory_movements', 0);
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+            'acknowledge_snapshot_replacement' => '1',
+        ])->assertRedirect(route('stock.index', ['client_id' => $friesland->id]));
+
+        $this->assertFalse($stockB->fresh()->active);
+        $this->assertSame(0, $stockB->fresh()->quantity_units);
+        $this->assertSame(2, InventoryMovement::query()
+            ->where('movement_type', InventoryMovement::IMPORT_RETIREMENT)
+            ->where('source_id', $stockImport->id)
+            ->count());
+        $this->assertSame(1, InventoryMovement::query()
+            ->where('movement_type', InventoryMovement::IMPORT)
+            ->where('source_id', $stockImport->id)
+            ->count());
+    }
+
+    public function test_stale_preview_cannot_overwrite_a_newer_snapshot(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $item = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'STALE-BASE', 'units_per_pallet' => 100]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $item->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 100,
+            'units_per_pallet' => 100,
+            'warehouse_pallets' => 1,
+        ]);
+        $result = app(StockExcelImportService::class)->createPreview(
+            $friesland,
+            $user,
+            $this->makeWorkbookUpload([
+                'STOCK' => [
+                    ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                    ['STALE-NEW', 'Snapshot antiguo', 'NO LOTE', 200, 100, 2],
+                ],
+            ]),
+        );
+        $stockImport = $result['stock_import'];
+
+        $stock->forceFill(['quantity_units' => 300, 'warehouse_pallets' => 3])->save();
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+            'acknowledge_snapshot_replacement' => '1',
+        ])->assertSessionHasErrors('file');
+
+        $this->assertSame(StockImport::STATUS_STALE, $stockImport->fresh()->status);
+        $this->assertTrue($stock->fresh()->active);
+        $this->assertSame(300, $stock->fresh()->quantity_units);
+        $this->assertDatabaseMissing('items', ['client_id' => $friesland->id, 'sku' => 'STALE-NEW']);
+        $this->assertDatabaseCount('inventory_movements', 0);
+        Storage::disk('local')->assertMissing($stockImport->stored_path);
+    }
+
+    public function test_failure_on_an_intermediate_row_rolls_back_stock_items_movements_and_import_status(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $legacyItem = Item::factory()->create(['client_id' => $friesland->id, 'sku' => 'ROLLBACK-OLD', 'units_per_pallet' => 100]);
+        $legacyStock = StockPallet::factory()->create([
+            'client_id' => $friesland->id,
+            'item_id' => $legacyItem->id,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 100,
+            'units_per_pallet' => 100,
+            'warehouse_pallets' => 1,
+        ]);
+        $stockImport = app(StockExcelImportService::class)->createPreview(
+            $friesland,
+            $user,
+            $this->makeWorkbookUpload([
+                'STOCK' => [
+                    ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                    ['ROLLBACK-ONE', 'Primera fila', 'PASS-1', 100, 100, 1],
+                    ['ROLLBACK-TWO', 'Segunda fila', 'FAIL-2', 100, 100, 1],
+                ],
+            ]),
+        )['stock_import'];
+        DB::unprepared("CREATE TRIGGER force_stock_import_failure BEFORE INSERT ON stock_pallets WHEN NEW.lot = 'FAIL-2' BEGIN SELECT RAISE(ABORT, 'forced intermediate failure'); END");
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+            'acknowledge_snapshot_replacement' => '1',
+        ])->assertSessionHasErrors('file');
+
+        $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->fresh()->status);
+        $this->assertTrue($legacyStock->fresh()->active);
+        $this->assertSame(100, $legacyStock->fresh()->quantity_units);
+        $this->assertDatabaseMissing('items', ['client_id' => $friesland->id, 'sku' => 'ROLLBACK-ONE']);
+        $this->assertDatabaseMissing('items', ['client_id' => $friesland->id, 'sku' => 'ROLLBACK-TWO']);
+        $this->assertDatabaseCount('inventory_movements', 0);
+        Storage::disk('local')->assertExists($stockImport->stored_path);
+    }
+
+    public function test_real_confirmation_is_idempotent_on_http_retry_and_deletes_the_consumed_temporary_file(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $stockImport = app(StockExcelImportService::class)->createPreview(
+            $friesland,
+            $user,
+            $this->makeWorkbookUpload([
+                'STOCK' => [
+                    ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                    ['RETRY-ONCE', 'Una sola vez', 'NO LOTE', 100, 100, 1],
+                ],
+            ]),
+        )['stock_import'];
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertRedirect();
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertSessionHasErrors('file');
+
+        $this->assertSame(StockImport::STATUS_IMPORTED, $stockImport->fresh()->status);
+        $this->assertSame(1, StockPallet::query()->where('client_id', $friesland->id)->where('active', true)->count());
+        $this->assertSame(1, InventoryMovement::query()->where('movement_type', InventoryMovement::IMPORT)->count());
+        Storage::disk('local')->assertMissing($stockImport->stored_path);
+    }
+
+    public function test_client_cannot_preview_or_confirm_another_clients_import_by_manipulating_ids(): void
+    {
+        [$friesland, $edelvives] = $this->seedBaseData();
+        Storage::fake('local');
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $clientUser = $this->makeUserWithRole(Role::CLIENTE, $friesland);
+        $stockImport = app(StockExcelImportService::class)->createPreview(
+            $edelvives,
+            $superadmin,
+            $this->makeWorkbookUpload([
+                'STOCK' => $this->makeRealEdelvivesWorkbookRows([
+                    $this->makeRealEdelvivesDataRow('A', 100, 'ED-PRIVATE', 'Edelvives', 100, 100, 1, 0, [], 1),
+                ]),
+            ]),
+        )['stock_import'];
+
+        $this->actingAs($clientUser)->post(route('stock.import.preview'), [
+            'client_id' => $edelvives->id,
+            'file' => $this->makeWorkbookUpload(['STOCK' => [['SKU'], ['FORCED']]]),
+        ])->assertForbidden();
+        $this->actingAs($clientUser)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertForbidden();
+
+        $this->assertSame(StockImport::STATUS_PENDING_CONFIRMATION, $stockImport->fresh()->status);
+        $this->assertDatabaseCount('stock_pallets', 0);
+        $this->assertDatabaseCount('stock_imports', 1);
+    }
+
+    public function test_temporary_prune_is_dry_run_by_default_and_expires_old_unconfirmed_previews(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $stockImport = app(StockExcelImportService::class)->createPreview(
+            $friesland,
+            $user,
+            $this->makeWorkbookUpload([
+                'STOCK' => [
+                    ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                    ['TEMP-OLD', 'Temporal', 'NO LOTE', 100, 100, 1],
+                ],
+            ]),
+        )['stock_import'];
+        $this->travel(25)->hours();
+
+        $this->artisan('wms:stock-imports:prune-temp --hours=24')
+            ->expectsOutputToContain('DRY-RUN')
+            ->assertSuccessful();
+        Storage::disk('local')->assertExists($stockImport->stored_path);
+
+        $this->artisan('wms:stock-imports:prune-temp --hours=24 --apply')
+            ->expectsOutputToContain('Previews caducadas: 1')
+            ->assertSuccessful();
+
+        Storage::disk('local')->assertMissing($stockImport->stored_path);
+        $this->assertSame(StockImport::STATUS_FAILED, $stockImport->fresh()->status);
+    }
+
+    public function test_confirmation_rejects_a_tampered_temporary_file_without_touching_stock(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $stockImport = app(StockExcelImportService::class)->createPreview(
+            $friesland,
+            $user,
+            $this->makeWorkbookUpload([
+                'STOCK' => [
+                    ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                    ['HASH-SAFE', 'Seguro', 'NO LOTE', 100, 100, 1],
+                ],
+            ]),
+        )['stock_import'];
+        Storage::disk('local')->put($stockImport->stored_path, 'tampered');
+
+        $this->actingAs($user)->post(route('stock.import.confirm'), [
+            'stock_import_id' => $stockImport->id,
+        ])->assertSessionHasErrors('file');
+
+        $this->assertSame(StockImport::STATUS_FAILED, $stockImport->fresh()->status);
+        $this->assertDatabaseCount('stock_pallets', 0);
+        $this->assertDatabaseCount('inventory_movements', 0);
+        Storage::disk('local')->assertMissing($stockImport->stored_path);
     }
 
     public function test_friesland_formula_quantity_cells_do_not_break_import_or_create_phantom_rows(): void

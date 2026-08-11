@@ -23,3 +23,7 @@ Schedule::command('wms:backups:create --type=database')
 Schedule::command('wms:backups:prune --days=365 --type=stock_snapshot_daily --apply')
     ->dailyAt('03:00')
     ->withoutOverlapping();
+
+Schedule::command('wms:stock-imports:prune-temp --hours=24 --apply')
+    ->dailyAt('03:15')
+    ->withoutOverlapping();

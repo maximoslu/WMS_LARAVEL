@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Client;
 use App\Models\GoodsReceipt;
-use App\Models\Item;
 use App\Models\InventoryMovement;
+use App\Models\Item;
 use App\Models\StockPallet;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;

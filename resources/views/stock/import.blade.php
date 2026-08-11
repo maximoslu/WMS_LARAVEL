@@ -11,6 +11,8 @@
             ['label' => 'Importar Excel'],
         ];
         $hasPreview = $preview && $stockImport;
+        $maximumImportMegabytes = (int) ceil((int) config('wms.stock_imports.max_file_kilobytes', 2048) / 1024);
+        $maximumImportRows = (int) config('wms.stock_imports.max_rows', 1000);
     @endphp
     <x-breadcrumbs :items="$breadcrumbs" />
 
@@ -54,7 +56,7 @@
 
         <section class="surface-card compact-card wms-stock-warning">
             <strong>Operacion sensible</strong>
-            <p>La confirmacion sustituye el stock actual del cliente seleccionado. Esta fase solo modifica la presentacion de la pantalla, no la importacion ni sus validaciones.</p>
+            <p>La confirmacion sustituye el snapshot completo del cliente. Revisa referencias, unidades, pallets, avisos y desapariciones antes de aceptar cualquier reduccion.</p>
         </section>
 
         @if ($errors->any())
@@ -92,7 +94,7 @@
                 </label>
 
                 <label class="auth-field">
-                    <span>Fichero Excel</span>
+                    <span>Fichero Excel (max. {{ $maximumImportMegabytes }} MB)</span>
                     <input type="file" name="file" class="auth-input" accept=".xlsx" required>
                 </label>
 
@@ -100,6 +102,8 @@
                     <button type="submit" class="button-primary compact-button btn-compact">Previsualizar importacion</button>
                 </div>
             </form>
+
+            <p class="stock-intro-helper">Limite tecnico: {{ number_format($maximumImportRows, 0, ',', '.') }} filas procesables. El libro se lee en streaming y se rechaza antes de superar ese numero.</p>
 
             @if ($stockImport?->client?->code === 'EDELVIVES')
                 <p class="stock-intro-helper">Se importaran articulos, ubicaciones, pallets y picos del cliente Edelvives.</p>
@@ -129,6 +133,12 @@
                 <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Pallets internos</strong><span>{{ number_format($preview['totals']['internal_warehouse_pallets'] ?? 0, 2, ',', '.') }}</span></article>
                 <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Diferencia partidas</strong><span>{{ number_format($preview['totals']['difference_rows'] ?? 0, 0, ',', '.') }}</span></article>
                 <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Diferencia pallets</strong><span>{{ number_format($preview['totals']['difference_warehouse_pallets'] ?? 0, 2, ',', '.') }}</span></article>
+                <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Referencias actuales</strong><span>{{ number_format($preview['snapshot']['current_references'] ?? 0, 0, ',', '.') }}</span></article>
+                <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Referencias importadas</strong><span>{{ number_format($preview['snapshot']['imported_references'] ?? 0, 0, ',', '.') }}</span></article>
+                <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Referencias nuevas</strong><span>{{ number_format($preview['snapshot']['new_references'] ?? 0, 0, ',', '.') }}</span></article>
+                <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Referencias que desaparecen</strong><span>{{ number_format($preview['snapshot']['disappearing_references'] ?? 0, 0, ',', '.') }}</span></article>
+                <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Unidades antes</strong><span>{{ number_format($preview['snapshot']['current_units'] ?? 0, 0, ',', '.') }}</span></article>
+                <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Variacion unidades</strong><span>{{ number_format($preview['snapshot']['units_delta'] ?? 0, 0, ',', '.') }} @if(($preview['snapshot']['units_delta_percent'] ?? null) !== null) ({{ number_format($preview['snapshot']['units_delta_percent'], 2, ',', '.') }} %) @endif</span></article>
                 <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Partidas bloqueadas</strong><span>{{ number_format($preview['totals']['blocked_rows'], 0, ',', '.') }}</span></article>
                 <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Articulos sin stock</strong><span>{{ number_format($preview['totals']['catalog_items_without_stock'], 0, ',', '.') }}</span></article>
                 <article class="surface-card stock-summary-card kpi-card kpi-compact"><strong>Errores bloqueantes en filas</strong><span>{{ number_format($preview['totals']['invalid_rows_ignored'], 0, ',', '.') }}</span></article>
@@ -161,6 +171,22 @@
                             <li><span class="import-error-detail">{{ $warning }}</span></li>
                         @endforeach
                     </ul>
+                </section>
+            @endif
+
+            @if (($preview['snapshot']['requires_reduction_acknowledgement'] ?? false) === true)
+                <section class="surface-card compact-card wms-stock-warning">
+                    <strong>Reduccion de snapshot detectada</strong>
+                    <p>
+                        Desapareceran {{ number_format($preview['snapshot']['disappearing_references'], 0, ',', '.') }} referencias y
+                        {{ number_format($preview['snapshot']['disappearing_batches'], 0, ',', '.') }} partidas logicas.
+                        Quedaran a cero {{ number_format($preview['snapshot']['units_to_zero'], 0, ',', '.') }} unidades
+                        ({{ number_format($preview['snapshot']['warehouse_pallets_to_zero'], 2, ',', '.') }} pallets de almacen) correspondientes a referencias ausentes.
+                    </p>
+                    @if (($preview['snapshot']['disappearing_skus_sample'] ?? []) !== [])
+                        <p><strong>Muestra de referencias ausentes:</strong> {{ implode(', ', $preview['snapshot']['disappearing_skus_sample']) }}</p>
+                    @endif
+                    <p>No existe un umbral comercial automatico: cualquier reduccion exige revision y aceptacion explicita.</p>
                 </section>
             @endif
 
@@ -198,7 +224,7 @@
             @if ($preview['row_errors'] !== [])
                 <section class="surface-card compact-card import-errors-card wms-stock-import-message">
                     <h3>Errores bloqueantes en filas</h3>
-                    <p>Estas filas no se importaran, pero no bloquean la importacion mientras existan filas validas.</p>
+                    <p>La importacion completa queda bloqueada. Ninguna fila sustituira el snapshot hasta corregir el fichero.</p>
                     <ul class="import-message-list">
                         @foreach ($preview['row_errors'] as $error)
                             <li><span class="import-error-detail">{{ $error }}</span></li>
@@ -270,11 +296,19 @@
                         <p>Las filas con avisos se importaran igualmente.</p>
                     @endif
                     @if ($preview['row_errors'] !== [])
-                        <p>Las filas invalidas detectadas seran omitidas y no bloquearan la importacion.</p>
+                        <p>Las filas invalidas bloquean la sustitucion completa del snapshot.</p>
                     @endif
                     <form method="POST" action="{{ route('stock.import.confirm') }}" class="stock-filter-actions action-buttons page-actions-compact" onsubmit="return confirm('Seguro que quieres reemplazar el stock de este cliente?');">
                         @csrf
                         <input type="hidden" name="stock_import_id" value="{{ $stockImport->id }}">
+                        @if (($preview['snapshot']['requires_reduction_acknowledgement'] ?? false) === true)
+                            <label class="auth-field">
+                                <span>
+                                    <input type="checkbox" name="acknowledge_snapshot_replacement" value="1" required>
+                                    He revisado las referencias, unidades y pallets que desapareceran y confirmo el reemplazo completo.
+                                </span>
+                            </label>
+                        @endif
                         <button type="submit" class="button-primary compact-button btn-compact">Confirmar importacion</button>
                     </form>
                 @else

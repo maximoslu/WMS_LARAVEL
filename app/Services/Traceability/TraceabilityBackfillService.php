@@ -10,6 +10,7 @@ use App\Models\GoodsReceiptLine;
 use App\Models\InventoryMovement;
 use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -43,48 +44,60 @@ class TraceabilityBackfillService
                 $query->where('loaded_pallets', '>', 0)->orWhere('loaded_partial_units', '>', 0);
             })
             ->count();
+        $receiptCandidates = $receiptLines->map(fn (GoodsReceiptLine $line): array => [
+            'line' => $line,
+            'stock' => $this->resolveReceiptStock($line),
+            'already_traced' => $this->receiptLineAlreadyTraced($line),
+        ]);
+        $allocationCandidates = $allocations->map(fn (GoodsDispatchLineAllocation $allocation): array => [
+            'allocation' => $allocation,
+            'already_traced' => $this->dispatchAllocationAlreadyTraced($allocation),
+        ]);
         $openingBalances = StockPallet::query()
             ->where('active', true)
             ->where('quantity_units', '>', 0)
+            ->whereNull('goods_receipt_id')
             ->when($clientId !== null, fn (Builder $query) => $query->where('client_id', $clientId))
-            ->whereDoesntHave('goodsReceipt')
-            ->count();
+            ->whereNotExists(fn ($query) => $query
+                ->selectRaw('1')
+                ->from('inventory_movements')
+                ->whereColumn('inventory_movements.stock_pallet_id', 'stock_pallets.id'))
+            ->get();
         $summary = [
-            'certain_receipts' => $receiptLines->whereNotNull('goods_receipt_id')->count(),
-            'certain_dispatches' => $allocations->count(),
-            'partial_receipts' => 0,
+            'certain_receipts' => $receiptCandidates
+                ->filter(fn (array $candidate): bool => ! $candidate['already_traced'] && $candidate['stock'] instanceof StockPallet)
+                ->count(),
+            'certain_dispatches' => $allocationCandidates
+                ->filter(fn (array $candidate): bool => ! $candidate['already_traced'])
+                ->count(),
+            'partial_receipts' => $receiptCandidates
+                ->filter(fn (array $candidate): bool => ! $candidate['already_traced'] && ! $candidate['stock'] instanceof StockPallet)
+                ->count(),
             'impossible_dispatches' => $unallocatedLines,
-            'opening_balances' => $openingBalances,
+            'opening_balances' => $openingBalances->count(),
             'created_movements' => 0,
-            'existing_movements' => 0,
+            'existing_movements' => $receiptCandidates->where('already_traced', true)->count()
+                + $allocationCandidates->where('already_traced', true)->count(),
         ];
 
         if (! $apply) {
             return $summary;
         }
 
-        return DB::transaction(function () use ($receiptLines, $allocations, $clientId, $summary): array {
+        return DB::transaction(function () use ($receiptCandidates, $allocationCandidates, $openingBalances, $clientId, $summary): array {
             $result = $summary;
 
-            foreach ($receiptLines as $line) {
-                $key = "backfill:receipt-line:{$line->id}";
+            foreach ($receiptCandidates as $candidate) {
+                /** @var GoodsReceiptLine $line */
+                $line = $candidate['line'];
+                /** @var StockPallet|null $stock */
+                $stock = $candidate['stock'];
 
-                if (InventoryMovement::query()->where('idempotency_key', $key)->exists()) {
-                    $result['existing_movements']++;
-
+                if ($candidate['already_traced'] || ! $stock instanceof StockPallet) {
                     continue;
                 }
 
-                $stock = StockPallet::query()
-                    ->where('goods_receipt_id', $line->goods_receipt_id)
-                    ->where('item_id', $line->item_id)
-                    ->when($line->lot !== null, fn (Builder $query) => $query->where('lot', $line->lot))
-                    ->first();
-                $confidence = $stock instanceof StockPallet ? 'exact' : 'partial';
-
-                if ($confidence === 'partial') {
-                    $result['partial_receipts']++;
-                }
+                $key = "backfill:receipt-line:{$line->id}";
 
                 $this->createHistoricalMovement(
                     key: $key,
@@ -95,7 +108,7 @@ class TraceabilityBackfillService
                     sku: $line->sku ?? $line->item?->sku,
                     description: $line->description ?? $line->item?->description,
                     lot: $line->lot,
-                    stockPalletId: $stock?->id,
+                    stockPalletId: $stock->id,
                     movementType: InventoryMovement::RECEIPT,
                     unitsDelta: (int) $line->quantity_units,
                     fullPalletsDelta: (int) $line->pallet_count,
@@ -103,20 +116,20 @@ class TraceabilityBackfillService
                     sourceLine: $line,
                     effectiveAt: $line->goodsReceipt->received_at ?? $line->goodsReceipt->confirmed_at,
                     metadata: ['label' => 'Entrada historica reconstruida', 'balances_reconstructed' => false],
-                    confidence: $confidence,
+                    confidence: 'exact',
                 );
                 $result['created_movements']++;
             }
 
-            foreach ($allocations as $allocation) {
-                $key = "backfill:dispatch-allocation:{$allocation->id}";
+            foreach ($allocationCandidates as $candidate) {
+                /** @var GoodsDispatchLineAllocation $allocation */
+                $allocation = $candidate['allocation'];
 
-                if (InventoryMovement::query()->where('idempotency_key', $key)->exists()) {
-                    $result['existing_movements']++;
-
+                if ($candidate['already_traced']) {
                     continue;
                 }
 
+                $key = "backfill:dispatch-allocation:{$allocation->id}";
                 $line = $allocation->line;
                 $dispatch = $line->dispatch;
                 $unitsPerPallet = (int) ($allocation->stockPallet?->units_per_pallet ?? $line->units_per_pallet ?? 0);
@@ -149,18 +162,9 @@ class TraceabilityBackfillService
                 $result['created_movements']++;
             }
 
-            $stocks = StockPallet::query()
-                ->with(['client', 'item', 'location.warehouse'])
-                ->where('active', true)
-                ->where('quantity_units', '>', 0)
-                ->when($clientId !== null, fn (Builder $query) => $query->where('client_id', $clientId))
-                ->get();
+            $openingBalances->load(['client', 'item', 'location.warehouse']);
 
-            foreach ($stocks as $stock) {
-                if (InventoryMovement::query()->where('stock_pallet_id', $stock->id)->exists()) {
-                    continue;
-                }
-
+            foreach ($openingBalances as $stock) {
                 $key = "backfill:opening-balance:{$stock->id}";
                 $this->createHistoricalMovement(
                     key: $key,
@@ -196,6 +200,48 @@ class TraceabilityBackfillService
 
             return $result;
         });
+    }
+
+    private function resolveReceiptStock(GoodsReceiptLine $line): ?StockPallet
+    {
+        return StockPallet::query()
+            ->where('goods_receipt_id', $line->goods_receipt_id)
+            ->where('item_id', $line->item_id)
+            ->orderBy('id')
+            ->get()
+            ->first(fn (StockPallet $stock): bool => LotNormalizer::normalize($stock->lot) === LotNormalizer::normalize($line->lot));
+    }
+
+    private function receiptLineAlreadyTraced(GoodsReceiptLine $line): bool
+    {
+        return InventoryMovement::query()
+            ->where(function (Builder $query) use ($line): void {
+                $query
+                    ->where('idempotency_key', "backfill:receipt-line:{$line->id}")
+                    ->orWhere(function (Builder $sourceQuery) use ($line): void {
+                        $sourceQuery
+                            ->where('source_line_type', $line->getMorphClass())
+                            ->where('source_line_id', $line->id);
+                    });
+            })
+            ->exists();
+    }
+
+    private function dispatchAllocationAlreadyTraced(GoodsDispatchLineAllocation $allocation): bool
+    {
+        return InventoryMovement::query()
+            ->where(function (Builder $query) use ($allocation): void {
+                $query
+                    ->where('idempotency_key', "backfill:dispatch-allocation:{$allocation->id}")
+                    ->orWhere(function (Builder $sourceQuery) use ($allocation): void {
+                        $sourceQuery
+                            ->where('source_line_type', $allocation->line->getMorphClass())
+                            ->where('source_line_id', $allocation->goods_dispatch_line_id)
+                            ->where('stock_pallet_id', $allocation->stock_pallet_id)
+                            ->where('metadata->allocation_id', $allocation->id);
+                    });
+            })
+            ->exists();
     }
 
     /** @param array<string, mixed> $metadata */

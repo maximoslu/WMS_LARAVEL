@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AuthenticationFlowTest extends TestCase
@@ -110,14 +111,21 @@ class AuthenticationFlowTest extends TestCase
             'status' => 'pending',
         ]);
 
+        Http::assertSentCount(2);
+        $recipients = collect(Http::recorded())
+            ->map(fn (array $pair): string => (string) $pair[0]['to'][0]['email'])
+            ->sort()
+            ->values()
+            ->all();
+        $this->assertSame([
+            'administracion@maximosl.com',
+            'superadmin@maximosl.com',
+        ], $recipients);
         Http::assertSent(function ($request): bool {
             return $request->url() === 'https://api.brevo.com/v3/smtp/email'
                 && $request['subject'] === 'MAXIMO WMS - Nueva solicitud de acceso'
-                && collect($request['to'])->pluck('email')->all() === [
-                    'administracion@maximosl.com',
-                    'superadmin@maximosl.com',
-                ]
-                && $request['sender']['email'] === 'sistema@maximosl.com';
+                && $request['sender']['email'] === 'sistema@maximosl.com'
+                && Str::isUuid((string) $request['headers']['idempotencyKey']);
         });
     }
 

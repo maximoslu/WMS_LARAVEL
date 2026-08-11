@@ -2,9 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\RetriesNotificationDelivery;
 use App\Models\StockAlertEvent;
 use App\Services\Audit\AuditLogService;
 use App\Services\BrevoMailService;
+use App\Services\Notifications\NotificationDeliveryService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -17,12 +19,15 @@ use Throwable;
 
 class SendStockAlertEmailJob implements ShouldBeUnique, ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, RetriesNotificationDelivery, SerializesModels;
 
     public function __construct(public readonly int $stockAlertEventId) {}
 
-    public function handle(BrevoMailService $mail, AuditLogService $audit): void
-    {
+    public function handle(
+        BrevoMailService $mail,
+        AuditLogService $audit,
+        ?NotificationDeliveryService $deliveries = null,
+    ): void {
         $event = StockAlertEvent::query()->with(['client', 'item', 'rule'])->find($this->stockAlertEventId);
 
         if (! $event instanceof StockAlertEvent
@@ -31,8 +36,31 @@ class SendStockAlertEmailJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $deliveries ??= app(NotificationDeliveryService::class);
+
         try {
-            $mail->sendStockAlert($event, $event->recipients ?? []);
+            $recipients = collect($event->recipients ?? [])
+                ->filter(fn (mixed $email): bool => is_string($email) && filter_var(trim($email), FILTER_VALIDATE_EMAIL) !== false)
+                ->map(fn (string $email): string => Str::lower(trim($email)))
+                ->unique()
+                ->values();
+
+            foreach ($recipients as $recipient) {
+                $deliveries->deliver(
+                    'stock_alert.triggered',
+                    'stock_alert_event',
+                    $event->id,
+                    (string) $event->uuid,
+                    'brevo_api',
+                    $recipient,
+                    fn ($delivery): ?string => $mail->sendStockAlert(
+                        $event,
+                        [$recipient],
+                        $delivery->provider_idempotency_key,
+                    ),
+                );
+            }
+
             $event->forceFill([
                 'notification_status' => 'sent',
                 'notification_error' => null,
@@ -52,7 +80,9 @@ class SendStockAlertEmailJob implements ShouldBeUnique, ShouldQueue
                 ['exception' => $exception::class],
             );
 
-            throw $exception;
+            $this->handleDeliveryException($exception);
+
+            return;
         }
 
         $this->recordAuditSafely(

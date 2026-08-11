@@ -127,8 +127,7 @@ class GoodsDispatchController extends Controller
         Request $request,
         MerchandiseRequest $merchandiseRequest,
         MerchandiseRequestFulfillmentService $fulfillmentService,
-    ): View
-    {
+    ): View {
         abort_unless(! $merchandiseRequest->isDraft(), 404);
 
         $merchandiseRequest->load([

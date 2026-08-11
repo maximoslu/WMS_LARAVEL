@@ -8,6 +8,7 @@ use App\Models\Location;
 use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Services\Stock\StockExportService;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -382,7 +383,7 @@ class StockExportTest extends TestCase
         $this->assertStringNotContainsString('FR-OBSOLETO-NO', $csvContent);
         $this->assertStringNotContainsString('FR-VARIOS-NO', $csvContent);
         $this->assertStringNotContainsString('_FR-MAL-CATEGORIZADO', $csvContent);
-        $this->assertSame(15.0, (float) app(\App\Services\Stock\StockExportService::class)->rows($friesland->id)->sum('total_pallets'));
+        $this->assertSame(15.0, (float) app(StockExportService::class)->rows($friesland->id)->sum('total_pallets'));
 
         $xlsx = $this->actingAs($clientUser)->get(route('stock.export', ['format' => 'xlsx']));
         $xlsx->assertOk();
@@ -403,7 +404,7 @@ class StockExportTest extends TestCase
         $this->assertStringNotContainsString('FR-VARIOS-NO', $xlsxFlat);
         $this->assertStringNotContainsString('_FR-MAL-CATEGORIZADO', $xlsxFlat);
 
-        $pdfRows = app(\App\Services\Stock\StockExportService::class)->rows($friesland->id);
+        $pdfRows = app(StockExportService::class)->rows($friesland->id);
         $pdfHtml = view('stock.export-pdf', [
             'client' => $friesland,
             'rows' => $pdfRows,
@@ -542,8 +543,7 @@ class StockExportTest extends TestCase
         string $stockCategory = StockPallet::CATEGORY_IN_USE,
         string $status = StockPallet::STATUS_AVAILABLE,
         ?float $warehousePallets = null,
-    ): StockPallet
-    {
+    ): StockPallet {
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => $sku,

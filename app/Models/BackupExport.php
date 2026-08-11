@@ -11,16 +11,25 @@ class BackupExport extends Model
     use HasFactory;
 
     public const TYPE_FULL_SYSTEM = 'full-system';
+
     public const TYPE_DATABASE = 'database';
+
     public const TYPE_MOVEMENTS = 'movements';
+
     public const TYPE_OPERATIONS = 'operations';
+
     public const TYPE_STOCK = 'stock';
+
     public const TYPE_STOCK_CLIENT = 'stock-client';
+
     public const TYPE_STOCK_SNAPSHOT_DAILY = 'stock_snapshot_daily';
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_RUNNING = 'running';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_FAILED = 'failed';
 
     protected $fillable = [

@@ -51,7 +51,9 @@ return new class extends Migration
 
     private function indexExists(string $indexName): bool
     {
-        return collect(DB::select('SHOW INDEX FROM goods_dispatches'))
+        $table = DB::getTablePrefix().'goods_dispatches';
+
+        return collect(DB::select('SHOW INDEX FROM `'.str_replace('`', '``', $table).'`'))
             ->contains(fn (object $index): bool => (string) $index->Key_name === $indexName);
     }
 };

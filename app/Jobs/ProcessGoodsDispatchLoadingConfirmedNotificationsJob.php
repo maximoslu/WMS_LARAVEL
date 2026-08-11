@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\RetriesNotificationDelivery;
 use App\Models\GoodsDispatch;
 use App\Models\User;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
@@ -10,7 +11,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ProcessGoodsDispatchLoadingConfirmedNotificationsJob implements ShouldQueue
@@ -18,6 +18,7 @@ class ProcessGoodsDispatchLoadingConfirmedNotificationsJob implements ShouldQueu
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
+    use RetriesNotificationDelivery;
     use SerializesModels;
 
     public function __construct(
@@ -39,11 +40,7 @@ class ProcessGoodsDispatchLoadingConfirmedNotificationsJob implements ShouldQueu
         try {
             $notificationService->deliverLoadingConfirmedNotifications($dispatch, $confirmedBy);
         } catch (Throwable $exception) {
-            Log::warning('Fallo al procesar notificaciones de confirmacion de carga.', [
-                'dispatch_id' => $this->goodsDispatchId,
-                'confirmed_by' => $this->confirmedByUserId,
-                'message' => $exception->getMessage(),
-            ]);
+            $this->handleDeliveryException($exception);
         }
     }
 }

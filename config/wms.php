@@ -8,6 +8,13 @@ return [
 
     'google_booking_calendar_embed_url' => env('GOOGLE_BOOKING_CALENDAR_EMBED_URL'),
 
+    'stock_imports' => [
+        // Limites tecnicos conservadores: el historico local llega a 574 filas / 146 KB.
+        'max_file_kilobytes' => 2048,
+        'max_rows' => 1000,
+        'temporary_retention_hours' => 24,
+    ],
+
     'merchandise_requests' => [
         'schedule' => [
             'timezone' => env('APP_TIMEZONE', 'Europe/Madrid'),

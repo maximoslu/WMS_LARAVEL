@@ -578,7 +578,7 @@ class ClientGoodsReceiptDocumentTest extends TestCase
             ->post(route('goods-receipts.store'), $this->storePayload($edelvives, 'SAICA'))
             ->assertRedirect();
 
-        Notification::assertSentToTimes($clienteUser, ClientGoodsReceiptDocumentAvailableNotification::class, 1);
+        Notification::assertSentToTimes($clienteUser, ClientGoodsReceiptDocumentAvailableNotification::class, 2);
         Notification::assertSentToTimes(new AnonymousNotifiable, ClientGoodsReceiptDocumentAvailableNotification::class, 0);
     }
 

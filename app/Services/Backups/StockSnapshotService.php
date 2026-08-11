@@ -4,7 +4,6 @@ namespace App\Services\Backups;
 
 use App\Models\BackupExport;
 use App\Models\Client;
-use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -12,9 +11,7 @@ use Illuminate\Support\Str;
 
 class StockSnapshotService
 {
-    public function __construct(private readonly BackupService $backups)
-    {
-    }
+    public function __construct(private readonly BackupService $backups) {}
 
     /**
      * @return array{planned:int,created:int,skipped:int,deleted:int,items:array<int, array<string, mixed>>}
@@ -45,6 +42,7 @@ class StockSnapshotService
 
             if (! $willCreate) {
                 $skipped++;
+
                 continue;
             }
 

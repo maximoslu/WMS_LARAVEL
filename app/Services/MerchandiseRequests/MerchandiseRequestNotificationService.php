@@ -12,17 +12,22 @@ use App\Notifications\CustomerDispatchDeliveryNoteNotification;
 use App\Notifications\CustomerMerchandiseRequestSubmittedNotification;
 use App\Notifications\InternalGoodsDispatchCompletedNotification;
 use App\Notifications\InternalMerchandiseRequestSubmittedNotification;
+use App\Services\Notifications\NotificationDeliveryService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Closure;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 class MerchandiseRequestNotificationService
 {
+    public function __construct(
+        private readonly NotificationDeliveryService $deliveries,
+    ) {}
+
     public function notifySubmitted(MerchandiseRequest $merchandiseRequest): void
     {
-        ProcessMerchandiseRequestSubmittedNotificationsJob::dispatch($merchandiseRequest->id)->afterCommit()->afterResponse();
+        ProcessMerchandiseRequestSubmittedNotificationsJob::dispatch($merchandiseRequest->id)->afterCommit();
     }
 
     public function deliverSubmittedNotifications(MerchandiseRequest $merchandiseRequest): void
@@ -50,22 +55,39 @@ class MerchandiseRequestNotificationService
         $clientRecipients = $this->clientRecipients($merchandiseRequest);
 
         foreach ($clientRecipients as $recipient) {
-            $recipient->notify(new CustomerMerchandiseRequestSubmittedNotification(
-                $merchandiseRequest,
+            $this->deliveries->deliverToUser(
+                'merchandise_request.submitted',
+                'merchandise_request',
+                $merchandiseRequest->id,
+                'submitted',
+                $recipient,
                 ['database', 'mail'],
-                $preparationPdfContent,
-                $preparationPdfName,
-            ));
+                fn (array $channels) => new CustomerMerchandiseRequestSubmittedNotification(
+                    $merchandiseRequest,
+                    $channels,
+                    $preparationPdfContent,
+                    $preparationPdfName,
+                ),
+            );
         }
 
         $internalRecipients = $this->notifyInternalUsers(
-            new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['database', 'mail'])
+            'merchandise_request.submitted.internal',
+            'merchandise_request',
+            $merchandiseRequest->id,
+            'submitted',
+            fn (array $channels) => new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, $channels),
         );
         $additionalEmails = $this->dispatchEmailRecipients($merchandiseRequest, $clientRecipients->merge($internalRecipients));
 
         foreach ($additionalEmails as $email) {
-            Notification::route('mail', $email)->notify(
-                new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, ['mail'])
+            $this->deliveries->deliverToEmail(
+                'merchandise_request.submitted.internal',
+                'merchandise_request',
+                $merchandiseRequest->id,
+                'submitted',
+                $email,
+                fn (array $channels) => new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, $channels),
             );
         }
 
@@ -117,7 +139,7 @@ class MerchandiseRequestNotificationService
             $dispatch->merchandise_request_id,
             $previousRequestStatus,
             $currentStatus,
-        )->afterResponse();
+        )->afterCommit();
     }
 
     public function sendDeliveryNoteToClient(GoodsDispatch $dispatch, string $currentStatus): ?string
@@ -157,34 +179,55 @@ class MerchandiseRequestNotificationService
             throw $exception;
         }
 
+        $eventVersion = 'completed:'.($dispatch->completed_at?->format('Y-m-d H:i:s.u') ?? $currentStatus);
+
         $this->notifyInternalUsers(
-            new InternalGoodsDispatchCompletedNotification($dispatch, $merchandiseRequest, ['database', 'mail'])
+            'goods_dispatch.completed.internal',
+            'goods_dispatch',
+            $dispatch->id,
+            $eventVersion,
+            fn (array $channels) => new InternalGoodsDispatchCompletedNotification($dispatch, $merchandiseRequest, $channels),
         );
 
         $recipients = $this->clientRecipients($merchandiseRequest);
         $validEmailRecipients = $recipients
             ->filter(fn (User $recipient) => $this->hasValidEmail($recipient))
-            ->unique(fn (User $recipient) => mb_strtolower((string) $recipient->email));
+            ->unique(fn (User $recipient) => mb_strtolower(trim((string) $recipient->email)));
         $additionalEmails = $this->dispatchEmailRecipients($merchandiseRequest, $validEmailRecipients);
 
         foreach ($recipients as $recipient) {
-            $recipient->notify(new CustomerDispatchDeliveryNoteNotification(
-                $dispatch,
-                $merchandiseRequest,
-                $pdfContent,
-                $currentStatus,
+            $this->deliveries->deliverToUser(
+                'goods_dispatch.delivery_note',
+                'goods_dispatch',
+                $dispatch->id,
+                $eventVersion,
+                $recipient,
                 $this->hasValidEmail($recipient) ? ['database', 'mail'] : ['database'],
-            ));
+                fn (array $channels) => new CustomerDispatchDeliveryNoteNotification(
+                    $dispatch,
+                    $merchandiseRequest,
+                    $pdfContent,
+                    $currentStatus,
+                    $channels,
+                ),
+            );
         }
 
         foreach ($additionalEmails as $email) {
-            Notification::route('mail', $email)->notify(new CustomerDispatchDeliveryNoteNotification(
-                $dispatch,
-                $merchandiseRequest,
-                $pdfContent,
-                $currentStatus,
-                ['mail'],
-            ));
+            $this->deliveries->deliverToEmail(
+                'goods_dispatch.delivery_note',
+                'goods_dispatch',
+                $dispatch->id,
+                $eventVersion,
+                $email,
+                fn (array $channels) => new CustomerDispatchDeliveryNoteNotification(
+                    $dispatch,
+                    $merchandiseRequest,
+                    $pdfContent,
+                    $currentStatus,
+                    $channels,
+                ),
+            );
         }
 
         $dispatch->forceFill([
@@ -212,13 +255,13 @@ class MerchandiseRequestNotificationService
         $userEmails = $userRecipients
             ->pluck('email')
             ->filter()
-            ->map(fn (string $email) => mb_strtolower($email))
+            ->map(fn (string $email) => mb_strtolower(trim($email)))
             ->all();
 
         return $merchandiseRequest->client?->dispatchEmailRecipients
             ->pluck('email')
             ->filter(fn (?string $email) => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)
-            ->map(fn (string $email) => mb_strtolower($email))
+            ->map(fn (string $email) => mb_strtolower(trim($email)))
             ->reject(fn (string $email) => in_array($email, $userEmails, true))
             ->unique()
             ->values() ?? collect();
@@ -260,8 +303,14 @@ class MerchandiseRequestNotificationService
     /**
      * @return Collection<int, User>
      */
-    private function notifyInternalUsers(object $notification, ?User $excludeUser = null): Collection
-    {
+    private function notifyInternalUsers(
+        string $type,
+        string $sourceType,
+        int|string $sourceId,
+        ?string $eventVersion,
+        Closure $notification,
+        ?User $excludeUser = null,
+    ): Collection {
         $recipients = $this->internalRecipients()
             ->reject(fn (User $recipient): bool => $excludeUser !== null && $recipient->id === $excludeUser->id)
             ->values();
@@ -271,7 +320,15 @@ class MerchandiseRequestNotificationService
         }
 
         foreach ($recipients as $recipient) {
-            $recipient->notify($notification);
+            $this->deliveries->deliverToUser(
+                $type,
+                $sourceType,
+                $sourceId,
+                $eventVersion,
+                $recipient,
+                ['database', 'mail'],
+                $notification,
+            );
         }
 
         return $recipients;

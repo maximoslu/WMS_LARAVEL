@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessAccessRequestEmailJob;
 use App\Models\AccessRequest;
 use App\Models\Client;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\BrevoMailService;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -15,7 +15,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
-use Throwable;
 
 class AccessRequestController extends Controller
 {
@@ -87,11 +86,7 @@ class AccessRequestController extends Controller
 
         $accessRequest = AccessRequest::query()->create($payload);
 
-        try {
-            app(BrevoMailService::class)->sendAccessRequestNotification($accessRequest);
-        } catch (Throwable $exception) {
-            report($exception);
-        }
+        ProcessAccessRequestEmailJob::dispatch($accessRequest->id, ProcessAccessRequestEmailJob::SUBMITTED);
 
         return redirect()
             ->route('access-requests.create')
@@ -159,11 +154,7 @@ class AccessRequestController extends Controller
             return $accessRequest->fresh(['client', 'user']);
         });
 
-        try {
-            app(BrevoMailService::class)->sendAccessRequestApproved($accessRequest);
-        } catch (Throwable $exception) {
-            report($exception);
-        }
+        ProcessAccessRequestEmailJob::dispatch($accessRequest->id, ProcessAccessRequestEmailJob::APPROVED);
 
         return redirect()
             ->route('access-requests.show', $accessRequest)
@@ -188,11 +179,7 @@ class AccessRequestController extends Controller
             'rejection_reason' => $validated['rejection_reason'],
         ]);
 
-        try {
-            app(BrevoMailService::class)->sendAccessRequestRejected($accessRequest->fresh());
-        } catch (Throwable $exception) {
-            report($exception);
-        }
+        ProcessAccessRequestEmailJob::dispatch($accessRequest->id, ProcessAccessRequestEmailJob::REJECTED);
 
         return redirect()
             ->route('access-requests.show', $accessRequest)

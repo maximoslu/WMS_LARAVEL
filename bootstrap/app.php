@@ -5,6 +5,8 @@ use App\Http\Middleware\TrackUserActivity;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\PostTooLargeException;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -23,7 +25,16 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (Illuminate\Http\Exceptions\PostTooLargeException $exception, Illuminate\Http\Request $request) {
+        $exceptions->render(function (PostTooLargeException $exception, Request $request) {
+            if ($request->is('stock/importar/previsualizar')) {
+                $maximumMegabytes = (int) ceil((int) config('wms.stock_imports.max_file_kilobytes', 2048) / 1024);
+
+                return back()
+                    ->withErrors([
+                        'file' => 'El fichero de stock no puede superar '.$maximumMegabytes.' MB.',
+                    ]);
+            }
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'message' => 'El documento no puede superar los 50 MB.',

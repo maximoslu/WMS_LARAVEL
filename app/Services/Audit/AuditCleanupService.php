@@ -7,7 +7,7 @@ use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class AuditCleanupService
 {
@@ -51,16 +51,40 @@ class AuditCleanupService
             ];
         }
 
-        $deleted = $this->db->transaction(function () use ($filters): int {
-            return match ((string) $filters['cleanup_type']) {
-                'notifications' => $this->notificationsQuery($filters)->delete(),
-                'stock_imports' => $this->stockImportsQuery($filters)->delete(),
-                'failed_jobs' => Schema::hasTable('failed_jobs')
-                    ? $this->failedJobsQuery($filters)->delete()
-                    : 0,
-                default => 0,
-            };
+        $result = $this->db->transaction(function () use ($filters): array {
+            if ((string) $filters['cleanup_type'] === 'stock_imports') {
+                $imports = $this->stockImportsQuery($filters)
+                    ->lockForUpdate()
+                    ->get(['id', 'stored_path']);
+
+                return [
+                    'deleted' => $imports->isEmpty()
+                        ? 0
+                        : StockImport::query()->whereKey($imports->pluck('id'))->delete(),
+                    'temporary_paths' => $imports->pluck('stored_path')->filter()->values()->all(),
+                ];
+            }
+
+            return [
+                'deleted' => match ((string) $filters['cleanup_type']) {
+                    'notifications' => $this->notificationsQuery($filters)->delete(),
+                    'failed_jobs' => Schema::hasTable('failed_jobs')
+                        ? $this->failedJobsQuery($filters)->delete()
+                        : 0,
+                    default => 0,
+                },
+                'temporary_paths' => [],
+            ];
         });
+        $deleted = (int) $result['deleted'];
+
+        foreach ($result['temporary_paths'] as $path) {
+            $normalizedPath = str_replace('\\', '/', trim((string) $path));
+
+            if (str_starts_with($normalizedPath, 'stock-imports/') && ! str_contains($normalizedPath, '..')) {
+                Storage::disk('local')->delete($normalizedPath);
+            }
+        }
 
         Log::info('Audit cleanup executed', [
             'actor_id' => $actorId,
@@ -158,6 +182,7 @@ class AuditCleanupService
             ->when(($filters['client_id'] ?? null) !== null, fn ($query) => $query->where('client_id', (int) $filters['client_id']))
             ->whereIn('status', [
                 StockImport::STATUS_FAILED,
+                StockImport::STATUS_STALE,
                 StockImport::STATUS_PENDING_CONFIRMATION,
                 StockImport::STATUS_PREVIEWED,
             ])

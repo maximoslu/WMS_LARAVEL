@@ -2,12 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\TransientNotificationDeliveryException;
 use App\Jobs\SendStockAlertEmailJob;
 use App\Models\Client;
 use App\Models\ClientStockAlertEmailRecipient;
+use App\Models\GoodsReceipt;
+use App\Models\GoodsReceiptLine;
 use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
+use App\Models\NotificationDelivery;
 use App\Models\Role;
 use App\Models\StockAlertEvent;
 use App\Models\StockAlertRule;
@@ -277,6 +281,74 @@ class TraceabilityModuleTest extends TestCase
             'client_id' => $client->id,
         ]);
         Http::assertSentCount(1);
+        Http::assertSent(fn ($request): bool => Str::isUuid((string) $request['headers']['idempotencyKey']));
+        $this->assertDatabaseHas('notification_deliveries', [
+            'type' => 'stock_alert.triggered',
+            'source_id' => (string) $event->id,
+            'status' => NotificationDelivery::STATUS_SENT,
+            'attempts' => 1,
+            'provider_message_id' => 'stock-alert-1',
+        ]);
+    }
+
+    public function test_stock_alert_transient_failure_is_retried_with_one_stable_brevo_key(): void
+    {
+        config([
+            'services.brevo.key' => 'test-brevo-key',
+            'services.brevo.base_url' => 'https://api.brevo.com/v3',
+            'mail.from.address' => 'sistema@example.test',
+            'mail.from.name' => 'MAXIMO WMS',
+        ]);
+        Http::fake([
+            'https://api.brevo.com/*' => Http::sequence()
+                ->push(['code' => 'temporary'], 503)
+                ->push(['messageId' => 'stock-alert-retry'], 201),
+        ]);
+        $client = Client::factory()->create();
+        $item = Item::factory()->create(['client_id' => $client->id, 'sku' => 'ALERT-RETRY']);
+        $rule = StockAlertRule::query()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'active' => true,
+            'minimum_units' => 100,
+            'severity' => 'warning',
+            'cooldown_minutes' => 60,
+        ]);
+        $event = StockAlertEvent::query()->create([
+            'uuid' => (string) Str::uuid(),
+            'stock_alert_rule_id' => $rule->id,
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'severity' => StockAlertEvent::STATUS_WARNING,
+            'status' => StockAlertEvent::STATUS_WARNING,
+            'reason' => 'Stock bajo transitorio.',
+            'recipients' => ['RETRY@example.test', ' retry@example.test '],
+            'notification_status' => 'queued',
+            'triggered_at' => now(),
+        ]);
+        $job = new SendStockAlertEmailJob($event->id);
+
+        try {
+            $job->handle(app(BrevoMailService::class), app(AuditLogService::class));
+            $this->fail('El HTTP 503 debe salir del job para que Laravel lo reintente.');
+        } catch (TransientNotificationDeliveryException) {
+            // Expected first queue attempt.
+        }
+
+        $this->assertSame('failed', $event->fresh()->notification_status);
+        $this->assertSame(NotificationDelivery::STATUS_FAILED, NotificationDelivery::query()->sole()->status);
+        $firstProviderKey = NotificationDelivery::query()->sole()->provider_idempotency_key;
+
+        $job->handle(app(BrevoMailService::class), app(AuditLogService::class));
+
+        $delivery = NotificationDelivery::query()->sole();
+        $this->assertSame(NotificationDelivery::STATUS_SENT, $delivery->status);
+        $this->assertSame(2, $delivery->attempts);
+        $this->assertSame($firstProviderKey, $delivery->provider_idempotency_key);
+        $this->assertSame('sent', $event->fresh()->notification_status);
+        Http::assertSentCount(2);
+        $keys = collect(Http::recorded())->map(fn (array $pair): string => (string) $pair[0]['headers']['idempotencyKey'])->unique();
+        $this->assertCount(1, $keys);
     }
 
     public function test_stock_alert_recipients_are_normalized_separate_and_audited(): void
@@ -471,9 +543,11 @@ class TraceabilityModuleTest extends TestCase
         $service = app(TraceabilityBackfillService::class);
 
         $first = $service->run($client->id, true);
+        $afterFirstDryRun = $service->run($client->id, false);
         $second = $service->run($client->id, true);
 
         $this->assertSame(1, $first['created_movements']);
+        $this->assertSame(0, $afterFirstDryRun['opening_balances']);
         $this->assertSame(0, $second['created_movements']);
         $this->assertSame(250, (int) $stock->fresh()->quantity_units);
         $this->assertDatabaseCount('inventory_movements', 1);
@@ -482,6 +556,76 @@ class TraceabilityModuleTest extends TestCase
             'movement_type' => InventoryMovement::OPENING_BALANCE,
             'source' => 'backfill',
             'reconstruction_confidence' => 'opening_balance',
+        ]);
+    }
+
+    public function test_traceability_backfill_keeps_receipt_without_matching_stock_as_ambiguous(): void
+    {
+        $client = Client::factory()->create();
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsReceipt::STATUS_CONFIRMED,
+            'stock_applied_at' => now()->subMinute(),
+        ]);
+        GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'lot' => 'AMBIGUOUS-LOT',
+            'quantity_units' => 500,
+            'pallet_count' => 5,
+        ]);
+        $service = app(TraceabilityBackfillService::class);
+
+        $dryRun = $service->run($client->id, false);
+        $apply = $service->run($client->id, true);
+
+        $this->assertSame(0, $dryRun['certain_receipts']);
+        $this->assertSame(1, $dryRun['partial_receipts']);
+        $this->assertSame(0, $apply['created_movements']);
+        $this->assertDatabaseCount('inventory_movements', 0);
+    }
+
+    public function test_traceability_backfill_only_creates_an_exact_missing_receipt_movement_once(): void
+    {
+        $client = Client::factory()->create();
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsReceipt::STATUS_CONFIRMED,
+            'stock_applied_at' => now()->subMinute(),
+        ]);
+        $line = GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'lot' => 'EXACT-LOT',
+            'quantity_units' => 500,
+            'pallet_count' => 5,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'goods_receipt_id' => $receipt->id,
+            'lot' => 'EXACT-LOT',
+            'quantity_units' => 500,
+        ]);
+        $service = app(TraceabilityBackfillService::class);
+
+        $before = $service->run($client->id, false);
+        $first = $service->run($client->id, true);
+        $after = $service->run($client->id, false);
+        $second = $service->run($client->id, true);
+
+        $this->assertSame(1, $before['certain_receipts']);
+        $this->assertSame(1, $first['created_movements']);
+        $this->assertSame(0, $after['certain_receipts']);
+        $this->assertSame(1, $after['existing_movements']);
+        $this->assertSame(0, $second['created_movements']);
+        $this->assertSame(500, (int) $stock->fresh()->quantity_units);
+        $this->assertDatabaseHas('inventory_movements', [
+            'stock_pallet_id' => $stock->id,
+            'source_line_id' => $line->id,
+            'reconstruction_confidence' => 'exact',
         ]);
     }
 

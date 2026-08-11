@@ -177,7 +177,7 @@ class MerchandiseRequestForecastTest extends TestCase
             ->assertRedirect();
 
         $this->assertSame(MerchandiseRequest::STATUS_PENDING, $draft->fresh()->status);
-        Bus::assertDispatchedAfterResponse(ProcessMerchandiseRequestSubmittedNotificationsJob::class);
+        Bus::assertDispatched(ProcessMerchandiseRequestSubmittedNotificationsJob::class);
 
         $this->actingAs($internal)
             ->get(route('merchandise-requests.forecast.index'))

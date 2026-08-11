@@ -1254,6 +1254,50 @@ class StockOverviewTest extends TestCase
         $this->assertSame('C1-07', $stockPallet->location_text);
     }
 
+    public function test_manual_location_update_rejects_compatible_destination_batch(): void
+    {
+        [$client] = $this->seedBaseData();
+        $warehouse = Warehouse::factory()->create(['client_id' => null]);
+        $destination = Location::factory()->create([
+            'warehouse_id' => $warehouse->id,
+            'code' => 'COLLISION-01',
+        ]);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => 'SKU-UPDATE-COLLISION',
+            'units_per_pallet' => 100,
+        ]);
+        $source = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => null,
+            'location_text' => null,
+            'lot' => 'LOT-UPDATE-COLLISION',
+            'units_per_pallet' => 100,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'active' => true,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'location_id' => $destination->id,
+            'lot' => 'LOT-UPDATE-COLLISION',
+            'units_per_pallet' => 100,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'active' => true,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::ALMACEN))
+            ->from(route('stock.batches.edit', $source))
+            ->put(route('stock.batches.update', $source), ['location_id' => $destination->id])
+            ->assertRedirect(route('stock.batches.edit', $source))
+            ->assertSessionHasErrors('location_id');
+
+        $this->assertNull($source->fresh()->location_id);
+    }
+
     public function test_stock_view_can_filter_by_selected_item_lot_and_location(): void
     {
         [$client] = $this->seedBaseData();
