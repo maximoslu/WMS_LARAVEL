@@ -11,11 +11,14 @@ class GoodsReceiptDeletionService
 {
     public function __construct(
         private readonly GoodsReceiptStockApplicationService $stockApplicationService,
+        private readonly GoodsReceiptDocumentStorage $documentStorage,
         private readonly AuditLogService $audit,
     ) {}
 
     public function delete(GoodsReceipt $receipt, User $user): void
     {
+        $documentPath = $receipt->document_path;
+
         DB::transaction(function () use ($receipt, $user): void {
             $correlationId = $this->audit->correlationId();
             $receipt->loadMissing([
@@ -51,5 +54,7 @@ class GoodsReceiptDeletionService
             $receipt->lines()->delete();
             $receipt->delete();
         });
+
+        $this->documentStorage->delete($documentPath);
     }
 }

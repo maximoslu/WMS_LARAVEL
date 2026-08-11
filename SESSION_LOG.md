@@ -4,6 +4,80 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-11 - AUDITORIA INTEGRAL Y CANDIDATO DE BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `audit/baseline-wms-2026-08-11`.
+**Punto de partida:** `dd74878b0833fa4e1918e2a68a6309f552e39fcc` (`feat: add unlocated stock visibility`), con `main` alineada con `origin/main` antes de crear la rama. `git pull origin main` indico que ya estaba actualizado. `.claude/` y `tmp/` eran y siguen siendo directorios locales no versionados y excluidos del alcance.
+
+### Decision de baseline
+
+**NO APTO para etiquetar como baseline estable.** El codigo funcional pasa la suite completa y las correcciones objetivas de esta auditoria quedan cubiertas, pero permanecen bloqueos de seguridad, concurrencia y saneamiento de datos. No se creo tag, no se hizo merge ni push, no se desplego y no se accedio a Forge o produccion.
+
+### Modelo operativo reconstruido
+
+- `stock_pallets` es la fuente del estado actual; solo cuentan filas activas y con existencia fisica/logistica positiva segun la vista. `inventory_movements` es el ledger inmutable de trazabilidad, no el stock vivo.
+- La identidad de una partida usa cliente, articulo, lote normalizado, ubicacion, unidades por palet, estado y categoria. `goods_receipt_id` y `stock_import_id` expresan procedencia, no identidad fisica.
+- Un borrador de entrada o pedido no cambia stock. La entrada confirmada incrementa stock una vez y la salida solo descuenta al enviarse/completarse, con marcadores de aplicacion y movimientos idempotentes. La confirmacion de carga no descuenta.
+- El stock sin ubicacion se representa por `location_id = NULL`; `location_text` es historico. Pedidos parciales, multiples asignaciones, picos, stock bloqueado/obsoleto/varios y metricas fisicas frente a oficiales mantienen reglas separadas y cubiertas por pruebas.
+- La importacion Excel es un reemplazo completo del snapshot activo del cliente seleccionado. No se interpreta como un delta y por ello requiere control operativo estricto frente a datos mas recientes.
+
+### Correcciones seguras aplicadas
+
+- Al borrar una entrada, su documento privado se elimina solo despues de completar la transaccion de base de datos. Si la reversion de stock falla y hay rollback, el documento se conserva.
+- Si un Excel no puede leerse al crear la previsualizacion, se elimina el temporal ya almacenado y no queda un fichero huerfano sin registro de importacion.
+- La confirmacion de una importacion vuelve a validar el estado despues de adquirir `lockForUpdate()`. Una instancia obsoleta no puede reaplicar una importacion que otro proceso ya completo.
+- No hubo migraciones ni cambios de datos. Se anadieron cuatro regresiones especificas para exito, rollback, fichero corrupto y estado concurrente obsoleto.
+
+### Auditoria de datos local, solo lectura
+
+- Volumen inspeccionado: 5 clientes, 11 usuarios, 386 articulos, 2 almacenes, 55 ubicaciones, 346 partidas, 5 entradas, 3 lineas de entrada, 1 pedido, 1 linea de pedido, 2 salidas, 1 linea de salida, 0 asignaciones, 168 movimientos y 2 importaciones.
+- No se detectaron cantidades negativas, partidas activas vacias, desgloses de picos incoherentes, referencias huerfanas, cruces cliente-articulo/ubicacion/salida, movimientos sin cliente ni claves de idempotencia duplicadas.
+- `wms:consolidate-stock-batches --dry-run` confirma un grupo fisico duplicado: IDs `246,247`, cliente 1, articulo 260, lote `OFA0004644`, sin ubicacion, `available/in_use`, 9.461 unidades y 6 palets. No se consolido.
+- `wms:lots:canonicalize --dry-run` propone normalizar 191 partidas, 3 lineas de entrada, 1 linea de pedido, 1 linea de salida y 12 movimientos hacia `NO LOTE`; no detecta colisiones y no se aplico.
+- `wms:traceability:backfill --dry-run` propone 344 saldos iniciales y una entrada cierta. El historico local no esta totalmente materializado en el ledger; no se aplico el backfill.
+- Existe una entrada confirmada historica sin lineas, marcador de stock ni movimientos (`goods_receipts.id = 7`, `ALB-OLD-001`) y una partida logistica de prueba con cero unidades y 731 unidades en picos (`stock_pallets.id = 186`). Requieren clasificacion funcional antes de sanear.
+- De 1.096 ficheros en el almacen privado de entradas, solo 3 estan referenciados: 1.093 quedan sin referencia local. El proceso existente de antiguedad limpia documentos referenciados, no estos huerfanos. No se borro ninguno.
+- `wms:locations:audit` no encontro ubicaciones faltantes, extras o grupos equivalentes duplicados. `wms:dispatches:apply-missing-stock --dry-run` no encontro salidas enviadas/completadas pendientes de descuento.
+
+### Bloqueos tecnicos y de seguridad
+
+1. `composer audit --locked` falla con 20 avisos sobre 5 paquetes. Hay severidad alta en Guzzle y CommonMark, ademas de avisos en Laravel, Dompdf y Firebase JWT. Versiones bloqueadas observadas: Laravel `12.61.0`, Dompdf `3.1.5`, Guzzle `7.13.1`, CommonMark `2.8.2` y Firebase JWT `6.11.1`.
+2. `composer validate --strict` informa que `composer.lock` no esta sincronizado con `composer.json`; tambien advierte de la restriccion exacta de OpenSpout `4.28`.
+3. La busqueda y consolidacion de partidas de entrada bloquea filas existentes, pero la creacion concurrente cuando aun no existe ninguna partida compatible no esta protegida por una clave unica o un cerrojo por identidad. Dos entradas simultaneas pueden crear duplicados. La edicion de una entrada confirmada tampoco vuelve a obtener la propia entrada con bloqueo al comenzar su transaccion.
+4. Los jobs de notificaciones capturan excepciones y las convierten en log, de modo que la cola puede marcarlos como correctos sin reintento. Los hitos de comunicacion general no tienen una clave persistente de idempotencia; el marcador de albaran de salida se escribe despues de enviar y no protege dos workers simultaneos.
+5. La importacion reemplaza el snapshot completo del cliente y acepta el Excel sin limite explicito de tamano. Es necesaria una regla operativa/tecnica antes de considerarla segura frente a cargas grandes o snapshots obsoletos.
+6. No se verifico produccion ni una replica de datos de produccion. La base local contiene los residuos anteriores y no puede certificarse como dataset limpio.
+
+### Validacion ejecutada
+
+- Regresiones nuevas: **4 passed, 18 assertions**.
+- Modulos modificados completos: **160 passed, 1.117 assertions**.
+- Tres bloques funcionales focalizados previos: **531 passed, 3.595 assertions**.
+- Suite completa final: **837 passed, 4.896 assertions**, 46,61 s.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: **0 vulnerabilidades**.
+- `git diff --check`: OK. Todas las migraciones locales constan como aplicadas hasta `2026_08_04_000001`.
+- `vendor/bin/pint --test`: falla por deuda de estilo transversal ya presente en numerosos archivos, incluidos archivos no modificados. No se aplico un reformateo masivo durante la auditoria.
+- `php artisan db:show --counts` no pudo leer `performance_schema.session_status` por permisos del usuario MySQL local; las consultas de diagnostico de las tablas WMS si se ejecutaron correctamente y solo en lectura.
+
+### Condiciones minimas antes de etiquetar
+
+1. Actualizar y volver a bloquear dependencias en una rama dedicada hasta que `composer validate --strict` y `composer audit --locked` pasen, seguido de suite y build completos.
+2. Disenar una identidad fisica transaccional para partidas (clave materializada unica o advisory lock por identidad), bloquear la entrada durante edicion confirmada y anadir pruebas reales con dos conexiones.
+3. Incorporar idempotencia persistente/reintentos en notificaciones y decidir el limite de tamano y control de vigencia de importaciones.
+4. Sobre copia o staging, revisar y aprobar explicitamente consolidacion de IDs 246/247, canonizacion de lotes, backfill, entrada historica y huerfanos documentales. Hacer backup antes de cualquier `--apply`.
+5. Repetir integridad, suite, build, auditorias de dependencias y smoke tests por rol en un entorno equivalente a Forge. Solo entonces crear un tag candidato y promoverlo por GitHub -> Forge.
+
+### Archivos versionados de esta auditoria
+
+- `app/Services/GoodsReceipts/GoodsReceiptDeletionService.php`
+- `app/Services/Stock/StockExcelImportService.php`
+- `tests/Feature/GoodsReceiptManagementTest.php`
+- `tests/Feature/StockImportTest.php`
+- `SESSION_LOG.md`
+
+---
+
 ## 2026-08-10 - FEAT STOCK SIN UBICACION PARA CONTROL INTERNO
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `main`.

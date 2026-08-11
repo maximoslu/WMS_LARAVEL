@@ -26,6 +26,7 @@ use Illuminate\Support\Str;
 use InvalidArgumentException;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Reader\Common\Creator\ReaderFactory;
+use Throwable;
 
 class StockExcelImportService
 {
@@ -129,7 +130,13 @@ class StockExcelImportService
             throw new InvalidArgumentException('No se ha podido guardar temporalmente el fichero de stock.');
         }
 
-        $preview = $this->parseWorkbook(Storage::disk('local')->path($storedPath), $client);
+        try {
+            $preview = $this->parseWorkbook(Storage::disk('local')->path($storedPath), $client);
+        } catch (Throwable $exception) {
+            Storage::disk('local')->delete($storedPath);
+
+            throw $exception;
+        }
 
         $status = $preview['fatal_errors'] !== []
             ? StockImport::STATUS_FAILED
@@ -218,6 +225,18 @@ class StockExcelImportService
                 ->whereKey($stockImport->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ($lockedImport->status === StockImport::STATUS_IMPORTED) {
+                throw new InvalidArgumentException('Esta importacion ya fue confirmada previamente.');
+            }
+
+            if ($lockedImport->status === StockImport::STATUS_FAILED) {
+                throw new InvalidArgumentException('No se puede confirmar una importacion fallida.');
+            }
+
+            if (! in_array($lockedImport->status, [StockImport::STATUS_PREVIEWED, StockImport::STATUS_PENDING_CONFIRMATION], true)) {
+                throw new InvalidArgumentException('Esta importacion no esta disponible para confirmar.');
+            }
 
             StockImport::query()
                 ->where('client_id', $lockedImport->client_id)

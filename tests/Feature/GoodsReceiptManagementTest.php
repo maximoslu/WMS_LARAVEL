@@ -2986,6 +2986,25 @@ class GoodsReceiptManagementTest extends TestCase
         $this->assertDatabaseCount('stock_pallets', 0);
     }
 
+    public function test_borrar_entrada_elimina_su_documento_privado_despues_del_commit(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $receipt = $this->createDraftReceipt($superadmin);
+        $documentPath = 'goods-receipts/documento-a-borrar.pdf';
+        Storage::disk('local')->put($documentPath, 'documento');
+        $receipt->update(['document_path' => $documentPath]);
+
+        $this->actingAs($superadmin)
+            ->delete(route('goods-receipts.destroy', $receipt))
+            ->assertRedirect(route('goods-receipts.index'));
+
+        Storage::disk('local')->assertMissing($documentPath);
+        $this->assertDatabaseMissing('goods_receipts', ['id' => $receipt->id]);
+    }
+
     public function test_superadmin_puede_borrar_confirmada_y_revertir_stock_una_sola_vez(): void
     {
         $this->seed(RoleSeeder::class);
@@ -3007,6 +3026,7 @@ class GoodsReceiptManagementTest extends TestCase
 
     public function test_no_se_puede_borrar_entrada_si_la_reversion_dejaria_inconsistencia(): void
     {
+        Storage::fake('local');
         $this->seed(RoleSeeder::class);
 
         $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
@@ -3016,6 +3036,9 @@ class GoodsReceiptManagementTest extends TestCase
         $stockBatch->update([
             'quantity_units' => 200,
         ]);
+        $documentPath = 'goods-receipts/documento-con-rollback.pdf';
+        Storage::disk('local')->put($documentPath, 'documento');
+        $receipt->update(['document_path' => $documentPath]);
 
         $this->actingAs($superadmin)
             ->delete(route('goods-receipts.destroy', $receipt))
@@ -3024,6 +3047,7 @@ class GoodsReceiptManagementTest extends TestCase
 
         $this->assertDatabaseHas('goods_receipts', ['id' => $receipt->id]);
         $this->assertDatabaseHas('stock_pallets', ['id' => $stockBatch->id]);
+        Storage::disk('local')->assertExists($documentPath);
     }
 
     public function test_superadmin_puede_borrar_confirmada_sin_ubicacion_asignada(): void

@@ -12,6 +12,7 @@ use App\Models\StockImport;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Stock\StockExcelImportService;
 use App\Support\Stock\StockOverviewBuilder;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
@@ -800,6 +801,53 @@ class StockImportTest extends TestCase
                 'stock_import_id' => $stockImport->id,
             ])
             ->assertSessionHasErrors();
+    }
+
+    public function test_create_preview_removes_temporary_file_when_workbook_cannot_be_read(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = UploadedFile::fake()->createWithContent('corrupt.xlsx', 'not-an-xlsx-file');
+
+        try {
+            app(StockExcelImportService::class)->createPreview($friesland, $user, $file);
+            $this->fail('La previsualizacion corrupta debio fallar.');
+        } catch (\Throwable) {
+            Storage::disk('local')->assertDirectoryEmpty('stock-imports');
+            $this->assertDatabaseCount('stock_imports', 0);
+        }
+    }
+
+    public function test_confirm_rechecks_import_status_after_acquiring_database_lock(): void
+    {
+        [$friesland] = $this->seedBaseData();
+        Storage::fake('local');
+
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+        $file = $this->makeWorkbookUpload([
+            'STOCK' => [
+                ['SKU', 'Descripcion', 'Lote', 'Cantidad', 'Uds/Pallet', 'Pallets'],
+                ['FR-RACE', 'Carrera de confirmacion', 'LOT-RACE', 10, 10, 1],
+            ],
+        ]);
+        $result = app(StockExcelImportService::class)->createPreview($friesland, $user, $file);
+        $staleImport = $result['stock_import'];
+
+        StockImport::query()->whereKey($staleImport->id)->update([
+            'status' => StockImport::STATUS_IMPORTED,
+        ]);
+
+        try {
+            app(StockExcelImportService::class)->confirm($staleImport, $user);
+            $this->fail('Una confirmacion concurrente ya completada no debe reaplicarse.');
+        } catch (\InvalidArgumentException $exception) {
+            $this->assertSame('Esta importacion ya fue confirmada previamente.', $exception->getMessage());
+        }
+
+        $this->assertDatabaseCount('stock_pallets', 0);
+        $this->assertDatabaseCount('inventory_movements', 0);
     }
 
     public function test_grouped_warnings_are_limited_to_five_examples(): void
