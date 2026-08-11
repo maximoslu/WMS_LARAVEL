@@ -4,6 +4,74 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-11 - CIERRE DEL BLOQUEO DE DEPENDENCIAS PHP PARA BASELINE
+
+**Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-composer-security-2026-08-11`.
+**SHA inicial:** `3f657714090e9393b3792c2751dcb32b0eb16ae4`, conservando el commit de la auditoria integral. La rama se creo exactamente desde ese SHA. `origin/main` permanecio en `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+
+### Resultado
+
+**Bloqueo de dependencias PHP RESUELTO.** `composer.json` y `composer.lock` quedan sincronizados, `composer validate --strict` pasa sin warnings y `composer audit --locked` devuelve cero advisories. Esto no cambia el dictamen general del WMS: todavia no debe declararse APTO COMO BASELINE mientras permanezcan los bloqueos no relacionados con Composer.
+
+### Diagnostico inicial
+
+- `composer validate --strict`: fallo porque el `content-hash` del lock estaba obsoleto y por el constraint exacto `openspout/openspout: 4.28`. Un `composer update --lock --dry-run` no proponia cambios de versiones, confirmando que el desfase inicial era de metadatos.
+- `composer audit --locked`: 20 advisories en 5 paquetes: 6 en Dompdf, 1 en Firebase JWT, 6 en Guzzle, 1 en Laravel y 6 en CommonMark.
+- `composer outdated --direct`: Google API Client podia actualizarse de 2.18.0 a 2.19.4 dentro de `^2.18`; Laravel 13, Tinker 3, OpenSpout 5 y PHPUnit 13 eran saltos mayores ajenos al objetivo y no se incorporaron.
+- La simulacion inicial con `--with-all-dependencies` proponia 37 updates y 3 removals. Se rechazo por alcance excesivo. La resolucion final se hizo sin `-W`, fijando en el comando solo los ocho paquetes necesarios y sus versiones minimas corregidas.
+
+### Dependencias y advisories cerrados
+
+- `laravel/framework`: `12.61.0` -> `12.61.1`. Dependencia directa. Resuelve GHSA-crmm-hgp2-wgrp / PKSA-m5cs-t1y6-qpcs (medium), confusion de path en URLs temporales firmadas. Impacta framework, rutas firmadas, auth, filesystem, colas y excepciones; la subida es un parche dentro de Laravel 12.
+- `dompdf/dompdf`: `3.1.5` -> `3.1.6`. Transitiva por `barryvdh/laravel-dompdf`. Resuelve CVE-2026-59943, CVE-2026-59942, CVE-2026-59941, CVE-2026-56722, CVE-2026-55555 y CVE-2026-55554 (4 medium, 2 low), relacionados con SVG/BMP, lectura/oraculo de ficheros, chroot y agotamiento de recursos. Impacta albaranes, etiquetas, preparaciones y export PDF.
+- `guzzlehttp/guzzle`: `7.13.1` -> `7.15.2`. Transitiva por Laravel, Google API Client y Google Auth. Resuelve CVE-2026-69246 (high), CVE-2026-69245, CVE-2026-67354, CVE-2026-67355, CVE-2026-67353 y CVE-2026-67339 (medium), sobre hosts/cookies no canonicos, Referer, consumo de cookies y Proxy-Authorization. Impacta Laravel HTTP/Brevo y Google Calendar/OAuth.
+- `league/commonmark`: `2.8.2` -> `2.9.0`. Transitiva por Laravel. Resuelve GHSA-mj63-m3rc-8ppr (medium), GHSA-mh25-x5hq-wrqp, GHSA-jfm3-95jq-q3rf, GHSA-g2gp-3wwq-f4ph y CVE-2026-71488 (high), y CVE-2026-71478 (medium). No se encontro uso directo de Markdown/CommonMark en la aplicacion.
+- `firebase/php-jwt`: `6.11.1` -> `7.0.0`. Transitiva por `google/apiclient`. Resuelve CVE-2025-45769 / GHSA-2x45-7fc3-mxwq (low), cifrado debil. La aplicacion no usa JWT directamente; Google API Client 2.18 lo limitaba a `^6`, por lo que se actualizo a 2.19.4, que declara compatibilidad explicita con `^6 || ^7`. PHP 8.4 satisface el requisito de JWT 7.
+
+### Cambios auxiliares estrictamente necesarios
+
+- `google/apiclient`: `2.18.0` -> `2.19.4`, dependencia directa y habilitador compatible de JWT 7. No se actualizaron `google/auth` ni `google/apiclient-services` porque sus versiones bloqueadas ya cumplian los nuevos constraints.
+- `guzzlehttp/promises`: `2.5.0` -> `2.5.1` y `guzzlehttp/psr7`: `2.12.3` -> `2.13.0`, minimos requeridos por Guzzle 7.15.2.
+- `paragonie/constant_time_encoding`, `paragonie/random_compat` y `phpseclib/phpseclib` salen del lock porque Google API Client 2.19.4/JWT 7 ya no las requieren. No existe uso directo en `app/`.
+- OpenSpout cambia solo el constraint directo `4.28` -> `^4.28`; la version bloqueada se mantiene en `4.28.0` y no se permite OpenSpout 5.
+- La instalacion de Google API Client 2.19.4 muestra deprecations upstream por parametros implicitamente nullable bajo PHP 8.4. No son advisories ni fallos y los flujos focalizados pasan; se conserva como observacion para futuras actualizaciones, sin editar `vendor/`.
+
+### Uso real revisado
+
+- Dompdf se usa en albaranes de entrada/salida, preparacion de pedidos, etiquetas y exportacion de stock.
+- Guzzle se usa a traves de Laravel `Http` para Brevo y dentro del cliente de Google.
+- Google API Client se usa en `GoogleCalendarService` para OAuth y Calendar; Firebase JWT solo es transitiva de esa integracion.
+- CommonMark no tiene invocaciones directas en el codigo del WMS.
+
+### Validacion
+
+- Tests focalizados de autenticacion/autorizacion, documentos privados y firmados, PDFs, entradas, stock/import/export, Google Calendar/OAuth, notificaciones, pedidos y salidas: **530 passed, 3.293 assertions**.
+- Suite completa: **837 passed, 4.896 assertions**, 39,00 s.
+- `npm run build`: OK, Vite 7.3.5, 55 modulos transformados.
+- `npm audit --omit=dev`: 0 vulnerabilidades.
+- `composer validate --strict`: `./composer.json is valid`, exit 0.
+- `composer audit --locked`: 0 advisories, 0 paquetes abandonados, exit 0.
+- `composer install --dry-run --no-interaction`: lock verificable y `Nothing to install, update or remove`.
+- `composer check-platform-reqs`: todos los requisitos pasan con PHP 8.4.22.
+- `git diff --check`: OK. Diff manual limitado a `composer.json`, `composer.lock` y este registro.
+
+### Git, datos y produccion
+
+- Commit: `fix: secure composer dependencies for baseline` (`HEAD` que contiene esta entrada; SHA informado al cierre).
+- Push: rama `fix/baseline-composer-security-2026-08-11` publicada normalmente en `origin` al finalizar; sin force push.
+- Migraciones: NO. Cambios de datos: NO. Produccion/Forge: NO TOCADA. Deploy: NO. Tag: NO. Merge a `main`: NO.
+- `.claude/` y `tmp/` permanecen locales, no versionados y fuera del commit. No se modificaron manualmente `vendor/` ni `node_modules/`.
+
+### Bloqueantes restantes para la baseline general
+
+1. Identidad y concurrencia transaccional de partidas.
+2. Idempotencia persistente y reintento de notificaciones.
+3. Revision del reemplazo completo de snapshot y limite de tamano de importaciones.
+4. Saneamiento controlado de lotes, duplicados, backfill y documentos mediante dry-run/staging.
+5. Validacion en un entorno equivalente a produccion antes de cualquier tag o deploy.
+
+---
+
 ## 2026-08-11 - AUDITORIA INTEGRAL Y CANDIDATO DE BASELINE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `audit/baseline-wms-2026-08-11`.
