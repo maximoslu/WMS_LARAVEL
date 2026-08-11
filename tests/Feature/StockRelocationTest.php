@@ -19,6 +19,8 @@ class StockRelocationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private int $stockFixtureSequence = 0;
+
     public function test_internal_roles_can_view_stock_relocation_screen(): void
     {
         [$client, $item] = $this->stockFixture();
@@ -429,15 +431,17 @@ class StockRelocationTest extends TestCase
     {
         $this->seed(RoleSeeder::class);
 
+        $fixtureSequence = ++$this->stockFixtureSequence;
+
         $client = Client::factory()->create(['active' => true]);
         $item = Item::factory()->create([
             'client_id' => $client->id,
-            'sku' => 'SKU-REUBICAR-'.fake()->unique()->numerify('###'),
+            'sku' => sprintf('SKU-REUBICAR-FIXTURE-%02d', $fixtureSequence),
             'description' => 'Articulo para reubicar',
             'units_per_pallet' => 100,
         ]);
-        $source = $this->locationForClient($client, 'SRC-'.fake()->unique()->numerify('##'));
-        $destination = $this->locationForClient($client, 'DST-'.fake()->unique()->numerify('##'));
+        $source = $this->locationForClient($client, sprintf('FIXTURE-SRC-%02d', $fixtureSequence));
+        $destination = $this->locationForClient($client, sprintf('FIXTURE-DST-%02d', $fixtureSequence));
         $stockPallet = StockPallet::factory()->create([
             'client_id' => $client->id,
             'item_id' => $item->id,

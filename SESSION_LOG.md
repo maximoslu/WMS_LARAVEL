@@ -6995,10 +6995,17 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - Validacion posterior: suite **872 passed, 5.087 assertions**; build Vite OK, 55 modulos; Composer audit 0; npm audit 0; `git diff --check` OK.
 - Push normal del merge a `origin/main`: OK (`dd74878b..a4ac7ff2`), sin force push.
 
+### Regresion de estabilidad cerrada antes de produccion
+- La suite completa posterior al merge detecto una colision aleatoria en `StockRelocationTest`: el fixture compartido podia generar `SRC-02` y el propio caso de regresion creaba despues deliberadamente esa misma identidad para el mismo cliente. La restriccion unica MySQL/SQLite de `warehouses (client_id, code)` funcionaba correctamente; el defecto estaba exclusivamente en la identidad no determinista del test.
+- Se sustituyeron SKU, almacen origen y almacen destino aleatorios del fixture por identidades deterministas y secuenciales reservadas (`FIXTURE-SRC-*` / `FIXTURE-DST-*`), sin modificar codigo productivo, esquema ni restricciones.
+- Antes del cambio, 20 ejecuciones dedicadas no reprodujeron la colision de baja probabilidad; el fallo de la suite completa queda conservado como reproduccion real. Despues del cambio, `StockRelocationTest` paso 20 veces consecutivas: **260 tests, 1.760 assertions** agregadas.
+- Suites relacionadas: **306 passed, 2.107 assertions**. Suite completa final repetida dos veces: **872 passed, 5.087 assertions** en ambas ejecuciones.
+- Tooling posterior: Composer `validate --strict`, `audit --locked`, `install --dry-run` y `check-platform-reqs` OK; Vite build OK (55 modulos); npm audit 0; Pint y `git diff --check` OK.
+
 ### Forge y produccion
 - La URL publica `https://wms.maximosl.com` responde y redirige correctamente a `/login`; titulo `Acceso | MAXIMO WMS`, formulario visible y sin errores de consola.
-- No existe CLI de Forge instalada en este equipo y el navegador integrado no dispone de sesion Forge; Chrome no estaba disponible para automatizacion.
-- GitHub confirma el commit remoto, pero no publica estados ni deployments para este SHA. Por tanto, **el despliegue no se da por iniciado ni finalizado**.
+- No existe CLI de Forge instalada en este equipo y Chrome no estaba disponible para automatizacion. La ruta raiz de Forge redirigio inicialmente a la pagina publica, pero la ruta de acceso confirmo despues una sesion autenticada en la organizacion `Maximo Servicios Logisticos`; la pestana quedo preparada para continuar.
+- GitHub confirma el commit remoto, pero no publica estados ni deployments para este SHA. La sesion Forge no llego a inspeccionar ni ejecutar un deployment en este paso; por tanto, **el despliegue no se da por iniciado ni finalizado**.
 - Migraciones `stock_batch_identity_locks` y `notification_deliveries`: estado productivo no comprobado.
 - `php artisan optimize:clear`: pendiente en produccion.
 - `php artisan queue:restart`: pendiente en produccion.
