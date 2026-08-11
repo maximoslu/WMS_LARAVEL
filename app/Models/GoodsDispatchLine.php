@@ -16,6 +16,7 @@ class GoodsDispatchLine extends Model
 {
     /** @use HasFactory<GoodsDispatchLineFactory> */
     use HasFactory;
+
     use NormalizesLotAttribute;
 
     protected $fillable = [

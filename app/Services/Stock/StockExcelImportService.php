@@ -222,21 +222,36 @@ class StockExcelImportService
         }
 
         if (! Storage::disk('local')->exists($stockImport->stored_path)) {
+            $this->throwIfImportedAfterSynchronization($stockImport);
+
             throw new InvalidArgumentException('El fichero temporal de la importacion ya no existe. Vuelve a subir el Excel.');
         }
 
-        $path = Storage::disk('local')->path($stockImport->stored_path);
-        $expectedFileHash = $stockImport->summary_json['file_sha256'] ?? null;
-        $currentFileHash = hash_file('sha256', $path);
+        try {
+            $path = Storage::disk('local')->path($stockImport->stored_path);
+            $expectedFileHash = $stockImport->summary_json['file_sha256'] ?? null;
+            $currentFileHash = hash_file('sha256', $path);
+        } catch (Throwable $exception) {
+            $this->throwIfImportedAfterSynchronization($stockImport);
+
+            throw $exception;
+        }
 
         if (! is_string($expectedFileHash) || ! is_string($currentFileHash) || ! hash_equals($expectedFileHash, $currentFileHash)) {
             $message = 'El fichero temporal no coincide con el que se previsualizo. Vuelve a subir el Excel.';
             $this->markImportFailed($stockImport, $message);
+            $this->throwIfImportedAfterSynchronization($stockImport);
 
             throw new InvalidArgumentException($message);
         }
 
-        $preview = $this->parseWorkbook($path, $stockImport->client);
+        try {
+            $preview = $this->parseWorkbook($path, $stockImport->client);
+        } catch (Throwable $exception) {
+            $this->throwIfImportedAfterSynchronization($stockImport);
+
+            throw $exception;
+        }
 
         if ($preview['fatal_errors'] !== [] || $preview['row_errors'] !== []) {
             $message = 'La importacion contiene errores bloqueantes y no se puede confirmar.';
@@ -503,6 +518,22 @@ class StockExcelImportService
     private function markImportStale(StockImport $stockImport, string $message): void
     {
         $this->markImportUnconfirmable($stockImport, StockImport::STATUS_STALE, $message);
+    }
+
+    private function throwIfImportedAfterSynchronization(StockImport $stockImport): void
+    {
+        $status = $this->db->transaction(function () use ($stockImport): ?string {
+            Client::query()->whereKey($stockImport->client_id)->lockForUpdate()->first();
+
+            return StockImport::query()
+                ->whereKey($stockImport->id)
+                ->lockForUpdate()
+                ->value('status');
+        });
+
+        if ($status === StockImport::STATUS_IMPORTED) {
+            throw new InvalidArgumentException('Esta importacion ya fue confirmada previamente.');
+        }
     }
 
     /** @param array<string, mixed>|null $preview */

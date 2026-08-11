@@ -18,10 +18,13 @@ use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\DailyOperations\DailyOperationTotalsService;
+use App\Services\Stock\StockExportService;
 use App\Support\WmsLineType;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DailyOperationsTest extends TestCase
@@ -454,7 +457,7 @@ class DailyOperationsTest extends TestCase
             ->where('client_id', $client->id)
             ->firstOrFail();
 
-        $officialRows = app(\App\Services\Stock\StockExportService::class)->rows($client->id);
+        $officialRows = app(StockExportService::class)->rows($client->id);
 
         $this->assertSame(20, $day->opening_pallets);
         $this->assertSame(20, $day->stored_pallets_today);
@@ -629,7 +632,7 @@ class DailyOperationsTest extends TestCase
                 'active' => true,
                 'status' => StockPallet::STATUS_AVAILABLE,
             ]);
-            $totals = app(\App\Services\DailyOperations\DailyOperationTotalsService::class);
+            $totals = app(DailyOperationTotalsService::class);
 
             $this->assertSame(1079, $totals->stockBaseForClient($client->id));
 
@@ -902,7 +905,7 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(1093, $day->stored_pallets_today);
         $this->assertSame(81, $day->moved_pallets_today);
         $this->assertSame(1079, $day->expected_pallets_tomorrow);
-        $this->assertSame(1079, app(\App\Services\DailyOperations\DailyOperationTotalsService::class)->stockBaseForClient($client->id));
+        $this->assertSame(1079, app(DailyOperationTotalsService::class)->stockBaseForClient($client->id));
         $this->assertSame(67, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_DESCARGA)->sum('pallets'));
         $this->assertSame(14, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
 
@@ -1551,8 +1554,8 @@ class DailyOperationsTest extends TestCase
     private function recordReceiptWarehouseMovement(GoodsReceipt $receipt, GoodsReceiptLine $line, int $warehousePallets, User $user): void
     {
         InventoryMovement::query()->create([
-            'uuid' => (string) \Illuminate\Support\Str::uuid(),
-            'correlation_id' => (string) \Illuminate\Support\Str::uuid(),
+            'uuid' => (string) Str::uuid(),
+            'correlation_id' => (string) Str::uuid(),
             'idempotency_key' => 'daily-ops-test-receipt-'.$receipt->id.'-'.$line->id,
             'client_id' => $receipt->client_id,
             'client_name' => $receipt->client?->name,
@@ -1592,8 +1595,7 @@ class DailyOperationsTest extends TestCase
         string $status,
         ?Item $item = null,
         string $stockCategory = StockPallet::CATEGORY_IN_USE,
-    ): void
-    {
+    ): void {
         $item ??= Item::factory()->create([
             'client_id' => $client->id,
             'units_per_pallet' => 1,

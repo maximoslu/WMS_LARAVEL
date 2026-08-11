@@ -2,9 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Booking;
+use App\Models\Role;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use App\Models\Booking;
 
 class StoreBookingRequest extends FormRequest
 {
@@ -15,7 +16,7 @@ class StoreBookingRequest extends FormRequest
 
     public function rules(): array
     {
-        $isInternal = $this->user()?->canAccessRole(\App\Models\Role::ALMACEN) === true;
+        $isInternal = $this->user()?->canAccessRole(Role::ALMACEN) === true;
 
         return [
             'client_id' => ['nullable', 'integer', 'exists:clients,id'],

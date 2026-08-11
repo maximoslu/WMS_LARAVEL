@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Carbon\CarbonInterface;
 use App\Support\WmsStatus;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;

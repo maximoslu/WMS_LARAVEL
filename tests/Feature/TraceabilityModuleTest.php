@@ -6,6 +6,8 @@ use App\Exceptions\TransientNotificationDeliveryException;
 use App\Jobs\SendStockAlertEmailJob;
 use App\Models\Client;
 use App\Models\ClientStockAlertEmailRecipient;
+use App\Models\GoodsReceipt;
+use App\Models\GoodsReceiptLine;
 use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\Location;
@@ -541,9 +543,11 @@ class TraceabilityModuleTest extends TestCase
         $service = app(TraceabilityBackfillService::class);
 
         $first = $service->run($client->id, true);
+        $afterFirstDryRun = $service->run($client->id, false);
         $second = $service->run($client->id, true);
 
         $this->assertSame(1, $first['created_movements']);
+        $this->assertSame(0, $afterFirstDryRun['opening_balances']);
         $this->assertSame(0, $second['created_movements']);
         $this->assertSame(250, (int) $stock->fresh()->quantity_units);
         $this->assertDatabaseCount('inventory_movements', 1);
@@ -552,6 +556,76 @@ class TraceabilityModuleTest extends TestCase
             'movement_type' => InventoryMovement::OPENING_BALANCE,
             'source' => 'backfill',
             'reconstruction_confidence' => 'opening_balance',
+        ]);
+    }
+
+    public function test_traceability_backfill_keeps_receipt_without_matching_stock_as_ambiguous(): void
+    {
+        $client = Client::factory()->create();
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsReceipt::STATUS_CONFIRMED,
+            'stock_applied_at' => now()->subMinute(),
+        ]);
+        GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'lot' => 'AMBIGUOUS-LOT',
+            'quantity_units' => 500,
+            'pallet_count' => 5,
+        ]);
+        $service = app(TraceabilityBackfillService::class);
+
+        $dryRun = $service->run($client->id, false);
+        $apply = $service->run($client->id, true);
+
+        $this->assertSame(0, $dryRun['certain_receipts']);
+        $this->assertSame(1, $dryRun['partial_receipts']);
+        $this->assertSame(0, $apply['created_movements']);
+        $this->assertDatabaseCount('inventory_movements', 0);
+    }
+
+    public function test_traceability_backfill_only_creates_an_exact_missing_receipt_movement_once(): void
+    {
+        $client = Client::factory()->create();
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsReceipt::STATUS_CONFIRMED,
+            'stock_applied_at' => now()->subMinute(),
+        ]);
+        $line = GoodsReceiptLine::factory()->create([
+            'goods_receipt_id' => $receipt->id,
+            'item_id' => $item->id,
+            'lot' => 'EXACT-LOT',
+            'quantity_units' => 500,
+            'pallet_count' => 5,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'goods_receipt_id' => $receipt->id,
+            'lot' => 'EXACT-LOT',
+            'quantity_units' => 500,
+        ]);
+        $service = app(TraceabilityBackfillService::class);
+
+        $before = $service->run($client->id, false);
+        $first = $service->run($client->id, true);
+        $after = $service->run($client->id, false);
+        $second = $service->run($client->id, true);
+
+        $this->assertSame(1, $before['certain_receipts']);
+        $this->assertSame(1, $first['created_movements']);
+        $this->assertSame(0, $after['certain_receipts']);
+        $this->assertSame(1, $after['existing_movements']);
+        $this->assertSame(0, $second['created_movements']);
+        $this->assertSame(500, (int) $stock->fresh()->quantity_units);
+        $this->assertDatabaseHas('inventory_movements', [
+            'stock_pallet_id' => $stock->id,
+            'source_line_id' => $line->id,
+            'reconstruction_confidence' => 'exact',
         ]);
     }
 

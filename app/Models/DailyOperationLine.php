@@ -12,18 +12,29 @@ class DailyOperationLine extends Model
     use HasFactory;
 
     public const SECTION_DESCARGA = 'descarga';
+
     public const SECTION_CARGA = 'carga';
+
     public const SECTION_ENVIO = 'envio';
+
     public const SECTION_HORAS_OPERARIO = 'horas_operario';
+
     public const SECTION_GESTION_CAMION = 'gestion_camion';
+
     public const SECTION_VIAJE_CAMION = 'viaje_camion';
+
     public const SECTION_ALMACENAJE = 'almacenaje';
+
     public const SECTION_GESTION = 'gestion';
+
     public const SECTION_TRANSPORTE = 'transporte';
 
     public const SOURCE_MANUAL_LINE = 'manual_line';
+
     public const SOURCE_GOODS_RECEIPT = 'goods_receipt';
+
     public const SOURCE_GOODS_DISPATCH = 'goods_dispatch';
+
     public const SOURCE_STOCK_SNAPSHOT = 'stock_snapshot';
 
     protected $fillable = [

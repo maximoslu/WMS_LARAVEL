@@ -8,8 +8,8 @@ use App\Services\GoogleCalendarService;
 use App\Support\Bookings\GoogleCalendarEventDeduplicator;
 use App\Support\Notifications\NotificationPresentation;
 use App\Support\WmsNavigation;
-use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -18,8 +18,7 @@ class DashboardController extends Controller
         Request $request,
         GoogleCalendarService $googleCalendarService,
         GoogleCalendarEventDeduplicator $eventDeduplicator,
-    ): View
-    {
+    ): View {
         $user = $request->user();
         $pendingByModule = $user->unreadNotifications()
             ->get()

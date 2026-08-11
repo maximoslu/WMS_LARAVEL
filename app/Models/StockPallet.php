@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Support\Stock\StockBatchCalculator;
 use App\Support\Stock\LotNormalizer;
+use App\Support\Stock\StockBatchCalculator;
 use Database\Factories\StockPalletFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

@@ -19,9 +19,7 @@ class WarehouseIntegrityService
         'bookings' => 'warehouse_id',
     ];
 
-    public function __construct(private readonly LocationIntegrityService $locations)
-    {
-    }
+    public function __construct(private readonly LocationIntegrityService $locations) {}
 
     public function resolveClient(?string $filter): ?Client
     {

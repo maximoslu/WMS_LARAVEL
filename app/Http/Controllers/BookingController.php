@@ -12,8 +12,8 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Bookings\BookingNotificationService;
 use App\Services\GoogleCalendarService;
-use App\Support\Bookings\GoogleCalendarEventDeduplicator;
 use App\Services\Warehouses\WarehouseIntegrityService;
+use App\Support\Bookings\GoogleCalendarEventDeduplicator;
 use App\Support\WmsNavigation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -21,8 +21,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Throwable;
 use Illuminate\View\View;
+use Throwable;
 
 class BookingController extends Controller
 {
@@ -137,8 +137,7 @@ class BookingController extends Controller
     public function update(
         UpdateBookingRequest $request,
         Booking $booking,
-    ): RedirectResponse
-    {
+    ): RedirectResponse {
         $user = $request->user();
         abort_unless($this->canEditBooking($user, $booking), 403);
 
@@ -231,8 +230,7 @@ class BookingController extends Controller
         Request $request,
         GoogleCalendarService $googleCalendarService,
         GoogleCalendarEventDeduplicator $eventDeduplicator,
-    ): View
-    {
+    ): View {
         $user = $request->user();
         abort_unless($this->canAccessBookings($user), 403);
 
@@ -307,8 +305,7 @@ class BookingController extends Controller
         Request $request,
         Booking $booking,
         BookingNotificationService $notificationService,
-    ): RedirectResponse
-    {
+    ): RedirectResponse {
         $user = $request->user();
         abort_unless($this->canViewBooking($user, $booking), 403);
 

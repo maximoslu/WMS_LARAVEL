@@ -30,12 +30,12 @@ class StoreMerchandiseRequestRequest extends FormRequest
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
- *     requested_pallets:int,
- *     requested_peaks:int,
-  *     requested_units:int,
- *     required_units:int|null,
- *     fill_truck:bool
-  * }> | null
+     *     requested_pallets:int,
+     *     requested_peaks:int,
+     *     requested_units:int,
+     *     required_units:int|null,
+     *     fill_truck:bool
+     * }> | null
      */
     private ?array $resolvedLines = null;
 
@@ -165,12 +165,12 @@ class StoreMerchandiseRequestRequest extends FormRequest
      *     location_text:string|null,
      *     units_per_pallet:int,
      *     units_per_peak:int|null,
- *     requested_pallets:int,
- *     requested_peaks:int,
-  *     requested_units:int,
- *     required_units:int|null,
- *     fill_truck:bool
-  * }>
+     *     requested_pallets:int,
+     *     requested_peaks:int,
+     *     requested_units:int,
+     *     required_units:int|null,
+     *     fill_truck:bool
+     * }>
      */
     public function validatedLines(): array
     {

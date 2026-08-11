@@ -243,6 +243,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
                 if (! $line instanceof GoodsDispatchLine) {
                     $errors["lines.$rowKey.line_id"] = 'Hay lineas de carga no validas para esta salida.';
+
                     continue;
                 }
 
@@ -308,6 +309,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
             if (! $item instanceof Item) {
                 $errors["lines.$rowKey.item_id"] = 'Selecciona una referencia valida para este cliente.';
+
                 continue;
             }
 
@@ -315,17 +317,20 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
             if ($stockPalletId !== null && (! $stockPallet instanceof StockPallet || (int) $stockPallet->item_id !== $item->id)) {
                 $errors["lines.$rowKey.stock_pallet_id"] = 'La partida seleccionada no coincide con la referencia elegida.';
+
                 continue;
             }
 
             if ($lineType === WmsLineType::PEAK) {
                 if (! $stockPallet instanceof StockPallet) {
                     $errors["lines.$rowKey.stock_pallet_id"] = 'Selecciona un pico existente para esta referencia.';
+
                     continue;
                 }
 
                 if ($stockPeakIndex === null || $stockPeakIndex < 1 || $stockPeakIndex > StockPallet::MAX_PEAK_COLUMNS) {
                     $errors["lines.$rowKey.stock_peak_index"] = 'El pico seleccionado no es valido.';
+
                     continue;
                 }
 
@@ -333,11 +338,13 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
                 if ($unitsPerPeak <= 0) {
                     $errors["lines.$rowKey.stock_peak_index"] = 'El pico seleccionado ya no esta disponible.';
+
                     continue;
                 }
 
                 if ($loadedQuantity > 1) {
                     $errors["lines.$rowKey.loaded_quantity"] = 'Cada linea de pico representa un pico concreto.';
+
                     continue;
                 }
 
@@ -347,6 +354,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
                 if ($loadedPartialUnits > $unitsPerPeak) {
                     $errors["lines.$rowKey.loaded_partial_units"] = 'La carga parcial supera las unidades disponibles en el pico seleccionado.';
+
                     continue;
                 }
 
@@ -388,11 +396,13 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             if ($loadedPartialUnits > 0) {
                 if (! $stockPallet instanceof StockPallet) {
                     $errors["lines.$rowKey.stock_pallet_id"] = 'Selecciona una partida concreta para cargar unidades parciales.';
+
                     continue;
                 }
 
                 if (! $this->loadingFitsStock($stockPallet, $loadedPallets, $loadedPartialUnits, null)) {
                     $errors["lines.$rowKey.stock_pallet_id"] = 'La carga real supera el stock disponible en la partida seleccionada.';
+
                     continue;
                 }
             }
@@ -520,11 +530,13 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
             if ($selectedPeakIndices !== [] && count($selectedPeakIndices) !== count(array_unique($selectedPeakIndices))) {
                 $errors["lines.$rowKey.allocations.$allocationIndex.selected_peak_indices"] = 'No puedes usar el mismo pico dos veces en la misma preparacion.';
+
                 return null;
             }
 
             if ($stockPalletId === null && ($manualPartialUnits > 0 || $selectedPeakIndices !== [])) {
                 $errors["lines.$rowKey.allocations.$allocationIndex.stock_pallet_id"] = 'Selecciona una partida concreta para esta asignacion.';
+
                 return null;
             }
 
@@ -532,6 +544,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
             if ($stockPalletId !== null && ! $stockPallet instanceof StockPallet) {
                 $errors["lines.$rowKey.allocations.$allocationIndex.stock_pallet_id"] = 'La partida seleccionada no coincide con la referencia elegida.';
+
                 return null;
             }
 
@@ -541,11 +554,13 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             foreach ($selectedPeakIndices as $peakIndex) {
                 if (! $stockPallet instanceof StockPallet) {
                     $errors["lines.$rowKey.allocations.$allocationIndex.selected_peak_indices"] = 'Selecciona una partida antes de elegir picos.';
+
                     return null;
                 }
 
                 if ($peakIndex < 1 || $peakIndex > StockPallet::MAX_PEAK_COLUMNS) {
                     $errors["lines.$rowKey.allocations.$allocationIndex.selected_peak_indices"] = 'El pico seleccionado no es valido.';
+
                     return null;
                 }
 
@@ -553,6 +568,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
                 if (isset($usedPeakKeys[$peakKey])) {
                     $errors["lines.$rowKey.allocations.$allocationIndex.selected_peak_indices"] = 'No puedes usar el mismo pico dos veces en la misma preparacion.';
+
                     return null;
                 }
 
@@ -560,6 +576,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
                 if ($peakUnits <= 0) {
                     $errors["lines.$rowKey.allocations.$allocationIndex.selected_peak_indices"] = 'El pico seleccionado ya no esta disponible.';
+
                     return null;
                 }
 
@@ -584,6 +601,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
                 if (! $this->loadingFitsStock($stockPallet, $usedPalletsByStock[$stockId], $usedPartialUnitsByStock[$stockId], null)) {
                     $errors["lines.$rowKey.allocations.$allocationIndex.stock_pallet_id"] = 'La carga real supera el stock disponible en la partida seleccionada.';
+
                     return null;
                 }
             }
@@ -681,7 +699,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
         return $total;
     }
 
-    private function dispatch(): GoodsDispatch|null
+    private function dispatch(): ?GoodsDispatch
     {
         $dispatch = $this->route('goodsDispatch');
 

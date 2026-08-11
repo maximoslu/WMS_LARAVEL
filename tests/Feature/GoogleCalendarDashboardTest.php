@@ -10,7 +10,6 @@ use App\Services\GoogleCalendarService;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Carbon;
 use Mockery;
 use RuntimeException;
 use Tests\TestCase;

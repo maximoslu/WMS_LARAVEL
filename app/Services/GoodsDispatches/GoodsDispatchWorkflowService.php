@@ -215,8 +215,7 @@ class GoodsDispatchWorkflowService
         User $user,
         ?string $completionMode = null,
         ?string $remainderCloseReason = null,
-    ): ?string
-    {
+    ): ?string {
         $correlationId = $this->audit->correlationId();
         $result = DB::transaction(function () use ($dispatch, $newStatus, $user, $completionMode, $remainderCloseReason, $correlationId): array {
             $lockedDispatch = GoodsDispatch::query()
@@ -345,7 +344,7 @@ class GoodsDispatchWorkflowService
             $this->audit->record(
                 event: 'merchandise_request_status_changed',
                 module: 'merchandise_requests',
-                description: "Estado de pedido cambiado de {$previousRequestStatus} a ".($requestPayload['status'] ?? $merchandiseRequest->status)." desde su salida.",
+                description: "Estado de pedido cambiado de {$previousRequestStatus} a ".($requestPayload['status'] ?? $merchandiseRequest->status).' desde su salida.',
                 auditable: $merchandiseRequest,
                 subject: $lockedDispatch,
                 user: $user,

@@ -281,7 +281,7 @@ class BackupService
             mkdir(dirname($absolutePath), 0775, true);
         }
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($absolutePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new RuntimeException('No se ha podido crear el ZIP del sistema completo.');
         }

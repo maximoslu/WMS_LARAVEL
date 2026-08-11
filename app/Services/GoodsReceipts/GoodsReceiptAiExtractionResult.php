@@ -148,7 +148,6 @@ class GoodsReceiptAiExtractionResult
     }
 
     /**
-     * @param  mixed  $value
      * @return array<int, string>
      */
     private static function normalizeStringList(mixed $value): array

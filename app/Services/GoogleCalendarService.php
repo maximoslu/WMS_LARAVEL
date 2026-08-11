@@ -263,7 +263,7 @@ class GoogleCalendarService
     {
         $timezone = config('app.timezone', 'Europe/Madrid');
         [$start, $end, $allDay] = $this->bookingEventWindow($booking, $timezone);
-        $event = new GoogleCalendarEvent();
+        $event = new GoogleCalendarEvent;
         $event->setId($eventId);
         $event->setSummary($this->bookingEventSummary($booking));
         $event->setDescription($this->bookingEventDescription($booking));
@@ -325,7 +325,7 @@ class GoogleCalendarService
 
     private function makeEventDateTime(Carbon $value, string $timezone, bool $allDay): GoogleCalendarEventDateTime
     {
-        $dateTime = new GoogleCalendarEventDateTime();
+        $dateTime = new GoogleCalendarEventDateTime;
 
         if ($allDay) {
             $dateTime->setDate($value->copy()->setTimezone($timezone)->toDateString());
@@ -512,7 +512,7 @@ class GoogleCalendarService
 
     private function makeOAuthClient(): GoogleClient
     {
-        $client = new GoogleClient();
+        $client = new GoogleClient;
         $client->setApplicationName('MAXIMO WMS');
         $client->setClientId((string) config('google-calendar.client_id'));
         $client->setClientSecret((string) config('google-calendar.client_secret'));

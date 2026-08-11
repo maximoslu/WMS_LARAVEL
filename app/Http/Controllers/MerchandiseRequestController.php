@@ -396,21 +396,21 @@ class MerchandiseRequestController extends Controller
         }
 
         $merchandiseRequest->load([
-                'client',
-                'requestedBy',
-                'lines.item',
-                'lines.stockPallet.location.warehouse',
-                'dispatch.lines.item',
-                'dispatch.lines.stockPallet.location.warehouse',
-                'dispatch.lines.allocations.stockPallet.location.warehouse',
-                'dispatch.lines.sourceRequestLine',
-                'openDispatch.lines.item',
-                'openDispatch.lines.stockPallet.location.warehouse',
-                'openDispatch.lines.allocations.stockPallet.location.warehouse',
-                'openDispatch.lines.sourceRequestLine',
-                'goodsDispatches.lines.item',
-                'goodsDispatches.lines.allocations',
-            ]);
+            'client',
+            'requestedBy',
+            'lines.item',
+            'lines.stockPallet.location.warehouse',
+            'dispatch.lines.item',
+            'dispatch.lines.stockPallet.location.warehouse',
+            'dispatch.lines.allocations.stockPallet.location.warehouse',
+            'dispatch.lines.sourceRequestLine',
+            'openDispatch.lines.item',
+            'openDispatch.lines.stockPallet.location.warehouse',
+            'openDispatch.lines.allocations.stockPallet.location.warehouse',
+            'openDispatch.lines.sourceRequestLine',
+            'goodsDispatches.lines.item',
+            'goodsDispatches.lines.allocations',
+        ]);
         $canAddInternalLine = ! $user->hasRole(Role::CLIENTE)
             && $user->canAccessRole(Role::ALMACEN)
             && $this->canAcceptInternalLines($merchandiseRequest);

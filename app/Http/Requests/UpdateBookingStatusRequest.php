@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Booking;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use App\Models\Booking;
 
 class UpdateBookingStatusRequest extends FormRequest
 {

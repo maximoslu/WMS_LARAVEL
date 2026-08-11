@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\NormalizesLotAttribute;
 use App\Models\Concerns\ImmutableLedgerRecord;
+use App\Models\Concerns\NormalizesLotAttribute;
 use Illuminate\Database\Eloquent\Model;
 
 class InventoryMovement extends Model

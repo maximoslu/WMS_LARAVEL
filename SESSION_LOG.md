@@ -6893,3 +6893,88 @@ Sembrando FRIESLAND con CAJA0030 (EN USO), CRYOVAC6 (EN USO), CAJA0077 (BLOQUEAD
 - No se toco `.env`, secretos, `.claude/`, `tmp/`, `vendor/` ni `node_modules/`.
 - No se uso `migrate:fresh`, `db:wipe`, force push ni `git add .`.
 - Pendiente en este momento: revisar diff final, commit y push normal a `origin/main` si todo sigue correcto.
+
+## 2026-08-11 - CIERRE DEFINITIVO DE BASELINE WMS (PC trabajo)
+
+**Equipo:** PC trabajo.
+**Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`.
+**Rama:** `audit/final-baseline-wms-2026-08-11`.
+**SHA inicial exacto:** `cc3b817fc453ae733e3875bc24f5e481a29f29e3`. La rama se creo desde ese commit acumulativo, no desde `main`.
+**SHA de `origin/main` durante la auditoria:** `dd74878b0833fa4e1918e2a68a6309f552e39fcc`.
+**SHA final:** el commit que contiene esta entrada, informado en el dictamen y fijado por el tag local `baseline-wms-2026-08-11`.
+
+### Dictamen
+- **APTO COMO BASELINE**: no queda ningun bloqueante conocido de integridad, concurrencia, seguridad, migraciones, dependencias, recuperacion o funcionamiento.
+- La baseline queda validada antes del despliegue. No se hizo merge a `main`, no se desplego y no se modifico produccion.
+- El tag se prepara localmente. No se publica porque no existe automatizacion versionada que permita descartar con certeza efectos externos asociados a tags.
+
+### Entorno equivalente y recuperacion
+- No habia staging versionado o accesible. Se uso un equivalente local: PHP `8.4.22`, Laravel `12.61.1`, MariaDB `10.4.32`, colas `database`, filesystem privado `local` y mailer `array`.
+- Se valido desde cero la cadena completa de migraciones con prefijo MySQL `02`; todas quedaron `Ran` sin usar `migrate:fresh`, `db:wipe` ni tocar las tablas fuente.
+- Antes del saneamiento se clono el estado representativo a las tablas de backup prefijo `03` y se generaron recuentos y checksums por tabla.
+- Manifiesto privado: `storage/app/private/baseline-validation/20260811_121935_stage_02_backup_03.json`; SHA-256 `15f614f961adee58c186bdb0be05352cb29523f9584e039bf48e5ffd60b0d3fe`.
+- Restauracion comprobable: vaciar exclusivamente las tablas aisladas `02` con FK desactivadas y reinsertar desde sus homologas `03`. Git, el SHA y el tag son el mecanismo de recuperacion del codigo.
+
+### Clasificacion y saneamiento de datos
+- **Seguro y demostrable en copia:** consolidacion de partidas `246/247`; canonizacion de 208 referencias de lote; backfill de 177 movimientos de saldo inicial.
+- **Ambiguo y conservado:** linea `goods_receipt_line` 8 de la entrada 4, creada 23 segundos despues de la confirmacion y sin partida equivalente; no se reconstruyo movimiento.
+- `ALB-OLD-001`: entrada historica confirmada sin lineas, stock ni movimiento, con documento privado existente. Se conserva como legado ambiguo; no se inventan datos ni se elimina.
+- Documentos privados: 1.208 ficheros, 3 referenciados presentes, 0 referenciados ausentes, 0 temporales demostrables y 0 huerfanos demostrables; los 1.205 no referenciados se conservan por falta de prueba suficiente.
+- Dry-run fuente: un grupo compatible (`246/247`), 208 alias/NULL de lote, 0 colisiones, 177 saldos iniciales exactos y una recepcion parcial ambigua. No hubo cambios en las tablas fuente.
+- Aplicacion solo en copia `02`: 1 grupo consolidado, 208 referencias canonizadas y 177 movimientos de apertura creados. Segundo dry-run: 0 consolidaciones, 0 lotes pendientes y 0 aperturas pendientes; la unica ambiguedad siguio intacta.
+
+### Reconciliacion
+- Partidas activas: `346 -> 345`, unica diferencia esperada por consolidar `246/247`.
+- Unidades: `12.558.781 -> 12.558.781` (diferencia 0).
+- Pallets completos: `3.102 -> 3.102` (diferencia 0).
+- Picos: `188 -> 188` (diferencia 0).
+- Pallets de almacen: `3.306 -> 3.306` (diferencia 0).
+- FRIESLAND conserva 7.407.703 unidades y 2.338 pallets de almacen; EDELVIVES conserva 5.149.956 y 954. No aparecieron negativos, orfandades ni cruces de cliente.
+
+### Correcciones realizadas durante la certificacion
+- `TraceabilityBackfillService`: seleccion exacta e idempotente, deteccion de movimientos ya existentes, saldos iniciales realmente pendientes y exclusion explicita de recepciones parciales ambiguas.
+- Migraciones historicas de operaciones diarias y multiples salidas: deteccion correcta de indices con `DB_PREFIX` en MySQL para instalaciones recuperadas desde cero; sin nuevas migraciones ni efecto sobre esquemas ya aplicados.
+- `StockExcelImportService`: el reintento concurrente que pierde la carrera despues de borrarse el temporal devuelve de forma estable "ya fue confirmada", manteniendo aplicacion exactamente una vez.
+- Pint oficial aplicado al arbol completo para eliminar deuda de formato acumulada; segunda suite completa verde despues del formateo.
+
+### E2E, colas y concurrencia
+- Suite focalizada de entradas, stock, ubicaciones, pedidos, salidas, importacion, documentos, notificaciones, multicliente, operaciones y facturacion: **717 passed, 4.510 assertions**.
+- Suite completa final, repetida despues de Pint: **872 passed, 5.087 assertions**, 44,66 s.
+- Concurrencia MySQL de identidad de partidas: **6 passed, 47 assertions**.
+- Concurrencia MySQL de snapshots de importacion: **3 passed, 30 assertions**; repetida tres veces consecutivas antes del cierre sin recurrencia de la carrera corregida.
+- Concurrencia MySQL de notificaciones: **1 passed, 14 assertions**.
+- Worker real `queue:work --once` sobre copia: el job aparece solo despues del commit de DB; primera ejecucion crea 8 entregas y 8 notificaciones, reintento conserva 8/8 y 0 fallidos. Mailer `array`, sin correo externo.
+- Operaciones diarias y facturacion incluyen las regresiones EDELVIVES y multiples salidas; todos los casos pasan.
+
+### Seguridad y limites
+- Composer: `validate --strict` OK, `audit --locked` 0 advisories, `install --dry-run` sin cambios, `check-platform-reqs` OK.
+- npm: build Vite OK (55 modulos), `npm audit --omit=dev` 0 vulnerabilidades.
+- Autenticacion y multicliente cubiertos por HTTP: rutas operativas protegidas por `auth`/rol; los POST publicos son login, reset y solicitud de acceso.
+- Documentos de entrada se almacenan en disco privado; descarga de cliente exige tenant, y enlace sin sesion exige firma valida/temporal. Backups rechazan path traversal.
+- Uploads de entradas limitados a 50 MiB y tipos permitidos; importaciones tienen limite explicito de bytes/filas, hash del temporal, aislamiento de cliente, rollback y proteccion contra snapshot obsoleto.
+- No se versionaron `.env`, secretos, dumps, `vendor`, `node_modules`, `.claude/` ni `tmp/`.
+
+### Rendimiento observado
+- Nueva entrada (6 clientes/72 ubicaciones): 86,34 ms, 15 queries, +4 MiB.
+- Stock (500 partidas): 53,52 ms, 81 queries, +6 MiB.
+- Dashboard (200 partidas): 27,58 ms, 9 queries, sin incremento medido.
+- Importacion: 100 filas 335,55 ms/1.213 queries; 500 filas 1.620,17 ms/6.013; 1.000 filas 3.179,32 ms/12.013. Escalado lineal observado, sin bloqueo de baseline.
+
+### Tooling final
+- `vendor/bin/pint --test`: OK.
+- `git diff --check`: OK.
+- `php artisan migrate:status`: todas las migraciones `Ran`.
+- `php artisan schedule:list`: 5 tareas registradas (alertas, snapshots, backup DB y dos podas controladas).
+- Diff acumulado desde `origin/main` revisado; no contiene secretos, artefactos generados ni depuracion accidental.
+
+### Incidencias observadas y resueltas durante la tarea
+- La primera migracion prefijada descubrio dos migraciones antiguas que consultaban nombres no prefijados; se corrigieron y la cadena completa paso.
+- La primera carrera de importacion confirmo stock una sola vez, pero el perdedor devolvio error de temporal ausente; se corrigio la semantica, se agrego sincronizacion y las repeticiones pasaron.
+- Pint inicialmente detecto 40 archivos con formato pendiente; el formateador oficial lo corrigio y la suite completa se repitio con exito.
+- Un primer smoke de cola uso por error la DB `:memory:` de testing y no altero datos; se repitio con la base/prefijo correctos y paso.
+
+### Git y produccion
+- Commit final previsto: `chore: finalize stable WMS baseline`.
+- Push normal previsto exclusivamente a `origin/audit/final-baseline-wms-2026-08-11`, sin force push.
+- Tag anotado local: `baseline-wms-2026-08-11`, apuntando al SHA final exacto.
+- Merge a `main`: NO. Tag remoto: NO. Deploy/Forge: NO. Cambios de produccion: **0**.
