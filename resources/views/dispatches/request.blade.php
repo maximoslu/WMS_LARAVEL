@@ -112,6 +112,10 @@
         </dl>
 
         <div class="warehouse-request-actions wms-detail-actions wms-load-actions">
+            @if (! $dispatch && auth()->user()?->canAccessRole(\App\Models\Role::ALMACEN))
+                <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact">Modificar pedido</a>
+            @endif
+
             @if ($canGenerateDispatch)
                 <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
                     @csrf

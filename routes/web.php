@@ -266,6 +266,9 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/solicitudes-mercancia/{merchandiseRequest}/lineas', [MerchandiseRequestController::class, 'storeLine'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('merchandise-requests.lines.store');
+    Route::patch('/solicitudes-mercancia/{merchandiseRequest}/lineas', [MerchandiseRequestController::class, 'updateLines'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('merchandise-requests.lines.update');
     Route::get('/solicitudes-mercancia/{merchandiseRequest}', [MerchandiseRequestController::class, 'show'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.show');

@@ -22,6 +22,20 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 **Estado Git:** pendiente de commit y push normal a `origin/main` tras esta actualizacion documental. `.claude/` y `tmp/` permanecen fuera de Git.
 
+## 2026-08-18 - EDICION CONTROLADA DE PEDIDOS PENDIENTES
+
+**Incidencia:** en `Salidas > Pedidos pendientes > SOL-000063`, pedido EDELVIVES en estado PENDIENTE y sin salida, no aparecian acciones para modificar, quitar o anadir lineas. El commit `273d3f6 fix: allow editing lines during order loading` solo cubria lineas de `goods_dispatch_lines` cuando ya existia una salida/carga; no cubria la cabecera y las lineas de `merchandise_requests` antes de generar salida.
+
+**Regla final:** los usuarios internos autorizados por el permiso operativo de almacen pueden editar pedidos pendientes sin salida: ajustar cantidades, eliminar lineas no preparadas y anadir referencias al mismo pedido. Se conserva la cabecera, se recalculan pallets, picos y unidades, no se crea gestion/salida nueva y no se descuenta stock hasta iniciar y confirmar la carga. Si existe una salida abierta, los cambios se sincronizan con sus lineas no cargadas. Las lineas con carga real, salidas cerradas/enviadas/completadas o estados no editables quedan bloqueadas con mensaje en espanol. Un pedido no puede quedar sin lineas.
+
+**Causa y correccion:** se anadio `PATCH /solicitudes-mercancia/{merchandiseRequest}/lineas`, validacion de rol y pertenencia, transaccion con bloqueo de la solicitud, sincronizacion opcional con la salida abierta y auditoria `merchandise_request_lines_updated`. La pantalla de pedidos pendientes enlaza ahora a `Modificar pedido`; el detalle permite modificar cantidades, eliminar lineas no cargadas y mantiene el formulario existente de anadir referencia.
+
+**Archivos modificados:** `app/Http/Requests/UpdateMerchandiseRequestLinesRequest.php`, `app/Http/Controllers/MerchandiseRequestController.php`, `routes/web.php`, `resources/views/dispatches/request.blade.php`, `resources/views/merchandise-requests/show.blade.php` y `tests/Feature/MerchandiseRequestManagementTest.php`.
+
+**Pruebas:** `MerchandiseRequestManagementTest` -> 58 passed, 405 assertions; `GoodsDispatchManagementTest` -> 67 passed, 532 assertions; suite completa -> **878 passed, 5.123 assertions**; `npm run build` OK; `git diff --check` OK. No se ejecutaron migraciones ni se modificaron datos de produccion.
+
+**Forge/produccion:** no hay evidencia disponible en esta sesion de que Forge haya desplegado `273d3f6`; el ultimo despliegue documentado en el registro corresponde a `79f37a92`. La validacion manual de SOL-000063, EDELVIVES y FRIESLAND en produccion queda pendiente de `Deploy Now` en Forge y comprobacion posterior.
+
 ## 2026-08-11 - CIERRE DE SNAPSHOT Y LIMITES DE IMPORTACION PARA BASELINE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-import-snapshot-limits-2026-08-11`.

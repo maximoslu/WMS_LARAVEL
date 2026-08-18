@@ -1763,6 +1763,131 @@ class MerchandiseRequestManagementTest extends TestCase
         }
     }
 
+    public function test_internal_user_sees_pending_order_edit_action_without_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::SUPERADMIN);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 10])->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 1,
+            'requested_units' => 10,
+            'units_per_pallet' => 10,
+        ]);
+
+        $this->actingAs($internal)
+            ->get(route('dispatches.requests.show', $request))
+            ->assertOk()
+            ->assertSee('Modificar pedido')
+            ->assertSee('Empezar carga')
+            ->assertSee('Sin salida generada');
+    }
+
+    public function test_internal_user_can_update_and_remove_pending_order_lines_without_stock_or_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::SUPERADMIN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 10]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $first = MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 2,
+            'requested_units' => 20,
+            'units_per_pallet' => 10,
+        ]);
+        $second = MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 1,
+            'requested_units' => 10,
+            'units_per_pallet' => 10,
+        ]);
+
+        $this->actingAs($internal)
+            ->patch(route('merchandise-requests.lines.update', $request), [
+                'lines' => [
+                    $first->id => ['line_id' => $first->id, 'quantity' => 4],
+                    $second->id => ['line_id' => $second->id, 'remove' => 1],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $request));
+
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'id' => $first->id,
+            'requested_pallets' => 4,
+            'requested_units' => 40,
+        ]);
+        $this->assertDatabaseMissing('merchandise_request_lines', ['id' => $second->id]);
+        $this->assertDatabaseCount('goods_dispatches', 0);
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'merchandise_request_lines_updated',
+            'auditable_id' => $request->id,
+        ]);
+    }
+
+    public function test_pending_order_line_update_rejects_loaded_dispatch_line(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::SUPERADMIN);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 10]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $line = MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'requested_pallets' => 2,
+            'requested_units' => 20,
+            'units_per_pallet' => 10,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatchLine = $dispatch->lines()->create([
+            'item_id' => $item->id,
+            'source_request_line_id' => $line->id,
+            'line_type' => 'pallet',
+            'pallets' => 2,
+            'requested_pallets' => 2,
+            'requested_units' => 20,
+            'loaded_pallets' => 1,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'units_per_pallet' => 10,
+        ]);
+
+        $this->actingAs($internal)
+            ->patch(route('merchandise-requests.lines.update', $request), [
+                'lines' => [$line->id => ['line_id' => $line->id, 'remove' => 1]],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $request))
+            ->assertSessionHasErrors('lines.'.$line->id.'.quantity');
+
+        $this->assertDatabaseHas('merchandise_request_lines', ['id' => $line->id, 'requested_pallets' => 2]);
+        $this->assertDatabaseHas('goods_dispatch_lines', ['id' => $dispatchLine->id, 'loaded_pallets' => 1]);
+    }
+
     public function test_cliente_cannot_add_line_to_existing_request(): void
     {
         $this->seedBaseData();

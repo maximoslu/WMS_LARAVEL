@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AddMerchandiseRequestLineRequest;
 use App\Http\Requests\StoreMerchandiseRequestRequest;
+use App\Http\Requests\UpdateMerchandiseRequestLinesRequest;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\Item;
@@ -503,6 +504,142 @@ class MerchandiseRequestController extends Controller
         return redirect()
             ->route('merchandise-requests.show', $merchandiseRequest)
             ->with('status', 'Linea anadida al pedido. No se descuenta stock hasta la confirmacion de carga.');
+    }
+
+    public function updateLines(
+        UpdateMerchandiseRequestLinesRequest $request,
+        MerchandiseRequest $merchandiseRequest,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        if (! $this->canAcceptInternalLines($merchandiseRequest)) {
+            return redirect()
+                ->route('merchandise-requests.show', $merchandiseRequest)
+                ->withErrors(['lines' => 'Este pedido ya no se puede modificar en su estado actual.']);
+        }
+
+        $payload = $request->validated()['lines'];
+
+        try {
+            DB::transaction(function () use ($request, $merchandiseRequest, $payload, $audit): void {
+                $lockedRequest = MerchandiseRequest::query()
+                    ->whereKey($merchandiseRequest->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $lockedRequest->load(['lines', 'openDispatch.lines.allocations']);
+
+                if (! $this->canAcceptInternalLines($lockedRequest)) {
+                    throw ValidationException::withMessages([
+                        'lines' => 'Este pedido ya no se puede modificar en su estado actual.',
+                    ]);
+                }
+
+                $requestLines = $lockedRequest->lines->keyBy('id');
+                $dispatch = $lockedRequest->openDispatch;
+                $dispatchLines = $dispatch?->lines->keyBy('source_request_line_id') ?? collect();
+                $updates = [];
+
+                foreach ($payload as $rowKey => $linePayload) {
+                    $lineId = (int) $linePayload['line_id'];
+                    $line = $requestLines->get($lineId);
+
+                    if (! $line instanceof MerchandiseRequestLine) {
+                        throw ValidationException::withMessages([
+                            "lines.{$rowKey}.line_id" => 'La línea no pertenece a este pedido.',
+                        ]);
+                    }
+
+                    $dispatchLine = $dispatchLines->get($line->id);
+                    $remove = (bool) ($linePayload['remove'] ?? false);
+                    $quantity = (int) ($linePayload['quantity'] ?? 0);
+                    $loadedUnits = $dispatchLine?->loadedUnitsTotal() ?? 0;
+
+                    if ($dispatchLine?->hasActualLoadedQuantity()) {
+                        throw ValidationException::withMessages([
+                            "lines.{$rowKey}.quantity" => 'No se puede modificar una línea que ya tiene carga real registrada.',
+                        ]);
+                    }
+
+                    if ($remove) {
+                        $remainingLineCount = $lockedRequest->lines->count() - (int) ($updates['removed_count'] ?? 0);
+
+                        if ($remainingLineCount <= 1) {
+                            throw ValidationException::withMessages([
+                                "lines.{$rowKey}.remove" => 'El pedido debe conservar al menos una línea.',
+                            ]);
+                        }
+
+                        if ($loadedUnits > 0) {
+                            throw ValidationException::withMessages([
+                                "lines.{$rowKey}.remove" => 'No se puede eliminar una línea con cantidades ya cargadas.',
+                            ]);
+                        }
+
+                        $line->delete();
+                        $dispatchLine?->delete();
+                        $updates['removed_count'] = ($updates['removed_count'] ?? 0) + 1;
+                        continue;
+                    }
+
+                    if ($quantity < 1) {
+                        throw ValidationException::withMessages([
+                            "lines.{$rowKey}.quantity" => 'Indica una cantidad válida o marca la línea para eliminarla.',
+                        ]);
+                    }
+
+                    $unitsPerQuantity = $line->isPeakLine()
+                        ? (int) ($line->units_per_peak ?? 0)
+                        : (int) ($line->units_per_pallet ?? 0);
+                    $requestedUnits = $quantity * max(0, $unitsPerQuantity);
+
+                    if ($loadedUnits > $requestedUnits) {
+                        throw ValidationException::withMessages([
+                            "lines.{$rowKey}.quantity" => 'La cantidad no puede ser inferior a lo ya cargado.',
+                        ]);
+                    }
+
+                    $line->update([
+                        'requested_pallets' => $line->isPalletLine() ? $quantity : 0,
+                        'requested_peaks' => $line->isPeakLine() ? $quantity : 0,
+                        'requested_units' => $requestedUnits,
+                    ]);
+
+                    if ($dispatchLine instanceof \App\Models\GoodsDispatchLine) {
+                        $dispatchLine->update([
+                            'requested_pallets' => $line->requestedPalletsCount(),
+                            'requested_peaks' => $line->requestedPeaksCount(),
+                            'requested_units' => $requestedUnits,
+                            'pallets' => $line->requestedPalletsCount(),
+                        ]);
+                    }
+
+                    $updates['updated_count'] = ($updates['updated_count'] ?? 0) + 1;
+                }
+
+                $audit->record(
+                    event: 'merchandise_request_lines_updated',
+                    module: 'merchandise_requests',
+                    description: 'Lineas de pedido modificadas por usuario interno.',
+                    auditable: $lockedRequest,
+                    user: $request->user(),
+                    clientId: $lockedRequest->client_id,
+                    newValues: [
+                        'updated_count' => $updates['updated_count'] ?? 0,
+                        'removed_count' => $updates['removed_count'] ?? 0,
+                        'line_count' => $lockedRequest->lines()->count(),
+                        'dispatch_synced' => $dispatch instanceof GoodsDispatch,
+                    ],
+                );
+            });
+        } catch (ValidationException $exception) {
+            return redirect()
+                ->route('merchandise-requests.show', $merchandiseRequest)
+                ->withErrors($exception->errors())
+                ->withInput();
+        }
+
+        return redirect()
+            ->route('merchandise-requests.show', $merchandiseRequest)
+            ->with('status', 'Cambios del pedido guardados correctamente. No se ha descontado stock.');
     }
 
     public function updateStatus(

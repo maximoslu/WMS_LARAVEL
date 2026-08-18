@@ -37,6 +37,13 @@
             \App\Models\GoodsDispatch::STATUS_DRAFT,
             \App\Models\GoodsDispatch::STATUS_PREPARING,
         ], true);
+        $canEditInternalLines = ! $isClient
+            && $merchandiseRequest->status !== \App\Models\MerchandiseRequest::STATUS_CANCELLED
+            && $merchandiseRequest->status !== \App\Models\MerchandiseRequest::STATUS_COMPLETED
+            && ($dispatch === null || in_array($dispatch->status, [
+                \App\Models\GoodsDispatch::STATUS_DRAFT,
+                \App\Models\GoodsDispatch::STATUS_PREPARING,
+            ], true));
         $primaryLoadingLabel = $canStartLoading
             ? 'Empezar carga'
             : ($canContinueLoading ? 'Continuar carga' : 'Ver carga');
@@ -163,6 +170,12 @@
             @if ($canEditDraft)
                 <div class="wms-detail-actions order-primary-action">
                     <a href="{{ route('merchandise-requests.draft.edit', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">Continuar pedido</a>
+                </div>
+            @endif
+
+            @if ($canEditInternalLines)
+                <div class="wms-detail-actions order-primary-action">
+                    <a href="#editar-lineas-pedido" class="button-secondary compact-button btn-compact">Modificar pedido</a>
                 </div>
             @endif
         </section>
@@ -321,6 +334,68 @@
                         <button type="submit" class="button-primary compact-button btn-compact" data-request-submit disabled>
                             Añadir línea
                         </button>
+                    </div>
+                </form>
+            @endif
+
+            @if ($canEditInternalLines)
+                <form method="POST" action="{{ route('merchandise-requests.lines.update', $merchandiseRequest) }}" class="surface-card compact-card wms-action-card" id="editar-lineas-pedido">
+                    @csrf
+                    @method('PATCH')
+                    <div class="wms-add-order-line-head">
+                        <div>
+                            <strong>Modificar pedido</strong>
+                            <p>Ajusta cantidades o elimina líneas no preparadas. No se descuenta stock.</p>
+                        </div>
+                    </div>
+
+                    <div class="order-table-wrap">
+                        <table class="order-table">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Tipo</th>
+                                    <th>Cantidad solicitada</th>
+                                    <th>Unidades</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($merchandiseRequest->lines as $line)
+                                    @php
+                                        $dispatchLineForEdit = $dispatch?->lines->firstWhere('source_request_line_id', $line->id);
+                                        $lineHasActualLoad = $dispatchLineForEdit?->hasActualLoadedQuantity() ?? false;
+                                    @endphp
+                                    <tr>
+                                        <td class="order-table-strong">{{ $line->item?->sku ?? 'Artículo eliminado' }}</td>
+                                        <td>{{ $line->lineTypeLabel() }}</td>
+                                        <td>
+                                            @if ($lineHasActualLoad)
+                                                {{ $line->requestedQuantity() }}
+                                            @else
+                                                <input type="hidden" name="lines[{{ $line->id }}][line_id]" value="{{ $line->id }}">
+                                                <input type="number" min="1" step="1" name="lines[{{ $line->id }}][quantity]" value="{{ $line->requestedQuantity() }}" class="auth-input">
+                                            @endif
+                                        </td>
+                                        <td>{{ number_format($line->requestedUnitsTotal(), 0, ',', '.') }} uds</td>
+                                        <td>
+                                            @if ($lineHasActualLoad)
+                                                Carga real registrada
+                                            @else
+                                                <label>
+                                                    <input type="checkbox" name="lines[{{ $line->id }}][remove]" value="1">
+                                                    Eliminar línea
+                                                </label>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="item-filter-actions action-buttons page-actions-compact">
+                        <button type="submit" class="button-primary compact-button btn-compact">Guardar cambios</button>
                     </div>
                 </form>
             @endif
