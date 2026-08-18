@@ -4,6 +4,16 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-18 - ESTABILIZACION DEL LAYOUT DE ACCIONES DE SALIDA
+
+**Incidencia:** en `resources/views/dispatches/show.blade.php`, el bloque `Estado y documentos` podia forzar tres columnas hasta anchos medianos. Los botones internos conservaban el ancho minimo global y las tarjetas no limitaban de forma explicita el contenido, por lo que `Ver pedido origen` e `Imprimir albaran` podian desbordar visualmente hacia la tarjeta `Transporte`.
+
+**Correccion aplicada:** `resources/css/app.css` usa ahora columnas adaptativas con un minimo relativo al contenido, limita el desbordamiento de las tarjetas y hace que las acciones internas ocupen el ancho disponible sin invadir columnas vecinas. Los textos largos pueden envolver, los radios de transporte se adaptan y el breakpoint movil mantiene una sola columna. Las acciones, rutas, permisos, stock y vistas Blade no han cambiado.
+
+**Validacion local:** `GoodsDispatchManagementTest` -> 67 passed, 532 assertions; `MerchandiseRequestManagementTest` -> 63 passed, 431 assertions; `DailyOperationsTest` -> 26 passed, 298 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; suite completa -> **883 passed, 5.149 assertions**; `npm run build` OK; `git diff --check` OK. La pestaña local redirigio a `/login`, por lo que no se pudo realizar desde esta sesion una comprobacion visual autenticada de la pantalla con navegador; queda pendiente revisar manualmente 1920, 1536, 1366, 1280 px y zoom 100/110% en operativa.
+
+**Estado Git:** pendiente de commit y push normal a `origin/main`. No se modificaron rutas, logica funcional, datos, migraciones, `.env`, `.claude/` ni `tmp/`. Forge/produccion queda pendiente de `Deploy Now` y validacion posterior.
+
 ## 2026-08-18 - CORRECCION DE EDICION DE LINEAS EN CARGA
 
 **Incidencia:** en la pantalla de carga, `Eliminar linea` retiraba la fila del DOM antes de enviar el campo oculto `remove=1`; por eso el backend no recibia la eliminacion y la linea reaparecia. Ademas, el servicio solo contemplaba lineas extra. La solicitud original siempre conserva sus lineas y cantidades solicitadas.
