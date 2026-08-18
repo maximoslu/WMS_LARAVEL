@@ -1569,6 +1569,186 @@ class GoodsDispatchManagementTest extends TestCase
         ]);
     }
 
+    public function test_confirming_loading_removes_existing_unloaded_line_and_keeps_request_intact(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $request->lines()->create([
+            'item_id' => Item::factory()->create(['client_id' => $client->id])->id,
+            'requested_pallets' => 2,
+            'requested_units' => 2,
+            'units_per_pallet' => 1,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $lineToRemove = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $requestLine->item_id,
+            'source_request_line_id' => $requestLine->id,
+            'requested_pallets' => 2,
+            'loaded_pallets' => null,
+            'confirmed_at' => null,
+        ]);
+        $lineToKeep = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 1,
+            'loaded_pallets' => null,
+            'confirmed_at' => null,
+            'is_extra_line' => true,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    'line_'.$lineToRemove->id => [
+                        'line_id' => $lineToRemove->id,
+                        'remove' => 1,
+                        'loaded_pallets' => 0,
+                    ],
+                    'line_'.$lineToKeep->id => [
+                        'line_id' => $lineToKeep->id,
+                        'loaded_pallets' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertDatabaseMissing('goods_dispatch_lines', ['id' => $lineToRemove->id]);
+        $this->assertDatabaseHas('goods_dispatch_lines', ['id' => $lineToKeep->id]);
+        $this->assertDatabaseHas('merchandise_request_lines', ['id' => $requestLine->id]);
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'goods_dispatch_line_removed',
+            'auditable_id' => $dispatch->id,
+        ]);
+        $this->assertSame(1, GoodsDispatchLine::query()->where('goods_dispatch_id', $dispatch->id)->count());
+        $this->assertSame(1, MerchandiseRequest::query()->whereKey($request->id)->count());
+    }
+
+    public function test_confirming_loading_rejects_removing_line_with_real_load(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $loadedLine = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 1,
+            'loaded_pallets' => 1,
+            'confirmed_at' => now(),
+        ]);
+        $otherLine = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'requested_pallets' => 1,
+            'loaded_pallets' => null,
+            'confirmed_at' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.show', $dispatch))
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    'line_'.$loadedLine->id => [
+                        'line_id' => $loadedLine->id,
+                        'remove' => 1,
+                        'loaded_pallets' => 1,
+                    ],
+                    'line_'.$otherLine->id => [
+                        'line_id' => $otherLine->id,
+                        'loaded_pallets' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasErrors('lines.0.remove');
+
+        $this->assertDatabaseHas('goods_dispatch_lines', [
+            'id' => $loadedLine->id,
+            'loaded_pallets' => 1,
+        ]);
+        $this->assertDatabaseHas('goods_dispatch_lines', [
+            'id' => $otherLine->id,
+            'loaded_pallets' => null,
+        ]);
+    }
+
+    public function test_confirming_loading_adds_new_reference_to_existing_request_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $baseItem = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 20]);
+        $extraItem = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 20, 'sku' => 'NUEVA-REF-CARGA']);
+        $extraStock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $extraItem->id,
+            'units_per_pallet' => 20,
+            'quantity_units' => 100,
+            'peak_1' => 0,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $request->lines()->create([
+            'item_id' => $baseItem->id,
+            'requested_pallets' => 1,
+            'requested_units' => 20,
+            'units_per_pallet' => 20,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $baseLine = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $baseItem->id,
+            'source_request_line_id' => $requestLine->id,
+            'requested_pallets' => 1,
+            'loaded_pallets' => null,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'lines' => [
+                    'line_'.$baseLine->id => [
+                        'line_id' => $baseLine->id,
+                        'loaded_pallets' => 0,
+                    ],
+                    'new_extra' => [
+                        'item_id' => $extraItem->id,
+                        'stock_pallet_id' => $extraStock->id,
+                        'loaded_pallets' => 2,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertSame(1, MerchandiseRequest::query()->count());
+        $this->assertSame($request->id, $dispatch->fresh()->merchandise_request_id);
+        $this->assertDatabaseHas('goods_dispatch_lines', [
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $extraItem->id,
+            'is_extra_line' => true,
+            'loaded_pallets' => 2,
+        ]);
+        $this->assertSame(2, GoodsDispatchLine::query()->where('goods_dispatch_id', $dispatch->id)->count());
+    }
+
     public function test_completing_dispatch_sends_customer_email_with_delivery_note_attachment(): void
     {
         Notification::fake();

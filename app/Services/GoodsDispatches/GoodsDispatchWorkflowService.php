@@ -84,7 +84,28 @@ class GoodsDispatchWorkflowService
                 if ($lineId !== null && $existingLines->has($lineId)) {
                     $line = $existingLines->get($lineId);
 
-                    if ($line->is_extra_line && $removeLine) {
+                    if ($removeLine) {
+                        if ($line->hasActualLoadedQuantity()) {
+                            throw ValidationException::withMessages([
+                                "lines.{$rowKey}.remove" => 'No se puede eliminar una línea que ya tiene carga real registrada.',
+                            ]);
+                        }
+
+                        $this->audit->record(
+                            event: 'goods_dispatch_line_removed',
+                            module: 'goods_dispatches',
+                            description: 'Línea eliminada de la carga sin modificar la solicitud original.',
+                            auditable: $dispatch,
+                            subject: $dispatch->merchandiseRequest,
+                            user: $user,
+                            clientId: $dispatch->client_id,
+                            oldValues: [
+                                'line_id' => $line->id,
+                                'item_id' => $line->item_id,
+                                'is_extra_line' => (bool) $line->is_extra_line,
+                            ],
+                            correlationId: $correlationId,
+                        );
                         $line->delete();
 
                         continue;

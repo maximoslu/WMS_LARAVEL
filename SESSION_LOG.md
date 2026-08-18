@@ -4,6 +4,24 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-18 - CORRECCION DE EDICION DE LINEAS EN CARGA
+
+**Incidencia:** en la pantalla de carga, `Eliminar linea` retiraba la fila del DOM antes de enviar el campo oculto `remove=1`; por eso el backend no recibia la eliminacion y la linea reaparecia. Ademas, el servicio solo contemplaba lineas extra. La solicitud original siempre conserva sus lineas y cantidades solicitadas.
+
+**Regla funcional consolidada:** un pedido conserva la solicitud original; cada camion/salida es independiente. Una linea de la salida puede eliminarse mientras no tenga carga real persistida, sin borrar la linea original del pedido. Si ya tiene carga real, o la salida ya esta enviada, completada o ha aplicado stock, la operacion queda bloqueada. El resto puede permanecer pendiente o cerrarse expresamente, pero nunca se falsean ni se borran cantidades solicitadas.
+
+**Correccion aplicada:**
+- Las filas persistidas se marcan con `remove=1` y se ocultan sin eliminarlas del formulario; las filas nuevas se eliminan del DOM.
+- El servicio elimina cualquier linea de la salida sin carga real, registra auditoria y mantiene intacta `merchandise_request_lines`.
+- Se anade `GoodsDispatchLine::hasActualLoadedQuantity()` para no confundir el valor solicitado por defecto con carga realmente registrada.
+- Anadir una nueva referencia valida cliente, articulo, stock y cantidades y la incorpora a la salida/pedido existente; no crea otro pedido ni aplica stock hasta la finalizacion normal de la salida.
+
+**Archivos modificados:** `app/Models/GoodsDispatchLine.php`, `app/Services/GoodsDispatches/GoodsDispatchWorkflowService.php`, `resources/js/app.js`, `resources/views/dispatches/show.blade.php` y `tests/Feature/GoodsDispatchManagementTest.php`.
+
+**Validacion local:** `php artisan test --filter=GoodsDispatchManagementTest` -> 67 passed, 532 assertions; pruebas focalizadas -> 330 passed, 2.149 assertions; suite completa -> **875 passed, 5.107 assertions**; `npm run build` OK; `git diff --check` OK. No se ejecutaron migraciones, no se modificaron datos ni produccion. La validacion autenticada en Forge/produccion queda pendiente.
+
+**Estado Git:** pendiente de commit y push normal a `origin/main` tras esta actualizacion documental. `.claude/` y `tmp/` permanecen fuera de Git.
+
 ## 2026-08-11 - CIERRE DE SNAPSHOT Y LIMITES DE IMPORTACION PARA BASELINE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-import-snapshot-limits-2026-08-11`.

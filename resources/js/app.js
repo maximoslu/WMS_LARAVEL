@@ -2149,13 +2149,17 @@ const setupDispatchLoadingEditor = () => {
             return;
         }
 
+        const lineIdField = row.querySelector('input[name$="[line_id]"]');
         const removeFlag = row.querySelector('[data-dispatch-remove-flag]');
 
-        if (removeFlag) {
+        if (lineIdField && removeFlag) {
             removeFlag.value = '1';
+            row.hidden = true;
+            row.setAttribute('aria-hidden', 'true');
+            row.dataset.pendingRemoval = 'true';
+        } else {
+            row.remove();
         }
-
-        row.remove();
     });
 
     form.dataset.loadingEditorBound = 'true';

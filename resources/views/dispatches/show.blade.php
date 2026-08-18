@@ -403,12 +403,12 @@
                             </label>
 
                             <div class="wms-loading-row-action">
-                                @if ($line->is_extra_line)
+                                @if (! $line->hasActualLoadedQuantity())
                                     <button type="button" class="button-secondary compact-button btn-compact" data-dispatch-loading-remove>
-                                        Eliminar línea extra
+                                        Eliminar línea de esta carga
                                     </button>
                                 @else
-                                    <p>Usa <strong>0</strong> si finalmente no se carga esta línea.</p>
+                                    <p>Esta línea ya tiene carga real registrada y no se puede eliminar.</p>
                                 @endif
                             </div>
                         </div>

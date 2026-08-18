@@ -334,6 +334,23 @@ class GoodsDispatchLine extends Model
         return $this->loadedUnitsTotal() > 0;
     }
 
+    public function hasActualLoadedQuantity(): bool
+    {
+        if ((int) ($this->loaded_pallets ?? 0) > 0
+            || (int) ($this->loaded_peaks ?? 0) > 0
+            || (int) ($this->loaded_partial_units ?? 0) > 0) {
+            return true;
+        }
+
+        return $this->relationLoaded('allocations')
+            ? $this->allocations->contains(fn (GoodsDispatchLineAllocation $allocation): bool => $allocation->loadedPallets() > 0 || $allocation->loadedPartialUnits() > 0)
+            : $this->allocations()->where(function ($query): void {
+                $query
+                    ->where('loaded_pallets', '>', 0)
+                    ->orWhere('loaded_partial_units', '>', 0);
+            })->exists();
+    }
+
     public function lineOriginLabel(): string
     {
         return $this->is_extra_line ? 'Extra' : 'Pedido';
