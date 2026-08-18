@@ -36,6 +36,22 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 **Forge/produccion:** no hay evidencia disponible en esta sesion de que Forge haya desplegado `273d3f6`; el ultimo despliegue documentado en el registro corresponde a `79f37a92`. La validacion manual de SOL-000063, EDELVIVES y FRIESLAND en produccion queda pendiente de `Deploy Now` en Forge y comprobacion posterior.
 
+## 2026-08-18 - ANULACION SEGURA DE PEDIDOS PENDIENTES
+
+**Solicitud:** añadir `Eliminar` junto a `Modificar pedido` en la pantalla de pedidos pendientes. La accion debe ser segura, trazable y compatible con la edicion de lineas introducida en `983cae4`.
+
+**Decision de dominio:** se implementa **anulacion logica**, no borrado fisico. `MerchandiseRequest` ya dispone de `STATUS_CANCELLED` y `cancelled_at`, no usa `SoftDeletes`, y los listados operativos excluyen el estado cancelado. Se conservan pedido, lineas, salidas y movimientos historicos.
+
+**Reglas aplicadas:** el boton solo aparece para usuarios internos con acceso de almacen y pedidos en estado pendiente, preparacion o parcialmente servido que no tengan salida enviada/cerrada, carga real, stock aplicado ni movimientos de despacho. Un pedido sin salida se anula directamente. Una salida abierta en `draft` o `preparing` sin carga real se anula en la misma transaccion. Cualquier carga real, movimiento de stock, salida enviada/completada o estado no elegible bloquea la operacion con mensaje en espanol.
+
+**Implementacion:** nuevo `MerchandiseRequestCancellationService` con bloqueo transaccional, comprobacion de `stock_applied_at`, `warehouse_stock_applied_at`, `GoodsDispatchLine::hasActualLoadedQuantity()` y `InventoryMovement` por salida. Nueva ruta `PATCH /salidas/pedidos/{merchandiseRequest}/cancelar`, boton con confirmacion y auditoria `merchandise_request_cancelled` / `goods_dispatch_cancelled`.
+
+**Archivos modificados:** `app/Services/MerchandiseRequests/MerchandiseRequestCancellationService.php`, `app/Http/Controllers/GoodsDispatchController.php`, `routes/web.php`, `resources/views/dispatches/request.blade.php` y `tests/Feature/MerchandiseRequestManagementTest.php`.
+
+**Validacion:** `MerchandiseRequestManagementTest` -> 63 passed, 431 assertions; `GoodsDispatchManagementTest` -> 67 passed, 532 assertions; `DailyOperationsTest` -> 26 passed, 298 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; suite completa -> **883 passed, 5.149 assertions**; `npm run build` OK; `git diff --check` OK. No migraciones, cambios de datos ni acciones en produccion.
+
+**Forge:** sigue pendiente `Deploy Now` y la validacion manual productiva. No se afirma que esta correccion este desplegada.
+
 ## 2026-08-11 - CIERRE DE SNAPSHOT Y LIMITES DE IMPORTACION PARA BASELINE
 
 **Equipo:** PC trabajo. **Ruta:** `C:\DEV\WMS_LARAVEL_PORTATIL`. **Rama:** `fix/baseline-import-snapshot-limits-2026-08-11`.

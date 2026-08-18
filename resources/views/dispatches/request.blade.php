@@ -116,6 +116,14 @@
                 <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact">Modificar pedido</a>
             @endif
 
+            @if ($canCancelRequest ?? false)
+                <form method="POST" action="{{ route('dispatches.requests.cancel', $merchandiseRequest) }}" onsubmit="return confirm('¿Seguro que quieres eliminar este pedido? Esta acción no debe usarse si ya se ha preparado o cargado mercancía.');">
+                    @csrf
+                    @method('PATCH')
+                    <button type="submit" class="button-secondary compact-button btn-compact">Eliminar</button>
+                </form>
+            @endif
+
             @if ($canGenerateDispatch)
                 <form method="POST" action="{{ route('dispatches.requests.generate', $merchandiseRequest) }}">
                     @csrf

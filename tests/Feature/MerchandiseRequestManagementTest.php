@@ -1664,6 +1664,7 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertDontSee('Continuar carga')
             ->assertDontSee('Más acciones')
             ->assertDontSee('Cambiar estado');
+
     }
 
     public function test_internal_roles_can_start_loading_from_request_detail(): void
@@ -1788,6 +1789,161 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertSee('Modificar pedido')
             ->assertSee('Empezar carga')
             ->assertSee('Sin salida generada');
+    }
+
+    public function test_superadmin_sees_delete_action_for_pending_order_without_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::SUPERADMIN);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        MerchandiseRequestLine::factory()->create(['merchandise_request_id' => $request->id]);
+
+        $this->actingAs($internal)
+            ->get(route('dispatches.requests.show', $request))
+            ->assertOk()
+            ->assertSee('Modificar pedido')
+            ->assertSee('>Eliminar<', false);
+    }
+
+    public function test_internal_user_cancels_pending_order_without_stock_or_dispatch(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::SUPERADMIN);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        MerchandiseRequestLine::factory()->create(['merchandise_request_id' => $request->id]);
+
+        $this->actingAs($internal)
+            ->patch(route('dispatches.requests.cancel', $request))
+            ->assertRedirect(route('dispatches.requests.index'))
+            ->assertSessionHas('status', 'Pedido anulado correctamente.');
+
+        $this->assertDatabaseHas('merchandise_requests', [
+            'id' => $request->id,
+            'status' => MerchandiseRequest::STATUS_CANCELLED,
+        ]);
+        $this->assertDatabaseHas('merchandise_request_lines', ['merchandise_request_id' => $request->id]);
+        $this->assertDatabaseCount('goods_dispatches', 0);
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'merchandise_request_cancelled',
+            'auditable_id' => $request->id,
+        ]);
+    }
+
+    public function test_internal_user_cancels_open_dispatch_without_real_load_with_request(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 20]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $line = MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 1,
+            'requested_units' => 20,
+            'units_per_pallet' => 20,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatch->lines()->create([
+            'item_id' => $item->id,
+            'source_request_line_id' => $line->id,
+            'line_type' => 'pallet',
+            'pallets' => 1,
+            'requested_pallets' => 1,
+            'requested_units' => 20,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'units_per_pallet' => 20,
+        ]);
+
+        $this->actingAs($internal)
+            ->patch(route('dispatches.requests.cancel', $request))
+            ->assertRedirect(route('dispatches.requests.index'));
+
+        $this->assertDatabaseHas('merchandise_requests', ['id' => $request->id, 'status' => MerchandiseRequest::STATUS_CANCELLED]);
+        $this->assertDatabaseHas('goods_dispatches', ['id' => $dispatch->id, 'status' => GoodsDispatch::STATUS_CANCELLED]);
+        $this->assertDatabaseHas('goods_dispatch_lines', ['goods_dispatch_id' => $dispatch->id, 'source_request_line_id' => $line->id]);
+    }
+
+    public function test_cancelling_order_with_real_load_is_rejected(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::SUPERADMIN);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $line = MerchandiseRequestLine::factory()->create(['merchandise_request_id' => $request->id]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatch->lines()->create([
+            'item_id' => $line->item_id,
+            'source_request_line_id' => $line->id,
+            'line_type' => 'pallet',
+            'pallets' => 1,
+            'requested_pallets' => 1,
+            'requested_units' => 10,
+            'loaded_pallets' => 1,
+            'sku' => $line->item->sku,
+            'description' => $line->item->description,
+            'units_per_pallet' => 10,
+        ]);
+
+        $this->actingAs($internal)
+            ->from(route('dispatches.requests.show', $request))
+            ->patch(route('dispatches.requests.cancel', $request))
+            ->assertRedirect(route('dispatches.requests.show', $request))
+            ->assertSessionHasErrors(['request' => 'No se puede eliminar este pedido porque ya tiene carga registrada.']);
+
+        $this->assertDatabaseHas('merchandise_requests', ['id' => $request->id, 'status' => MerchandiseRequest::STATUS_PREPARING]);
+        $this->assertDatabaseHas('goods_dispatches', ['id' => $dispatch->id, 'status' => GoodsDispatch::STATUS_PREPARING]);
+    }
+
+    public function test_cancelling_sent_order_is_rejected_and_client_cannot_force_endpoint(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $internal = $this->makeUserWithRole(Role::SUPERADMIN);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+        ]);
+
+        $this->actingAs($internal)
+            ->from(route('dispatches.requests.show', $request))
+            ->patch(route('dispatches.requests.cancel', $request))
+            ->assertRedirect(route('dispatches.requests.show', $request))
+            ->assertSessionHasErrors(['request' => 'No se puede eliminar este pedido porque ya está enviado o cerrado.']);
+
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->patch(route('dispatches.requests.cancel', $request))
+            ->assertForbidden();
     }
 
     public function test_internal_user_can_update_and_remove_pending_order_lines_without_stock_or_dispatch(): void

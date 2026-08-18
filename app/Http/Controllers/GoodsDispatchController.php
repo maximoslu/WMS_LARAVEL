@@ -11,6 +11,7 @@ use App\Models\MerchandiseRequestLine;
 use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
+use App\Services\MerchandiseRequests\MerchandiseRequestCancellationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Support\Stock\StockVariantCatalog;
@@ -127,6 +128,7 @@ class GoodsDispatchController extends Controller
         Request $request,
         MerchandiseRequest $merchandiseRequest,
         MerchandiseRequestFulfillmentService $fulfillmentService,
+        MerchandiseRequestCancellationService $cancellationService,
     ): View {
         abort_unless(! $merchandiseRequest->isDraft(), 404);
 
@@ -154,8 +156,30 @@ class GoodsDispatchController extends Controller
             'activeDispatch' => $activeDispatch,
             'fulfillmentSummary' => $fulfillmentService->summary($merchandiseRequest, $activeDispatch),
             'stockOptionsByItem' => $this->stockOptionsByItem($merchandiseRequest),
+            'canCancelRequest' => $request->user()->canAccessRole(\App\Models\Role::ALMACEN)
+                && $cancellationService->canCancel($merchandiseRequest),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
+    }
+
+    public function cancelRequest(
+        Request $request,
+        MerchandiseRequest $merchandiseRequest,
+        MerchandiseRequestCancellationService $cancellationService,
+    ): RedirectResponse {
+        abort_unless($request->user()->canAccessRole(\App\Models\Role::ALMACEN), 403);
+
+        try {
+            $cancellationService->cancel($merchandiseRequest, $request->user());
+        } catch (ValidationException $exception) {
+            return redirect()
+                ->route('dispatches.requests.show', $merchandiseRequest)
+                ->withErrors($exception->errors());
+        }
+
+        return redirect()
+            ->route('dispatches.requests.index')
+            ->with('status', 'Pedido anulado correctamente.');
     }
 
     public function generateFromRequest(
