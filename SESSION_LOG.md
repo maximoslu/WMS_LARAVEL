@@ -12,7 +12,7 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 **Validacion local:** `GoodsDispatchManagementTest` -> 67 passed, 532 assertions; `MerchandiseRequestManagementTest` -> 63 passed, 431 assertions; `DailyOperationsTest` -> 26 passed, 298 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; suite completa -> **883 passed, 5.149 assertions**; `npm run build` OK; `git diff --check` OK. La pestaña local redirigio a `/login`, por lo que no se pudo realizar desde esta sesion una comprobacion visual autenticada de la pantalla con navegador; queda pendiente revisar manualmente 1920, 1536, 1366, 1280 px y zoom 100/110% en operativa.
 
-**Estado Git:** pendiente de commit y push normal a `origin/main`. No se modificaron rutas, logica funcional, datos, migraciones, `.env`, `.claude/` ni `tmp/`. Forge/produccion queda pendiente de `Deploy Now` y validacion posterior.
+**Estado Git:** commit `1f6cc3d` creado y publicado en `origin/main`; `HEAD` y `origin/main` coinciden. No se modificaron rutas, logica funcional, datos, migraciones, `.env`, `.claude/` ni `tmp/`. Forge/produccion queda pendiente de `Deploy Now` y validacion posterior.
 
 ## 2026-08-18 - CORRECCION DE EDICION DE LINEAS EN CARGA
 
