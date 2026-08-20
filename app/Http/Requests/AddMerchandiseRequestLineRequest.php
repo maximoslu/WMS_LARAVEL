@@ -135,7 +135,7 @@ class AddMerchandiseRequestLineRequest extends FormRequest
 
         /** @var StockLinePayloadResolver $resolver */
         $resolver = app(StockLinePayloadResolver::class);
-        $resolved = $resolver->resolve($this->merchandiseRequestClientId(), $this->input('lines', []), true);
+        $resolved = $resolver->resolve($this->merchandiseRequestClientId(), $this->input('lines', []), true, true);
 
         $submittedLines = collect($this->input('lines', []))->values();
         $this->resolvedLines = collect($resolved['lines'])

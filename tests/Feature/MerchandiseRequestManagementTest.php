@@ -156,13 +156,14 @@ class MerchandiseRequestManagementTest extends TestCase
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         foreach (range(1, 18) as $index) {
-            Item::factory()->create([
+            $item = Item::factory()->create([
                 'client_id' => $client->id,
                 'sku' => sprintf('CAJA%04d', $index),
                 'description' => 'Catalogo cliente '.$index,
                 'lot_key' => sprintf('L%04d', $index),
                 'active' => true,
             ]);
+            $this->createAvailableStock($item);
         }
 
         Item::factory()->create([
@@ -192,16 +193,18 @@ class MerchandiseRequestManagementTest extends TestCase
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
-        Item::factory()->create([
+        $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SEARCH-FRIES-001',
             'active' => true,
         ]);
-        Item::factory()->create([
+        $this->createAvailableStock($item);
+        $item = Item::factory()->create([
             'client_id' => $otherClient->id,
             'sku' => 'SEARCH-EDEL-001',
             'active' => true,
         ]);
+        $this->createAvailableStock($item);
 
         $response = $this->actingAs($almacen)
             ->getJson(route('merchandise-requests.items.search', [
@@ -223,16 +226,18 @@ class MerchandiseRequestManagementTest extends TestCase
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
-        Item::factory()->create([
+        $item = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'SEARCH-FRIES-002',
             'active' => true,
         ]);
-        Item::factory()->create([
+        $this->createAvailableStock($item);
+        $item = Item::factory()->create([
             'client_id' => $otherClient->id,
             'sku' => 'SEARCH-EDEL-002',
             'active' => true,
         ]);
+        $this->createAvailableStock($item);
 
         $response = $this->actingAs($cliente)
             ->getJson(route('merchandise-requests.items.search', [
@@ -259,6 +264,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'description' => 'Caja de prueba',
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($item, 4);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->actingAs($cliente)
@@ -312,8 +318,22 @@ class MerchandiseRequestManagementTest extends TestCase
             'client_id' => $client->id,
             'item_id' => $item->id,
             'quantity_units' => 1000,
+            'units_per_pallet' => 100,
             'full_pallets' => 10,
             'warehouse_pallets' => 10,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'peak_1' => 0,
+            'peak_2' => 0,
+            'peak_3' => 0,
+            'peak_4' => 0,
+            'peak_5' => 0,
+            'peak_6' => 0,
+            'peak_7' => 0,
+            'peak_8' => 0,
+            'peak_9' => 0,
+            'peak_10' => 0,
+            'active' => true,
         ]);
 
         $this->actingAs($cliente)
@@ -455,6 +475,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'client_id' => $client->id,
             'item_id' => $item->id,
             'quantity_units' => 2500,
+            'units_per_pallet' => 250,
             'full_pallets' => 10,
             'warehouse_pallets' => 10,
         ]);
@@ -516,6 +537,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'sku' => 'DESTINO-001',
             'units_per_pallet' => 100,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->actingAs($cliente)
@@ -552,6 +574,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'sku' => 'NEED-001',
             'units_per_pallet' => 6000,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->actingAs($cliente)
@@ -662,6 +685,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'sku' => 'OWN-ORDER-001',
             'units_per_pallet' => 100,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->actingAs($cliente)
@@ -771,6 +795,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'client_id' => $client->id,
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->travelTo(Carbon::parse('2026-01-05 08:00:00', config('app.timezone')));
@@ -797,6 +822,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'client_id' => $client->id,
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->travelTo(Carbon::parse('2026-01-05 05:59:59', config('app.timezone')));
@@ -823,6 +849,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'client_id' => $client->id,
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->travelTo(Carbon::parse('2026-01-05 14:01:00', config('app.timezone')));
@@ -849,6 +876,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'client_id' => $client->id,
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->travelTo(Carbon::parse('2026-01-03 10:00:00', config('app.timezone')));
@@ -881,6 +909,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'sku' => 'CAJA0030',
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($item, 2);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->travelTo(Carbon::parse('2026-01-03 10:00:00', config('app.timezone')));
@@ -911,6 +940,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'client_id' => $client->id,
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($item, 3);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->travelTo(Carbon::parse('2026-01-03 10:00:00', config('app.timezone')));
@@ -1003,6 +1033,8 @@ class MerchandiseRequestManagementTest extends TestCase
             'sku' => 'LINEA002',
             'units_per_pallet' => 80,
         ]);
+        $this->createAvailableStock($firstItem, 2);
+        $this->createAvailableStock($secondItem, 3);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->actingAs($cliente)
@@ -1096,12 +1128,14 @@ class MerchandiseRequestManagementTest extends TestCase
             'description' => 'Primera referencia',
             'units_per_pallet' => 700,
         ]);
+        $this->createAvailableStock($firstItem, 2);
         $secondItem = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'CAJA0002',
             'description' => 'Segunda referencia',
             'units_per_pallet' => 560,
         ]);
+        $this->createAvailableStock($secondItem, 3);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->actingAs($cliente)
@@ -1393,12 +1427,13 @@ class MerchandiseRequestManagementTest extends TestCase
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
-        Item::factory()->create([
+        $activeItem = Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'ACTIVO001',
             'status' => Item::STATUS_ACTIVE,
             'active' => true,
         ]);
+        $this->createAvailableStock($activeItem);
         Item::factory()->create([
             'client_id' => $client->id,
             'sku' => 'BLOQ001',
@@ -1727,6 +1762,7 @@ class MerchandiseRequestManagementTest extends TestCase
                 'sku' => strtoupper($roleSlug).'-ADD-LINE',
                 'units_per_pallet' => 25,
             ]);
+            $this->createAvailableStock($item, 3);
             $request = MerchandiseRequest::factory()->create([
                 'client_id' => $client->id,
                 'requested_by' => $requester->id,
@@ -2176,6 +2212,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'description' => 'Linea añadida durante carga',
             'units_per_pallet' => 40,
         ]);
+        $this->createAvailableStock($item, 4);
         $request = MerchandiseRequest::factory()->create([
             'client_id' => $client->id,
             'requested_by' => $requester->id,
@@ -2350,6 +2387,173 @@ class MerchandiseRequestManagementTest extends TestCase
         }
     }
 
+    public function test_edelvives_search_and_create_require_exact_available_stock(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $withoutStock = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => '140x120 90',
+            'units_per_pallet' => 100,
+        ]);
+        $withStock = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => '120x140 90',
+            'units_per_pallet' => 100,
+        ]);
+        $stock = $this->createAvailableStock($withStock, 2);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->getJson(route('merchandise-requests.items.search', ['search' => '140x120 90']))
+            ->assertOk()
+            ->assertJsonPath('data', []);
+
+        $this->actingAs($cliente)
+            ->getJson(route('merchandise-requests.items.search', ['search' => '120x140 90']))
+            ->assertOk()
+            ->assertJsonFragment(['sku' => $withStock->sku, 'item_id' => $withStock->id]);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.create'))
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $withoutStock->id,
+                        'line_type' => 'pallet',
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.create'))
+            ->assertSessionHasErrors('lines.line_1.stock_pallet_id');
+
+        $this->assertDatabaseCount('merchandise_requests', 0);
+        $this->assertSame(2, (int) $stock->fresh()->full_pallets);
+    }
+
+    public function test_available_stock_without_location_is_valid_for_exact_item(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => '120x140 90',
+            'units_per_pallet' => 100,
+        ]);
+        $stock = $this->createAvailableStock($item, 2);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'stock_pallet_id' => $stock->id,
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $request = MerchandiseRequest::query()->firstOrFail();
+        $this->assertDatabaseHas('merchandise_request_lines', [
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'requested_pallets' => 1,
+        ]);
+        $this->assertNull($stock->fresh()->location_id);
+        $this->assertSame(2, (int) $stock->fresh()->full_pallets);
+    }
+
+    public function test_order_rejects_quantity_greater_than_exact_stock(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 100]);
+        $stock = $this->createAvailableStock($item, 1);
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.create'))
+            ->post(route('merchandise-requests.store'), [
+                'lines' => [
+                    'line_1' => [
+                        'item_id' => $item->id,
+                        'line_type' => 'pallet',
+                        'stock_pallet_id' => $stock->id,
+                        'quantity' => 2,
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('merchandise-requests.create'))
+            ->assertSessionHasErrors('lines.line_1.quantity');
+
+        $this->assertDatabaseCount('merchandise_requests', 0);
+    }
+
+    public function test_draft_modification_and_pending_add_line_reject_unavailable_exact_item(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $available = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 100]);
+        $this->createAvailableStock($available, 2);
+        $unavailable = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 100]);
+        $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $this->actingAs($requester)
+            ->post(route('merchandise-requests.store'), [
+                'submit_action' => 'draft',
+                'lines' => [[
+                    'item_id' => $available->id,
+                    'line_type' => 'pallet',
+                    'quantity' => 1,
+                ]],
+            ])
+            ->assertRedirect();
+
+        $draft = MerchandiseRequest::query()->firstOrFail();
+
+        $this->actingAs($requester)
+            ->from(route('merchandise-requests.draft.edit', $draft))
+            ->patch(route('merchandise-requests.draft.update', $draft), [
+                'submit_action' => 'draft',
+                'lines' => [[
+                    'item_id' => $unavailable->id,
+                    'line_type' => 'pallet',
+                    'quantity' => 1,
+                ]],
+            ])
+            ->assertRedirect(route('merchandise-requests.draft.edit', $draft))
+            ->assertSessionHasErrors('lines.0.stock_pallet_id');
+
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $requester->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('merchandise-requests.show', $request))
+            ->post(route('merchandise-requests.lines.store', $request), [
+                'lines' => [[
+                    'item_id' => $unavailable->id,
+                    'line_type' => 'pallet',
+                    'quantity' => 1,
+                ]],
+            ])
+            ->assertRedirect(route('merchandise-requests.show', $request))
+            ->assertSessionHasErrors('lines.0.stock_pallet_id');
+    }
+
     private function seedBaseData(): void
     {
         $this->seed([
@@ -2368,6 +2572,34 @@ class MerchandiseRequestManagementTest extends TestCase
         ]);
     }
 
+    private function createAvailableStock(Item $item, int $fullPallets = 20): StockPallet
+    {
+        $stock = StockPallet::factory()->create([
+            'client_id' => $item->client_id,
+            'item_id' => $item->id,
+            'units_per_pallet' => $item->units_per_pallet,
+            'quantity_units' => $fullPallets * $item->units_per_pallet,
+            'lot' => null,
+            'status' => StockPallet::STATUS_AVAILABLE,
+            'stock_category' => StockPallet::CATEGORY_IN_USE,
+            'peak_1' => 0,
+            'peak_2' => 0,
+            'peak_3' => 0,
+            'peak_4' => 0,
+            'peak_5' => 0,
+            'peak_6' => 0,
+            'peak_7' => 0,
+            'peak_8' => 0,
+            'peak_9' => 0,
+            'peak_10' => 0,
+            'active' => true,
+            'location_id' => null,
+            'location_text' => null,
+        ]);
+
+        return $stock;
+    }
+
     private function assertInternalRoleCanCreateRequestForClient(string $roleSlug): void
     {
         Bus::fake();
@@ -2379,6 +2611,7 @@ class MerchandiseRequestManagementTest extends TestCase
             'sku' => strtoupper($roleSlug).'-ORDER-001',
             'units_per_pallet' => 125,
         ]);
+        $this->createAvailableStock($item, 3);
         $internalUser = $this->makeUserWithRole($roleSlug);
 
         $this->actingAs($internalUser)

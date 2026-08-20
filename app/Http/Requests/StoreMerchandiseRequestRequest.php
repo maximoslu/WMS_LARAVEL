@@ -137,17 +137,17 @@ class StoreMerchandiseRequestRequest extends FormRequest
             $this->mirrorLegacyValidationErrors($validator);
             $lines = $this->validatedLines();
 
+            foreach ($this->resolvedErrors() as $field => $message) {
+                $validator->errors()->add($field, $message);
+                $this->addLegacyQuantitiesError($validator, $message, $field);
+            }
+
             if ($lines === [] && ! $this->isDraftSubmission()) {
                 $message = 'Debes seleccionar al menos una linea valida con pallets o picos.';
                 $validator->errors()->add('lines', $message);
                 $this->addLegacyQuantitiesError($validator, $message);
 
                 return;
-            }
-
-            foreach ($this->resolvedErrors() as $field => $message) {
-                $validator->errors()->add($field, $message);
-                $this->addLegacyQuantitiesError($validator, $message, $field);
             }
         });
     }
@@ -180,7 +180,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
 
         /** @var StockLinePayloadResolver $resolver */
         $resolver = app(StockLinePayloadResolver::class);
-        $resolved = $resolver->resolve($this->effectiveClientId(), $this->input('lines', []), true);
+        $resolved = $resolver->resolve($this->effectiveClientId(), $this->input('lines', []), true, true);
 
         $submittedLines = collect($this->input('lines', []))->values();
         $this->resolvedLines = collect($resolved['lines'])

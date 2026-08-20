@@ -12,7 +12,7 @@ class StockVariantCatalog
     /**
      * @return array<int, array<string, mixed>>
      */
-    public function search(string $query, ?int $clientId = null, int $limit = 10, bool $activeOnly = true): array
+    public function search(string $query, ?int $clientId = null, int $limit = 10, bool $activeOnly = true, bool $requireAvailableStock = false): array
     {
         $normalizedQuery = trim($query);
         $lotQuery = LotNormalizer::isNoLotAlias($normalizedQuery)
@@ -29,6 +29,11 @@ class StockVariantCatalog
                 'stockPallets' => fn ($query) => $query
                     ->where('active', true)
                     ->where('status', StockPallet::STATUS_AVAILABLE)
+                    ->whereNotIn('stock_category', [
+                        StockPallet::CATEGORY_BLOCKED,
+                        StockPallet::CATEGORY_OBSOLETE,
+                        StockPallet::CATEGORY_MISC,
+                    ])
                     ->orderByDesc('received_at')
                     ->orderBy('lot'),
             ])
@@ -42,6 +47,11 @@ class StockVariantCatalog
                         $builder
                             ->where('active', true)
                             ->where('status', StockPallet::STATUS_AVAILABLE)
+                            ->whereNotIn('stock_category', [
+                                StockPallet::CATEGORY_BLOCKED,
+                                StockPallet::CATEGORY_OBSOLETE,
+                                StockPallet::CATEGORY_MISC,
+                            ])
                             ->where(function (Builder $builder) use ($normalizedQuery, $lotQuery): void {
                                 $builder
                                     ->where('lot', 'like', '%'.$lotQuery.'%')
@@ -55,7 +65,7 @@ class StockVariantCatalog
             ->get();
 
         $variants = $items
-            ->flatMap(fn (Item $item) => $this->variantsForItem($item))
+            ->flatMap(fn (Item $item) => $this->variantsForItem($item, $requireAvailableStock))
             ->values()
             ->all();
 
@@ -167,15 +177,13 @@ class StockVariantCatalog
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function variantsForItem(Item $item): array
+    private function variantsForItem(Item $item, bool $requireAvailableStock = false): array
     {
         $variants = collect();
         $availableBatches = $item->stockPallets->filter(fn (StockPallet $stockPallet) => $this->batchHasAvailableVariants($stockPallet));
 
         if ($availableBatches->isEmpty()) {
-            $variants->push($this->buildFallbackVariant($item));
-
-            return $variants->filter()->values()->all();
+            return $requireAvailableStock ? [] : [$this->buildFallbackVariant($item)];
         }
 
         foreach ($availableBatches as $stockPallet) {

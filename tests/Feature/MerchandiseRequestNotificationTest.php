@@ -43,6 +43,15 @@ class MerchandiseRequestNotificationTest extends TestCase
             'client_id' => $client->id,
             'units_per_pallet' => 700,
         ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 700,
+            'quantity_units' => 7000,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+            'peak_1' => 0,
+        ]);
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 
         $this->actingAs($cliente)
@@ -171,6 +180,15 @@ class MerchandiseRequestNotificationTest extends TestCase
         $item = Item::factory()->create([
             'client_id' => $client->id,
             'units_per_pallet' => 500,
+        ]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 500,
+            'quantity_units' => 5000,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+            'peak_1' => 0,
         ]);
 
         $this->actingAs($internalCreator)

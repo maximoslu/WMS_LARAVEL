@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-20 - STOCK EXACTO EN PEDIDOS EDELVIVES
+
+**Incidencia:** el pedido podia aceptar una referencia EDELVIVES sin stock exacto, por ejemplo `140x120 90`, cuando existia stock de otra referencia similar como `120x140 90`. Tambien se detecto que una partida sin ubicacion podia ser valida y no debia rechazarse por ese motivo.
+
+**Causa raiz:** el catalogo de variantes devolvia una variante generica para articulos sin stock y `StockLinePayloadResolver` aceptaba despues el `item_id` sin exigir una partida disponible. No habia mezcla de SKU ni normalizacion de referencias; el problema era el fallback y la validacion incompleta.
+
+**Correccion aplicada:** la busqueda y validacion de pedidos quedan limitadas por cliente, articulo exacto y partida disponible, activa y no bloqueada/obsoleta/misc. Se valida la cantidad contra `full_pallets`, los picos contra su partida exacta y se permite stock valido sin `location_id`. La misma regla se aplica al alta, edicion de borradores y anadido de lineas. No se modificaron calculos, stock, datos reales ni flujos de salidas.
+
+**Pruebas:** `MerchandiseRequestManagementTest` -> 67 passed, 460 assertions; `MerchandiseRequestForecastTest` -> 7 passed, 120 assertions; `MerchandiseRequestNotificationTest` -> 12 passed, 52 assertions; suite completa -> **887 passed, 5.178 assertions**; `npm run build` OK; `git diff --check` OK. Se cubren referencias similares, stock sin ubicacion, cantidades superiores al stock, borradores, anadido de lineas, aislamiento de cliente y conservacion del stock.
+
+**Estado:** pendiente de commit y push normal a `origin/main`. No se ejecutaron migraciones ni se tocaron produccion, `.env`, `.claude/` o `tmp/`. La validacion del pedido real EDELVIVES y el despliegue en Forge quedan pendientes.
+
 ## 2026-08-18 - ESTABILIZACION DEL LAYOUT DE ACCIONES DE SALIDA
 
 **Incidencia:** en `resources/views/dispatches/show.blade.php`, el bloque `Estado y documentos` podia forzar tres columnas hasta anchos medianos. Los botones internos conservaban el ancho minimo global y las tarjetas no limitaban de forma explicita el contenido, por lo que `Ver pedido origen` e `Imprimir albaran` podian desbordar visualmente hacia la tarjeta `Transporte`.

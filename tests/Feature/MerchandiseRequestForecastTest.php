@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\MerchandiseRequestLine;
 use App\Models\Role;
+use App\Models\StockPallet;
 use App\Models\User;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
@@ -154,6 +155,15 @@ class MerchandiseRequestForecastTest extends TestCase
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
         $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 50]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 50,
+            'quantity_units' => 500,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+            'peak_1' => 0,
+        ]);
         $draft = $this->makeDraft($client, $cliente, $item);
         $internal = $this->makeUserWithRole(Role::ALMACEN);
 
@@ -191,6 +201,15 @@ class MerchandiseRequestForecastTest extends TestCase
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
         $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 20]);
+        StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 20,
+            'quantity_units' => 200,
+            'full_pallets' => 10,
+            'warehouse_pallets' => 10,
+            'peak_1' => 0,
+        ]);
         $draft = $this->makeDraft($client, $requester, $item, notes: 'No modificar');
         $before = $draft->fresh();
         $beforeLineCount = $draft->lines()->count();

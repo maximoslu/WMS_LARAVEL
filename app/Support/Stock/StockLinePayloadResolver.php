@@ -29,7 +29,7 @@ class StockLinePayloadResolver
      *     errors: array<string, string>
      * }
      */
-    public function resolve(int $clientId, iterable $submittedLines, bool $activeOnly = true): array
+    public function resolve(int $clientId, iterable $submittedLines, bool $activeOnly = true, bool $requireAvailableStock = false): array
     {
         $rows = collect($submittedLines)
             ->map(fn ($payload, $key) => [
@@ -86,8 +86,25 @@ class StockLinePayloadResolver
             ->get()
             ->keyBy('id');
 
+        $availablePalletsByItem = StockPallet::query()
+            ->where('client_id', $clientId)
+            ->when($activeOnly, fn ($query) => $query
+                ->where('active', true)
+                ->where('status', StockPallet::STATUS_AVAILABLE)
+                ->whereNotIn('stock_category', [
+                    StockPallet::CATEGORY_BLOCKED,
+                    StockPallet::CATEGORY_OBSOLETE,
+                    StockPallet::CATEGORY_MISC,
+                ]))
+            ->whereIn('item_id', $itemIds)
+            ->orderByDesc('received_at')
+            ->get()
+            ->groupBy('item_id');
+
         $resolvedLines = [];
         $errors = [];
+        $requestedPalletsByStock = [];
+        $requestedPeaksByStock = [];
 
         foreach ($positiveRows as $row) {
             $payload = $row['payload'];
@@ -116,7 +133,28 @@ class StockLinePayloadResolver
 
             $stockPallet = $stockPalletId !== null ? $stockPallets->get($stockPalletId) : null;
 
-            if ($stockPalletId !== null && (! $stockPallet instanceof StockPallet || (int) $stockPallet->item_id !== $item->id)) {
+            if ($requireAvailableStock && $stockPalletId === null && $lineType === WmsLineType::PALLET) {
+                $stockPallet = $availablePalletsByItem
+                    ->get($item->id, collect())
+                    ->first(function (StockPallet $candidate) use ($quantity, $requestedPalletsByStock): bool {
+                        return ($requestedPalletsByStock[$candidate->id] ?? 0) + $quantity <= (int) $candidate->full_pallets;
+                    });
+                $stockPalletId = $stockPallet?->id;
+            }
+
+            if ($requireAvailableStock && ! $stockPallet instanceof StockPallet) {
+                $errors["lines.$rowKey.stock_pallet_id"] = 'La referencia seleccionada no tiene stock disponible para este cliente.';
+
+                continue;
+            }
+
+            if ($stockPalletId !== null && ! $stockPallet instanceof StockPallet) {
+                $errors["lines.$rowKey.stock_pallet_id"] = 'La partida seleccionada no coincide con la referencia elegida.';
+
+                continue;
+            }
+
+            if ($stockPallet instanceof StockPallet && (int) $stockPallet->item_id !== $item->id) {
                 $errors["lines.$rowKey.stock_pallet_id"] = 'La partida seleccionada no coincide con la referencia elegida.';
 
                 continue;
@@ -149,6 +187,16 @@ class StockLinePayloadResolver
                     continue;
                 }
 
+                $peakKey = $stockPallet->id.':'.$stockPeakIndex;
+
+                if (isset($requestedPeaksByStock[$peakKey])) {
+                    $errors["lines.$rowKey.stock_peak_index"] = 'El pico seleccionado ya está incluido en este pedido.';
+
+                    continue;
+                }
+
+                $requestedPeaksByStock[$peakKey] = true;
+
                 $resolvedLines[] = [
                     'item_id' => $item->id,
                     'sku' => $item->sku,
@@ -167,6 +215,36 @@ class StockLinePayloadResolver
 
                 continue;
             }
+
+            if (! $requireAvailableStock) {
+                $resolvedLines[] = [
+                    'item_id' => $item->id,
+                    'sku' => $item->sku,
+                    'description' => $item->description,
+                    'stock_pallet_id' => $stockPallet?->id,
+                    'line_type' => WmsLineType::PALLET,
+                    'stock_peak_index' => null,
+                    'lot' => LotNormalizer::normalize($stockPallet?->lot),
+                    'location_text' => filled($stockPallet?->location_text) ? trim((string) $stockPallet->location_text) : null,
+                    'units_per_pallet' => (int) $item->units_per_pallet,
+                    'units_per_peak' => null,
+                    'requested_pallets' => $quantity,
+                    'requested_peaks' => 0,
+                    'requested_units' => $quantity * (int) $item->units_per_pallet,
+                ];
+
+                continue;
+            }
+
+            $requestedPallets = ($requestedPalletsByStock[$stockPallet->id] ?? 0) + $quantity;
+
+            if ($requestedPallets > (int) $stockPallet->full_pallets) {
+                $errors["lines.$rowKey.quantity"] = 'La referencia seleccionada no tiene stock suficiente para este cliente.';
+
+                continue;
+            }
+
+            $requestedPalletsByStock[$stockPallet->id] = $requestedPallets;
 
             $resolvedLines[] = [
                 'item_id' => $item->id,
