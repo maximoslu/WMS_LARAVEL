@@ -488,6 +488,137 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(3.0, (float) $stock->warehouse_pallets);
     }
 
+    public function test_superadmin_can_correct_sent_dispatch_and_reapply_only_new_loaded_quantity(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $superadmin = $this->makeUserWithRole(Role::SUPERADMIN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'units_per_pallet' => 100,
+        ]);
+        $stock = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'units_per_pallet' => 100,
+            'quantity_units' => 500,
+            'full_pallets' => 5,
+            'warehouse_pallets' => 5,
+            'peak_1' => 0,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $request->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 2,
+            'requested_units' => 200,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock->id,
+            'source_request_line_id' => $requestLine->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 2,
+            'requested_units' => 200,
+        ]);
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'finalize_dispatch' => '1',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 2,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 2,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(300, (int) $stock->fresh()->quantity_units);
+        $this->assertSame(3.0, (float) $stock->fresh()->warehouse_pallets);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.show', $dispatch))
+            ->assertOk()
+            ->assertSee('Esta salida ya esta enviada')
+            ->assertDontSee('Correccion de albaran');
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch->fresh()), [
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 1,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($superadmin)
+            ->get(route('dispatches.show', $dispatch))
+            ->assertOk()
+            ->assertSee('Correccion de albaran');
+
+        $this->actingAs($superadmin)
+            ->patch(route('dispatches.confirm-loading', $dispatch->fresh()), [
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 0,
+                        'loading_notes' => 'Correccion del albaran 0063.',
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 1,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch));
+
+        $this->assertSame(400, (int) $stock->fresh()->quantity_units);
+        $this->assertSame(4.0, (float) $stock->fresh()->warehouse_pallets);
+        $this->assertSame(1, $line->fresh()->loadedPallets());
+        $this->assertSame(2, (int) $requestLine->fresh()->requested_pallets);
+        $this->assertDatabaseHas('inventory_movements', [
+            'source_type' => $dispatch->getMorphClass(),
+            'source_id' => $dispatch->id,
+            'movement_type' => InventoryMovement::REVERSAL,
+        ]);
+    }
+
     public function test_internal_request_page_saves_full_pallets_and_partial_peak_units_for_selected_batch(): void
     {
         Bus::fake();

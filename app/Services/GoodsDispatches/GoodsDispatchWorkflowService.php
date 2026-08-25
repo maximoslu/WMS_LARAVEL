@@ -4,11 +4,14 @@ namespace App\Services\GoodsDispatches;
 
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
+use App\Models\InventoryMovement;
+use App\Models\StockPallet;
 use App\Models\MerchandiseRequest;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
 use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
+use App\Services\Inventory\InventoryMovementService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -18,6 +21,7 @@ class GoodsDispatchWorkflowService
         private readonly MerchandiseRequestNotificationService $notificationService,
         private readonly MerchandiseRequestFulfillmentService $fulfillmentService,
         private readonly StockDispatchAllocationService $stockAllocationService,
+        private readonly InventoryMovementService $movements,
         private readonly AuditLogService $audit,
     ) {}
 
@@ -60,7 +64,17 @@ class GoodsDispatchWorkflowService
                 ->firstOrFail();
             $dispatch->load(['lines.allocations', 'merchandiseRequest']);
 
-            if ($dispatch->hasStockApplied() || in_array($dispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)) {
+            $isCorrection = $dispatch->status === GoodsDispatch::STATUS_SENT;
+
+            if ($isCorrection && ! $user->isSuperAdmin()) {
+                throw ValidationException::withMessages([
+                    'dispatch' => 'Solo el superadmin puede corregir una salida ya enviada.',
+                ]);
+            }
+
+            if ($isCorrection) {
+                $this->reverseAppliedDispatchStock($dispatch, $user, $correlationId);
+            } elseif ($dispatch->hasStockApplied() || $dispatch->status === GoodsDispatch::STATUS_COMPLETED) {
                 throw ValidationException::withMessages([
                     'dispatch' => 'La carga de una salida enviada o completada no se puede modificar.',
                 ]);
@@ -85,7 +99,7 @@ class GoodsDispatchWorkflowService
                     $line = $existingLines->get($lineId);
 
                     if ($removeLine) {
-                        if ($line->hasActualLoadedQuantity()) {
+                        if ($line->hasActualLoadedQuantity() && ! $isCorrection) {
                             throw ValidationException::withMessages([
                                 "lines.{$rowKey}.remove" => 'No se puede eliminar una línea que ya tiene carga real registrada.',
                             ]);
@@ -172,6 +186,29 @@ class GoodsDispatchWorkflowService
                 ]);
             }
 
+            if ($isCorrection) {
+                $this->stockAllocationService->apply($dispatch->fresh(), $user, $correlationId);
+                $dispatch->update([
+                    'stock_applied_at' => now(),
+                    'stock_applied_by' => $user->id,
+                    'warehouse_stock_applied_at' => now(),
+                    'warehouse_stock_applied_by' => $user->id,
+                ]);
+
+                $this->audit->record(
+                    event: 'goods_dispatch_corrected_after_sent',
+                    module: 'goods_dispatches',
+                    description: 'Albaran de salida corregido por superadmin y stock recalculado.',
+                    auditable: $dispatch,
+                    subject: $dispatch->merchandiseRequest,
+                    user: $user,
+                    clientId: $dispatch->client_id,
+                    newValues: ['status' => $dispatch->status, 'stock_recalculated' => true],
+                    correlationId: $correlationId,
+                    severity: 'warning',
+                );
+            }
+
             $this->audit->record(
                 event: 'goods_dispatch_loading_confirmed',
                 module: 'goods_dispatches',
@@ -191,7 +228,69 @@ class GoodsDispatchWorkflowService
             'merchandiseRequest',
         ]);
 
-        $this->notificationService->notifyLoadingConfirmed($freshDispatch, $user);
+        if ($freshDispatch->status !== GoodsDispatch::STATUS_SENT || ! $user->isSuperAdmin()) {
+            $this->notificationService->notifyLoadingConfirmed($freshDispatch, $user);
+        }
+    }
+
+    private function reverseAppliedDispatchStock(GoodsDispatch $dispatch, User $user, string $correlationId): void
+    {
+        $movements = InventoryMovement::query()
+            ->where('source_type', $dispatch->getMorphClass())
+            ->where('source_id', $dispatch->id)
+            ->where('movement_type', InventoryMovement::DISPATCH)
+            ->whereNotIn('id', InventoryMovement::query()
+                ->select('reversal_of_id')
+                ->where('source_type', $dispatch->getMorphClass())
+                ->where('source_id', $dispatch->id)
+                ->where('movement_type', InventoryMovement::REVERSAL)
+                ->whereNotNull('reversal_of_id'))
+            ->whereNotNull('stock_pallet_id')
+            ->orderBy('id')
+            ->get();
+
+        if ($movements->isEmpty()) {
+            throw ValidationException::withMessages([
+                'dispatch' => 'No se puede corregir esta salida porque no existe una trazabilidad de stock completa.',
+            ]);
+        }
+
+        foreach ($movements as $movement) {
+            $stockPallet = StockPallet::query()
+                ->whereKey($movement->stock_pallet_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $stockPallet instanceof StockPallet) {
+                throw ValidationException::withMessages([
+                    'dispatch' => 'No se puede corregir la salida porque falta una partida de stock trazada.',
+                ]);
+            }
+
+            $before = $this->movements->snapshot($stockPallet);
+            $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - (int) $movement->units_delta);
+            $stockPallet->warehouse_pallets = (float) ($stockPallet->warehouse_pallets ?? 0) - (float) $movement->warehouse_pallets_delta;
+
+            foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakIndex) {
+                $delta = (int) (($movement->peaks_delta ?? [])[$peakIndex - 1] ?? 0);
+                $stockPallet->{'peak_'.$peakIndex} = max(0, (int) $stockPallet->{'peak_'.$peakIndex} - $delta);
+            }
+
+            $stockPallet->save();
+            $after = $this->movements->snapshot($stockPallet->fresh());
+            $this->movements->record(
+                before: $before,
+                after: $after,
+                movementType: InventoryMovement::REVERSAL,
+                idempotencyKey: "dispatch-correction-reversal:{$dispatch->id}:movement:{$movement->id}:{$correlationId}",
+                correlationId: $correlationId,
+                source: $dispatch,
+                user: $user,
+                effectiveAt: now(),
+                metadata: ['reason' => 'Correccion del albaran enviado.', 'reversed_movement_id' => $movement->id],
+                reversalOfId: $movement->id,
+            );
+        }
     }
 
     /**

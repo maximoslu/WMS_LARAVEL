@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-25 - CORRECCION CONTROLADA DE ALBARANES ENVIADOS
+
+**Incidencia:** una salida ya enviada, como la 0063, no permitia corregir una cantidad de pallets mal consignada en el albaran.
+
+**Correccion aplicada:** solo `superadmin` puede reabrir la edicion de la carga real de una salida en estado enviado. Puede ajustar pallets, picos, observaciones y eliminar una linea del albaran corregido sin modificar la solicitud original ni sus cantidades pedidas. Al guardar, el sistema revierte el impacto anterior de esa salida mediante movimientos de inventario inmutables y aplica de nuevo la carga corregida. Las correcciones sucesivas solo revierten el impacto vigente, evitando sumas o descuentos duplicados.
+
+**Seguridad y trazabilidad:** almacen y administracion no pueden corregir salidas enviadas; las salidas completadas siguen bloqueadas. Si falta la trazabilidad de movimientos de la salida, la correccion se rechaza. Cada correccion queda auditada y genera movimientos `reversal` y `dispatch`; no se borran movimientos historicos ni se toca el pedido original.
+
+**Validacion:** `GoodsDispatchManagementTest` -> 68 passed, 548 assertions; suite completa -> **888 passed, 5.194 assertions**; `npm run build` OK; `git diff --check` OK. No se requieren migraciones ni se modifican datos reales durante las pruebas.
+
+**Estado:** pendiente de commit y push normal a `origin/main`. Forge/produccion queda pendiente de despliegue y de probar la salida 0063 con un superadmin, verificando el nuevo PDF del albaran y el stock resultante.
+
 ## 2026-08-20 - STOCK EXACTO EN PEDIDOS EDELVIVES
 
 **Incidencia:** el pedido podia aceptar una referencia EDELVIVES sin stock exacto, por ejemplo `140x120 90`, cuando existia stock de otra referencia similar como `120x140 90`. Tambien se detecto que una partida sin ubicacion podia ser valida y no debia rechazarse por ese motivo.

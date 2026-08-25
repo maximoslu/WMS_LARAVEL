@@ -50,6 +50,10 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
     public function authorize(): bool
     {
+        if ($this->dispatch()?->status === GoodsDispatch::STATUS_SENT) {
+            return $this->user()?->isSuperAdmin() ?? false;
+        }
+
         return $this->user()?->canAccessRole(Role::ALMACEN) ?? false;
     }
 
@@ -599,7 +603,8 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                 $usedPalletsByStock[$stockId] = ($usedPalletsByStock[$stockId] ?? 0) + $loadedPallets;
                 $usedPartialUnitsByStock[$stockId] = ($usedPartialUnitsByStock[$stockId] ?? 0) + $allocationPartialUnits;
 
-                if (! $this->loadingFitsStock($stockPallet, $usedPalletsByStock[$stockId], $usedPartialUnitsByStock[$stockId], null)) {
+                if (! $this->isSentCorrection()
+                    && ! $this->loadingFitsStock($stockPallet, $usedPalletsByStock[$stockId], $usedPartialUnitsByStock[$stockId], null)) {
                     $errors["lines.$rowKey.allocations.$allocationIndex.stock_pallet_id"] = 'La carga real supera el stock disponible en la partida seleccionada.';
 
                     return null;
@@ -704,5 +709,11 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
         $dispatch = $this->route('goodsDispatch');
 
         return $dispatch instanceof GoodsDispatch ? $dispatch : null;
+    }
+
+    private function isSentCorrection(): bool
+    {
+        return $this->user()?->isSuperAdmin() === true
+            && $this->dispatch()?->status === GoodsDispatch::STATUS_SENT;
     }
 }

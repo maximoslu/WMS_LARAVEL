@@ -18,6 +18,7 @@
     $loadedUnits = $dispatch->loadedUnitsCount();
     $lineCount = $dispatch->lines->count();
     $sourceLabel = $dispatch->type === \App\Models\GoodsDispatch::TYPE_REQUEST ? 'Salida desde pedido' : 'Salida manual';
+    $canCorrectSentDispatch = auth()->user()?->isSuperAdmin() && $dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT;
     $deliveryNoteLabel = in_array($dispatch->status, [\App\Models\GoodsDispatch::STATUS_SENT, \App\Models\GoodsDispatch::STATUS_COMPLETED], true)
         ? 'Albaran disponible'
         : 'Albaran pendiente';
@@ -265,6 +266,14 @@
         </article>
     </section>
 
+    @if ($dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT && ! $canCorrectSentDispatch)
+        <section class="surface-card compact-card wms-flow-card">
+            <div class="dispatch-inline-help">
+                Esta salida ya esta enviada. Solo el superadmin puede corregir las cantidades del albaran y recalcular el stock.
+            </div>
+        </section>
+    @endif
+
     <section class="surface-card compact-card wms-flow-card">
         <div class="wms-section-head">
             <div>
@@ -314,11 +323,12 @@
         </div>
     </section>
 
+    @if (! in_array($dispatch->status, [\App\Models\GoodsDispatch::STATUS_COMPLETED, \App\Models\GoodsDispatch::STATUS_SENT], true) || $canCorrectSentDispatch)
     <section class="surface-card compact-card wms-flow-card">
         <div class="wms-section-head">
             <div>
                 <strong>Carga real</strong>
-                <p class="merchandise-request-summary-copy">Aquí puedes ajustar cantidades, eliminar líneas extra, añadir sustituciones y registrar si algo sale como pallet o como pico.</p>
+                <p class="merchandise-request-summary-copy">{{ $canCorrectSentDispatch ? 'Correccion de albaran: ajusta la cantidad real que salio. El pedido original no se modifica.' : 'Aquí puedes ajustar cantidades, eliminar líneas extra, añadir sustituciones y registrar si algo sale como pallet o como pico.' }}</p>
             </div>
             <span class="ops-status">{{ $dispatch->hasConfirmedLoading() ? 'Confirmada' : 'Pendiente' }}</span>
         </div>
@@ -403,7 +413,7 @@
                             </label>
 
                             <div class="wms-loading-row-action">
-                                @if (! $line->hasActualLoadedQuantity())
+                                @if (! $line->hasActualLoadedQuantity() || $canCorrectSentDispatch)
                                     <button type="button" class="button-secondary compact-button btn-compact" data-dispatch-loading-remove>
                                         Eliminar línea de esta carga
                                     </button>
@@ -599,8 +609,9 @@
             <div class="item-filter-actions action-buttons page-actions-compact">
                 <button type="submit" class="button-primary compact-button btn-compact">Confirmar carga real</button>
             </div>
-        </form>
+    </form>
     </section>
+    @endif
 
     <section class="surface-card compact-card wms-flow-card">
         <div class="wms-section-head">
