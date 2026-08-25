@@ -64,6 +64,44 @@ class DailyOperationTotalsService
             ->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'));
     }
 
+    /**
+     * @return array{inbound:int, outbound:int}
+     */
+    public function externalMovementTotalsForDate(string $operationDate, int $clientId): array
+    {
+        $date = Carbon::parse($operationDate)->toDateString();
+        $inbound = 0;
+        $outbound = 0;
+
+        GoodsReceipt::query()
+            ->with('lines')
+            ->where('client_id', $clientId)
+            ->where('status', GoodsReceipt::STATUS_CONFIRMED)
+            ->whereDate('received_at', $date)
+            ->get()
+            ->each(fn (GoodsReceipt $receipt) => $inbound += $this->receiptLogisticUnits($receipt));
+
+        GoodsDispatch::query()
+            ->with('lines.allocations')
+            ->where('client_id', $clientId)
+            ->whereIn('status', [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED])
+            ->where(function ($query) use ($date): void {
+                $query
+                    ->where(function ($query) use ($date): void {
+                        $query->where('status', GoodsDispatch::STATUS_COMPLETED)
+                            ->whereDate('completed_at', $date);
+                    })
+                    ->orWhere(function ($query) use ($date): void {
+                        $query->where('status', GoodsDispatch::STATUS_SENT)
+                            ->whereDate('sent_at', $date);
+                    });
+            })
+            ->get()
+            ->each(fn (GoodsDispatch $dispatch) => $outbound += $this->dispatchLogisticUnits($dispatch));
+
+        return ['inbound' => $inbound, 'outbound' => $outbound];
+    }
+
     public function openingPalletsForDate(
         string $operationDate,
         int $clientId,
@@ -73,7 +111,7 @@ class DailyOperationTotalsService
     ): int
     {
         $date = Carbon::parse($operationDate)->toDateString();
-        $openingFromCurrentStock = $this->openingPalletsFromCurrentStock($clientId, $inboundPallets, $outboundPallets);
+        $openingFromCurrentStock = $this->openingPalletsFromCurrentStockForDate($clientId, $inboundPallets, $outboundPallets);
 
         if ($this->usesLiveStockBaseForDate($date)) {
             return $openingFromCurrentStock;
@@ -96,12 +134,12 @@ class DailyOperationTotalsService
         return $openingFromCurrentStock;
     }
 
-    private function openingPalletsFromCurrentStock(int $clientId, int $inboundPallets, int $outboundPallets): int
+    public function openingPalletsFromCurrentStockForDate(int $clientId, int $inboundPallets, int $outboundPallets): int
     {
         return max(0, $this->stockBaseForClient($clientId) + $outboundPallets - $inboundPallets);
     }
 
-    private function usesLiveStockBaseForDate(string $operationDate): bool
+    public function usesLiveStockBaseForDate(string $operationDate): bool
     {
         return $operationDate === Carbon::now(config('app.timezone', 'UTC'))->toDateString();
     }

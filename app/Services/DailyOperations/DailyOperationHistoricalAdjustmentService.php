@@ -41,8 +41,16 @@ class DailyOperationHistoricalAdjustmentService
             ];
 
             if ((int) $lockedDay->opening_pallets === $openingPallets) {
+                if (! $lockedDay->is_historical_anchor) {
+                    $lockedDay->is_historical_anchor = true;
+                    $lockedDay->save();
+                }
+
                 return $lockedDay->fresh(['lines']);
             }
+
+            $lockedDay->is_historical_anchor = true;
+            $lockedDay->save();
 
             $adjustedDay = $this->totalsService->syncDay(
                 $lockedDay->fresh(['lines']),

@@ -18,6 +18,7 @@ class DailyOperationDay extends Model
         'stored_pallets_today',
         'moved_pallets_today',
         'expected_pallets_tomorrow',
+        'is_historical_anchor',
         'notes',
         'created_by',
         'updated_by',
@@ -31,7 +32,17 @@ class DailyOperationDay extends Model
             'stored_pallets_today' => 'integer',
             'moved_pallets_today' => 'integer',
             'expected_pallets_tomorrow' => 'integer',
+            'is_historical_anchor' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $day): void {
+            if ($day->is_historical_anchor === null && $day->opening_pallets !== null) {
+                $day->is_historical_anchor = true;
+            }
+        });
     }
 
     public function creator(): BelongsTo

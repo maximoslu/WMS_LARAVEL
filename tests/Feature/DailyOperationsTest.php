@@ -482,6 +482,7 @@ class DailyOperationsTest extends TestCase
         foreach (range(1, 96) as $_) {
             $this->createStockPalletWithPeaks($client, 0, 1, StockPallet::STATUS_AVAILABLE, $item);
         }
+        $this->createHistoricalAnchor($client, '2026-07-08', 1044, $user);
 
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
@@ -528,6 +529,7 @@ class DailyOperationsTest extends TestCase
         DailyOperationDay::query()->create([
             'operation_date' => '2026-08-24',
             'client_id' => $client->id,
+            'is_historical_anchor' => true,
             'opening_pallets' => 1124,
             'stored_pallets_today' => 1124,
             'moved_pallets_today' => 12,
@@ -574,6 +576,68 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(12, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+    }
+
+    public function test_historical_recalculate_rebuilds_contaminated_opening_from_prior_trusted_anchor(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'EDELVIVES', 'code' => 'EDELVIVES']);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 1]);
+        $this->createHistoricalAnchor($client, '2026-08-23', 1124, $user);
+        DailyOperationDay::query()->create([
+            'operation_date' => '2026-08-24',
+            'client_id' => $client->id,
+            'opening_pallets' => 1102,
+            'stored_pallets_today' => 1102,
+            'moved_pallets_today' => 12,
+            'expected_pallets_tomorrow' => 1090,
+            'is_historical_anchor' => false,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => '2026-08-24 10:00:00',
+            'created_by' => $user->id,
+            'camion_propio' => true,
+        ]);
+        GoodsDispatchLine::query()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'sku' => 'EDE-HIST-OUT',
+            'description' => 'Salida histórica',
+            'units_per_pallet' => 1,
+            'pallets' => 12,
+            'requested_units' => 12,
+            'requested_pallets' => 12,
+            'loaded_pallets' => 12,
+            'is_extra_line' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), ['operation_date' => '2026-08-24', 'client_id' => $client->id])
+            ->assertRedirect();
+
+        $day = DailyOperationDay::query()->whereDate('operation_date', '2026-08-24')->where('client_id', $client->id)->firstOrFail();
+        $this->assertSame(1124, $day->opening_pallets);
+        $this->assertSame(1124, $day->stored_pallets_today);
+        $this->assertSame(12, $day->moved_pallets_today);
+        $this->assertSame(1112, $day->expected_pallets_tomorrow);
+    }
+
+    public function test_historical_recalculate_without_trusted_anchor_returns_controlled_error(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), ['operation_date' => '2026-08-24', 'client_id' => $client->id])
+            ->assertSessionHasErrors('operation_date');
+
+        $this->assertDatabaseMissing('daily_operation_days', ['client_id' => $client->id, 'operation_date' => '2026-08-24']);
     }
 
     public function test_authorized_user_can_audit_historical_base_adjustment_without_touching_stock_or_movements(): void
@@ -688,6 +752,7 @@ class DailyOperationsTest extends TestCase
         ]);
 
         $this->createStockPallet($client, 1035, StockPallet::STATUS_AVAILABLE, $item);
+        $this->createHistoricalAnchor($client, '2026-07-08', 1044, $user);
 
         $dispatch = GoodsDispatch::factory()->create([
             'client_id' => $client->id,
@@ -909,6 +974,7 @@ class DailyOperationsTest extends TestCase
         foreach (range(1, 10) as $_) {
             $this->createStockPalletWithPeaks($client, 0, 1, StockPallet::STATUS_AVAILABLE, $item);
         }
+        $this->createHistoricalAnchor($client, '2026-07-08', 1000, $user);
 
         $receipt = GoodsReceipt::factory()->create([
             'client_id' => $client->id,
@@ -1118,6 +1184,7 @@ class DailyOperationsTest extends TestCase
         );
         $secondLine = $receipt->lines()->whereKeyNot($firstLine->id)->firstOrFail();
         $this->recordReceiptWarehouseMovement($receipt, $firstLine, 11, $user);
+        $this->createHistoricalAnchor($client, '2026-07-28', 0, $user);
 
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
@@ -1293,6 +1360,7 @@ class DailyOperationsTest extends TestCase
                 'is_extra_line' => false,
             ]);
         }
+        $this->createHistoricalAnchor($client, '2026-07-09', 0, $user);
 
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
@@ -1385,6 +1453,12 @@ class DailyOperationsTest extends TestCase
 
         $this->createStockPallet($client, 2, StockPallet::STATUS_AVAILABLE, $item);
         $this->createStockPallet($client, 2, StockPallet::STATUS_BLOCKED, $item);
+        $day->update([
+            'opening_pallets' => 2,
+            'stored_pallets_today' => 2,
+            'expected_pallets_tomorrow' => 2,
+            'is_historical_anchor' => true,
+        ]);
 
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
@@ -1576,6 +1650,10 @@ class DailyOperationsTest extends TestCase
     {
         $date = $receipt->received_at?->format('Y-m-d') ?? '2026-07-29';
 
+        if (! DailyOperationDay::query()->whereDate('operation_date', $date)->where('client_id', $client->id)->exists()) {
+            $this->createHistoricalAnchor($client, $date, 0, $user);
+        }
+
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
                 'operation_date' => $date,
@@ -1651,6 +1729,7 @@ class DailyOperationsTest extends TestCase
                 'is_extra_line' => false,
             ]);
         }
+        $this->createHistoricalAnchor($client, '2026-07-09', 12, $user);
 
         $this->actingAs($user)
             ->post(route('daily-operations.recalculate'), [
@@ -1671,6 +1750,21 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->count());
         $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
         $this->assertSame(2, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+    }
+
+    private function createHistoricalAnchor(Client $client, string $date, int $opening, User $user): DailyOperationDay
+    {
+        return DailyOperationDay::query()->create([
+            'operation_date' => $date,
+            'client_id' => $client->id,
+            'opening_pallets' => $opening,
+            'stored_pallets_today' => $opening,
+            'moved_pallets_today' => 0,
+            'expected_pallets_tomorrow' => $opening,
+            'is_historical_anchor' => true,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
     }
 
     private function createStockBase(Client $client, int $pallets): void

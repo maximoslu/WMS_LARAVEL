@@ -88,6 +88,10 @@ class DailyOperationController extends Controller
             $day->created_by = $request->user()->id;
         }
 
+        if (array_key_exists('opening_pallets', $validated) && $validated['opening_pallets'] !== null) {
+            $day->is_historical_anchor = true;
+        }
+
         $day = $this->totalsService->syncDay(
             $day,
             isset($validated['opening_pallets']) ? (int) $validated['opening_pallets'] : null,

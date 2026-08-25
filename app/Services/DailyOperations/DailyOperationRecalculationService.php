@@ -6,6 +6,8 @@ use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsReceipt;
+use App\Models\User;
+use App\Services\Audit\AuditLogService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -13,6 +15,8 @@ class DailyOperationRecalculationService
 {
     public function __construct(
         private readonly DailyOperationTotalsService $totalsService,
+        private readonly DailyOperationHistoricalRebuildService $historicalRebuildService,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function rebuildForDateAndClient(string $operationDate, int $clientId, int $userId): DailyOperationDay
@@ -34,9 +38,12 @@ class DailyOperationRecalculationService
                 ]);
             }
 
-            $storedOpeningPallets = $day->exists && $day->opening_pallets !== null
-                ? (int) $day->opening_pallets
-                : null;
+            $previousValues = [
+                'opening_pallets' => $day->opening_pallets,
+                'stored_pallets_today' => $day->stored_pallets_today,
+                'moved_pallets_today' => $day->moved_pallets_today,
+                'expected_pallets_tomorrow' => $day->expected_pallets_tomorrow,
+            ];
 
             $manualSortOrder = (int) $day->lines()->where(function ($query): void {
                 $query
@@ -169,13 +176,9 @@ class DailyOperationRecalculationService
                 }
             }
 
-            $openingPallets = $this->totalsService->openingPalletsForDate(
-                $date,
-                $clientId,
-                $inboundPallets,
-                $outboundPallets,
-                $storedOpeningPallets,
-            );
+            $openingPallets = $this->totalsService->usesLiveStockBaseForDate($date)
+                ? $this->totalsService->openingPalletsFromCurrentStockForDate($clientId, $inboundPallets, $outboundPallets)
+                : $this->historicalRebuildService->openingForDate($date, $clientId, $day);
             $billableStoragePallets = $openingPallets + $inboundPallets;
 
             if ($billableStoragePallets > 0) {
@@ -192,7 +195,26 @@ class DailyOperationRecalculationService
                 );
             }
 
-            return $this->totalsService->syncDay($day, $openingPallets, $day->notes, $userId);
+            $result = $this->totalsService->syncDay($day, $openingPallets, $day->notes, $userId);
+
+            $this->audit->record(
+                event: 'daily_operation_recalculated',
+                module: 'daily_operations',
+                description: 'Operación diaria recalculada desde movimientos externos y anclas históricas.',
+                auditable: $result,
+                user: User::query()->find($userId),
+                clientId: $clientId,
+                oldValues: $previousValues,
+                newValues: [
+                    'opening_pallets' => $result->opening_pallets,
+                    'stored_pallets_today' => $result->stored_pallets_today,
+                    'moved_pallets_today' => $result->moved_pallets_today,
+                    'expected_pallets_tomorrow' => $result->expected_pallets_tomorrow,
+                ],
+                metadata: ['operation_date' => $date, 'historical_anchor' => (bool) $result->is_historical_anchor],
+            );
+
+            return $result;
         });
     }
 

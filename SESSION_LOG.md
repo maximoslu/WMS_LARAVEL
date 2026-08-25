@@ -4,6 +4,20 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-25 - RECONSTRUCCION HISTORICA DESDE ANCLAS FIABLES
+
+**Incidencia persistente:** EDELVIVES 24/08/2026 seguía mostrando apertura 1.102 y base mañana 1.090. La causa exacta en el código era que `DailyOperationRecalculationService` pasaba el `opening_pallets` persistido a `DailyOperationTotalsService` antes de reconstruir el histórico; el fix anterior protegía ese valor, aunque fuese el snapshot contaminado.
+
+**Correccion:** los días históricos tienen ahora `is_historical_anchor`. `Recalcular` busca la ancla fiable anterior más cercana, toma su base mañana y replaya día a día las entradas y salidas externas del cliente hasta la fecha objetivo. Las reubicaciones internas no participan. Si el día ajustado es el propio ancla, conserva su base. Si no existe una ancla fiable, devuelve el mensaje controlado `No hay base histórica fiable para reconstruir este día` y no crea ni inventa un resumen. El día actual mantiene el cálculo vivo existente.
+
+**Anclas:** una base introducida explícitamente en un resumen diario y una base corregida mediante `Ajustar base histórica` quedan marcadas como anclas. La corrección manual sigue siendo necesaria para crear el primer ancla fiable de una cadena sin histórico previo; después, `Recalcular` propaga la cadena. Cada recálculo se audita y no toca stock ni movimientos.
+
+**Caso reproducido:** ancla 23/08 = 1.124, día 24 contaminado = 1.102, salida externa = 12. Tras recalcular: apertura 1.124, facturable 1.124, movido 12 y base mañana 1.112. El caso sin ancla produce error controlado.
+
+**Validacion:** `DailyOperationsTest` -> 31 passed, 335 assertions; `GoodsDispatchManagementTest` -> 68 passed, 548 assertions; `GoodsReceiptManagementTest` -> 122 passed, 714 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; `StockRelocationTest` -> 13 passed, 88 assertions; suite completa -> **893 passed, 5.231 assertions**; `npm run build` OK; `git diff --check` OK. Commit y push quedan pendientes al cierre de esta sesión.
+
+**Produccion:** no se ha consultado Forge ni se han ejecutado comandos productivos. Tras desplegar, hay que migrar, crear/confirmar el ancla fiable correspondiente y pulsar `Recalcular` para EDELVIVES 24/08/2026. No se puede afirmar aún que producción esté corregida.
+
 ## 2026-08-25 - AJUSTE AUDITADO DE BASE HISTORICA
 
 **Incidencia persistente:** EDELVIVES 24/08/2026 seguía mostrando 1.102/1.090 frente al parte real 1.124/1.112. El fix anterior era correcto para impedir que un histórico se recalculara con stock vivo, pero no podía corregir un `opening_pallets` que ya estuviera guardado de forma contaminada en 1.102.
