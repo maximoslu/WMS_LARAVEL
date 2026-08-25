@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreDailyOperationLineRequest;
+use App\Http\Requests\AdjustDailyOperationBaseRequest;
 use App\Http\Requests\UpdateDailyOperationLineRequest;
 use App\Http\Requests\UpsertDailyOperationDayRequest;
 use App\Models\Client;
@@ -10,6 +11,7 @@ use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\Role;
 use App\Services\DailyOperations\DailyOperationLineAutomationService;
+use App\Services\DailyOperations\DailyOperationHistoricalAdjustmentService;
 use App\Services\DailyOperations\DailyOperationRecalculationService;
 use App\Services\DailyOperations\DailyOperationTotalsService;
 use App\Support\WmsNavigation;
@@ -22,6 +24,7 @@ class DailyOperationController extends Controller
 {
     public function __construct(
         private readonly DailyOperationLineAutomationService $lineAutomationService,
+        private readonly DailyOperationHistoricalAdjustmentService $historicalAdjustmentService,
         private readonly DailyOperationRecalculationService $recalculationService,
         private readonly DailyOperationTotalsService $totalsService,
     ) {}
@@ -64,6 +67,7 @@ class DailyOperationController extends Controller
             'sectionTotals' => $sectionBreakdown,
             'billingDetails' => $day !== null ? $this->billingDetails($day) : [],
             'canManage' => $request->user()?->canAccessRole(Role::ALMACEN) === true,
+            'canAdjustHistoricalBase' => $request->user()?->canAccessRole(Role::ADMINISTRACION) === true,
             'lineBeingEdited' => $lineBeingEdited,
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
@@ -148,6 +152,26 @@ class DailyOperationController extends Controller
                 'client_id' => $validated['client_id'],
             ])
             ->with('status', 'Operaciones recalculadas desde entradas, salidas y stock activo. Las lineas manuales se han conservado.');
+    }
+
+    public function adjustHistoricalBase(AdjustDailyOperationBaseRequest $request, DailyOperationDay $dailyOperationDay): RedirectResponse
+    {
+        abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
+
+        $validated = $request->validated();
+        $day = $this->historicalAdjustmentService->adjust(
+            $dailyOperationDay,
+            (int) $validated['opening_pallets'],
+            (string) $validated['reason'],
+            $request->user(),
+        );
+
+        return redirect()
+            ->route('daily-operations.index', [
+                'date' => $day->operation_date?->toDateString(),
+                'client_id' => $day->client_id,
+            ])
+            ->with('status', 'Base histórica ajustada correctamente. No se han modificado el stock ni los movimientos.');
     }
 
     public function updateLine(UpdateDailyOperationLineRequest $request, DailyOperationLine $dailyOperationLine): RedirectResponse

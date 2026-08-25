@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\AuditLog;
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\GoodsDispatch;
@@ -573,6 +574,107 @@ class DailyOperationsTest extends TestCase
         $this->assertSame(12, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
         $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
+    }
+
+    public function test_authorized_user_can_audit_historical_base_adjustment_without_touching_stock_or_movements(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $client = Client::factory()->create(['name' => 'EDELVIVES', 'code' => 'EDELVIVES']);
+        $day = DailyOperationDay::query()->create([
+            'operation_date' => '2026-08-24',
+            'client_id' => $client->id,
+            'opening_pallets' => 1102,
+            'stored_pallets_today' => 1102,
+            'moved_pallets_today' => 12,
+            'expected_pallets_tomorrow' => 1090,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+        $day->lines()->createMany([
+            ['section' => DailyOperationLine::SECTION_ENVIO, 'counterparty_name' => 'Salida #62', 'pallets' => 12, 'is_auto_generated' => true, 'source_type' => DailyOperationLine::SOURCE_GOODS_DISPATCH, 'source_id' => 62, 'sort_order' => 1, 'created_by' => $user->id],
+            ['section' => DailyOperationLine::SECTION_GESTION_CAMION, 'counterparty_name' => 'Salida #62', 'pallets' => 1, 'is_auto_generated' => true, 'source_type' => DailyOperationLine::SOURCE_GOODS_DISPATCH, 'source_id' => 62, 'sort_order' => 2, 'created_by' => $user->id],
+            ['section' => DailyOperationLine::SECTION_VIAJE_CAMION, 'counterparty_name' => 'Salida #62', 'pallets' => 1, 'is_auto_generated' => true, 'source_type' => DailyOperationLine::SOURCE_GOODS_DISPATCH, 'source_id' => 62, 'sort_order' => 3, 'created_by' => $user->id],
+        ]);
+        $stockCount = StockPallet::query()->count();
+        $movementCount = InventoryMovement::query()->count();
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.historical-base.adjust', $day), [
+                'opening_pallets' => 1124,
+                'reason' => 'Corrección contra parte operativo Excel EDELVIVES_OP_8',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Base histórica ajustada correctamente. No se han modificado el stock ni los movimientos.');
+
+        $day->refresh();
+        $this->assertSame(1124, $day->opening_pallets);
+        $this->assertSame(1124, $day->stored_pallets_today);
+        $this->assertSame(12, $day->moved_pallets_today);
+        $this->assertSame(1112, $day->expected_pallets_tomorrow);
+        $this->assertSame($stockCount, StockPallet::query()->count());
+        $this->assertSame($movementCount, InventoryMovement::query()->count());
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'daily_operation_historical_base_adjusted',
+            'auditable_type' => DailyOperationDay::class,
+            'auditable_id' => $day->id,
+            'user_id' => $user->id,
+        ]);
+        $audit = AuditLog::query()->where('event', 'daily_operation_historical_base_adjusted')->latest('id')->firstOrFail();
+        $this->assertSame(1102, $audit->old_values['opening_pallets']);
+        $this->assertSame(1124, $audit->new_values['opening_pallets']);
+        $this->assertSame('Corrección contra parte operativo Excel EDELVIVES_OP_8', $audit->metadata['reason']);
+
+        $auditCount = AuditLog::query()->where('event', 'daily_operation_historical_base_adjusted')->count();
+        $this->actingAs($user)
+            ->post(route('daily-operations.historical-base.adjust', $day), [
+                'opening_pallets' => 1124,
+                'reason' => 'Repetición idempotente del ajuste',
+            ])
+            ->assertRedirect();
+        $this->assertSame($auditCount, AuditLog::query()->where('event', 'daily_operation_historical_base_adjusted')->count());
+    }
+
+    public function test_historical_base_adjustment_is_restricted_and_recalculate_preserves_adjusted_snapshot(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $admin = $this->makeUserWithRole(Role::ADMINISTRACION);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create();
+        $day = DailyOperationDay::query()->create([
+            'operation_date' => '2026-08-24',
+            'client_id' => $client->id,
+            'opening_pallets' => 1124,
+            'stored_pallets_today' => 1124,
+            'expected_pallets_tomorrow' => 1124,
+            'created_by' => $admin->id,
+            'updated_by' => $admin->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('daily-operations.historical-base.adjust', $day), ['opening_pallets' => 1200, 'reason' => 'No autorizado'])
+            ->assertForbidden();
+
+        $this->actingAs($admin)
+            ->post(route('daily-operations.historical-base.adjust', $day), ['opening_pallets' => 1200])
+            ->assertSessionHasErrors('reason');
+
+        $this->actingAs($admin)
+            ->post(route('daily-operations.recalculate'), ['operation_date' => '2026-08-24', 'client_id' => $client->id])
+            ->assertRedirect();
+
+        $day->refresh();
+        $this->assertSame(1124, $day->opening_pallets);
+
+        $futureDay = DailyOperationDay::query()->create([
+            'operation_date' => now()->addDay()->toDateString(),
+            'client_id' => $client->id,
+            'created_by' => $admin->id,
+            'updated_by' => $admin->id,
+        ]);
+        $this->actingAs($admin)
+            ->post(route('daily-operations.historical-base.adjust', $futureDay), ['opening_pallets' => 1200, 'reason' => 'Futuro'])
+            ->assertSessionHasErrors('opening_pallets');
     }
 
     public function test_recalculate_reconstructs_opening_stock_when_same_day_dispatch_already_reduced_current_stock(): void

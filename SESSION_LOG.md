@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-25 - AJUSTE AUDITADO DE BASE HISTORICA
+
+**Incidencia persistente:** EDELVIVES 24/08/2026 seguía mostrando 1.102/1.090 frente al parte real 1.124/1.112. El fix anterior era correcto para impedir que un histórico se recalculara con stock vivo, pero no podía corregir un `opening_pallets` que ya estuviera guardado de forma contaminada en 1.102.
+
+**Verificacion:** localmente `HEAD` y `origin/main` estaban en `8a34904f`; el remoto es `maximoslu/WMS_LARAVEL`, rama `main`, y el árbol solo conserva `.claude/` y `tmp/` fuera de Git. La base local tiene EDELVIVES, pero no tiene ningún `daily_operation_day` del 24/08/2026, por lo que no se puede confirmar aquí el valor persistido real ni el origen exacto de los 22 palés. Forge, cachés, OPcache y workers de producción no se han consultado ni modificado desde esta sesión.
+
+**Solución definitiva:** se añade `DailyOperationHistoricalAdjustmentService` y la acción interna `Ajustar base histórica`. Solo superadmin/administración pueden usarla, únicamente sobre días anteriores al actual. Exige una nueva base no negativa y motivo obligatorio; actualiza `opening_pallets` y recalcula derivados con las líneas existentes (`facturable = apertura + entradas`, `movido = entradas + salidas`, `base mañana = apertura + entradas - salidas`). No toca stock, entradas, salidas ni movimientos. Cada cambio guarda auditoría con usuario, fecha, valores anterior/nuevo y motivo. Repetir el mismo valor es idempotente. `Ver día` sigue siendo de solo lectura y `Recalcular` conserva la base ajustada.
+
+**Corrección productiva pendiente:** tras publicar y desplegar, abrir EDELVIVES / 24/08/2026 y usar `Ajustar base histórica` con `1.124` y motivo `Corrección contra parte operativo Excel EDELVIVES_OP_8`. Después comprobar 1.124, 12, 1.112, gestión 1, viaje 1, stock intacto y auditoría.
+
+**Validación:** `DailyOperationsTest` -> 29 passed, 327 assertions; `GoodsDispatchManagementTest` -> 68 passed, 548 assertions; `GoodsReceiptManagementTest` -> 122 passed, 714 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; `StockRelocationTest` -> 13 passed, 88 assertions; suite completa -> **891 passed, 5.223 assertions**; `npm run build` OK; `git diff --check` OK. Commit y push quedan pendientes al cierre de esta sesión.
+
 ## 2026-08-25 - ESTABILIZACION DE OPERACIONES DIARIAS HISTORICAS
 
 **Incidencia:** el parte EDELVIVES del 24/08/2026 indicaba una apertura/facturable de 1.124 palés, 12 movidos y 1.112 para el día siguiente, mientras la pantalla podía reconstruir 1.102/1.090. La base local no contiene los registros reales de operaciones de esa fecha ni permite identificar aquí los 22 palés afectados.

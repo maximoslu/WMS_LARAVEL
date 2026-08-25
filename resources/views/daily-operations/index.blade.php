@@ -111,6 +111,25 @@
                         <button type="submit" class="button-primary compact-button btn-compact">Recalcular</button>
                     </form>
                 @endif
+
+                @if ($day !== null && $canAdjustHistoricalBase && $selectedDate->isBefore(now(config('app.timezone', 'UTC'))->startOfDay()))
+                    <details class="daily-ops-historical-adjustment">
+                        <summary>Ajustar base histórica</summary>
+                        <form method="POST" action="{{ route('daily-operations.historical-base.adjust', $day) }}" class="daily-ops-historical-adjustment-form">
+                            @csrf
+                            <label class="auth-field">
+                                <span>Nueva base inicio</span>
+                                <input type="number" name="opening_pallets" value="{{ old('opening_pallets', $openingPallets) }}" min="0" step="1" class="auth-input" required>
+                            </label>
+                            <label class="auth-field">
+                                <span>Motivo</span>
+                                <textarea name="reason" rows="2" maxlength="2000" class="auth-input" required>{{ old('reason') }}</textarea>
+                            </label>
+                            <small class="helper-text">Solo corrige la base del parte diario. No modifica stock ni movimientos.</small>
+                            <button type="submit" class="button-secondary compact-button btn-compact" onclick="return confirm('¿Confirmas el ajuste auditado de la base histórica?');">Guardar ajuste</button>
+                        </form>
+                    </details>
+                @endif
             </div>
 
             <div class="wms-filter-summary" aria-label="Seleccion actual">
