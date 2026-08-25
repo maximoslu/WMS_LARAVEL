@@ -34,6 +34,10 @@ class DailyOperationRecalculationService
                 ]);
             }
 
+            $storedOpeningPallets = $day->exists && $day->opening_pallets !== null
+                ? (int) $day->opening_pallets
+                : null;
+
             $manualSortOrder = (int) $day->lines()->where(function ($query): void {
                 $query
                     ->where('is_auto_generated', false)
@@ -170,6 +174,7 @@ class DailyOperationRecalculationService
                 $clientId,
                 $inboundPallets,
                 $outboundPallets,
+                $storedOpeningPallets,
             );
             $billableStoragePallets = $openingPallets + $inboundPallets;
 

@@ -90,10 +90,10 @@ class DailyOperationsTest extends TestCase
 
         $day->refresh();
 
-        $this->assertSame(0, $day->opening_pallets);
-        $this->assertSame(12, $day->stored_pallets_today);
+        $this->assertSame(100, $day->opening_pallets);
+        $this->assertSame(112, $day->stored_pallets_today);
         $this->assertSame(12, $day->moved_pallets_today);
-        $this->assertSame(12, $day->expected_pallets_tomorrow);
+        $this->assertSame(112, $day->expected_pallets_tomorrow);
 
         $this->assertDatabaseHas('daily_operation_lines', [
             'day_id' => $day->id,
@@ -267,10 +267,10 @@ class DailyOperationsTest extends TestCase
             ->where('client_id', $client->id)
             ->firstOrFail();
 
-        $this->assertSame(50, $day->opening_pallets);
+        $this->assertSame(0, $day->opening_pallets);
         $this->assertSame(0, $day->moved_pallets_today);
-        $this->assertSame(50, $day->stored_pallets_today);
-        $this->assertSame(50, $day->expected_pallets_tomorrow);
+        $this->assertSame(0, $day->stored_pallets_today);
+        $this->assertSame(0, $day->expected_pallets_tomorrow);
     }
 
     public function test_updating_manual_line_does_not_duplicate_associated_lines(): void
@@ -506,6 +506,73 @@ class DailyOperationsTest extends TestCase
             'pallets' => 1044,
             'is_auto_generated' => true,
         ]);
+    }
+
+    public function test_historical_recalculation_preserves_validated_opening_snapshot(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $user = $this->makeUserWithRole(Role::ALMACEN);
+        $client = Client::factory()->create(['name' => 'EDELVIVES', 'code' => 'EDELVIVES']);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 1]);
+
+        DailyOperationDay::query()->create([
+            'operation_date' => '2026-08-23',
+            'client_id' => $client->id,
+            'opening_pallets' => 1102,
+            'stored_pallets_today' => 1102,
+            'expected_pallets_tomorrow' => 1102,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+        DailyOperationDay::query()->create([
+            'operation_date' => '2026-08-24',
+            'client_id' => $client->id,
+            'opening_pallets' => 1124,
+            'stored_pallets_today' => 1124,
+            'moved_pallets_today' => 12,
+            'expected_pallets_tomorrow' => 1112,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => '2026-08-24 10:00:00',
+            'camion_propio' => true,
+        ]);
+        GoodsDispatchLine::query()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'sku' => 'EDE-HIST-12',
+            'description' => 'Salida historica EDELVIVES',
+            'units_per_pallet' => 1,
+            'pallets' => 12,
+            'requested_units' => 12,
+            'requested_pallets' => 12,
+            'loaded_pallets' => 12,
+            'is_extra_line' => false,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('daily-operations.recalculate'), [
+                'operation_date' => '2026-08-24',
+                'client_id' => $client->id,
+            ])
+            ->assertRedirect();
+
+        $day = DailyOperationDay::query()
+            ->whereDate('operation_date', '2026-08-24')
+            ->where('client_id', $client->id)
+            ->firstOrFail();
+
+        $this->assertSame(1124, $day->opening_pallets);
+        $this->assertSame(1124, $day->stored_pallets_today);
+        $this->assertSame(12, $day->moved_pallets_today);
+        $this->assertSame(1112, $day->expected_pallets_tomorrow);
+        $this->assertSame(12, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_ENVIO)->sum('pallets'));
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_GESTION_CAMION)->sum('pallets'));
+        $this->assertSame(1, DailyOperationLine::query()->where('day_id', $day->id)->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)->sum('pallets'));
     }
 
     public function test_recalculate_reconstructs_opening_stock_when_same_day_dispatch_already_reduced_current_stock(): void

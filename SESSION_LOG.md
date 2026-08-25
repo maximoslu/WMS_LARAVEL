@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-25 - ESTABILIZACION DE OPERACIONES DIARIAS HISTORICAS
+
+**Incidencia:** el parte EDELVIVES del 24/08/2026 indicaba una apertura/facturable de 1.124 palés, 12 movidos y 1.112 para el día siguiente, mientras la pantalla podía reconstruir 1.102/1.090. La base local no contiene los registros reales de operaciones de esa fecha ni permite identificar aquí los 22 palés afectados.
+
+**Causa raiz:** al recalcular una fecha histórica, `DailyOperationRecalculationService` reconstruía las líneas correctamente, pero `DailyOperationTotalsService` podía sustituir la apertura histórica por el stock físico vivo actual o por el cierre del día anterior. Ese cálculo es válido para el día actual, pero no para un parte histórico ya cerrado, porque movimientos posteriores y diferencias de métrica contaminan el resultado.
+
+**Correccion aplicada:** las fechas históricas conservan su `opening_pallets` almacenado al recalcular y solo se regeneran las líneas automáticas de entradas, salidas y viajes. El día actual mantiene el cálculo vivo existente, incluido el tratamiento de reubicaciones internas. Se añadió una prueba de regresión con el caso 1.124 - 12 = 1.112 y se actualizaron dos expectativas antiguas para documentar el contrato de snapshot histórico. No se modificaron datos, importadores, stock, producción ni migraciones.
+
+**Validacion:** `DailyOperationsTest` -> 27 passed, 306 assertions; `GoodsDispatchManagementTest` -> 68 passed, 548 assertions; `GoodsReceiptManagementTest` -> 122 passed, 714 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; `StockRelocationTest` -> 13 passed, 88 assertions; suite completa -> **889 passed, 5.202 assertions**; `npm run build` OK; `git diff --check` OK. El commit y push de este cambio quedan pendientes al cierre de la sesión.
+
+**Estado Git y despliegue:** el repositorio local está en `main`, con `HEAD` y `origin/main` en `ebb77692` (`fix: allow superadmin to correct sent dispatches`), no en el hash antiguo `90e9d6ec`; `.claude/` y `tmp/` siguen fuera de seguimiento. No se debe afirmar que producción está corregida por estar en GitHub: queda pendiente publicar este cambio, ejecutar `Deploy Now` en Forge y validar el parte del 24/08 con EDELVIVES y un superadmin.
+
 ## 2026-08-25 - CORRECCION CONTROLADA DE ALBARANES ENVIADOS
 
 **Incidencia:** una salida ya enviada, como la 0063, no permitia corregir una cantidad de pallets mal consignada en el albaran.

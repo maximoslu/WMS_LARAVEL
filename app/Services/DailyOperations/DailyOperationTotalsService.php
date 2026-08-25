@@ -35,9 +35,7 @@ class DailyOperationTotalsService
 
         $opening = $openingPallets !== null
             ? max(0, (int) $openingPallets)
-            : ($day->client_id !== null
-                ? $this->stockBaseForClient((int) $day->client_id)
-                : 0);
+            : $this->openingForSync($day);
 
         $breakdown = $this->sectionBreakdown($day);
         $inbound = (int) collect(DailyOperationLine::movementInboundSections())
@@ -66,13 +64,23 @@ class DailyOperationTotalsService
             ->sum(DB::raw('COALESCE(warehouse_pallets, full_pallets + peaks_count)'));
     }
 
-    public function openingPalletsForDate(string $operationDate, int $clientId, int $inboundPallets, int $outboundPallets): int
+    public function openingPalletsForDate(
+        string $operationDate,
+        int $clientId,
+        int $inboundPallets,
+        int $outboundPallets,
+        ?int $storedOpeningPallets = null,
+    ): int
     {
         $date = Carbon::parse($operationDate)->toDateString();
         $openingFromCurrentStock = $this->openingPalletsFromCurrentStock($clientId, $inboundPallets, $outboundPallets);
 
         if ($this->usesLiveStockBaseForDate($date)) {
             return $openingFromCurrentStock;
+        }
+
+        if ($storedOpeningPallets !== null) {
+            return max(0, $storedOpeningPallets);
         }
 
         $previousDate = Carbon::parse($date)->subDay()->toDateString();
@@ -96,6 +104,24 @@ class DailyOperationTotalsService
     private function usesLiveStockBaseForDate(string $operationDate): bool
     {
         return $operationDate === Carbon::now(config('app.timezone', 'UTC'))->toDateString();
+    }
+
+    private function openingForSync(DailyOperationDay $day): int
+    {
+        if ($day->client_id === null) {
+            return 0;
+        }
+
+        $operationDate = $day->operation_date?->toDateString();
+
+        if ($operationDate !== null
+            && ! $this->usesLiveStockBaseForDate($operationDate)
+            && $day->exists
+            && $day->opening_pallets !== null) {
+            return max(0, (int) $day->opening_pallets);
+        }
+
+        return $this->stockBaseForClient((int) $day->client_id);
     }
 
     public function receiptLogisticUnits(GoodsReceipt $receipt): int
