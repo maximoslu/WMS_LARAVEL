@@ -244,6 +244,7 @@
                     method="POST"
                     action="{{ route('merchandise-requests.lines.store', $merchandiseRequest) }}"
                     class="wms-add-order-line"
+                    id="anadir-linea-pedido"
                     data-merchandise-request-form
                     data-search-endpoint="{{ $searchEndpoint }}"
                     data-client-id="{{ $merchandiseRequest->client_id }}"

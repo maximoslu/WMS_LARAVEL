@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-26 - SOL-00072: AÑADIR LÍNEAS A PEDIDOS NO ENVIADOS
+
+**Causa raíz:** el endpoint `merchandise-requests.lines.store` ya permitía añadir líneas al pedido y sincronizarlas con una salida `DRAFT` o `PREPARING`, pero `resources/views/dispatches/request.blade.php` solo mostraba `Modificar pedido` cuando no existía salida. Por eso, al entrar en Gestión con una salida abierta, el usuario no tenía acceso al formulario de añadir línea aunque el pedido siguiera editable. SOL-00072 no existe en la base local; se reprodujo el estado equivalente con un pedido en preparación y una salida abierta.
+
+**Corrección:** `MerchandiseRequest::canAcceptInternalLines()` centraliza la regla de edición para pedidos `PENDING`, `PREPARING` o `PARTIALLY_FULFILLED`, bloqueando salidas enviadas, completadas o canceladas. La pantalla de gestión muestra ahora `Añadir línea` también con salida abierta y enlaza al formulario del mismo pedido. La línea nueva se guarda en `merchandise_request_lines` y se replica en la misma `goods_dispatch` como pendiente/no cargada; no crea otro pedido o camión, no modifica líneas con carga real y no descuenta stock hasta la carga.
+
+**Validación:** `MerchandiseRequestManagementTest` 67 passed, `GoodsDispatchManagementTest` 68 passed, suite completa **893 passed, 5.233 assertions**, `npm run build` OK y `git diff --check` OK. Se mantienen la validación exacta de stock, el aislamiento entre clientes y el bloqueo de pedidos enviados/cerrados con el mensaje `No se pueden añadir líneas porque el pedido ya está enviado o cerrado.`
+
+**Archivos:** `app/Models/MerchandiseRequest.php`, `app/Http/Controllers/MerchandiseRequestController.php`, `app/Http/Controllers/GoodsDispatchController.php`, `resources/views/merchandise-requests/show.blade.php`, `resources/views/dispatches/request.blade.php` y `tests/Feature/GoodsDispatchManagementTest.php`.
+
+**Producción:** no se ha desplegado ni modificado Forge. La comprobación manual de SOL-00072 en producción queda pendiente de `Deploy Now` y de validar añadir una línea, mantener la misma salida y confirmar que el stock solo cambia al cargar.
+
 ## 2026-08-25 - RECONSTRUCCION HISTORICA DESDE ANCLAS FIABLES
 
 **Incidencia persistente:** EDELVIVES 24/08/2026 seguía mostrando apertura 1.102 y base mañana 1.090. La causa exacta en el código era que `DailyOperationRecalculationService` pasaba el `opening_pallets` persistido a `DailyOperationTotalsService` antes de reconstruir el histórico; el fix anterior protegía ese valor, aunque fuese el snapshot contaminado.

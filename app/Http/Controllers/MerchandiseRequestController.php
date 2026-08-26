@@ -441,7 +441,7 @@ class MerchandiseRequestController extends Controller
             return redirect()
                 ->route('merchandise-requests.show', $merchandiseRequest)
                 ->withErrors([
-                    'lines' => 'No se pueden anadir lineas a un pedido enviado, completado o cancelado.',
+                    'lines' => 'No se pueden añadir líneas porque el pedido ya está enviado o cerrado.',
                 ]);
         }
 
@@ -456,7 +456,7 @@ class MerchandiseRequestController extends Controller
 
             if (! $this->canAcceptInternalLines($lockedRequest)) {
                 throw ValidationException::withMessages([
-                    'lines' => 'No se pueden anadir lineas a un pedido enviado, completado o cancelado.',
+                    'lines' => 'No se pueden añadir líneas porque el pedido ya está enviado o cerrado.',
                 ]);
             }
 
@@ -757,16 +757,7 @@ class MerchandiseRequestController extends Controller
 
     private function canAcceptInternalLines(MerchandiseRequest $merchandiseRequest): bool
     {
-        return in_array($merchandiseRequest->status, [
-            MerchandiseRequest::STATUS_PENDING,
-            MerchandiseRequest::STATUS_PREPARING,
-            MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
-        ], true)
-            && ! in_array($merchandiseRequest->openDispatch?->status, [
-                GoodsDispatch::STATUS_SENT,
-                GoodsDispatch::STATUS_COMPLETED,
-                GoodsDispatch::STATUS_CANCELLED,
-            ], true);
+        return $merchandiseRequest->canAcceptInternalLines();
     }
 
     /**

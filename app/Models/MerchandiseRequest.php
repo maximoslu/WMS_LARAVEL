@@ -136,6 +136,20 @@ class MerchandiseRequest extends Model
         return $this->status === self::STATUS_DRAFT;
     }
 
+    public function canAcceptInternalLines(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_PENDING,
+            self::STATUS_PREPARING,
+            self::STATUS_PARTIALLY_FULFILLED,
+        ], true)
+            && ! in_array($this->openDispatch?->status, [
+                GoodsDispatch::STATUS_SENT,
+                GoodsDispatch::STATUS_COMPLETED,
+                GoodsDispatch::STATUS_CANCELLED,
+            ], true);
+    }
+
     public function submittedAt(): ?CarbonInterface
     {
         $submittedAt = $this->getAttribute('submitted_at');

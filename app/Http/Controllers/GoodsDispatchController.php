@@ -150,6 +150,9 @@ class GoodsDispatchController extends Controller
         ]);
 
         $activeDispatch = $merchandiseRequest->openDispatch ?? $merchandiseRequest->dispatch;
+        $canAddInternalLine = ! $request->user()->hasRole(\App\Models\Role::CLIENTE)
+            && $request->user()->canAccessRole(\App\Models\Role::ALMACEN)
+            && $merchandiseRequest->canAcceptInternalLines();
 
         return view('dispatches.request', [
             'merchandiseRequest' => $merchandiseRequest,
@@ -158,6 +161,7 @@ class GoodsDispatchController extends Controller
             'stockOptionsByItem' => $this->stockOptionsByItem($merchandiseRequest),
             'canCancelRequest' => $request->user()->canAccessRole(\App\Models\Role::ALMACEN)
                 && $cancellationService->canCancel($merchandiseRequest),
+            'canAddInternalLine' => $canAddInternalLine,
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }

@@ -112,8 +112,12 @@
         </dl>
 
         <div class="warehouse-request-actions wms-detail-actions wms-load-actions">
+            @if ($canAddInternalLine ?? false)
+                <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}#anadir-linea-pedido" class="button-secondary compact-button btn-compact">Añadir línea</a>
+            @endif
+
             @if (! $dispatch && auth()->user()?->canAccessRole(\App\Models\Role::ALMACEN))
-                <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-compact">Modificar pedido</a>
+                <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}#editar-lineas-pedido" class="button-secondary compact-button btn-compact">Modificar pedido</a>
             @endif
 
             @if ($canCancelRequest ?? false)

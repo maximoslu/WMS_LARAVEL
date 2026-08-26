@@ -336,6 +336,8 @@ class GoodsDispatchManagementTest extends TestCase
         $this->actingAs($almacen)
             ->get(route('dispatches.requests.show', $merchandiseRequest))
             ->assertOk()
+            ->assertSee('Añadir línea')
+            ->assertSee('#anadir-linea-pedido', false)
             ->assertDontSee('Ver salida t')
             ->assertDontSee('GENERAR SALIDA')
             ->assertSee('Partida / lote / ubicaci')
