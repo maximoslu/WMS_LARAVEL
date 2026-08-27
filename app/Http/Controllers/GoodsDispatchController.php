@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ConfirmGoodsDispatchLoadingRequest;
 use App\Http\Requests\StoreGoodsDispatchRequest;
+use App\Http\Requests\UpdateMerchandiseRequestDeliveryAddressRequest;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\MerchandiseRequest;
 use App\Models\MerchandiseRequestLine;
+use App\Models\Role;
 use App\Models\StockPallet;
 use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
@@ -152,8 +154,8 @@ class GoodsDispatchController extends Controller
         ]);
 
         $activeDispatch = $merchandiseRequest->openDispatch ?? $merchandiseRequest->dispatch;
-        $canAddInternalLine = ! $request->user()->hasRole(\App\Models\Role::CLIENTE)
-            && $request->user()->canAccessRole(\App\Models\Role::ALMACEN)
+        $canAddInternalLine = ! $request->user()->hasRole(Role::CLIENTE)
+            && $request->user()->canAccessRole(Role::ALMACEN)
             && $merchandiseRequest->canAcceptInternalLines();
 
         return view('dispatches.request', [
@@ -161,7 +163,7 @@ class GoodsDispatchController extends Controller
             'activeDispatch' => $activeDispatch,
             'fulfillmentSummary' => $fulfillmentService->summary($merchandiseRequest, $activeDispatch),
             'stockOptionsByItem' => $this->stockOptionsByItem($merchandiseRequest),
-            'canCancelRequest' => $request->user()->canAccessRole(\App\Models\Role::ALMACEN)
+            'canCancelRequest' => $request->user()->canAccessRole(Role::ALMACEN)
                 && $cancellationService->canCancel($merchandiseRequest),
             'canAddInternalLine' => $canAddInternalLine,
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
@@ -173,7 +175,7 @@ class GoodsDispatchController extends Controller
         MerchandiseRequest $merchandiseRequest,
         MerchandiseRequestCancellationService $cancellationService,
     ): RedirectResponse {
-        abort_unless($request->user()->canAccessRole(\App\Models\Role::ALMACEN), 403);
+        abort_unless($request->user()->canAccessRole(Role::ALMACEN), 403);
 
         try {
             $cancellationService->cancel($merchandiseRequest, $request->user());
@@ -186,6 +188,54 @@ class GoodsDispatchController extends Controller
         return redirect()
             ->route('dispatches.requests.index')
             ->with('status', 'Pedido anulado correctamente.');
+    }
+
+    public function updateRequestDeliveryAddress(
+        UpdateMerchandiseRequestDeliveryAddressRequest $request,
+        MerchandiseRequest $merchandiseRequest,
+        AuditLogService $audit,
+    ): RedirectResponse {
+        $merchandiseRequest->load('openDispatch');
+
+        if ($merchandiseRequest->openDispatch !== null) {
+            return redirect()
+                ->route('dispatches.requests.show', $merchandiseRequest)
+                ->withErrors(['delivery_address_text' => 'La dirección de entrega se gestiona desde la salida abierta.']);
+        }
+
+        if (! in_array($merchandiseRequest->status, [
+            MerchandiseRequest::STATUS_PENDING,
+            MerchandiseRequest::STATUS_PREPARING,
+            MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
+        ], true)) {
+            return redirect()
+                ->route('dispatches.requests.show', $merchandiseRequest)
+                ->withErrors(['delivery_address_text' => 'No se puede modificar la dirección de entrega de un pedido enviado, completado o cancelado.']);
+        }
+
+        $oldAddress = $merchandiseRequest->only(['delivery_address_override', 'delivery_address_text']);
+        $override = $request->boolean('delivery_address_override');
+        $merchandiseRequest->update([
+            'delivery_address_override' => $override,
+            'delivery_address_text' => $override ? $request->input('delivery_address_text') : null,
+        ]);
+
+        if ($oldAddress !== $merchandiseRequest->fresh()->only(['delivery_address_override', 'delivery_address_text'])) {
+            $audit->record(
+                event: 'merchandise_request_delivery_address_updated',
+                module: 'merchandise_requests',
+                description: 'Dirección de entrega actualizada.',
+                auditable: $merchandiseRequest,
+                user: $request->user(),
+                clientId: $merchandiseRequest->client_id,
+                oldValues: $oldAddress,
+                newValues: $merchandiseRequest->only(['delivery_address_override', 'delivery_address_text']),
+            );
+        }
+
+        return redirect()
+            ->route('dispatches.requests.show', $merchandiseRequest)
+            ->with('status', 'Dirección de entrega actualizada correctamente.');
     }
 
     public function generateFromRequest(

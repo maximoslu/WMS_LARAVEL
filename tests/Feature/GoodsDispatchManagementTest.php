@@ -2160,6 +2160,120 @@ class GoodsDispatchManagementTest extends TestCase
             ->assertSee('Calle Entrega 27');
     }
 
+    public function test_pending_request_without_dispatch_can_store_an_alternative_delivery_address_before_loading(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::factory()->create([
+            'code' => 'INSOCA-ADDRESS',
+            'delivery_address' => 'Dirección habitual Insoca',
+        ]);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $merchandiseRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $merchandiseRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 1,
+            'requested_units' => 100,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk()
+            ->assertSee('Dirección de entrega')
+            ->assertSee('Usar dirección de entrega alternativa')
+            ->assertSee('Si no se indica una dirección alternativa, se usará la dirección habitual del cliente.')
+            ->assertSee(route('dispatches.requests.delivery-address.update', $merchandiseRequest), false);
+
+        $this->actingAs($almacen)
+            ->put(route('dispatches.requests.delivery-address.update', $merchandiseRequest), [
+                'delivery_address_override' => '1',
+                'delivery_address_text' => "INSOCA Logística\nCalle de entrega 79\n50000 Zaragoza",
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertSessionHasNoErrors();
+
+        $merchandiseRequest->refresh();
+        $this->assertTrue($merchandiseRequest->delivery_address_override);
+        $this->assertSame("INSOCA Logística\nCalle de entrega 79\n50000 Zaragoza", $merchandiseRequest->delivery_address_text);
+        $this->assertSame(0, GoodsDispatch::query()->where('merchandise_request_id', $merchandiseRequest->id)->count());
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'merchandise_request_delivery_address_updated',
+            'auditable_id' => $merchandiseRequest->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        $dispatch = GoodsDispatch::query()->where('merchandise_request_id', $merchandiseRequest->id)->firstOrFail();
+        $this->assertTrue($dispatch->delivery_address_override);
+        $this->assertSame($merchandiseRequest->delivery_address_text, $dispatch->delivery_address_text);
+
+        $preparationHtml = view('merchandise-requests.preparation-pdf', [
+            'merchandiseRequest' => $merchandiseRequest->fresh()->load('client', 'lines.item', 'lines.stockPallet.location.warehouse', 'dispatch.lines.allocations.stockPallet.location.warehouse'),
+        ])->render();
+        $deliveryNoteHtml = view('dispatches.delivery-note-pdf', [
+            'dispatch' => $dispatch->fresh()->load('client', 'lines.allocations'),
+        ])->render();
+
+        $this->assertStringContainsString('INSOCA Logística', $preparationHtml);
+        $this->assertStringContainsString('Calle de entrega 79', $deliveryNoteHtml);
+    }
+
+    public function test_pending_request_without_override_uses_the_clients_delivery_address_and_closed_request_is_blocked(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::factory()->create([
+            'code' => 'ADDRESS-FALLBACK',
+            'delivery_address' => 'Dirección habitual de cliente',
+        ]);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $item = Item::factory()->create(['client_id' => $client->id]);
+        $pendingRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        $pendingRequest->lines()->create([
+            'item_id' => $item->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 1,
+            'requested_units' => 100,
+        ]);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $pendingRequest))
+            ->assertRedirect();
+
+        $dispatch = GoodsDispatch::query()->where('merchandise_request_id', $pendingRequest->id)->firstOrFail();
+        $this->assertFalse($dispatch->delivery_address_override);
+        $this->assertNull($dispatch->delivery_address_text);
+        $this->assertSame('Dirección habitual de cliente', $dispatch->load('client')->effectiveDeliveryAddress());
+
+        $closedRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_COMPLETED,
+        ]);
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.requests.show', $closedRequest))
+            ->put(route('dispatches.requests.delivery-address.update', $closedRequest), [
+                'delivery_address_override' => '1',
+                'delivery_address_text' => 'Cambio bloqueado',
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $closedRequest))
+            ->assertSessionHasErrors('delivery_address_text');
+
+        $this->assertFalse($closedRequest->fresh()->delivery_address_override);
+    }
+
     public function test_delivery_note_uses_alternative_address_and_sent_dispatch_cannot_change_it(): void
     {
         $this->seedBaseData();

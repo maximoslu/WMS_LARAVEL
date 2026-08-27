@@ -421,6 +421,9 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/salidas/pedidos/{merchandiseRequest}/cancelar', [GoodsDispatchController::class, 'cancelRequest'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.requests.cancel');
+    Route::put('/salidas/pedidos/{merchandiseRequest}/direccion-entrega', [GoodsDispatchController::class, 'updateRequestDeliveryAddress'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.requests.delivery-address.update');
     Route::get('/salidas/{goodsDispatch}', [GoodsDispatchController::class, 'show'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.show');

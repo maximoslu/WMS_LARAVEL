@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-27 - DIRECCION ALTERNATIVA EN GESTION DE PEDIDO PENDIENTE
+
+**Incidencia y causa raiz:** la direccion alternativa se habia incorporado a la creacion/edicion de pedido, salida manual, detalle de salida y albaran, pero la pantalla operativa `Panel de control > Salidas > Pedidos pendientes > SOL-*` usa `GoodsDispatchController::showRequest()` y `resources/views/dispatches/request.blade.php`, no el detalle general de pedido ni el detalle de salida. Esa vista no contenia bloque de direccion ni ruta para actualizar `MerchandiseRequest`, aunque los campos ya existian en la migracion anterior y `generateFromRequest()` ya los copiaba a `GoodsDispatch`.
+
+**Solucion:** se anade la ruta interna `dispatches.requests.delivery-address.update` y el formulario `Direccion de entrega` en Gestion de pedido, visible solo cuando el pedido puede iniciar carga y no existe salida. Guarda `delivery_address_override` y `delivery_address_text` en el pedido; exige texto si se activa, no crea salida, no modifica stock y registra `merchandise_request_delivery_address_updated`. Con salida abierta el endpoint queda bloqueado y la direccion se mantiene en la pantalla propia de la salida; pedidos enviados, completados o cancelados tampoco pueden cambiarla.
+
+**Propagacion y documentos:** al pulsar `Empezar carga`, la salida sigue copiando los campos del pedido. `MerchandiseRequest::effectiveDeliveryAddress()` centraliza el fallback a la ficha del cliente para la hoja de preparacion previa a la salida. El albaran conserva `GoodsDispatch::effectiveDeliveryAddress()`, por lo que usa el snapshot de la salida y no altera albaranes historicos.
+
+**Cobertura y validacion local:** se anadieron casos de pedido pendiente INSOCA sin salida que muestra, guarda y audita la alternativa sin crear salida; posterior copia y render en preparacion/albaran; fallback habitual; y bloqueo del pedido cerrado. `GoodsDispatchManagementTest` -> 72 passed, 596 assertions; `MerchandiseRequestManagementTest` -> 67 passed, 462 assertions; filtros `Delivery` -> 37 passed, 211 assertions; filtros `Albaran` -> 21 passed, 94 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; `DailyOperationsTest` -> 31 passed, 335 assertions; suite completa -> **900 passed, 5.346 assertions**. `npm run build`, `vendor/bin/pint --dirty` y `git diff --check` OK.
+
+**Produccion:** no se accedio a Forge ni se desplego. No hay migracion nueva en este ajuste; Forge sigue teniendo pendiente aplicar con `php artisan migrate --force` la migracion de direccion publicada en `7867ee72`, junto con la migracion historica previa `45e7098f` si aun no se aplicaron. Debe validarse autenticadamente SOL-000079 o pedido equivalente antes de generar salida, su preparacion, la salida abierta y el albaran.
+
 ## 2026-08-27 - DIRECCION DE ENTREGA ALTERNATIVA EN PEDIDOS Y SALIDAS
 
 **Necesidad y regla de dominio:** un pedido o salida puede requerir una direccion de entrega distinta de la ficha habitual del cliente. La direccion alternativa es opcional: sin ella se conserva exactamente la direccion estructurada del cliente; con ella, el albaran debe reflejar la direccion real de esa salida. No cambia stock, cantidades, movimientos, carga, aislamiento de clientes ni notificaciones.

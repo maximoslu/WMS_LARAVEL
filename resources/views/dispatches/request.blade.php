@@ -185,6 +185,28 @@
         </div>
     </section>
 
+    @if (! $dispatch && $canGenerateDispatch)
+        <section class="surface-card compact-card wms-flow-card">
+            <form method="POST" action="{{ route('dispatches.requests.delivery-address.update', $merchandiseRequest) }}">
+                @csrf
+                @method('PUT')
+                <div class="wms-section-head">
+                    <div>
+                        <strong>Dirección de entrega</strong>
+                        <p>Si no se indica una dirección alternativa, se usará la dirección habitual del cliente.</p>
+                    </div>
+                </div>
+                <input type="hidden" name="delivery_address_override" value="0">
+                <label><input type="checkbox" name="delivery_address_override" value="1" @checked((bool) old('delivery_address_override', $merchandiseRequest->delivery_address_override))> Usar dirección de entrega alternativa</label>
+                <label class="auth-field">
+                    <span>Dirección de entrega alternativa</span>
+                    <textarea name="delivery_address_text" maxlength="2000" rows="3" class="auth-input" placeholder="Nombre, dirección, código postal, población y observaciones">{{ old('delivery_address_text', $merchandiseRequest->delivery_address_text) }}</textarea>
+                </label>
+                <button type="submit" class="button-secondary compact-button btn-compact">Guardar dirección</button>
+            </form>
+        </section>
+    @endif
+
     @if (filled($merchandiseRequest->notes))
         <section class="surface-card compact-card wms-flow-card merchandise-request-comments">
             <div class="wms-section-head">

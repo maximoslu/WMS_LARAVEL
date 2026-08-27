@@ -70,6 +70,12 @@
                     <strong>{{ number_format($merchandiseRequest->requestedPeaksCount(), 0, ',', '.') }}</strong>
                 </td>
             </tr>
+            <tr>
+                <td colspan="3">
+                    <div class="meta-label">{{ $merchandiseRequest->hasDeliveryAddressOverride() ? 'Dirección de entrega alternativa' : 'Dirección de entrega' }}</div>
+                    <strong>{{ $merchandiseRequest->effectiveDeliveryAddress() ?: 'Pendiente en ficha de cliente' }}</strong>
+                </td>
+            </tr>
         </table>
 
         @if (filled($merchandiseRequest->notes))

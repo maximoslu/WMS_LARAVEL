@@ -189,6 +189,18 @@ class MerchandiseRequest extends Model
         return WmsStatus::merchandiseRequestLabel((string) $this->status);
     }
 
+    public function hasDeliveryAddressOverride(): bool
+    {
+        return $this->delivery_address_override && filled($this->delivery_address_text);
+    }
+
+    public function effectiveDeliveryAddress(): string
+    {
+        return $this->hasDeliveryAddressOverride()
+            ? trim((string) $this->delivery_address_text)
+            : ($this->client?->formattedDeliveryAddress() ?? '');
+    }
+
     /**
      * @return array<string, string>
      */
