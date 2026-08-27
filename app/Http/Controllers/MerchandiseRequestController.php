@@ -205,6 +205,8 @@ class MerchandiseRequestController extends Controller
                 'status' => $isDraft ? MerchandiseRequest::STATUS_DRAFT : MerchandiseRequest::STATUS_PENDING,
                 'requested_date' => now()->toDateString(),
                 'camion_propio' => $request->boolean('camion_propio'),
+                'delivery_address_override' => $request->boolean('delivery_address_override'),
+                'delivery_address_text' => $request->input('delivery_address_text'),
                 'notes' => $request->input('notes'),
             ]);
 
@@ -329,6 +331,8 @@ class MerchandiseRequestController extends Controller
                 'status' => $isDraft ? MerchandiseRequest::STATUS_DRAFT : MerchandiseRequest::STATUS_PENDING,
                 'requested_date' => $isDraft ? $lockedRequest->requested_date : now()->toDateString(),
                 'camion_propio' => $request->boolean('camion_propio'),
+                'delivery_address_override' => $request->boolean('delivery_address_override'),
+                'delivery_address_text' => $request->input('delivery_address_text'),
                 'notes' => $request->input('notes'),
             ]);
             $submittedNow = ! $isDraft;

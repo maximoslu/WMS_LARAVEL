@@ -34,6 +34,8 @@ class MerchandiseRequest extends Model
         'status',
         'delivery_reference',
         'delivery_address',
+        'delivery_address_override',
+        'delivery_address_text',
         'camion_propio',
         'requested_date',
         'notes',
@@ -62,6 +64,7 @@ class MerchandiseRequest extends Model
             'remainder_close_snapshot' => 'array',
             'cancelled_at' => 'datetime',
             'camion_propio' => 'boolean',
+            'delivery_address_override' => 'boolean',
         ];
     }
 

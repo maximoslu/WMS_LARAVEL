@@ -191,6 +191,20 @@
             </section>
         @endif
 
+        @php
+            $deliveryDispatch = $merchandiseRequest->openDispatch ?? $merchandiseRequest->dispatch;
+        @endphp
+        @if ($merchandiseRequest->delivery_address_override || $deliveryDispatch?->hasDeliveryAddressOverride())
+            <section class="surface-card compact-card wms-flow-card merchandise-request-comments">
+                <div class="wms-section-head">
+                    <div>
+                        <strong>Dirección de entrega alternativa</strong>
+                        <p>{{ $deliveryDispatch?->effectiveDeliveryAddress() ?: $merchandiseRequest->delivery_address_text }}</p>
+                    </div>
+                </div>
+            </section>
+        @endif
+
         <section class="surface-card compact-card order-track" aria-label="Seguimiento del pedido">
             <ol class="order-steps">
                 @foreach ($timeline as $step)

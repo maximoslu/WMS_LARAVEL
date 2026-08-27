@@ -80,6 +80,8 @@ class StoreMerchandiseRequestRequest extends FormRequest
 
         $this->merge([
             'camion_propio' => $this->boolean('camion_propio'),
+            'delivery_address_override' => $this->boolean('delivery_address_override'),
+            'delivery_address_text' => trim((string) $this->input('delivery_address_text')) ?: null,
             'client_id' => $this->input('client_id') === '' ? null : $this->input('client_id'),
             'submit_action' => $this->input('submit_action') === 'draft' ? 'draft' : 'submit',
             'lines' => collect($submittedLines)
@@ -118,6 +120,8 @@ class StoreMerchandiseRequestRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:2000'],
             'lines' => [Rule::requiredIf(fn (): bool => ! $this->isDraftSubmission()), 'array'],
             'camion_propio' => ['boolean'],
+            'delivery_address_override' => ['boolean'],
+            'delivery_address_text' => ['nullable', 'string', 'max:2000'],
             'lines.*.item_id' => ['nullable', 'integer'],
             'lines.*.line_type' => ['required', 'string'],
             'lines.*.stock_pallet_id' => ['nullable', 'integer'],
@@ -148,6 +152,10 @@ class StoreMerchandiseRequestRequest extends FormRequest
                 $this->addLegacyQuantitiesError($validator, $message);
 
                 return;
+            }
+
+            if ($this->boolean('delivery_address_override') && blank($this->input('delivery_address_text'))) {
+                $validator->errors()->add('delivery_address_text', 'Indica una dirección de entrega alternativa o desmarca la opción.');
             }
         });
     }

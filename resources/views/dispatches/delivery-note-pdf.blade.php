@@ -95,8 +95,8 @@
                     <strong>{{ $dispatch->client?->name ?? 'Sin cliente' }}</strong>
                 </td>
                 <td colspan="2">
-                    <div class="meta-label">Dirección de entrega</div>
-                    <strong>{{ $dispatch->client?->formattedDeliveryAddress() ?: 'Pendiente en ficha de cliente' }}</strong>
+                    <div class="meta-label">{{ $dispatch->hasDeliveryAddressOverride() ? 'Dirección de entrega alternativa' : 'Dirección de entrega' }}</div>
+                    <strong>{{ $dispatch->effectiveDeliveryAddress() ?: 'Pendiente en ficha de cliente' }}</strong>
                 </td>
             </tr>
         </table>

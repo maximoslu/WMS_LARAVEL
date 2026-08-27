@@ -119,10 +119,9 @@ class ClientGoodsReceiptDocumentController extends Controller
                         $dispatch->statusLabel(),
                         $dispatch->client?->name,
                         $dispatch->client?->code,
-                        $dispatch->client?->formattedDeliveryAddress(),
+                        $dispatch->effectiveDeliveryAddress(),
                         $dispatch->merchandiseRequest?->referenceCode(),
                         $dispatch->merchandiseRequest?->delivery_reference,
-                        $dispatch->merchandiseRequest?->delivery_address,
                         DocumentDisplayNamer::dispatchBaseName($dispatch),
                     ])));
 

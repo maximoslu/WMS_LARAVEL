@@ -204,7 +204,7 @@ class DeliveryNoteManagementController extends Controller
             $date = $this->dispatchDocumentDate($dispatch);
             $request = $dispatch->merchandiseRequest;
             $related = $request?->delivery_reference
-                ?: $request?->delivery_address
+                ?: $dispatch->effectiveDeliveryAddress()
                 ?: $request?->referenceCode();
 
             return [
@@ -230,8 +230,7 @@ class DeliveryNoteManagementController extends Controller
                     $dispatch->statusLabel(),
                     $request?->referenceCode(),
                     $request?->delivery_reference,
-                    $request?->delivery_address,
-                    $dispatch->client?->formattedDeliveryAddress(),
+                    $dispatch->effectiveDeliveryAddress(),
                     $displayName,
                 ])),
             ];

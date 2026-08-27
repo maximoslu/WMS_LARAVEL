@@ -76,6 +76,8 @@ class GoodsDispatchController extends Controller
                 'created_by' => $request->user()->id,
                 'notes' => $request->input('notes'),
                 'camion_propio' => $request->boolean('camion_propio'),
+                'delivery_address_override' => $request->boolean('delivery_address_override'),
+                'delivery_address_text' => $request->input('delivery_address_text'),
             ]);
 
             foreach ($validatedLines as $line) {
@@ -241,6 +243,8 @@ class GoodsDispatchController extends Controller
                 'created_by' => $request->user()->id,
                 'notes' => $lockedRequest->notes,
                 'camion_propio' => true,
+                'delivery_address_override' => $lockedRequest->delivery_address_override,
+                'delivery_address_text' => $lockedRequest->delivery_address_text,
             ]);
 
             foreach ($pendingLines as $pendingLine) {
@@ -395,19 +399,54 @@ class GoodsDispatchController extends Controller
         return $response;
     }
 
-    public function updateOwnTruck(Request $request, GoodsDispatch $goodsDispatch): RedirectResponse
+    public function updateOwnTruck(Request $request, GoodsDispatch $goodsDispatch, AuditLogService $audit): RedirectResponse
     {
         $validated = $request->validate([
             'camion_propio' => ['boolean'],
+            'delivery_address_override' => ['sometimes', 'boolean'],
+            'delivery_address_text' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $goodsDispatch->update([
+        $updates = [
             'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
-        ]);
+        ];
+
+        if ($request->has('delivery_address_override')) {
+            $override = $request->boolean('delivery_address_override');
+            $address = trim((string) ($validated['delivery_address_text'] ?? '')) ?: null;
+
+            if ($override && $address === null) {
+                return back()->withErrors(['delivery_address_text' => 'Indica una dirección de entrega alternativa o desmarca la opción.']);
+            }
+
+            if (($override !== (bool) $goodsDispatch->delivery_address_override || $address !== $goodsDispatch->delivery_address_text)
+                && ! $goodsDispatch->canEditDeliveryAddress()) {
+                return back()->withErrors(['delivery_address_text' => 'No se puede modificar la dirección de entrega porque la salida ya está enviada o cerrada.']);
+            }
+
+            $updates['delivery_address_override'] = $override;
+            $updates['delivery_address_text'] = $override ? $address : null;
+        }
+
+        $oldAddress = $goodsDispatch->only(['delivery_address_override', 'delivery_address_text']);
+        $goodsDispatch->update($updates);
+
+        if ($request->has('delivery_address_override') && $oldAddress !== $goodsDispatch->fresh()->only(['delivery_address_override', 'delivery_address_text'])) {
+            $audit->record(
+                event: 'dispatch_delivery_address_updated',
+                module: 'dispatches',
+                description: 'Dirección de entrega actualizada.',
+                auditable: $goodsDispatch,
+                user: $request->user(),
+                clientId: $goodsDispatch->client_id,
+                oldValues: $oldAddress,
+                newValues: $goodsDispatch->only(['delivery_address_override', 'delivery_address_text']),
+            );
+        }
 
         return redirect()
             ->route('dispatches.show', $goodsDispatch)
-            ->with('status', 'Transporte actualizado correctamente.');
+            ->with('status', $request->has('delivery_address_override') ? 'Dirección de entrega actualizada correctamente.' : 'Transporte actualizado correctamente.');
     }
 
     public function deliveryNotePdf(

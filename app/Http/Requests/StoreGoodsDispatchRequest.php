@@ -68,6 +68,8 @@ class StoreGoodsDispatchRequest extends FormRequest
             'camion_propio' => $this->has('camion_propio')
                 ? $this->boolean('camion_propio')
                 : true,
+            'delivery_address_override' => $this->boolean('delivery_address_override'),
+            'delivery_address_text' => trim((string) $this->input('delivery_address_text')) ?: null,
             'lines' => collect($submittedLines)
                 ->map(function ($payload) {
                     if (! is_array($payload)) {
@@ -92,6 +94,8 @@ class StoreGoodsDispatchRequest extends FormRequest
             'client_id' => ['required', 'exists:clients,id'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'camion_propio' => ['boolean'],
+            'delivery_address_override' => ['boolean'],
+            'delivery_address_text' => ['nullable', 'string', 'max:2000'],
             'lines' => ['required', 'array'],
             'lines.*.item_id' => ['nullable', 'integer'],
             'lines.*.line_type' => ['required', 'string'],
@@ -127,6 +131,10 @@ class StoreGoodsDispatchRequest extends FormRequest
             foreach ($this->resolvedErrors() as $field => $message) {
                 $validator->errors()->add($field, $message);
                 $this->addLegacyQuantitiesError($validator, $message, $field);
+            }
+
+            if ($this->boolean('delivery_address_override') && blank($this->input('delivery_address_text'))) {
+                $validator->errors()->add('delivery_address_text', 'Indica una dirección de entrega alternativa o desmarca la opción.');
             }
         });
     }

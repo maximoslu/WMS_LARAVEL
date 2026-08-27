@@ -4,6 +4,20 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-27 - DIRECCION DE ENTREGA ALTERNATIVA EN PEDIDOS Y SALIDAS
+
+**Necesidad y regla de dominio:** un pedido o salida puede requerir una direccion de entrega distinta de la ficha habitual del cliente. La direccion alternativa es opcional: sin ella se conserva exactamente la direccion estructurada del cliente; con ella, el albaran debe reflejar la direccion real de esa salida. No cambia stock, cantidades, movimientos, carga, aislamiento de clientes ni notificaciones.
+
+**Modelo y migracion:** se anaden `delivery_address_override` (booleano, `false`) y `delivery_address_text` (texto nullable) a `merchandise_requests` y `goods_dispatches` mediante `2026_08_27_000001_add_delivery_address_override_to_requests_and_dispatches.php`. La salida copia la alternativa del pedido al iniciarse la carga y queda como snapshot propio; una salida manual tambien puede definirla. La direccion efectiva se centraliza en `GoodsDispatch::effectiveDeliveryAddress()` y usa la ficha del cliente cuando no hay alternativa.
+
+**Operacion, permisos y trazabilidad:** los formularios de nuevo pedido, borrador, salida manual y detalle de salida permiten activar la alternativa y exigen texto no vacio. Solo salidas `DRAFT` o `PREPARING` pueden cambiar su direccion; enviada, completada o cancelada la conservan en solo lectura y el servidor rechaza cualquier POST manipulado. Cada cambio valido desde la salida registra la auditoria `dispatch_delivery_address_updated`. La actualizacion de transporte ya existente sigue disponible sin enviar campos de direccion cuando esta queda bloqueada.
+
+**Documentos y busqueda:** el PDF de albaran muestra `Direccion de entrega alternativa` y el texto efectivo cuando procede; si no, mantiene la direccion habitual. La gestion documental utiliza la misma direccion efectiva para listar y buscar, sin alterar el contenido operativo de entradas o stock.
+
+**Cobertura y validacion local:** se cubre la copia pedido-salida, guardado y auditoria en salida abierta, render del PDF con alternativa y bloqueo tras envio. `GoodsDispatchManagementTest` -> 70 passed, 570 assertions; `MerchandiseRequestManagementTest` -> 67 passed, 462 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; `DailyOperationsTest` -> 31 passed, 335 assertions; filtros `Delivery` -> 35 passed, 185 assertions; filtros `Pdf` -> 14 passed, 73 assertions; suite completa -> **898 passed, 5.320 assertions**. `vendor/bin/pint --dirty`, `npm run build` y `git diff --check` OK.
+
+**Produccion:** se aplico la migracion solo en la base local de desarrollo. No se accedio a Forge ni se desplego. Tras publicar, Forge debera ejecutar `php artisan migrate --force`; sigue pendiente la migracion historica anterior asociada al commit `45e7098f`. Debe validarse autenticadamente una salida abierta con alternativa, su PDF, el bloqueo de una salida enviada y el fallback a la direccion habitual.
+
 ## 2026-08-27 - BORRADORES EDITABLES Y ENVIABLES POR CLIENTE E INTERNOS
 
 **Incidencia y causa raiz:** el flujo de borradores ya existia para el usuario cliente: `MerchandiseRequestController::editDraft()` y `updateDraft()` reutilizan el formulario de pedido, guardan `status=draft` o lo pasan a `pending` al enviar. Sin embargo, `authorizeDraftAccess()` exigia literalmente que el usuario tuviera rol `cliente` y perteneciera al cliente del borrador. Por ello administracion, almacen y superadmin recibian `403`, aunque podian ver los borradores en Prevision. Los botones `Editar borrador` y `Continuar pedido` tambien quedaban ocultos para los roles internos.

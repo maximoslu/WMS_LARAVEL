@@ -45,6 +45,8 @@ class GoodsDispatch extends Model
         'warehouse_stock_applied_by',
         'notes',
         'camion_propio',
+        'delivery_address_override',
+        'delivery_address_text',
     ];
 
     protected function casts(): array
@@ -57,6 +59,7 @@ class GoodsDispatch extends Model
             'stock_applied_at' => 'datetime',
             'warehouse_stock_applied_at' => 'datetime',
             'camion_propio' => 'boolean',
+            'delivery_address_override' => 'boolean',
         ];
     }
 
@@ -242,6 +245,23 @@ class GoodsDispatch extends Model
     public function statusLabel(): string
     {
         return WmsStatus::goodsDispatchLabel((string) $this->status);
+    }
+
+    public function hasDeliveryAddressOverride(): bool
+    {
+        return $this->delivery_address_override && filled($this->delivery_address_text);
+    }
+
+    public function effectiveDeliveryAddress(): string
+    {
+        return $this->hasDeliveryAddressOverride()
+            ? trim((string) $this->delivery_address_text)
+            : ($this->client?->formattedDeliveryAddress() ?? '');
+    }
+
+    public function canEditDeliveryAddress(): bool
+    {
+        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_PREPARING], true);
     }
 
     /**

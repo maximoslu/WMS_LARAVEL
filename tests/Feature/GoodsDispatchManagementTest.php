@@ -210,6 +210,8 @@ class GoodsDispatchManagementTest extends TestCase
             'requested_by' => $cliente->id,
             'status' => MerchandiseRequest::STATUS_PENDING,
             'camion_propio' => false,
+            'delivery_address_override' => true,
+            'delivery_address_text' => 'Destino alternativo solicitado',
         ]);
         $merchandiseRequest->lines()->create([
             'item_id' => $item->id,
@@ -227,6 +229,8 @@ class GoodsDispatchManagementTest extends TestCase
 
         $this->assertSame($merchandiseRequest->id, $dispatch->merchandise_request_id);
         $this->assertTrue($dispatch->camion_propio);
+        $this->assertTrue($dispatch->delivery_address_override);
+        $this->assertSame('Destino alternativo solicitado', $dispatch->delivery_address_text);
         $this->assertDatabaseHas('goods_dispatch_lines', [
             'goods_dispatch_id' => $dispatch->id,
             'item_id' => $item->id,
@@ -2116,6 +2120,85 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertStringContainsString('Muelle cliente 2', $html);
         $this->assertStringContainsString('Calle Mayor 1', $html);
         $this->assertStringContainsString('5', $html);
+    }
+
+    public function test_open_dispatch_can_store_and_audit_an_alternative_delivery_address(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $client->update(['delivery_address' => 'Dirección habitual Edelvives']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+            'camion_propio' => true,
+        ]);
+
+        $this->actingAs($almacen)
+            ->put(route('dispatches.own-truck.update', $dispatch), [
+                'camion_propio' => '0',
+                'delivery_address_override' => '1',
+                'delivery_address_text' => "Destinatario alternativo\nCalle Entrega 27\n28080 Madrid",
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasNoErrors();
+
+        $dispatch->refresh();
+        $this->assertTrue($dispatch->delivery_address_override);
+        $this->assertSame("Destinatario alternativo\nCalle Entrega 27\n28080 Madrid", $dispatch->delivery_address_text);
+        $this->assertSame("Destinatario alternativo\nCalle Entrega 27\n28080 Madrid", $dispatch->effectiveDeliveryAddress());
+        $this->assertDatabaseHas('audit_logs', [
+            'event' => 'dispatch_delivery_address_updated',
+            'auditable_id' => $dispatch->id,
+        ]);
+
+        $this->actingAs($almacen)
+            ->get(route('dispatches.show', $dispatch))
+            ->assertOk()
+            ->assertSee('Dirección alternativa')
+            ->assertSee('Calle Entrega 27');
+    }
+
+    public function test_delivery_note_uses_alternative_address_and_sent_dispatch_cannot_change_it(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $client->update(['delivery_address' => 'Dirección habitual Friesland']);
+        $almacen = $this->makeUserWithRole(Role::ALMACEN);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsDispatch::STATUS_SENT,
+            'sent_at' => now(),
+            'delivery_address_override' => true,
+            'delivery_address_text' => 'Plataforma alternativa Friesland',
+        ]);
+        GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'loaded_pallets' => 1,
+            'confirmed_at' => now(),
+        ]);
+
+        $html = view('dispatches.delivery-note-pdf', [
+            'dispatch' => $dispatch->load('client', 'lines.allocations'),
+        ])->render();
+
+        $this->assertStringContainsString('Dirección de entrega alternativa', $html);
+        $this->assertStringContainsString('Plataforma alternativa Friesland', $html);
+        $this->assertStringNotContainsString('Dirección habitual Friesland', $html);
+
+        $this->actingAs($almacen)
+            ->from(route('dispatches.show', $dispatch))
+            ->put(route('dispatches.own-truck.update', $dispatch), [
+                'camion_propio' => '1',
+                'delivery_address_override' => '1',
+                'delivery_address_text' => 'Cambio bloqueado',
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasErrors('delivery_address_text');
+
+        $this->assertSame('Plataforma alternativa Friesland', $dispatch->fresh()->delivery_address_text);
     }
 
     public function test_delivery_note_uses_compact_columns_and_separates_long_description_from_sku(): void

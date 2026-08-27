@@ -138,6 +138,11 @@
             <strong>{{ $dispatch->camion_propio ? 'Camion propio MAXIMO' : 'Camion externo' }}</strong>
             <small>{{ $sourceLabel }}</small>
         </div>
+        <div>
+            <span>Entrega</span>
+            <strong>{{ $dispatch->hasDeliveryAddressOverride() ? 'Dirección alternativa' : 'Dirección habitual del cliente' }}</strong>
+            <small>{{ $dispatch->effectiveDeliveryAddress() ?: 'Sin dirección registrada' }}</small>
+        </div>
     </section>
 
     @if (filled($dispatch->notes))
@@ -260,7 +265,21 @@
                         </label>
                     </fieldset>
 
-                    <button type="submit" class="button-secondary compact-button btn-compact">Actualizar transporte</button>
+                    <strong class="wms-action-card-title">Dirección de entrega</strong>
+                    @if ($dispatch->canEditDeliveryAddress())
+                        <p>Si no se indica una dirección alternativa, se usará la dirección habitual del cliente.</p>
+                        <input type="hidden" name="delivery_address_override" value="0">
+                        <label><input type="checkbox" name="delivery_address_override" value="1" @checked((bool) old('delivery_address_override', $dispatch->delivery_address_override))> Usar dirección de entrega alternativa</label>
+                        <label class="auth-field">
+                            <span>Dirección de entrega alternativa</span>
+                            <textarea name="delivery_address_text" maxlength="2000" rows="3" class="auth-input">{{ old('delivery_address_text', $dispatch->delivery_address_text) }}</textarea>
+                        </label>
+                    @else
+                        <p>{{ $dispatch->effectiveDeliveryAddress() }}</p>
+                        <p>La dirección queda en solo lectura porque la salida ya está enviada o cerrada.</p>
+                    @endif
+
+                    <button type="submit" class="button-secondary compact-button btn-compact">{{ $dispatch->canEditDeliveryAddress() ? 'Actualizar transporte y dirección' : 'Actualizar transporte' }}</button>
                 </form>
             </div>
         </article>
