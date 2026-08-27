@@ -115,15 +115,11 @@ class StockAdjustmentService
             ]);
         }
 
-        $stockPallet->quantity_units = $afterQuantity;
+        $this->applyBreakdown($stockPallet, $request, $afterQuantity);
         $stockPallet->units_per_pallet = (int) $stockPallet->units_per_pallet > 0
             ? (int) $stockPallet->units_per_pallet
             : $request->unitsPerPallet();
         $stockPallet->warehouse_pallets = null;
-
-        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-            $stockPallet->{'peak_'.$peakNumber} = 0;
-        }
 
         $stockPallet->save();
         $request->attributes->set('stock_adjustment_before_snapshot', $before);
@@ -167,6 +163,10 @@ class StockAdjustmentService
             'notes' => $request->note() ?: 'Regularizacion manual superadmin.',
             'active' => true,
         ];
+
+        foreach ($this->peakColumns($request->peaks()) as $column => $value) {
+            $attributes[$column] = $value;
+        }
         $identity = new StockBatchIdentity(
             clientId: $request->clientId(),
             itemId: (int) $item->id,
@@ -190,14 +190,12 @@ class StockAdjustmentService
 
         if ($stockPallet instanceof StockPallet) {
             $request->attributes->set('stock_adjustment_before_snapshot', $this->movements->snapshot($stockPallet));
-            $stockPallet->forceFill([
-                'quantity_units' => (int) $stockPallet->quantity_units + $request->quantityDelta(),
-                'warehouse_pallets' => null,
-            ]);
-
-            foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $peakNumber) {
-                $stockPallet->{'peak_'.$peakNumber} = 0;
-            }
+            $this->applyBreakdown(
+                $stockPallet,
+                $request,
+                (int) $stockPallet->quantity_units + $request->quantityDelta(),
+            );
+            $stockPallet->warehouse_pallets = null;
 
             $stockPallet->save();
 
@@ -223,6 +221,7 @@ class StockAdjustmentService
             'peak_units_requested' => $request->action() === StoreStockAdjustmentRequest::ACTION_REMOVE
                 ? -1 * $request->peakUnits()
                 : $request->peakUnits(),
+            'peaks_requested' => $request->peaks(),
             'units_per_pallet_requested' => $request->unitsPerPallet(),
             'note' => $request->note(),
             'ip_address' => $request->ip(),
@@ -230,5 +229,56 @@ class StockAdjustmentService
             'does_not_create_goods_receipt' => true,
             'does_not_create_goods_dispatch' => true,
         ];
+    }
+
+    private function applyBreakdown(StockPallet $stockPallet, StoreStockAdjustmentRequest $request, int $quantityUnits): void
+    {
+        $peaks = $this->peakValues($stockPallet);
+
+        if ($request->action() === StoreStockAdjustmentRequest::ACTION_REMOVE) {
+            foreach ($request->peaks() as $peak) {
+                $index = array_search($peak, $peaks, true);
+
+                if ($index === false) {
+                    throw ValidationException::withMessages([
+                        'peaks' => 'Cada pico a quitar debe coincidir con un pico existente en la partida seleccionada.',
+                    ]);
+                }
+
+                unset($peaks[$index]);
+            }
+        } else {
+            $peaks = [...$peaks, ...$request->peaks()];
+        }
+
+        $stockPallet->quantity_units = $quantityUnits;
+
+        foreach ($this->peakColumns(array_values($peaks)) as $column => $value) {
+            $stockPallet->{$column} = $value;
+        }
+    }
+
+    /** @return list<int> */
+    private function peakValues(StockPallet $stockPallet): array
+    {
+        return collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->map(fn (int $index): int => (int) ($stockPallet->{'peak_'.$index} ?? 0))
+            ->filter(fn (int $peak): bool => $peak > 0)
+            ->values()
+            ->all();
+    }
+
+    /** @param list<int> $peaks
+     * @return array<string, int>
+     */
+    private function peakColumns(array $peaks): array
+    {
+        $columns = [];
+
+        foreach (range(1, StockPallet::MAX_PEAK_COLUMNS) as $index) {
+            $columns['peak_'.$index] = (int) ($peaks[$index - 1] ?? 0);
+        }
+
+        return $columns;
     }
 }

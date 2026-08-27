@@ -93,7 +93,7 @@ class StockAdjustmentTest extends TestCase
             ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
                 'full_pallets' => 2,
                 'peak_units' => 30,
-                'note' => null,
+                'note' => 'Regularización manual de prueba.',
             ]))
             ->assertSessionHasNoErrors();
 
@@ -119,6 +119,93 @@ class StockAdjustmentTest extends TestCase
             'event' => 'stock_manual_adjustment_added',
             'auditable_id' => $stockPallet->id,
         ]);
+    }
+
+    public function test_superadmin_adds_complete_pallets_and_multiple_peaks_without_losing_existing_peaks(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture([
+            'quantity_units' => 19800,
+            'units_per_pallet' => 5000,
+            'full_pallets' => 2,
+            'peak_1' => 4800,
+            'peak_2' => 5000,
+            'warehouse_pallets' => 4,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
+                'full_pallets' => 3,
+                'units_per_pallet' => 5000,
+                'peaks' => [4800, 4700],
+                'note' => 'Regularización de inventario contado en almacén.',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $fresh = $stockPallet->fresh();
+
+        $this->assertSame(44300, $fresh->quantity_units);
+        $this->assertSame(5, $fresh->full_pallets);
+        $this->assertSame(4, $fresh->peaks_count);
+        $this->assertSame(4800, $fresh->peak_1);
+        $this->assertSame(5000, $fresh->peak_2);
+        $this->assertSame(4800, $fresh->peak_3);
+        $this->assertSame(4700, $fresh->peak_4);
+        $this->assertSame(9.0, (float) $fresh->warehouse_pallets);
+
+        $movement = InventoryMovement::query()->latest('id')->firstOrFail();
+        $this->assertSame(24500, $movement->units_delta);
+        $this->assertSame([4800, 4700], $movement->metadata['peaks_requested']);
+        $this->assertSame([4800, 5000, 4800, 4700], array_values(array_filter($movement->peaks_after)));
+    }
+
+    public function test_superadmin_can_add_only_multiple_peaks_to_stock_without_location(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture([
+            'location_id' => null,
+            'location_text' => null,
+            'lot' => 'NO LOTE',
+            'quantity_units' => 0,
+            'full_pallets' => 0,
+            'warehouse_pallets' => 0,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
+                'full_pallets' => 0,
+                'peaks' => [5000, 4800, 4700],
+                'note' => 'Regularización por tres picos sin ubicación.',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $fresh = $stockPallet->fresh();
+
+        $this->assertSame(14500, $fresh->quantity_units);
+        $this->assertSame(0, $fresh->full_pallets);
+        $this->assertSame(3, $fresh->peaks_count);
+        $this->assertSame([5000, 4800, 4700], [$fresh->peak_1, $fresh->peak_2, $fresh->peak_3]);
+        $this->assertSame(3.0, (float) $fresh->warehouse_pallets);
+        $this->assertNull($fresh->location_id);
+        $this->assertSame('NO LOTE', $fresh->lot);
+    }
+
+    public function test_adjustment_page_renders_pallet_peak_and_reason_controls(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture();
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->get(route('stock.adjustments.create', [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'stock_pallet_id' => $stockPallet->id,
+            ]))
+            ->assertOk()
+            ->assertSee('Ajuste a aplicar')
+            ->assertSee('Palets completos')
+            ->assertSee('Uds/palet')
+            ->assertSee('Añadir pico')
+            ->assertSee('Motivo de regularización')
+            ->assertSee('Total calculado')
+            ->assertSee('Diferencia a aplicar');
     }
 
     public function test_superadmin_creates_new_batch_without_goods_receipt_or_dispatch(): void
@@ -253,6 +340,18 @@ class StockAdjustmentTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
+                'peaks' => [-1],
+            ]))
+            ->assertSessionHasErrors('peaks.0');
+
+        $this->actingAs($user)
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
+                'note' => '',
+            ]))
+            ->assertSessionHasErrors('note');
+
+        $this->actingAs($user)
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
                 'full_pallets' => -1,
             ]))
             ->assertSessionHasErrors('full_pallets');
@@ -338,7 +437,7 @@ class StockAdjustmentTest extends TestCase
             ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
                 'full_pallets' => 1,
                 'peak_units' => 0,
-                'note' => null,
+                'note' => 'Regularización manual de prueba.',
             ]))
             ->assertSessionHasNoErrors();
 

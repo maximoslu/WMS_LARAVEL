@@ -15,12 +15,21 @@
         $selectedStockPallet = $stockPallets->firstWhere('id', old('stock_pallet_id', $filters['stock_pallet_id']));
         $singleStockPallet = $stockPallets->count() === 1 ? $stockPallets->first() : null;
         $summaryStockPallet = $selectedStockPallet ?? $singleStockPallet;
-        $summaryPeakUnits = $summaryStockPallet
-            ? collect(range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS))->sum(fn (int $peakNumber): int => (int) ($summaryStockPallet->{'peak_'.$peakNumber} ?? 0))
-            : 0;
+        $summaryPeakValues = $summaryStockPallet
+            ? collect(range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS))
+                ->map(fn (int $peakNumber): int => (int) ($summaryStockPallet->{'peak_'.$peakNumber} ?? 0))
+                ->filter(fn (int $peak): bool => $peak > 0)
+                ->values()
+            : collect();
+        $summaryPeakUnits = $summaryPeakValues->sum();
         $defaultUnitsPerPallet = old('units_per_pallet', $summaryStockPallet?->units_per_pallet ?: $selectedItem?->units_per_pallet ?: 1);
         $defaultAction = old('action', 'add');
         $defaultMode = old('mode', $summaryStockPallet ? 'existing' : 'new');
+        $adjustmentPeaks = collect(old('peaks', []))
+            ->filter(fn ($peak) => $peak !== null && $peak !== '')
+            ->values()
+            ->all();
+        $maxPeakColumns = \App\Models\StockPallet::MAX_PEAK_COLUMNS;
     @endphp
 
     <x-breadcrumbs :items="$breadcrumbs" />
@@ -127,7 +136,7 @@
                     <div class="wms-section-head">
                         <div>
                             <strong>Datos de regularizacion</strong>
-                            <p>Esta accion regulariza stock manualmente y quedara registrada.</p>
+                            <p>Ajuste a aplicar: añade o quita palets completos y picos concretos. El stock actual no se sustituye.</p>
                         </div>
                     </div>
 
@@ -156,7 +165,7 @@
 
                         <label class="auth-field">
                             <span>Accion</span>
-                            <select name="action" class="auth-input" required>
+                            <select name="action" class="auth-input" data-adjustment-action required>
                                 <option value="add" @selected($defaultAction === 'add')>Anadir stock</option>
                                 <option value="remove" @selected($defaultAction === 'remove')>Quitar stock</option>
                             </select>
@@ -225,31 +234,60 @@
                             </select>
                         </label>
 
-                        <label class="auth-field">
-                            <span>Pallets completos</span>
-                            <input type="number" name="full_pallets" value="{{ old('full_pallets', 0) }}" min="0" step="1" class="auth-input" required>
-                        </label>
+                        <section class="wms-adjustment-breakdown item-form-field--full" data-adjustment-breakdown>
+                            <div class="wms-adjustment-breakdown-head">
+                                <div>
+                                    <strong>Composición del ajuste</strong>
+                                    <p>Indica palets completos y cada pico por separado. El total se calcula automáticamente.</p>
+                                </div>
+                                <div class="wms-adjustment-total" aria-live="polite">
+                                    <span>Total calculado</span>
+                                    <strong><span data-adjustment-total>0</span> uds</strong>
+                                    <small>Diferencia a aplicar: <span data-adjustment-difference>+0</span> uds</small>
+                                </div>
+                            </div>
 
-                        <label class="auth-field">
-                            <span>Unidades por pallet</span>
-                            <input type="number" name="units_per_pallet" value="{{ $defaultUnitsPerPallet }}" min="1" step="1" class="auth-input" required>
-                        </label>
+                            <div class="wms-adjustment-breakdown-grid">
+                                <label class="auth-field">
+                                    <span>Palets completos</span>
+                                    <input type="number" name="full_pallets" value="{{ old('full_pallets', 0) }}" min="0" step="1" class="auth-input" data-adjustment-pallets required>
+                                </label>
 
-                        <label class="auth-field">
-                            <span>Unidades pico</span>
-                            <input type="number" name="peak_units" value="{{ old('peak_units', 0) }}" min="0" step="1" class="auth-input">
-                        </label>
+                                <label class="auth-field">
+                                    <span>Uds/palet</span>
+                                    <input type="number" name="units_per_pallet" value="{{ $defaultUnitsPerPallet }}" min="1" step="1" class="auth-input" data-adjustment-units-per-pallet required>
+                                </label>
+
+                                <div class="wms-adjustment-total-detail">
+                                    <span>Palets almacén</span>
+                                    <strong><span data-adjustment-pallet-total>0</span></strong>
+                                    <small><span data-adjustment-peak-count>0</span> picos añadidos</small>
+                                </div>
+                            </div>
+
+                            <div class="wms-adjustment-peaks" data-adjustment-peaks data-initial-peaks='@json($adjustmentPeaks)'>
+                                <div class="wms-adjustment-peaks-head">
+                                    <div>
+                                        <strong>Picos</strong>
+                                        <span>Unidades de cada palet parcial</span>
+                                    </div>
+                                    <button type="button" class="button-secondary compact-button btn-compact" data-add-peak>Añadir pico</button>
+                                </div>
+                                <div class="wms-adjustment-peak-list" data-peak-list></div>
+                                <p class="helper-text" data-peak-empty>Sin picos en este ajuste.</p>
+                            </div>
+                        </section>
 
                         <label class="auth-field item-form-field--full">
-                            <span>Nota interna opcional</span>
-                            <textarea name="note" class="auth-input" rows="3" maxlength="1000" placeholder="Nota interna opcional.">{{ old('note') }}</textarea>
+                            <span>Motivo de regularización</span>
+                            <textarea name="note" class="auth-input" rows="3" maxlength="1000" placeholder="Indica el motivo operativo de este ajuste." required>{{ old('note') }}</textarea>
                         </label>
                     </div>
 
                     <div class="wms-adjustment-confirm">
                         <label class="wms-adjustment-check">
                             <input type="checkbox" name="confirmed" value="1" @checked(old('confirmed')) required>
-                            <span>Confirmo regularizacion manual</span>
+                            <span>Confirmo el ajuste manual indicado</span>
                         </label>
                         <button type="submit" class="button-primary compact-button btn-compact">Aplicar regularizacion</button>
                     </div>
@@ -292,6 +330,10 @@
                             <div>
                                 <dt>Picos</dt>
                                 <dd>{{ number_format((int) $summaryStockPallet->peaks_count, 0, ',', '.') }} / {{ number_format($summaryPeakUnits, 0, ',', '.') }} uds pico</dd>
+                            </div>
+                            <div>
+                                <dt>Detalle de picos</dt>
+                                <dd>{{ $summaryPeakValues->isNotEmpty() ? $summaryPeakValues->map(fn (int $peak): string => number_format($peak, 0, ',', '.'))->implode(' · ').' uds' : 'Sin picos' }}</dd>
                             </div>
                             <div>
                                 <dt>Uds/pallet</dt>
@@ -337,4 +379,63 @@
             @endforelse
         </section>
     </div>
+
+    <script>
+        (() => {
+            const breakdown = document.querySelector('[data-adjustment-breakdown]');
+
+            if (!breakdown) return;
+
+            const form = breakdown.closest('form');
+            const pallets = breakdown.querySelector('[data-adjustment-pallets]');
+            const unitsPerPallet = breakdown.querySelector('[data-adjustment-units-per-pallet]');
+            const peakList = breakdown.querySelector('[data-peak-list]');
+            const peaks = breakdown.querySelector('[data-adjustment-peaks]');
+            const emptyState = breakdown.querySelector('[data-peak-empty]');
+            const total = breakdown.querySelector('[data-adjustment-total]');
+            const palletTotal = breakdown.querySelector('[data-adjustment-pallet-total]');
+            const peakCount = breakdown.querySelector('[data-adjustment-peak-count]');
+            const difference = breakdown.querySelector('[data-adjustment-difference]');
+            const action = form.querySelector('[data-adjustment-action]');
+            const format = new Intl.NumberFormat('es-ES');
+            const maxPeaks = {{ $maxPeakColumns }};
+
+            const recalculate = () => {
+                const fullPallets = Math.max(0, Number.parseInt(pallets.value, 10) || 0);
+                const perPallet = Math.max(0, Number.parseInt(unitsPerPallet.value, 10) || 0);
+                const peakValues = [...peakList.querySelectorAll('[data-peak-input]')]
+                    .map((input) => Math.max(0, Number.parseInt(input.value, 10) || 0));
+                const calculated = (fullPallets * perPallet) + peakValues.reduce((sum, value) => sum + value, 0);
+
+                total.textContent = format.format(calculated);
+                palletTotal.textContent = format.format(fullPallets);
+                peakCount.textContent = format.format(peakValues.length);
+                difference.textContent = `${action.value === 'remove' ? '-' : '+'}${format.format(calculated)}`;
+                emptyState.hidden = peakValues.length > 0;
+            };
+
+            const addPeak = (value = '') => {
+                if (peakList.children.length >= maxPeaks) return;
+
+                const row = document.createElement('div');
+                row.className = 'wms-adjustment-peak-row';
+                row.innerHTML = `<label class="auth-field"><span>Pico ${peakList.children.length + 1}</span><input type="number" name="peaks[]" value="${value}" min="1" step="1" class="auth-input" data-peak-input required></label><button type="button" class="button-secondary compact-button btn-compact" data-remove-peak aria-label="Quitar pico">Quitar</button>`;
+                peakList.append(row);
+                row.querySelector('[data-peak-input]').addEventListener('input', recalculate);
+                row.querySelector('[data-remove-peak]').addEventListener('click', () => {
+                    row.remove();
+                    [...peakList.children].forEach((peakRow, index) => peakRow.querySelector('label span').textContent = `Pico ${index + 1}`);
+                    recalculate();
+                });
+                recalculate();
+            };
+
+            JSON.parse(peaks.dataset.initialPeaks || '[]').forEach(addPeak);
+            breakdown.querySelector('[data-add-peak]').addEventListener('click', () => addPeak());
+            pallets.addEventListener('input', recalculate);
+            unitsPerPallet.addEventListener('input', recalculate);
+            action.addEventListener('change', recalculate);
+            recalculate();
+        })();
+    </script>
 @endsection

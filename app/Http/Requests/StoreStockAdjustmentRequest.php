@@ -39,6 +39,7 @@ class StoreStockAdjustmentRequest extends FormRequest
             'full_pallets' => $this->normalizeInteger($this->input('full_pallets')),
             'units_per_pallet' => $this->normalizeInteger($this->input('units_per_pallet')),
             'peak_units' => $this->normalizeInteger($this->input('peak_units')) ?? 0,
+            'peaks' => $this->normalizePeaks($this->input('peaks')),
             'lot' => $this->normalizeString($this->input('lot')),
             'status' => $this->normalizeString($this->input('status')) ?: StockPallet::STATUS_AVAILABLE,
             'stock_category' => $this->normalizeString($this->input('stock_category')) ?: StockPallet::CATEGORY_IN_USE,
@@ -61,7 +62,9 @@ class StoreStockAdjustmentRequest extends FormRequest
             'full_pallets' => ['required', 'integer', 'min:0', 'max:999999'],
             'units_per_pallet' => ['required', 'integer', 'min:1', 'max:999999999'],
             'peak_units' => ['nullable', 'integer', 'min:0', 'max:999999999'],
-            'note' => ['nullable', 'string', 'max:1000'],
+            'peaks' => ['nullable', 'array', 'max:'.StockPallet::MAX_PEAK_COLUMNS],
+            'peaks.*' => ['required', 'integer', 'min:1', 'max:999999999'],
+            'note' => ['required', 'string', 'max:1000'],
             'confirmed' => ['accepted'],
         ];
     }
@@ -113,6 +116,28 @@ class StoreStockAdjustmentRequest extends FormRequest
 
                 if ($this->action() === self::ACTION_REMOVE && $this->quantityDelta() > (int) $stockPallet->quantity_units) {
                     $validator->errors()->add('full_pallets', 'No puedes quitar mas stock del disponible en la partida seleccionada.');
+                }
+
+                if ($this->action() === self::ACTION_REMOVE) {
+                    if ($this->fullPallets() > (int) $stockPallet->full_pallets) {
+                        $validator->errors()->add('full_pallets', 'No puedes quitar más palets completos de los disponibles en la partida seleccionada.');
+                    }
+
+                    $availablePeaks = $this->peakValuesFor($stockPallet);
+
+                    foreach ($this->peaks() as $peak) {
+                        $index = array_search($peak, $availablePeaks, true);
+
+                        if ($index === false) {
+                            $validator->errors()->add('peaks', 'Cada pico a quitar debe coincidir con un pico existente en la partida seleccionada.');
+
+                            break;
+                        }
+
+                        unset($availablePeaks[$index]);
+                    }
+                } elseif (count($this->peaks()) + count($this->peakValuesFor($stockPallet)) > StockPallet::MAX_PEAK_COLUMNS) {
+                    $validator->errors()->add('peaks', 'La partida no puede tener más de '.StockPallet::MAX_PEAK_COLUMNS.' picos.');
                 }
             }
 
@@ -177,7 +202,17 @@ class StoreStockAdjustmentRequest extends FormRequest
 
     public function peakUnits(): int
     {
-        return $this->integer('peak_units');
+        return array_sum($this->peaks());
+    }
+
+    /** @return list<int> */
+    public function peaks(): array
+    {
+        return collect($this->input('peaks', []))
+            ->map(fn (mixed $peak): int => (int) $peak)
+            ->filter(fn (int $peak): bool => $peak > 0)
+            ->values()
+            ->all();
     }
 
     public function lot(): string
@@ -235,5 +270,31 @@ class StoreStockAdjustmentRequest extends FormRequest
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    /** @return array<int, int|null> */
+    private function normalizePeaks(mixed $peaks): array
+    {
+        $normalized = collect(is_array($peaks) ? $peaks : [])
+            ->filter(fn (mixed $peak): bool => $peak !== null && $peak !== '')
+            ->map(fn (mixed $peak): ?int => is_numeric($peak) ? (int) $peak : null)
+            ->values()
+            ->all();
+
+        if ($normalized === [] && $this->integer('peak_units') > 0) {
+            return [$this->integer('peak_units')];
+        }
+
+        return $normalized;
+    }
+
+    /** @return list<int> */
+    private function peakValuesFor(StockPallet $stockPallet): array
+    {
+        return collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->map(fn (int $index): int => (int) ($stockPallet->{'peak_'.$index} ?? 0))
+            ->filter(fn (int $peak): bool => $peak > 0)
+            ->values()
+            ->all();
     }
 }

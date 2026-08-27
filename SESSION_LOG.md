@@ -4,6 +4,24 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-27 - REGULARIZACION DE STOCK POR PALETS Y PICOS
+
+**Incidencia y causa raiz:** la regularizacion existente era un ajuste incremental, aunque la pantalla no lo expresaba con suficiente claridad. Admitia `full_pallets`, `units_per_pallet` y un unico `peak_units`; al guardar una partida existente, `StockAdjustmentService` ponia a cero `peak_1` a `peak_10`. Por tanto, una regularizacion podia perder el detalle de picos que ya tuviera el stock, aun cuando el total de unidades quedara correcto.
+
+**Decision de dominio:** se mantiene el modelo de **Ajuste a aplicar**. El operador indica cuanto anadir o quitar; el stock final es el actual mas o menos el ajuste. No se cambia a stock final objetivo ni se tocan entradas, salidas, pedidos, importaciones o datos existentes.
+
+**Solucion:** la pantalla permite palets completos, uds/palet y una lista dinamica de picos, con botones `Anadir pico` y `Quitar pico`. El total se calcula como `palets completos * uds/palet + suma(picos)` y muestra la diferencia firmada a aplicar. El bloque de stock actual ahora expone unidades, palets, numero y detalle de picos, lote y ubicacion. El motivo de regularizacion es obligatorio.
+
+**Backend y trazabilidad:** `StoreStockAdjustmentRequest` recalcula y valida siempre el total en servidor: no admite ajuste vacio, picos no positivos, mas de diez picos ni retirada de mas palets completos o picos distintos de los existentes. En suma conserva los picos previos y agrega los solicitados; en resta retira solo picos que coinciden exactamente, para no inventar detalle fisico. Se reutilizan las columnas `stock_pallets.peak_1` a `peak_10`, sin migracion. Cada cambio sigue usando transaccion, idempotencia, `inventory_movements` con snapshots antes/delta/despues de unidades y picos, usuario y motivo; no genera entradas, salidas ni albaranes.
+
+**Cobertura:** se anadieron casos para palets y varios picos sin perder picos existentes, solo picos sin ubicacion y lote `NO LOTE`, motivo obligatorio, picos negativos y render de los controles. Las pruebas existentes mantienen permisos solo de superadmin, ubicacion compatible, reubicaciones, entradas, salidas, stock sin ubicacion y que la regularizacion no distorsiona operaciones diarias externas.
+
+**Validacion local:** `StockAdjustmentTest` -> 13 passed, 123 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; `StockRelocationTest` -> 13 passed, 88 assertions; `DailyOperationsTest` -> 31 passed, 335 assertions; `GoodsReceiptManagementTest` -> 122 passed, 714 assertions; `GoodsDispatchManagementTest` -> 68 passed, 550 assertions; `MerchandiseRequestManagementTest` -> 67 passed, 460 assertions; suite completa -> **896 passed, 5.264 assertions**. `npm run build`, `vendor/bin/pint --test` y `git diff --check` OK.
+
+**Archivos:** `app/Http/Requests/StoreStockAdjustmentRequest.php`, `app/Services/Stock/StockAdjustmentService.php`, `resources/views/stock/adjustments/create.blade.php`, `resources/css/app.css` y `tests/Feature/StockAdjustmentTest.php`.
+
+**Produccion:** no se ha accedido a Forge ni se ha desplegado. No hay migracion nueva para esta mejora; sigue pendiente de produccion la migracion historica de Operaciones diarias asociada al commit `45e7098f`. Tras publicar, queda pendiente `Deploy Now` y una validacion autenticada con una referencia segura de FRIESLAND sin ubicacion/lote `NO LOTE` y otra de EDELVIVES con ubicacion, revisando stock y movimientos.
+
 ## 2026-08-26 - SOL-00072: AÑADIR LÍNEAS A PEDIDOS NO ENVIADOS
 
 **Causa raíz:** el endpoint `merchandise-requests.lines.store` ya permitía añadir líneas al pedido y sincronizarlas con una salida `DRAFT` o `PREPARING`, pero `resources/views/dispatches/request.blade.php` solo mostraba `Modificar pedido` cuando no existía salida. Por eso, al entrar en Gestión con una salida abierta, el usuario no tenía acceso al formulario de añadir línea aunque el pedido siguiera editable. SOL-00072 no existe en la base local; se reprodujo el estado equivalente con un pedido en preparación y una salida abierta.
