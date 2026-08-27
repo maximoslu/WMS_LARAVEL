@@ -7,10 +7,12 @@ use App\Http\Requests\StoreMerchandiseRequestRequest;
 use App\Http\Requests\UpdateMerchandiseRequestLinesRequest;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
+use App\Models\GoodsDispatchLine;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\MerchandiseRequestLine;
 use App\Models\Role;
+use App\Models\User;
 use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
@@ -85,6 +87,7 @@ class MerchandiseRequestController extends Controller
                 'client_id' => $clientId > 0 ? $clientId : null,
             ],
             'isClient' => $isClient,
+            'canEditDrafts' => $this->canManageDrafts($user),
             'canCreate' => ($user->hasRole(Role::CLIENTE) && $user->client_id !== null) || $user->canAccessRole(Role::ALMACEN),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
@@ -148,6 +151,7 @@ class MerchandiseRequestController extends Controller
             'formAction' => route('merchandise-requests.store'),
             'formMethod' => 'POST',
             'pageTitle' => 'NUEVO PEDIDO',
+            'canEditDrafts' => $this->canManageDrafts($user),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
@@ -293,6 +297,7 @@ class MerchandiseRequestController extends Controller
             'formAction' => route('merchandise-requests.draft.update', $merchandiseRequest),
             'formMethod' => 'PATCH',
             'pageTitle' => 'EDITAR BORRADOR',
+            'canEditDrafts' => $this->canManageDrafts($request->user()),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -415,9 +420,7 @@ class MerchandiseRequestController extends Controller
         $canAddInternalLine = ! $user->hasRole(Role::CLIENTE)
             && $user->canAccessRole(Role::ALMACEN)
             && $this->canAcceptInternalLines($merchandiseRequest);
-        $canEditDraft = $merchandiseRequest->isDraft()
-            && $user->hasRole(Role::CLIENTE)
-            && (int) $user->client_id === (int) $merchandiseRequest->client_id;
+        $canEditDraft = $this->canAccessDraft($user, $merchandiseRequest);
 
         return view('merchandise-requests.show', [
             'merchandiseRequest' => $merchandiseRequest,
@@ -577,6 +580,7 @@ class MerchandiseRequestController extends Controller
                         $line->delete();
                         $dispatchLine?->delete();
                         $updates['removed_count'] = ($updates['removed_count'] ?? 0) + 1;
+
                         continue;
                     }
 
@@ -603,7 +607,7 @@ class MerchandiseRequestController extends Controller
                         'requested_units' => $requestedUnits,
                     ]);
 
-                    if ($dispatchLine instanceof \App\Models\GoodsDispatchLine) {
+                    if ($dispatchLine instanceof GoodsDispatchLine) {
                         $dispatchLine->update([
                             'requested_pallets' => $line->requestedPalletsCount(),
                             'requested_peaks' => $line->requestedPeaksCount(),
@@ -810,14 +814,26 @@ class MerchandiseRequestController extends Controller
 
     private function authorizeDraftAccess(Request $request, MerchandiseRequest $merchandiseRequest): void
     {
-        $user = $request->user();
-
         abort_unless($merchandiseRequest->isDraft(), 404);
+        abort_unless($this->canAccessDraft($request->user(), $merchandiseRequest), 403);
+    }
 
-        abort_unless(
-            $user->hasRole(Role::CLIENTE) && (int) $user->client_id === (int) $merchandiseRequest->client_id,
-            403
-        );
+    private function canAccessDraft(?User $user, MerchandiseRequest $merchandiseRequest): bool
+    {
+        if (! $user instanceof User) {
+            return false;
+        }
+
+        return $merchandiseRequest->isDraft()
+            && (($user->hasRole(Role::CLIENTE) && (int) $user->client_id === (int) $merchandiseRequest->client_id)
+                || (! $user->hasRole(Role::CLIENTE) && $user->canAccessRole(Role::ALMACEN)));
+    }
+
+    private function canManageDrafts(?User $user): bool
+    {
+        return $user instanceof User
+            && (($user->hasRole(Role::CLIENTE) && $user->client_id !== null)
+                || (! $user->hasRole(Role::CLIENTE) && $user->canAccessRole(Role::ALMACEN)));
     }
 
     /**

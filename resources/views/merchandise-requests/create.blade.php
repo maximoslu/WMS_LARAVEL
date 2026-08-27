@@ -223,7 +223,7 @@
                                     {{ number_format($pendingRequest->requestedPalletsCount(), 0, ',', '.') }} pallets
                                 </td>
                                 <td class="table-actions-cell">
-                                    @if ($pendingRequest->isDraft())
+                                    @if ($canEditDrafts && $pendingRequest->isDraft())
                                         <a href="{{ route('merchandise-requests.draft.edit', $pendingRequest) }}" class="button-secondary compact-button btn-table">Editar borrador</a>
                                     @else
                                         <a href="{{ route('merchandise-requests.show', $pendingRequest) }}" class="button-secondary compact-button btn-table">Ver</a>

@@ -169,7 +169,7 @@
 
             @if ($canEditDraft)
                 <div class="wms-detail-actions order-primary-action">
-                    <a href="{{ route('merchandise-requests.draft.edit', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">Continuar pedido</a>
+                    <a href="{{ route('merchandise-requests.draft.edit', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">Modificar borrador</a>
                 </div>
             @endif
 

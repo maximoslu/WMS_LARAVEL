@@ -195,8 +195,9 @@ class MerchandiseRequestForecastTest extends TestCase
             ->assertDontSee($draft->referenceCode());
     }
 
-    public function test_internal_roles_cannot_mutate_or_operationalize_draft(): void
+    public function test_internal_roles_can_reopen_and_save_client_drafts_without_operational_side_effects(): void
     {
+        Bus::fake();
         $this->seedBaseData();
         $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
         $requester = $this->makeUserWithRole(Role::CLIENTE, $client);
@@ -210,27 +211,36 @@ class MerchandiseRequestForecastTest extends TestCase
             'warehouse_pallets' => 10,
             'peak_1' => 0,
         ]);
-        $draft = $this->makeDraft($client, $requester, $item, notes: 'No modificar');
-        $before = $draft->fresh();
-        $beforeLineCount = $draft->lines()->count();
-
         foreach ([Role::ADMINISTRACION, Role::ALMACEN, Role::SUPERADMIN] as $roleSlug) {
+            $draft = $this->makeDraft($client, $requester, $item, notes: 'Borrador por actualizar');
             $internal = $this->makeUserWithRole($roleSlug);
+
+            $this->actingAs($internal)
+                ->get(route('merchandise-requests.draft.edit', $draft))
+                ->assertOk()
+                ->assertSee('EDITAR BORRADOR')
+                ->assertSee('GUARDAR BORRADOR')
+                ->assertSee('ENVIAR PEDIDO');
 
             $this->actingAs($internal)
                 ->patch(route('merchandise-requests.draft.update', $draft), [
                     'client_id' => $client->id,
-                    'submit_action' => 'submit',
-                    'notes' => 'Intento de cambio',
+                    'submit_action' => 'draft',
+                    'notes' => 'Borrador actualizado internamente',
                     'lines' => [
                         'line_1' => [
                             'item_id' => $item->id,
                             'line_type' => 'pallet',
-                            'quantity' => 1,
+                            'quantity' => 2,
                         ],
                     ],
                 ])
-                ->assertForbidden();
+                ->assertRedirect(route('merchandise-requests.show', $draft));
+
+            $draft->refresh();
+            $this->assertSame(MerchandiseRequest::STATUS_DRAFT, $draft->status);
+            $this->assertSame('Borrador actualizado internamente', $draft->notes);
+            $this->assertSame(2, $draft->lines()->firstOrFail()->requested_pallets);
 
             $this->actingAs($internal)
                 ->post(route('merchandise-requests.lines.store', $draft), [
@@ -256,12 +266,29 @@ class MerchandiseRequestForecastTest extends TestCase
             $this->actingAs($internal)
                 ->get(route('dispatches.requests.show', $draft))
                 ->assertNotFound();
+
+            $this->actingAs($internal)
+                ->patch(route('merchandise-requests.draft.update', $draft), [
+                    'client_id' => $client->id,
+                    'submit_action' => 'submit',
+                    'notes' => 'Pedido definitivo enviado internamente',
+                    'lines' => [
+                        'line_1' => [
+                            'item_id' => $item->id,
+                            'line_type' => 'pallet',
+                            'quantity' => 2,
+                        ],
+                    ],
+                ])
+                ->assertRedirect(route('merchandise-requests.show', $draft));
+
+            $this->assertSame(MerchandiseRequest::STATUS_PENDING, $draft->fresh()->status);
+            Bus::assertDispatched(
+                ProcessMerchandiseRequestSubmittedNotificationsJob::class,
+                fn (ProcessMerchandiseRequestSubmittedNotificationsJob $job): bool => $job->merchandiseRequestId === $draft->id,
+            );
         }
 
-        $after = $draft->fresh();
-        $this->assertSame(MerchandiseRequest::STATUS_DRAFT, $after->status);
-        $this->assertSame($before->notes, $after->notes);
-        $this->assertSame($beforeLineCount, $draft->lines()->count());
         $this->assertSame(0, GoodsDispatch::query()->count());
     }
 

@@ -218,7 +218,7 @@
                                             <a href="{{ route('merchandise-requests.show', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
                                                 Ver
                                             </a>
-                                            @if ($isClient && $merchandiseRequest->isDraft())
+                                            @if ($canEditDrafts && $merchandiseRequest->isDraft())
                                                 <a href="{{ route('merchandise-requests.draft.edit', $merchandiseRequest) }}" class="button-secondary compact-button btn-table">
                                                     Editar borrador
                                                 </a>

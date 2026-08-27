@@ -372,6 +372,11 @@ class MerchandiseRequestManagementTest extends TestCase
             ->assertForbidden();
 
         $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $draft))
+            ->assertOk()
+            ->assertSee('Modificar borrador');
+
+        $this->actingAs($cliente)
             ->get(route('merchandise-requests.draft.edit', $draft))
             ->assertOk()
             ->assertSee('EDITAR BORRADOR')

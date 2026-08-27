@@ -4,6 +4,22 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-08-27 - BORRADORES EDITABLES Y ENVIABLES POR CLIENTE E INTERNOS
+
+**Incidencia y causa raiz:** el flujo de borradores ya existia para el usuario cliente: `MerchandiseRequestController::editDraft()` y `updateDraft()` reutilizan el formulario de pedido, guardan `status=draft` o lo pasan a `pending` al enviar. Sin embargo, `authorizeDraftAccess()` exigia literalmente que el usuario tuviera rol `cliente` y perteneciera al cliente del borrador. Por ello administracion, almacen y superadmin recibian `403`, aunque podian ver los borradores en Prevision. Los botones `Editar borrador` y `Continuar pedido` tambien quedaban ocultos para los roles internos.
+
+**Regla final:** un borrador es editable por el cliente de su propio cliente y por administracion, almacen y superadmin. Todos usan el mismo formulario con `Guardar borrador` y `Enviar pedido`. Mientras conserva `draft` no crea salida, carga, movimiento de inventario, gestion de camion ni notificacion definitiva. Al enviar, el request vuelve a resolver y validar lineas contra stock exacto, exige al menos una linea, cambia el mismo pedido a `pending`, audita la transicion y dispara la notificacion de pedido definitivo una sola vez. Las rutas de carga, generacion de salida, PDF de preparacion y cambio general de estado siguen bloqueadas para `draft`.
+
+**Solucion:** `canAccessDraft()` centraliza el acceso sobre el borrador concreto y `canManageDrafts()` gobierna los enlaces de los listados. El detalle muestra ahora `Modificar borrador`; los listados general y de nuevo pedido muestran `Editar borrador` para quien tenga permiso. No se cambio el esquema, las lineas de pedido pendientes, las salidas abiertas, la anulacion, el stock ni los flujos de carga.
+
+**Cobertura:** se actualizo la regresion que anteriormente exigia el bloqueo interno. Administracion, almacen y superadmin ahora abren, guardan y envian un borrador de cliente; se comprueba que no crea salidas mientras es borrador y que al enviar queda `pending` con su notificacion. Se conserva la prueba de cliente que crea, reabre, modifica y envia, ahora verificando el boton visible `Modificar borrador`.
+
+**Validacion local:** `MerchandiseRequestManagementTest` -> 67 passed, 462 assertions; `MerchandiseRequestForecastTest` -> 7 passed, 153 assertions; `MerchandiseRequestNotificationTest` -> 12 passed, 52 assertions; `GoodsDispatchManagementTest` -> 68 passed, 550 assertions; `StockOverviewTest` -> 57 passed, 419 assertions; `DailyOperationsTest` -> 31 passed, 335 assertions; suite completa -> **896 passed, 5.278 assertions**. `npm run build`, `vendor/bin/pint --test` y `git diff --check` OK.
+
+**Archivos:** `app/Http/Controllers/MerchandiseRequestController.php`, `resources/views/merchandise-requests/index.blade.php`, `resources/views/merchandise-requests/create.blade.php`, `resources/views/merchandise-requests/show.blade.php`, `tests/Feature/MerchandiseRequestManagementTest.php` y `tests/Feature/MerchandiseRequestForecastTest.php`.
+
+**Produccion:** no se ha accedido a Forge ni se ha desplegado. No hay migracion nueva; sigue pendiente la migracion historica previa asociada al commit `45e7098f`. Tras publicar queda pendiente `Deploy Now` y validar autenticadamente, como cliente e interno, crear un borrador, guardar cambios, enviar una vez, comprobar `pending`, ausencia de salida/stock antes de carga y aislamiento entre FRIESLAND y EDELVIVES.
+
 ## 2026-08-27 - REGULARIZACION DE STOCK POR PALETS Y PICOS
 
 **Incidencia y causa raiz:** la regularizacion existente era un ajuste incremental, aunque la pantalla no lo expresaba con suficiente claridad. Admitia `full_pallets`, `units_per_pallet` y un unico `peak_units`; al guardar una partida existente, `StockAdjustmentService` ponia a cero `peak_1` a `peak_10`. Por tanto, una regularizacion podia perder el detalle de picos que ya tuviera el stock, aun cuando el total de unidades quedara correcto.
