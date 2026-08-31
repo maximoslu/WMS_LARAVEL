@@ -10655,6 +10655,52 @@ body.brand-body.app-shell-body .wms-request-create form[data-merchandise-request
     min-width: 0;
 }
 
+body.brand-body.app-shell-body .wms-request-create .delivery-address-card {
+    gap: 0.65rem;
+}
+
+body.brand-body.app-shell-body .wms-request-create .delivery-address-card-header {
+    display: grid;
+    gap: 0.2rem;
+}
+
+body.brand-body.app-shell-body .wms-request-create .delivery-address-card-header > strong {
+    color: var(--ops-text);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-request-create .delivery-address-card-header > p {
+    color: var(--ops-muted);
+    font-size: 0.75rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-request-create .delivery-address-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    color: var(--ops-text);
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+body.brand-body.app-shell-body .wms-request-create .delivery-address-toggle-input {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+    min-height: 0;
+    margin: 0;
+    accent-color: var(--ops-accent);
+}
+
+body.brand-body.app-shell-body .wms-request-create .delivery-address-text-field {
+    margin-top: 0.05rem;
+}
+
 body.brand-body.app-shell-body .wms-request-create .merchandise-request-new-shell {
     overflow: visible;
 }

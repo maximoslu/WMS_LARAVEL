@@ -147,12 +147,17 @@
                     <textarea name="notes" maxlength="2000" rows="3" class="auth-input" placeholder="Opcional">{{ old('notes', $draft->notes ?? '') }}</textarea>
                 </label>
 
-                <section class="wms-action-card">
-                    <strong>Dirección de entrega</strong>
-                    <p>Si no se indica una dirección alternativa, se usará la dirección habitual del cliente.</p>
+                <section class="wms-action-card delivery-address-card">
+                    <div class="delivery-address-card-header">
+                        <strong>Dirección de entrega</strong>
+                        <p>Si no se indica una dirección alternativa, se usará la dirección habitual del cliente.</p>
+                    </div>
                     <input type="hidden" name="delivery_address_override" value="0">
-                    <label><input type="checkbox" name="delivery_address_override" value="1" @checked((bool) old('delivery_address_override', $draft->delivery_address_override ?? false))> Usar dirección de entrega alternativa</label>
-                    <label class="auth-field">
+                    <label class="delivery-address-toggle">
+                        <input class="delivery-address-toggle-input" type="checkbox" name="delivery_address_override" value="1" @checked((bool) old('delivery_address_override', $draft->delivery_address_override ?? false))>
+                        <span>Usar dirección de entrega alternativa</span>
+                    </label>
+                    <label class="auth-field delivery-address-text-field">
                         <span>Dirección de entrega alternativa</span>
                         <textarea name="delivery_address_text" maxlength="2000" rows="3" class="auth-input" placeholder="Nombre, dirección, código postal, población y observaciones">{{ old('delivery_address_text', $draft->delivery_address_text ?? '') }}</textarea>
                     </label>
