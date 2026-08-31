@@ -15,6 +15,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
 use App\Services\GoodsDispatches\GoodsDispatchWorkflowService;
+use App\Services\MerchandiseRequests\MerchandiseRequestCancellationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestScheduleService;
 use App\Support\Stock\LotNormalizer;
@@ -395,8 +396,11 @@ class MerchandiseRequestController extends Controller
         return $response;
     }
 
-    public function show(Request $request, MerchandiseRequest $merchandiseRequest): View
-    {
+    public function show(
+        Request $request,
+        MerchandiseRequest $merchandiseRequest,
+        MerchandiseRequestCancellationService $cancellationService,
+    ): View {
         $user = $request->user();
 
         if ($user->hasRole(Role::CLIENTE)) {
@@ -429,6 +433,7 @@ class MerchandiseRequestController extends Controller
         return view('merchandise-requests.show', [
             'merchandiseRequest' => $merchandiseRequest,
             'isClient' => $user->hasRole(Role::CLIENTE),
+            'canCancel' => $user->hasRole(Role::CLIENTE) && $cancellationService->canCancel($merchandiseRequest),
             'canAddInternalLine' => $canAddInternalLine,
             'canEditDraft' => $canEditDraft,
             'selectedItems' => $canAddInternalLine
@@ -437,6 +442,31 @@ class MerchandiseRequestController extends Controller
             'searchEndpoint' => route('merchandise-requests.items.search'),
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
+    }
+
+    public function cancel(
+        Request $request,
+        MerchandiseRequest $merchandiseRequest,
+        MerchandiseRequestCancellationService $cancellationService,
+    ): RedirectResponse {
+        $user = $request->user();
+
+        abort_unless(
+            $user->hasRole(Role::CLIENTE) && (int) $user->client_id === (int) $merchandiseRequest->client_id,
+            403
+        );
+
+        try {
+            $cancellationService->cancel($merchandiseRequest, $user);
+        } catch (ValidationException $exception) {
+            return redirect()
+                ->route('merchandise-requests.show', $merchandiseRequest)
+                ->withErrors($exception->errors());
+        }
+
+        return redirect()
+            ->route('merchandise-requests.show', $merchandiseRequest)
+            ->with('status', 'Pedido cancelado correctamente.');
     }
 
     public function storeLine(

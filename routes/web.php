@@ -272,6 +272,9 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/solicitudes-mercancia/{merchandiseRequest}', [MerchandiseRequestController::class, 'show'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('merchandise-requests.show');
+    Route::patch('/solicitudes-mercancia/{merchandiseRequest}/cancelar', [MerchandiseRequestController::class, 'cancel'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('merchandise-requests.cancel');
     Route::patch('/solicitudes-mercancia/{merchandiseRequest}/estado', [MerchandiseRequestController::class, 'updateStatus'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('merchandise-requests.update-status');

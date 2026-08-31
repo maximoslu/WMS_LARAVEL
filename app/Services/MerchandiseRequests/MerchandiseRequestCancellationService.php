@@ -5,6 +5,7 @@ namespace App\Services\MerchandiseRequests;
 use App\Models\GoodsDispatch;
 use App\Models\InventoryMovement;
 use App\Models\MerchandiseRequest;
+use App\Models\User;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,7 +19,7 @@ class MerchandiseRequestCancellationService
         return $this->blockingReason($request) === null;
     }
 
-    public function cancel(MerchandiseRequest $request, \App\Models\User $user): void
+    public function cancel(MerchandiseRequest $request, User $user): void
     {
         DB::transaction(function () use ($request, $user): void {
             $lockedRequest = MerchandiseRequest::query()
@@ -64,7 +65,7 @@ class MerchandiseRequestCancellationService
             $this->audit->record(
                 event: 'merchandise_request_cancelled',
                 module: 'merchandise_requests',
-                description: 'Pedido anulado por usuario interno antes de afectar stock.',
+                description: 'Pedido cancelado antes de afectar stock.',
                 auditable: $lockedRequest,
                 user: $user,
                 clientId: $lockedRequest->client_id,
@@ -87,23 +88,23 @@ class MerchandiseRequestCancellationService
             MerchandiseRequest::STATUS_PARTIALLY_FULFILLED,
         ], true)) {
             return in_array($request->status, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)
-                ? 'No se puede eliminar este pedido porque ya está enviado o cerrado.'
-                : 'Este pedido ya no se puede eliminar en su estado actual.';
+                ? 'No se puede cancelar este pedido porque ya está enviado o cerrado.'
+                : 'Este pedido ya no se puede cancelar en su estado actual.';
         }
 
         $request->loadMissing(['goodsDispatches.lines.allocations']);
 
         foreach ($request->goodsDispatches as $dispatch) {
             if (in_array($dispatch->status, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)) {
-                return 'No se puede eliminar este pedido porque ya está enviado o cerrado.';
+                return 'No se puede cancelar este pedido porque ya está enviado o cerrado.';
             }
 
             if ($dispatch->hasStockApplied() || $dispatch->hasWarehouseStockApplied()) {
-                return 'No se puede eliminar este pedido porque ya tiene movimientos de stock.';
+                return 'No se puede cancelar este pedido porque ya tiene movimientos de stock.';
             }
 
             if ($dispatch->lines->contains(fn ($line): bool => $line->hasActualLoadedQuantity())) {
-                return 'No se puede eliminar este pedido porque ya tiene carga registrada.';
+                return 'No se puede cancelar este pedido porque ya tiene carga registrada.';
             }
 
             if (InventoryMovement::query()
@@ -111,7 +112,7 @@ class MerchandiseRequestCancellationService
                 ->where('source_id', $dispatch->id)
                 ->where('movement_type', InventoryMovement::DISPATCH)
                 ->exists()) {
-                return 'No se puede eliminar este pedido porque ya tiene movimientos de stock.';
+                return 'No se puede cancelar este pedido porque ya tiene movimientos de stock.';
             }
         }
 

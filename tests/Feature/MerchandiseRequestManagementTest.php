@@ -1883,6 +1883,221 @@ class MerchandiseRequestManagementTest extends TestCase
         ]);
     }
 
+    public function test_cliente_can_cancel_own_pending_order_before_loading(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+        MerchandiseRequestLine::factory()->create(['merchandise_request_id' => $request->id]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('CANCELAR PEDIDO')
+            ->assertSee('¿Seguro que quieres cancelar este pedido? Esta acción no se puede deshacer.')
+            ->assertSee(route('merchandise-requests.cancel', $request), false);
+
+        $this->actingAs($cliente)
+            ->patch(route('merchandise-requests.cancel', $request))
+            ->assertRedirect(route('merchandise-requests.show', $request))
+            ->assertSessionHas('status', 'Pedido cancelado correctamente.');
+
+        $this->assertDatabaseHas('merchandise_requests', [
+            'id' => $request->id,
+            'status' => MerchandiseRequest::STATUS_CANCELLED,
+        ]);
+        $this->assertNotNull($request->fresh()->cancelled_at);
+        $this->assertDatabaseHas('merchandise_request_lines', ['merchandise_request_id' => $request->id]);
+        $this->assertDatabaseCount('goods_dispatches', 0);
+        $this->assertDatabaseCount('inventory_movements', 0);
+        $this->assertDatabaseHas('audit_logs', [
+            'client_id' => $client->id,
+            'user_id' => $cliente->id,
+            'event' => 'merchandise_request_cancelled',
+            'auditable_id' => $request->id,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $request))
+            ->assertOk()
+            ->assertSee('Cancelado')
+            ->assertDontSee('CANCELAR PEDIDO');
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.show', $request))
+            ->patch(route('merchandise-requests.cancel', $request))
+            ->assertRedirect(route('merchandise-requests.show', $request))
+            ->assertSessionHasErrors(['request' => 'Este pedido ya no se puede cancelar en su estado actual.']);
+    }
+
+    public function test_cliente_can_cancel_own_open_dispatch_without_real_loading(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 20]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $line = MerchandiseRequestLine::factory()->create([
+            'merchandise_request_id' => $request->id,
+            'item_id' => $item->id,
+            'requested_pallets' => 1,
+            'requested_units' => 20,
+            'units_per_pallet' => 20,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $dispatch->lines()->create([
+            'item_id' => $item->id,
+            'source_request_line_id' => $line->id,
+            'line_type' => 'pallet',
+            'pallets' => 1,
+            'requested_pallets' => 1,
+            'requested_units' => 20,
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'units_per_pallet' => 20,
+        ]);
+
+        $this->actingAs($cliente)
+            ->patch(route('merchandise-requests.cancel', $request))
+            ->assertRedirect(route('merchandise-requests.show', $request));
+
+        $this->assertDatabaseHas('merchandise_requests', ['id' => $request->id, 'status' => MerchandiseRequest::STATUS_CANCELLED]);
+        $this->assertDatabaseHas('goods_dispatches', ['id' => $dispatch->id, 'status' => GoodsDispatch::STATUS_CANCELLED]);
+        $this->assertDatabaseCount('inventory_movements', 0);
+    }
+
+    public function test_cliente_cannot_cancel_other_clients_order(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $otherClient = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $otherRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $otherClient->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+
+        $this->actingAs($cliente)
+            ->patch(route('merchandise-requests.cancel', $otherRequest))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('merchandise_requests', [
+            'id' => $otherRequest->id,
+            'status' => MerchandiseRequest::STATUS_PENDING,
+        ]);
+    }
+
+    public function test_cliente_cancellation_endpoint_rejects_real_loading_stock_and_closed_orders(): void
+    {
+        $this->seedBaseData();
+
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
+        $loadedRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $loadedLine = MerchandiseRequestLine::factory()->create(['merchandise_request_id' => $loadedRequest->id]);
+        $loadedDispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $loadedRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $loadedDispatch->lines()->create([
+            'item_id' => $loadedLine->item_id,
+            'source_request_line_id' => $loadedLine->id,
+            'line_type' => 'pallet',
+            'pallets' => 1,
+            'requested_pallets' => 1,
+            'requested_units' => 10,
+            'loaded_pallets' => 1,
+            'sku' => $loadedLine->item->sku,
+            'description' => $loadedLine->item->description,
+            'units_per_pallet' => 10,
+        ]);
+        $stockAppliedRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $stockAppliedRequest->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+            'stock_applied_at' => now(),
+        ]);
+        $sentRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_SENT,
+        ]);
+        $completedRequest = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'requested_by' => $cliente->id,
+            'status' => MerchandiseRequest::STATUS_COMPLETED,
+        ]);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $loadedRequest))
+            ->assertOk()
+            ->assertDontSee('CANCELAR PEDIDO');
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $stockAppliedRequest))
+            ->assertOk()
+            ->assertDontSee('CANCELAR PEDIDO');
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.show', $loadedRequest))
+            ->patch(route('merchandise-requests.cancel', $loadedRequest))
+            ->assertRedirect(route('merchandise-requests.show', $loadedRequest))
+            ->assertSessionHasErrors(['request' => 'No se puede cancelar este pedido porque ya tiene carga registrada.']);
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.show', $stockAppliedRequest))
+            ->patch(route('merchandise-requests.cancel', $stockAppliedRequest))
+            ->assertRedirect(route('merchandise-requests.show', $stockAppliedRequest))
+            ->assertSessionHasErrors(['request' => 'No se puede cancelar este pedido porque ya tiene movimientos de stock.']);
+
+        $this->actingAs($cliente)
+            ->get(route('merchandise-requests.show', $sentRequest))
+            ->assertOk()
+            ->assertDontSee('CANCELAR PEDIDO');
+
+        $this->actingAs($cliente)
+            ->from(route('merchandise-requests.show', $sentRequest))
+            ->patch(route('merchandise-requests.cancel', $sentRequest))
+            ->assertRedirect(route('merchandise-requests.show', $sentRequest))
+            ->assertSessionHasErrors(['request' => 'No se puede cancelar este pedido porque ya está enviado o cerrado.']);
+
+        $this->actingAs($cliente)
+            ->patch(route('merchandise-requests.cancel', $completedRequest))
+            ->assertRedirect(route('merchandise-requests.show', $completedRequest))
+            ->assertSessionHasErrors(['request' => 'No se puede cancelar este pedido porque ya está enviado o cerrado.']);
+
+        $this->assertDatabaseHas('merchandise_requests', ['id' => $loadedRequest->id, 'status' => MerchandiseRequest::STATUS_PREPARING]);
+        $this->assertDatabaseHas('merchandise_requests', ['id' => $stockAppliedRequest->id, 'status' => MerchandiseRequest::STATUS_PREPARING]);
+        $this->assertDatabaseHas('merchandise_requests', ['id' => $sentRequest->id, 'status' => MerchandiseRequest::STATUS_SENT]);
+        $this->assertDatabaseHas('merchandise_requests', ['id' => $completedRequest->id, 'status' => MerchandiseRequest::STATUS_COMPLETED]);
+    }
+
     public function test_internal_user_cancels_open_dispatch_without_real_load_with_request(): void
     {
         $this->seedBaseData();
@@ -1960,7 +2175,7 @@ class MerchandiseRequestManagementTest extends TestCase
             ->from(route('dispatches.requests.show', $request))
             ->patch(route('dispatches.requests.cancel', $request))
             ->assertRedirect(route('dispatches.requests.show', $request))
-            ->assertSessionHasErrors(['request' => 'No se puede eliminar este pedido porque ya tiene carga registrada.']);
+            ->assertSessionHasErrors(['request' => 'No se puede cancelar este pedido porque ya tiene carga registrada.']);
 
         $this->assertDatabaseHas('merchandise_requests', ['id' => $request->id, 'status' => MerchandiseRequest::STATUS_PREPARING]);
         $this->assertDatabaseHas('goods_dispatches', ['id' => $dispatch->id, 'status' => GoodsDispatch::STATUS_PREPARING]);
@@ -1981,7 +2196,7 @@ class MerchandiseRequestManagementTest extends TestCase
             ->from(route('dispatches.requests.show', $request))
             ->patch(route('dispatches.requests.cancel', $request))
             ->assertRedirect(route('dispatches.requests.show', $request))
-            ->assertSessionHasErrors(['request' => 'No se puede eliminar este pedido porque ya está enviado o cerrado.']);
+            ->assertSessionHasErrors(['request' => 'No se puede cancelar este pedido porque ya está enviado o cerrado.']);
 
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
 

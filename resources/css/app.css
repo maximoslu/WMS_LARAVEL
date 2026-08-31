@@ -10957,6 +10957,19 @@ body.brand-body.app-shell-body .wms-detail-actions form {
     margin: 0;
 }
 
+body.brand-body.app-shell-body .order-cancel-action .button-danger {
+    border-color: #991b1b;
+    background: #b91c1c;
+    color: #ffffff;
+    font-weight: 800;
+}
+
+body.brand-body.app-shell-body .order-cancel-action .button-danger:hover {
+    border-color: #7f1d1d;
+    background: #991b1b;
+    color: #ffffff;
+}
+
 body.brand-body.app-shell-body .order-prep-head > .order-primary-action {
     display: none;
 }
@@ -11125,7 +11138,8 @@ body.brand-body.app-shell-body .order-alert {
     body.brand-body.app-shell-body .wms-detail-actions,
     body.brand-body.app-shell-body .wms-detail-actions form,
     body.brand-body.app-shell-body .wms-detail-actions .button-primary,
-    body.brand-body.app-shell-body .wms-detail-actions .button-secondary {
+    body.brand-body.app-shell-body .wms-detail-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-detail-actions .button-danger {
         width: 100%;
     }
 

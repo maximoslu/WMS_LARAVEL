@@ -167,6 +167,16 @@
                 </div>
             @endunless
 
+            @if ($canCancel)
+                <div class="wms-detail-actions order-cancel-action">
+                    <form method="POST" action="{{ route('merchandise-requests.cancel', $merchandiseRequest) }}" onsubmit="return confirm('¿Seguro que quieres cancelar este pedido? Esta acción no se puede deshacer.');">
+                        @csrf
+                        @method('PATCH')
+                        <button type="submit" class="button-danger compact-button btn-compact">CANCELAR PEDIDO</button>
+                    </form>
+                </div>
+            @endif
+
             @if ($canEditDraft)
                 <div class="wms-detail-actions order-primary-action">
                     <a href="{{ route('merchandise-requests.draft.edit', $merchandiseRequest) }}" class="button-primary compact-button btn-compact">Modificar borrador</a>
