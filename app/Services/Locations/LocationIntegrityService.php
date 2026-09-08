@@ -19,6 +19,7 @@ class LocationIntegrityService
         'goods_receipt_lines' => ['location_id'],
         'items' => ['default_location_id'],
         'inventory_movements' => ['location_id', 'from_location_id', 'to_location_id'],
+        'stock_inventory_locations' => ['location_id'],
     ];
 
     public function resolveClient(?string $filter): ?Client

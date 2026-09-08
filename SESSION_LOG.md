@@ -4,6 +4,22 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-09-08 - INVENTARIOS FÍSICOS REANUDABLES POR UBICACIÓN
+
+**Necesidad y arquitectura:** la pantalla `Stock > Inventario` existente preparaba una vista previa y un XLSX filtrados, pero no persistía sesiones, progreso ni histórico. Se conserva `stock_pallets` y `StockOverviewBuilder` como fuente canónica del stock actual. La migración `2026_09_08_000001_create_stock_inventory_sessions_tables.php` añade `stock_inventory_sessions` para la cabecera y `stock_inventory_locations` para las unidades comprobables, con una restricción que permite un único inventario abierto por cliente.
+
+**Operativa:** cada inventario guarda cliente, alcance real, usuario/fecha de inicio, estado y cierre. El alcance admite los filtros existentes, ubicación concreta, selección parcial y rangos naturales. Cada ubicación conserva etiqueta histórica, usuario/hora de comprobación, observaciones, snapshot teórico por referencia/lote con pallets y picos, y el ID máximo del libro de movimientos visible antes de tomar la fotografía. El progreso sobrevive a sesiones y días; dos usuarios pueden comprobar ubicaciones diferentes sin sobrescribirse.
+
+**Semáforo y movimientos posteriores:** pendiente significa no comprobada. Verde significa comprobada físicamente y sin movimientos físicos posteriores conocidos. Ámbar se calcula cuando existe después del watermark una entrada, salida, reubicación, regularización, importación, reversión o corrección que afecte a la ubicación. Las reubicaciones invalidan origen y destino. Se excluyen saldos iniciales, backfills de trazabilidad, consolidaciones administrativas y registros sin delta físico. Revalidar actualiza fotografía y watermark. Marcar comprobado no modifica stock ni crea movimientos.
+
+**UX, permisos e histórico:** la pantalla existente permite iniciar o continuar el inventario, ordenar las mismas unidades por ubicación natural o referencia, filtrar por pendiente/comprobada/revisar, y trabajar con tarjetas táctiles responsive que muestran referencias, pallets, picos y unidades. El cierre exige confirmación y bloquea mientras quede alguna ubicación pendiente o ámbar; el resultado se conserva en histórico. Superadmin, administración y almacén pueden operar cualquier cliente. El usuario cliente queda forzado a su `client_id`; si tiene desactivada la visibilidad de ubicaciones, conserva la vista/exportación anterior pero no puede operar sesiones físicas.
+
+**Auditoría y concurrencia:** se reutiliza `AuditLogService` para inicio, check, recheck y finalización. El inicio bloquea la fila del cliente y la restricción única evita dos sesiones abiertas concurrentes. Cada check bloquea solo su unidad, por lo que distintos trabajadores avanzan en paralelo de forma segura.
+
+**Validación:** pruebas nuevas de sesiones de inventario: **11 passed, 74 assertions**. Regresión relacionada de Inventario, Stock, entradas, salidas, reubicaciones, regularizaciones, trazabilidad y ubicaciones: **342 passed, 2.339 assertions**. Suite completa: **923 passed, 5.574 assertions**. `npm run build` OK (Vite 7.3.5, 55 módulos), Pint y `git diff --check` OK.
+
+**Límites y producción:** no se implementan conteos reales, diferencias ni regularizaciones automáticas. No se han modificado datos de producción ni se han ejecutado migraciones en producción. Commit previsto: `feat: add resumable warehouse inventory sessions`.
+
 ## 2026-08-27 - DIRECCION ALTERNATIVA EN GESTION DE PEDIDO PENDIENTE
 
 **Incidencia y causa raiz:** la direccion alternativa se habia incorporado a la creacion/edicion de pedido, salida manual, detalle de salida y albaran, pero la pantalla operativa `Panel de control > Salidas > Pedidos pendientes > SOL-*` usa `GoodsDispatchController::showRequest()` y `resources/views/dispatches/request.blade.php`, no el detalle general de pedido ni el detalle de salida. Esa vista no contenia bloque de direccion ni ruta para actualizar `MerchandiseRequest`, aunque los campos ya existian en la migracion anterior y `generateFromRequest()` ya los copiaba a `GoodsDispatch`.

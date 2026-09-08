@@ -48,6 +48,11 @@ class Client extends Model
         return $this->hasMany(StockPallet::class);
     }
 
+    public function stockInventorySessions(): HasMany
+    {
+        return $this->hasMany(StockInventorySession::class);
+    }
+
     public function warehouses(): HasMany
     {
         return $this->hasMany(Warehouse::class);

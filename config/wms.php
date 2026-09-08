@@ -88,7 +88,7 @@ return [
                     'path' => '/stock/inventario',
                     'title' => 'Inventario',
                     'icon' => 'stock',
-                    'summary' => 'Prepara y descarga inventarios fisicos filtrados sin modificar existencias.',
+                    'summary' => 'Inicia, reanuda y audita inventarios fisicos por ubicacion sin modificar existencias.',
                     'minimum_role' => 'cliente',
                     'tag' => 'Control fisico',
                     'status' => 'ready',

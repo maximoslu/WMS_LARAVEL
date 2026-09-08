@@ -127,6 +127,16 @@ class User extends Authenticatable
         return $this->hasMany(StockImport::class, 'uploaded_by');
     }
 
+    public function startedStockInventories(): HasMany
+    {
+        return $this->hasMany(StockInventorySession::class, 'started_by');
+    }
+
+    public function checkedStockInventoryLocations(): HasMany
+    {
+        return $this->hasMany(StockInventoryLocation::class, 'checked_by');
+    }
+
     public function hasRole(string $slug): bool
     {
         return $this->role?->slug === $slug;

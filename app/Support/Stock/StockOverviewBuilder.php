@@ -139,6 +139,21 @@ class StockOverviewBuilder
             $normalized['location_id'] = -1;
         }
 
+        $hasLocationSubset = $normalized['location_ids'] !== []
+            || $normalized['location_from'] !== ''
+            || $normalized['location_to'] !== '';
+        $scopeLocationIds = $options['locations']
+            ->when($normalized['location_ids'] !== [], fn (Collection $locations) => $locations->whereIn('id', $normalized['location_ids']))
+            ->when($normalized['location_from'] !== '', fn (Collection $locations) => $locations->filter(
+                fn (Location $location): bool => LocationCode::compareNaturally($location->code, $normalized['location_from']) >= 0
+            ))
+            ->when($normalized['location_to'] !== '', fn (Collection $locations) => $locations->filter(
+                fn (Location $location): bool => LocationCode::compareNaturally($location->code, $normalized['location_to']) <= 0
+            ))
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values();
+
         $baseFilters = [
             'client_id' => $normalized['client_id'],
             'item_id' => null,
@@ -162,6 +177,7 @@ class StockOverviewBuilder
                     fn (Builder $locationQuery) => $locationQuery->where('warehouse_id', $normalized['warehouse_id'])
                 );
             })
+            ->when($hasLocationSubset, fn (Builder $query) => $query->whereIn('location_id', $scopeLocationIds->isEmpty() ? [-1] : $scopeLocationIds))
             ->when($normalized['item_state'] !== 'all', function (Builder $query) use ($normalized): void {
                 $query->whereHas(
                     'item',
@@ -181,6 +197,7 @@ class StockOverviewBuilder
                         fn (Builder $locationQuery) => $locationQuery->where('warehouse_id', $normalized['warehouse_id'])
                     );
                 })
+                ->when($hasLocationSubset, fn (Builder $query) => $query->whereIn('default_location_id', $scopeLocationIds->isEmpty() ? [-1] : $scopeLocationIds))
                 ->when($normalized['location_id'] !== null, fn (Builder $query) => $query->where('default_location_id', $normalized['location_id']))
                 ->when($normalized['location_state'] === 'with_location', fn (Builder $query) => $query->whereNotNull('default_location_id'))
                 ->when($normalized['location_state'] === 'without_location', fn (Builder $query) => $query->whereNull('default_location_id'))
@@ -506,6 +523,7 @@ class StockOverviewBuilder
             'warehouse_code' => $warehouse?->code ?? '',
             'warehouse_name' => $warehouse?->name ?? '',
             'location_id' => $pallet->location_id,
+            'location_code' => $pallet->location?->code,
             'location_label' => $this->locationLabel($pallet) ?: 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($defaultLocation),
             'quantity_units' => (int) $pallet->quantity_units,
@@ -581,6 +599,7 @@ class StockOverviewBuilder
             'warehouse_code' => $warehouse?->code ?? '',
             'warehouse_name' => $warehouse?->name ?? '',
             'location_id' => $item->default_location_id,
+            'location_code' => $item->defaultLocation?->code,
             'location_label' => $item->defaultLocation?->code ?? 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($item->defaultLocation),
             'quantity_units' => 0,
@@ -938,6 +957,16 @@ class StockOverviewBuilder
             'location_id' => $canSeeLocations && isset($filters['location_id']) && (int) $filters['location_id'] > 0
                 ? (int) $filters['location_id']
                 : null,
+            'location_ids' => $canSeeLocations
+                ? collect((array) ($filters['location_ids'] ?? []))
+                    ->map(fn (mixed $id): int => (int) $id)
+                    ->filter(fn (int $id): bool => $id > 0)
+                    ->unique()
+                    ->values()
+                    ->all()
+                : [],
+            'location_from' => $canSeeLocations ? LocationCode::normalize($filters['location_from'] ?? '') : '',
+            'location_to' => $canSeeLocations ? LocationCode::normalize($filters['location_to'] ?? '') : '',
             'stock_state' => (string) ($filters['stock_state'] ?? 'with_stock') === 'include_zero'
                 ? 'include_zero'
                 : 'with_stock',

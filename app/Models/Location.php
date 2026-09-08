@@ -60,6 +60,11 @@ class Location extends Model
         return $this->hasMany(GoodsReceiptLine::class);
     }
 
+    public function stockInventoryLocations(): HasMany
+    {
+        return $this->hasMany(StockInventoryLocation::class);
+    }
+
     public function displayLabel(): string
     {
         $code = LocationCode::normalize($this->code);
