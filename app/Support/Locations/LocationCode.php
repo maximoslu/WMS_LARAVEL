@@ -49,6 +49,11 @@ final class LocationCode
         return [2, 0, $code];
     }
 
+    public static function compareNaturally(mixed $left, mixed $right): int
+    {
+        return strnatcasecmp(self::normalize($left), self::normalize($right));
+    }
+
     public static function applyNaturalOrder(Builder $query, string $column = 'code'): Builder
     {
         $wrapped = DB::getQueryGrammar()->wrap($column);

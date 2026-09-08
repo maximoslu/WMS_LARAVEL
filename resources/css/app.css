@@ -262,6 +262,161 @@ body.brand-body.app-shell-body .backup-status--pending {
     }
 }
 
+/* Stock > Inventario: seleccion compacta y vista previa para conteo fisico. */
+body.brand-body.app-shell-body .wms-inventory-page {
+    gap: 0.72rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-header {
+    align-items: center;
+}
+
+body.brand-body.app-shell-body .wms-inventory-filter-card {
+    padding: 0.78rem 0.88rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-filter-form,
+body.brand-body.app-shell-body .wms-inventory-advanced {
+    display: grid;
+    gap: 0.68rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(9.5rem, 1fr));
+    align-items: end;
+    gap: 0.55rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-advanced {
+    padding-top: 0.62rem;
+    border-top: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-inventory-advanced summary {
+    width: fit-content;
+    color: var(--ops-text);
+    cursor: pointer;
+    font-size: 0.74rem;
+    font-weight: 850;
+}
+
+body.brand-body.app-shell-body .wms-inventory-filter-grid--advanced {
+    grid-template-columns: repeat(4, minmax(10rem, 1fr));
+}
+
+body.brand-body.app-shell-body .wms-inventory-filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-summary article {
+    display: grid;
+    gap: 0.12rem;
+    padding: 0.68rem 0.76rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-summary span,
+body.brand-body.app-shell-body .wms-inventory-summary small {
+    color: var(--ops-muted);
+    font-size: 0.68rem;
+    font-weight: 750;
+}
+
+body.brand-body.app-shell-body .wms-inventory-summary strong {
+    color: var(--ops-text);
+    font-size: 1.08rem;
+    line-height: 1.1;
+}
+
+body.brand-body.app-shell-body .wms-inventory-table-card {
+    overflow: hidden;
+    padding: 0;
+}
+
+body.brand-body.app-shell-body .wms-inventory-table-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    padding: 0.62rem 0.78rem;
+    border-bottom: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-inventory-table-head strong {
+    color: var(--ops-text);
+    font-size: 0.82rem;
+}
+
+body.brand-body.app-shell-body .wms-inventory-table-head span {
+    color: var(--ops-muted);
+    font-size: 0.7rem;
+    font-weight: 750;
+}
+
+body.brand-body.app-shell-body .wms-inventory-table {
+    min-width: 1060px;
+}
+
+body.brand-body.app-shell-body .wms-inventory-table th {
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-inventory-table td {
+    vertical-align: middle;
+}
+
+body.brand-body.app-shell-body .wms-inventory-pagination {
+    padding: 0.58rem 0.72rem;
+    border-top: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-inventory-empty {
+    min-height: 5rem;
+}
+
+@media (max-width: 1180px) {
+    body.brand-body.app-shell-body .wms-inventory-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.brand-body.app-shell-body .wms-inventory-filter-grid--advanced {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    body.brand-body.app-shell-body .wms-inventory-filter-grid,
+    body.brand-body.app-shell-body .wms-inventory-filter-grid--advanced,
+    body.brand-body.app-shell-body .wms-inventory-summary {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-inventory-header,
+    body.brand-body.app-shell-body .wms-inventory-table-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    body.brand-body.app-shell-body .wms-inventory-filter-actions,
+    body.brand-body.app-shell-body .wms-inventory-filter-actions .button-primary,
+    body.brand-body.app-shell-body .wms-inventory-filter-actions .button-secondary,
+    body.brand-body.app-shell-body .wms-inventory-header .wms-list-actions,
+    body.brand-body.app-shell-body .wms-inventory-header .button-primary,
+    body.brand-body.app-shell-body .wms-inventory-header .button-secondary {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
 @media (max-width: 640px) {
     body.brand-body.app-shell-body .backup-summary-grid {
         grid-template-columns: 1fr;

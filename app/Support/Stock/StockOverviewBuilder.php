@@ -2,9 +2,15 @@
 
 namespace App\Support\Stock;
 
+use App\Models\Client;
 use App\Models\Item;
+use App\Models\Location;
 use App\Models\StockPallet;
 use App\Models\User;
+use App\Models\Warehouse;
+use App\Services\Locations\LocationIntegrityService;
+use App\Support\Locations\LocationCode;
+use App\Support\Warehouses\WarehouseCode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -12,6 +18,10 @@ use Illuminate\Support\Facades\DB;
 
 class StockOverviewBuilder
 {
+    public function __construct(
+        private readonly LocationIntegrityService $locationIntegrity,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $filters
      * @return array{filters: array<string, mixed>, rows: Collection<int, array<string, mixed>>, paginator: LengthAwarePaginator, summary: array<string, int|float>}
@@ -94,6 +104,185 @@ class StockOverviewBuilder
     public function resolveExportClientId(User $user, mixed $requestedClientId): ?int
     {
         return $this->resolveClientId($user, $requestedClientId);
+    }
+
+    /**
+     * Physical-inventory rows reuse the same current-stock query and row mapping
+     * as the Stock screen. Zero-stock references reuse its item-master query.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{filters: array<string, mixed>, rows: Collection<int, array<string, mixed>>, summary: array<string, int|float>, options: array<string, mixed>}
+     */
+    public function inventory(User $user, array $filters = []): array
+    {
+        $normalized = $this->normalizeInventoryFilters($user, $filters);
+        $options = $this->inventoryOptions(
+            $normalized['client_id'],
+            $normalized['warehouse_id'],
+            $normalized['can_see_locations'],
+        );
+
+        if ($normalized['client_id'] === null || $options['client'] === null) {
+            return [
+                'filters' => $normalized,
+                'rows' => collect(),
+                'summary' => $this->emptyInventorySummary(),
+                'options' => $options,
+            ];
+        }
+
+        if ($normalized['warehouse_id'] !== null && ! $options['warehouses']->contains('id', $normalized['warehouse_id'])) {
+            $normalized['warehouse_id'] = -1;
+        }
+
+        if ($normalized['location_id'] !== null && ! $options['locations']->contains('id', $normalized['location_id'])) {
+            $normalized['location_id'] = -1;
+        }
+
+        $baseFilters = [
+            'client_id' => $normalized['client_id'],
+            'item_id' => null,
+            'search' => '',
+            'lot' => '',
+            'location' => '',
+            'location_id' => $normalized['location_id'],
+            'location_state' => $normalized['location_state'],
+            'per_page' => 100,
+            'only_peaks' => false,
+            'batch_status' => $normalized['batch_status'],
+            'stock_category' => $normalized['stock_category'],
+            'stock_state' => 'with_stock',
+            'is_client' => $normalized['is_client'],
+        ];
+
+        $stockRows = $this->stockQuery($baseFilters)
+            ->when($normalized['warehouse_id'] !== null, function (Builder $query) use ($normalized): void {
+                $query->whereHas(
+                    'location',
+                    fn (Builder $locationQuery) => $locationQuery->where('warehouse_id', $normalized['warehouse_id'])
+                );
+            })
+            ->when($normalized['item_state'] !== 'all', function (Builder $query) use ($normalized): void {
+                $query->whereHas(
+                    'item',
+                    fn (Builder $itemQuery) => $itemQuery->where('active', $normalized['item_state'] === 'active')
+                );
+            })
+            ->get()
+            ->map(fn (StockPallet $pallet): array => $this->buildStockRow($pallet));
+
+        $zeroRows = collect();
+
+        if ($normalized['stock_state'] === 'include_zero' && $normalized['batch_status'] === 'all') {
+            $zeroRows = $this->withoutStockQuery($baseFilters)
+                ->when($normalized['warehouse_id'] !== null, function (Builder $query) use ($normalized): void {
+                    $query->whereHas(
+                        'defaultLocation',
+                        fn (Builder $locationQuery) => $locationQuery->where('warehouse_id', $normalized['warehouse_id'])
+                    );
+                })
+                ->when($normalized['location_id'] !== null, fn (Builder $query) => $query->where('default_location_id', $normalized['location_id']))
+                ->when($normalized['location_state'] === 'with_location', fn (Builder $query) => $query->whereNotNull('default_location_id'))
+                ->when($normalized['location_state'] === 'without_location', fn (Builder $query) => $query->whereNull('default_location_id'))
+                ->when($normalized['item_state'] !== 'all', fn (Builder $query) => $query->where('active', $normalized['item_state'] === 'active'))
+                ->get()
+                ->map(fn (Item $item): array => $this->buildWithoutStockRow($item));
+        }
+
+        $rows = $this->sortInventoryRows($stockRows->concat($zeroRows));
+
+        if (! $normalized['can_see_locations']) {
+            $rows = $rows->map(fn (array $row): array => array_replace($row, [
+                'warehouse_id' => null,
+                'warehouse_code' => '',
+                'warehouse_name' => '',
+                'location_id' => null,
+                'location_label' => 'No visible',
+            ]));
+        }
+
+        $locationCount = $rows
+            ->map(fn (array $row): ?string => $row['location_id'] !== null
+                ? 'id:'.$row['location_id']
+                : null)
+            ->filter()
+            ->unique()
+            ->count();
+
+        return [
+            'filters' => $normalized,
+            'rows' => $rows,
+            'summary' => [
+                'references' => $rows->pluck('item_id')->filter()->unique()->count(),
+                'lines' => $rows->count(),
+                'full_pallets' => (int) $rows->sum('full_pallets'),
+                'peaks' => (int) $rows->sum('peaks_count'),
+                'peak_units' => (int) $rows->sum('peak_units'),
+                'total_units' => (int) $rows->sum('quantity_units'),
+                'locations' => $locationCount,
+            ],
+            'options' => $options,
+        ];
+    }
+
+    /**
+     * @return array{client: ?Client, warehouses: Collection<int, Warehouse>, locations: Collection<int, Location>, categories: array<string, string>, batch_statuses: array<string, string>}
+     */
+    private function inventoryOptions(?int $clientId, ?int $warehouseId, bool $canSeeLocations): array
+    {
+        $client = $clientId !== null ? Client::query()->find($clientId) : null;
+
+        if (! $client instanceof Client) {
+            return [
+                'client' => null,
+                'warehouses' => collect(),
+                'locations' => collect(),
+                'categories' => [],
+                'batch_statuses' => [],
+            ];
+        }
+
+        $compatibleLocations = $canSeeLocations
+            ? $this->locationIntegrity->compatibleLocationOptionsForClient($client)
+            : collect();
+        $warehouses = $compatibleLocations
+            ->pluck('warehouse')
+            ->filter()
+            ->concat($canSeeLocations
+                ? Warehouse::query()->where('client_id', $client->id)->where('active', true)->get()
+                : collect())
+            ->unique('id')
+            ->sortBy(fn (Warehouse $warehouse): array => [
+                ...WarehouseCode::naturalSortKey($warehouse->code),
+                mb_strtoupper($warehouse->name),
+                $warehouse->id,
+            ])
+            ->values();
+        $locations = $compatibleLocations
+            ->when($warehouseId !== null, fn (Collection $collection) => $collection->where('warehouse_id', $warehouseId))
+            ->values();
+        $categoryValues = StockPallet::query()
+            ->where('client_id', $client->id)
+            ->pluck('stock_category')
+            ->concat(Item::query()->where('client_id', $client->id)->pluck('stock_category'))
+            ->filter(fn (mixed $value): bool => in_array((string) $value, StockPallet::stockCategories(), true))
+            ->unique()
+            ->values();
+        $statusValues = StockPallet::query()
+            ->where('client_id', $client->id)
+            ->withPhysicalStock()
+            ->pluck('status')
+            ->filter(fn (mixed $value): bool => in_array((string) $value, StockPallet::statuses(), true))
+            ->unique()
+            ->values();
+
+        return [
+            'client' => $client,
+            'warehouses' => $warehouses,
+            'locations' => $locations,
+            'categories' => collect(StockPallet::stockCategoryOptions())->only($categoryValues->all())->all(),
+            'batch_statuses' => collect(StockPallet::statusOptions())->only($statusValues->all())->all(),
+        ];
     }
 
     /**
@@ -289,6 +478,9 @@ class StockOverviewBuilder
     {
         $item = $pallet->item;
         $defaultLocation = $item?->defaultLocation;
+        $warehouse = $pallet->location?->warehouse;
+        $peakUnits = collect(range(1, StockPallet::MAX_PEAK_COLUMNS))
+            ->sum(fn (int $number): int => (int) $pallet->{'peak_'.$number});
 
         return [
             'id' => $pallet->id,
@@ -310,6 +502,10 @@ class StockOverviewBuilder
             'stock_category' => $pallet->stock_category ?? StockPallet::CATEGORY_IN_USE,
             'stock_category_label' => $pallet->stockCategoryLabel(),
             'blocked_reason' => $pallet->blocked_reason,
+            'warehouse_id' => $warehouse?->id,
+            'warehouse_code' => $warehouse?->code ?? '',
+            'warehouse_name' => $warehouse?->name ?? '',
+            'location_id' => $pallet->location_id,
             'location_label' => $this->locationLabel($pallet) ?: 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($defaultLocation),
             'quantity_units' => (int) $pallet->quantity_units,
@@ -323,6 +519,7 @@ class StockOverviewBuilder
             ),
             'full_pallets' => (int) $pallet->full_pallets,
             'peaks_count' => (int) $pallet->peaks_count,
+            'peak_units' => $peakUnits,
             'total_pallets' => (int) $pallet->full_pallets + (int) $pallet->peaks_count,
             'warehouse_pallets' => (float) ($pallet->warehouse_pallets ?? ((int) $pallet->full_pallets + (int) $pallet->peaks_count)),
             'peak_1' => (int) $pallet->peak_1,
@@ -358,6 +555,8 @@ class StockOverviewBuilder
      */
     private function buildWithoutStockRow(Item $item): array
     {
+        $warehouse = $item->defaultLocation?->warehouse;
+
         return [
             'id' => null,
             'row_type' => 'master_without_stock',
@@ -378,13 +577,18 @@ class StockOverviewBuilder
             'stock_category' => $item->stock_category ?? Item::CATEGORY_IN_USE,
             'stock_category_label' => $item->stockCategoryLabel(),
             'blocked_reason' => null,
-            'location_label' => 'Sin ubicacion',
+            'warehouse_id' => $warehouse?->id,
+            'warehouse_code' => $warehouse?->code ?? '',
+            'warehouse_name' => $warehouse?->name ?? '',
+            'location_id' => $item->default_location_id,
+            'location_label' => $item->defaultLocation?->code ?? 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($item->defaultLocation),
             'quantity_units' => 0,
             'units_per_pallet' => (int) $item->units_per_pallet,
             'units_per_pallet_label' => $this->unitsPerPalletLabel((int) $item->units_per_pallet),
             'full_pallets' => 0,
             'peaks_count' => 0,
+            'peak_units' => 0,
             'total_pallets' => 0,
             'warehouse_pallets' => 0.0,
             'peak_1' => 0,
@@ -703,6 +907,103 @@ class StockOverviewBuilder
         return isset($requestedClientId) && (int) $requestedClientId > 0
             ? (int) $requestedClientId
             : null;
+    }
+
+    /** @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    private function normalizeInventoryFilters(User $user, array $filters): array
+    {
+        $isClient = $user->hasRole('cliente');
+        $user->loadMissing('client');
+        $canSeeLocations = ! $isClient || (bool) ($user->client?->show_storage_occupancy_to_client ?? false);
+
+        return [
+            'client_id' => $this->resolveClientId($user, $filters['client_id'] ?? null),
+            'warehouse_id' => $canSeeLocations && isset($filters['warehouse_id']) && (int) $filters['warehouse_id'] > 0
+                ? (int) $filters['warehouse_id']
+                : null,
+            'stock_category' => in_array((string) ($filters['stock_category'] ?? 'all'), ['all', ...StockPallet::stockCategories()], true)
+                ? (string) ($filters['stock_category'] ?? 'all')
+                : 'all',
+            'item_state' => in_array((string) ($filters['item_state'] ?? 'all'), ['all', 'active', 'inactive'], true)
+                ? (string) ($filters['item_state'] ?? 'all')
+                : 'all',
+            'batch_status' => in_array((string) ($filters['batch_status'] ?? 'all'), ['all', ...StockPallet::statuses()], true)
+                ? (string) ($filters['batch_status'] ?? 'all')
+                : 'all',
+            'location_state' => $canSeeLocations && in_array((string) ($filters['location_state'] ?? 'all'), ['all', 'with_location', 'without_location'], true)
+                ? (string) ($filters['location_state'] ?? 'all')
+                : 'all',
+            'location_id' => $canSeeLocations && isset($filters['location_id']) && (int) $filters['location_id'] > 0
+                ? (int) $filters['location_id']
+                : null,
+            'stock_state' => (string) ($filters['stock_state'] ?? 'with_stock') === 'include_zero'
+                ? 'include_zero'
+                : 'with_stock',
+            'per_page' => in_array((int) ($filters['per_page'] ?? 50), [25, 50, 100], true)
+                ? (int) ($filters['per_page'] ?? 50)
+                : 50,
+            'is_client' => $isClient,
+            'can_see_locations' => $canSeeLocations,
+        ];
+    }
+
+    /** @param Collection<int, array<string, mixed>> $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function sortInventoryRows(Collection $rows): Collection
+    {
+        return $rows
+            ->sort(function (array $left, array $right): int {
+                $comparison = ($left['warehouse_id'] === null) <=> ($right['warehouse_id'] === null);
+
+                if ($comparison !== 0) {
+                    return $comparison;
+                }
+
+                $leftWarehouse = $left['warehouse_code'] !== '' ? $left['warehouse_code'] : $left['warehouse_name'];
+                $rightWarehouse = $right['warehouse_code'] !== '' ? $right['warehouse_code'] : $right['warehouse_name'];
+                $comparison = strnatcasecmp(WarehouseCode::normalize($leftWarehouse), WarehouseCode::normalize($rightWarehouse));
+
+                if ($comparison !== 0) {
+                    return $comparison;
+                }
+
+                $comparison = ($left['location_id'] === null) <=> ($right['location_id'] === null);
+
+                if ($comparison !== 0) {
+                    return $comparison;
+                }
+
+                foreach ([
+                    LocationCode::compareNaturally($left['location_label'], $right['location_label']),
+                    strnatcasecmp((string) $left['sku'], (string) $right['sku']),
+                    strnatcasecmp((string) $left['lot_label'], (string) $right['lot_label']),
+                    ((int) ($left['id'] ?? PHP_INT_MAX)) <=> ((int) ($right['id'] ?? PHP_INT_MAX)),
+                ] as $comparison) {
+                    if ($comparison !== 0) {
+                        return $comparison;
+                    }
+                }
+
+                return 0;
+            })
+            ->values();
+    }
+
+    /** @return array{references: int, lines: int, full_pallets: int, peaks: int, peak_units: int, total_units: int, locations: int} */
+    private function emptyInventorySummary(): array
+    {
+        return [
+            'references' => 0,
+            'lines' => 0,
+            'full_pallets' => 0,
+            'peaks' => 0,
+            'peak_units' => 0,
+            'total_units' => 0,
+            'locations' => 0,
+        ];
     }
 
     /**

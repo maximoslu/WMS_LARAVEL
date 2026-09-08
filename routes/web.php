@@ -27,6 +27,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\StockImportController;
+use App\Http\Controllers\StockInventoryController;
 use App\Http\Controllers\StockRelocationController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\Traceability\ActivityHeartbeatController;
@@ -177,6 +178,12 @@ Route::middleware('auth')->group(function (): void {
         ->whereIn('format', ['xlsx', 'csv', 'pdf'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('stock.export');
+    Route::get('/stock/inventario', [StockInventoryController::class, 'index'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('stock.inventory.index');
+    Route::get('/stock/inventario/descargar', [StockInventoryController::class, 'export'])
+        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->name('stock.inventory.export');
     Route::get('/stock/reubicar', [StockRelocationController::class, 'create'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.relocations.create');

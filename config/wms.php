@@ -83,6 +83,18 @@ return [
                     'active_patterns' => ['stock.index'],
                 ],
                 [
+                    'key' => 'stock-inventory',
+                    'route' => 'stock.inventory.index',
+                    'path' => '/stock/inventario',
+                    'title' => 'Inventario',
+                    'icon' => 'stock',
+                    'summary' => 'Prepara y descarga inventarios fisicos filtrados sin modificar existencias.',
+                    'minimum_role' => 'cliente',
+                    'tag' => 'Control fisico',
+                    'status' => 'ready',
+                    'active_patterns' => ['stock.inventory.*'],
+                ],
+                [
                     'key' => 'stock-relocations',
                     'route' => 'stock.relocations.create',
                     'path' => '/stock/reubicar',
