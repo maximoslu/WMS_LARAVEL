@@ -5,6 +5,9 @@
     @forelse ($pickingLocationSummaries as $pickingSummary)
         <span>
             Recoger en: {{ $pickingSummary['location'] }}
+            @if (filled($pickingSummary['lot'] ?? null))
+                · Lote {{ $pickingSummary['lot'] }}
+            @endif
             @if ($pickingSummary['quantity'])
                 · {{ $pickingSummary['quantity'] }}
             @endif

@@ -160,6 +160,16 @@ class StockLinePayloadResolver
                 continue;
             }
 
+            $actualUnitsPerPallet = $stockPallet instanceof StockPallet
+                ? max(0, (int) $stockPallet->units_per_pallet)
+                : max(0, (int) $item->units_per_pallet);
+
+            if ($lineType === WmsLineType::PALLET && $stockPallet instanceof StockPallet && $actualUnitsPerPallet <= 0) {
+                $errors["lines.$rowKey.stock_pallet_id"] = 'La partida seleccionada no tiene unidades por pallet reales registradas.';
+
+                continue;
+            }
+
             if ($lineType === WmsLineType::PEAK) {
                 if (! $stockPallet instanceof StockPallet) {
                     $errors["lines.$rowKey.stock_pallet_id"] = 'Selecciona un pico existente para esta referencia.';
@@ -206,7 +216,7 @@ class StockLinePayloadResolver
                     'stock_peak_index' => $stockPeakIndex,
                     'lot' => LotNormalizer::normalize($stockPallet->lot),
                     'location_text' => filled($stockPallet->location_text) ? trim((string) $stockPallet->location_text) : null,
-                    'units_per_pallet' => (int) $item->units_per_pallet,
+                    'units_per_pallet' => $actualUnitsPerPallet,
                     'units_per_peak' => $unitsPerPeak,
                     'requested_pallets' => 0,
                     'requested_peaks' => 1,
@@ -226,11 +236,11 @@ class StockLinePayloadResolver
                     'stock_peak_index' => null,
                     'lot' => LotNormalizer::normalize($stockPallet?->lot),
                     'location_text' => filled($stockPallet?->location_text) ? trim((string) $stockPallet->location_text) : null,
-                    'units_per_pallet' => (int) $item->units_per_pallet,
+                    'units_per_pallet' => $actualUnitsPerPallet,
                     'units_per_peak' => null,
                     'requested_pallets' => $quantity,
                     'requested_peaks' => 0,
-                    'requested_units' => $quantity * (int) $item->units_per_pallet,
+                    'requested_units' => $quantity * $actualUnitsPerPallet,
                 ];
 
                 continue;
@@ -255,11 +265,11 @@ class StockLinePayloadResolver
                 'stock_peak_index' => null,
                 'lot' => LotNormalizer::normalize($stockPallet?->lot),
                 'location_text' => filled($stockPallet?->location_text) ? trim((string) $stockPallet->location_text) : null,
-                'units_per_pallet' => (int) $item->units_per_pallet,
+                'units_per_pallet' => $actualUnitsPerPallet,
                 'units_per_peak' => null,
                 'requested_pallets' => $quantity,
                 'requested_peaks' => 0,
-                'requested_units' => $quantity * (int) $item->units_per_pallet,
+                'requested_units' => $quantity * $actualUnitsPerPallet,
             ];
         }
 

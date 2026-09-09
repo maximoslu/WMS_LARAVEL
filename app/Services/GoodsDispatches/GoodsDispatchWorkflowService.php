@@ -5,13 +5,13 @@ namespace App\Services\GoodsDispatches;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\InventoryMovement;
-use App\Models\StockPallet;
 use App\Models\MerchandiseRequest;
+use App\Models\StockPallet;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
+use App\Services\Inventory\InventoryMovementService;
 use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
-use App\Services\Inventory\InventoryMovementService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -42,6 +42,7 @@ class GoodsDispatchWorkflowService
      *     loaded_partial_units?:int|string|null,
      *     allocations?:array<int, array{
      *         stock_pallet_id?:int|null,
+     *         units_per_pallet?:int|null,
      *         loaded_pallets:int,
      *         loaded_partial_units:int,
      *         selected_peaks?:array<int, array{index:int, units:int}>,
@@ -320,6 +321,7 @@ class GoodsDispatchWorkflowService
                 'stock_pallet_id' => $stockPalletId,
                 'lot' => $allocation['lot'] ?? null,
                 'location_text' => $allocation['location_text'] ?? null,
+                'units_per_pallet' => $allocation['units_per_pallet'] ?? null,
                 'loaded_pallets' => $loadedPallets,
                 'loaded_partial_units' => $loadedPartialUnits,
                 'selected_peaks' => $allocation['selected_peaks'] ?? [],

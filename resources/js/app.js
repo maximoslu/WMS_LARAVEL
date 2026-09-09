@@ -2196,7 +2196,9 @@ const setupWarehouseRequestAllocations = () => {
     const updateAssignment = (assignment, line) => {
         updateVisiblePeakGroup(assignment);
 
-        const unitsPerPallet = parsePositiveInteger(line.dataset.unitsPerPallet);
+        const stockSelect = assignment.querySelector('[data-stock-select]');
+        const selectedOption = stockSelect?.selectedOptions?.[0];
+        const unitsPerPallet = parsePositiveInteger(selectedOption?.dataset.unitsPerPallet ?? '0');
         const loadedPallets = parsePositiveInteger(assignment.querySelector('[data-loaded-pallets]')?.value ?? '0');
         const manualPartialUnits = parsePositiveInteger(assignment.querySelector('[data-loaded-partial-units]')?.value ?? '0');
         const selectedPeakUnits = Array.from(assignment.querySelectorAll('[data-peak-group]:not([hidden]) input[type="checkbox"]:checked'))
@@ -2209,15 +2211,13 @@ const setupWarehouseRequestAllocations = () => {
             totalNode.textContent = formatNumber.format(totalUnits);
         }
 
-        const stockSelect = assignment.querySelector('[data-stock-select]');
-        const selectedOption = stockSelect?.selectedOptions?.[0];
         const locationLabel = stockSelect?.value
             ? (selectedOption?.dataset.pickingLocation || 'Sin ubicación registrada')
             : 'Pendiente de asignar ubicación';
         const quantityParts = [];
 
         if (loadedPallets > 0) {
-            quantityParts.push(`${formatNumber.format(loadedPallets)} ${loadedPallets === 1 ? 'pallet' : 'pallets'}`);
+            quantityParts.push(`${formatNumber.format(loadedPallets)} ${loadedPallets === 1 ? 'pallet' : 'pallets'} × ${formatNumber.format(unitsPerPallet)} uds = ${formatNumber.format(loadedPallets * unitsPerPallet)} uds`);
         }
 
         if (partialUnits > 0) {

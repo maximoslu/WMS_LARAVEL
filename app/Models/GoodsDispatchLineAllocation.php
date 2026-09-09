@@ -15,6 +15,7 @@ class GoodsDispatchLineAllocation extends Model
         'stock_pallet_id',
         'lot',
         'location_text',
+        'units_per_pallet',
         'loaded_pallets',
         'loaded_partial_units',
         'selected_peaks',
@@ -24,6 +25,7 @@ class GoodsDispatchLineAllocation extends Model
     {
         return [
             'stock_pallet_id' => 'integer',
+            'units_per_pallet' => 'integer',
             'loaded_pallets' => 'integer',
             'loaded_partial_units' => 'integer',
             'selected_peaks' => 'array',
@@ -60,7 +62,11 @@ class GoodsDispatchLineAllocation extends Model
         $partialUnits = $this->loadedPartialUnits();
 
         if ($pallets > 0) {
-            $parts[] = number_format($pallets, 0, ',', '.').' '.($pallets === 1 ? 'pallet' : 'pallets');
+            $unitsPerPallet = $this->actualUnitsPerPallet();
+            $palletLabel = number_format($pallets, 0, ',', '.').' '.($pallets === 1 ? 'pallet' : 'pallets');
+            $parts[] = $unitsPerPallet > 0
+                ? $palletLabel.' × '.number_format($unitsPerPallet, 0, ',', '.').' uds = '.number_format($pallets * $unitsPerPallet, 0, ',', '.').' uds'
+                : $palletLabel;
         }
 
         if ($partialUnits > 0) {
@@ -70,9 +76,20 @@ class GoodsDispatchLineAllocation extends Model
         return $parts !== [] ? implode(' + ', $parts) : null;
     }
 
-    public function loadedUnits(int $unitsPerPallet): int
+    public function actualUnitsPerPallet(): int
     {
-        return ($this->loadedPallets() * max(0, $unitsPerPallet)) + $this->loadedPartialUnits();
+        $snapshot = max(0, (int) $this->units_per_pallet);
+
+        if ($snapshot > 0) {
+            return $snapshot;
+        }
+
+        return max(0, (int) ($this->stockPallet?->units_per_pallet ?? $this->line?->units_per_pallet ?? 0));
+    }
+
+    public function loadedUnits(): int
+    {
+        return ($this->loadedPallets() * $this->actualUnitsPerPallet()) + $this->loadedPartialUnits();
     }
 
     public function loadedPallets(): int

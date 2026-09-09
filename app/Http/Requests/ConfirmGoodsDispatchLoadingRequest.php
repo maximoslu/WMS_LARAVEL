@@ -31,6 +31,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
      *     loaded_partial_units:int,
      *     allocations:array<int, array{
      *         stock_pallet_id:int|null,
+     *         units_per_pallet:int,
      *         loaded_pallets:int,
      *         loaded_partial_units:int,
      *         selected_peaks:array<int, array{index:int, units:int}>,
@@ -157,6 +158,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
      *     loaded_partial_units:int,
      *     allocations:array<int, array{
      *         stock_pallet_id:int|null,
+     *         units_per_pallet:int,
      *         loaded_pallets:int,
      *         loaded_partial_units:int,
      *         selected_peaks:array<int, array{index:int, units:int}>,
@@ -372,13 +374,14 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                     'stock_peak_index' => $stockPeakIndex,
                     'lot' => filled($stockPallet->lot) ? trim((string) $stockPallet->lot) : null,
                     'location_text' => filled($stockPallet->location_text) ? trim((string) $stockPallet->location_text) : null,
-                    'units_per_pallet' => (int) $item->units_per_pallet,
+                    'units_per_pallet' => max(0, (int) $stockPallet->units_per_pallet),
                     'units_per_peak' => $unitsPerPeak,
                     'loaded_pallets' => 0,
                     'loaded_peaks' => $loadedPartialUnits > 0 ? 1 : 0,
                     'loaded_partial_units' => $loadedPartialUnits,
                     'allocations' => [[
                         'stock_pallet_id' => $stockPallet->id,
+                        'units_per_pallet' => max(0, (int) $stockPallet->units_per_pallet),
                         'loaded_pallets' => 0,
                         'loaded_partial_units' => $loadedPartialUnits,
                         'selected_peaks' => $loadedPartialUnits > 0 ? [[
@@ -421,13 +424,16 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
                 'stock_peak_index' => null,
                 'lot' => filled($stockPallet?->lot) ? trim((string) $stockPallet->lot) : null,
                 'location_text' => filled($stockPallet?->location_text) ? trim((string) $stockPallet?->location_text) : null,
-                'units_per_pallet' => (int) $item->units_per_pallet,
+                'units_per_pallet' => $stockPallet instanceof StockPallet
+                    ? max(0, (int) $stockPallet->units_per_pallet)
+                    : max(0, (int) $item->units_per_pallet),
                 'units_per_peak' => null,
                 'loaded_pallets' => $loadedPallets,
                 'loaded_peaks' => 0,
                 'loaded_partial_units' => $loadedPartialUnits,
                 'allocations' => $stockPallet instanceof StockPallet ? [[
                     'stock_pallet_id' => $stockPallet->id,
+                    'units_per_pallet' => max(0, (int) $stockPallet->units_per_pallet),
                     'loaded_pallets' => $loadedPallets,
                     'loaded_partial_units' => $loadedPartialUnits,
                     'selected_peaks' => [],
@@ -464,6 +470,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
      * @param  array<string, string>  $errors
      * @return array<int, array{
      *     stock_pallet_id:int|null,
+     *     units_per_pallet:int,
      *     loaded_pallets:int,
      *     loaded_partial_units:int,
      *     selected_peaks:array<int, array{index:int, units:int}>,
@@ -599,6 +606,12 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             }
 
             if ($stockPallet instanceof StockPallet) {
+                if ($loadedPallets > 0 && (int) $stockPallet->units_per_pallet <= 0) {
+                    $errors["lines.$rowKey.allocations.$allocationIndex.stock_pallet_id"] = 'La partida seleccionada no tiene unidades por pallet reales registradas.';
+
+                    return null;
+                }
+
                 $stockId = (int) $stockPallet->id;
                 $usedPalletsByStock[$stockId] = ($usedPalletsByStock[$stockId] ?? 0) + $loadedPallets;
                 $usedPartialUnitsByStock[$stockId] = ($usedPartialUnitsByStock[$stockId] ?? 0) + $allocationPartialUnits;
@@ -613,6 +626,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
 
             $resolved[] = [
                 'stock_pallet_id' => $stockPallet?->id,
+                'units_per_pallet' => max(0, (int) ($stockPallet?->units_per_pallet ?? 0)),
                 'loaded_pallets' => $loadedPallets,
                 'loaded_partial_units' => $allocationPartialUnits,
                 'selected_peaks' => $selectedPeaks,
@@ -630,6 +644,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
             if ($fallbackStock instanceof StockPallet && $peakUnits > 0) {
                 $resolved[] = [
                     'stock_pallet_id' => $fallbackStock->id,
+                    'units_per_pallet' => max(0, (int) $fallbackStock->units_per_pallet),
                     'loaded_pallets' => 0,
                     'loaded_partial_units' => $peakUnits,
                     'selected_peaks' => [[

@@ -125,7 +125,11 @@
                             @endif
                         </td>
                         <td>{{ $line->lot ?: 'NO LOTE' }}</td>
-                        <td>{{ $line->unitsLabel() }}</td>
+                        <td>
+                            {{ $dispatchLine?->allocations?->isNotEmpty()
+                                ? 'Composición real detallada por partida'
+                                : $line->unitsLabel() }}
+                        </td>
                         <td>{{ $line->requestedQuantityLabel() }}</td>
                         <td>{{ $line->requiredUnits() !== null ? number_format((int) $line->requiredUnits(), 0, ',', '.').' uds.' : '-' }}</td>
                         <td>{{ $line->destination_location ?: '-' }}</td>
@@ -133,6 +137,9 @@
                             @forelse ($pickingLocationSummaries as $pickingSummary)
                                 <div>
                                     {{ $pickingSummary['location'] }}
+                                    @if (filled($pickingSummary['lot'] ?? null))
+                                        <span class="picking-quantity">Lote {{ $pickingSummary['lot'] }}</span>
+                                    @endif
                                     @if ($pickingSummary['quantity'])
                                         <span class="picking-quantity">{{ $pickingSummary['quantity'] }}</span>
                                     @endif

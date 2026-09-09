@@ -132,8 +132,7 @@ class TraceabilityBackfillService
                 $key = "backfill:dispatch-allocation:{$allocation->id}";
                 $line = $allocation->line;
                 $dispatch = $line->dispatch;
-                $unitsPerPallet = (int) ($allocation->stockPallet?->units_per_pallet ?? $line->units_per_pallet ?? 0);
-                $units = ((int) $allocation->loaded_pallets * $unitsPerPallet) + (int) $allocation->loaded_partial_units;
+                $units = $allocation->loadedUnits();
 
                 $this->createHistoricalMovement(
                     key: $key,

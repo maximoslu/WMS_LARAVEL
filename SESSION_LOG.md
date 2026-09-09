@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-09-09 - UNIDADES REALES POR PALET EN PREPARACION Y CARGA
+
+**Causa raiz:** las variantes y lineas de pedido copiaban `items.units_per_pallet` aunque ya hubieran seleccionado una partida concreta. La preparacion permitia varias asignaciones reales de `stock_pallets`, pero el JavaScript y `GoodsDispatchLine::loadedUnitsTotal()` multiplicaban todos los pallets por el unico valor de la linea. Por ello 1 pallet de 5.700 y otro de 5.500 se mostraban y contabilizaban como 11.400, aunque el descuento de stock usaba correctamente 11.200 desde las partidas fisicas.
+
+**Solucion:** `stock_pallets` se mantiene como fuente canonica. El catalogo y el resolver usan `stock_pallets.units_per_pallet` cuando existe una partida concreta. Cada `goods_dispatch_line_allocation` guarda ahora un snapshot nullable de sus unidades por pallet reales; los agregados, cumplimiento, pendientes, cobertura, preparacion y albaran suman cada asignacion por separado. Los picos continúan siendo unidades reales independientes. Una partida que declara pallets pero no tiene unidades por pallet fisicas queda bloqueada en vez de sustituirse por el estandar del articulo.
+
+**UX y documentos:** la preparacion muestra por partida lote, ubicacion, pallets, unidades reales por pallet, picos y total de la asignacion. El PDF de preparacion detalla la composicion real cuando ya existe, y el albaran usa las cantidades y lotes de las asignaciones. Las nuevas asignaciones conservan su snapshot aunque el stock cambie despues.
+
+**Compatibilidad:** no se cambia el criterio de seleccion existente (`received_at`, lote e ID), la gestion de picos ni el descuento transaccional. No se modificaron cantidades, pedidos ni datos de produccion. La migracion `2026_09_09_000001_add_units_per_pallet_to_goods_dispatch_line_allocations.php` es aditiva y no rellena ni altera registros historicos existentes; estos mantienen fallback compatible a su partida trazada.
+
+**Validacion:** regresion nueva: **6 passed, 37 assertions**; pedidos y salidas: **149 passed, 1.151 assertions**; stock, entradas, importaciones, identidad e inventarios: **249 passed, 1.798 assertions**; suite completa: **929 passed, 5.611 assertions**. Pint y sintaxis PHP OK. `npm run build` y `git diff --check` se ejecutan antes del commit.
+
 ## 2026-09-08 - INVENTARIOS FÍSICOS REANUDABLES POR UBICACIÓN
 
 **Necesidad y arquitectura:** la pantalla `Stock > Inventario` existente preparaba una vista previa y un XLSX filtrados, pero no persistía sesiones, progreso ni histórico. Se conserva `stock_pallets` y `StockOverviewBuilder` como fuente canónica del stock actual. La migración `2026_09_08_000001_create_stock_inventory_sessions_tables.php` añade `stock_inventory_sessions` para la cabecera y `stock_inventory_locations` para las unidades comprobables, con una restricción que permite un único inventario abierto por cliente.

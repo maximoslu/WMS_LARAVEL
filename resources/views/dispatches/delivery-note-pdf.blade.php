@@ -139,8 +139,22 @@
                                 <br><span class="fill-truck">PARA RELLENAR CAMION</span>
                             @endif
                         </td>
-                        <td class="col-lot">{{ $line->lot ?: 'NO LOTE' }}</td>
-                        <td class="col-delivered">{{ $line->loadedQuantityLabel() }}</td>
+                        <td class="col-lot">
+                            @if ($line->allocations->isNotEmpty())
+                                {{ $line->allocations->pluck('lot')->filter()->unique()->implode(', ') ?: 'NO LOTE' }}
+                            @else
+                                {{ $line->lot ?: 'NO LOTE' }}
+                            @endif
+                        </td>
+                        <td class="col-delivered">
+                            @if ($line->allocations->isNotEmpty())
+                                @foreach ($line->allocations as $allocation)
+                                    <div>{{ $allocation->pickingQuantityLabel() }}</div>
+                                @endforeach
+                            @else
+                                {{ $line->loadedQuantityLabel() }}
+                            @endif
+                        </td>
                         <td class="col-quantity number">{{ number_format($line->loadedUnitsTotal(), 0, ',', '.') }} uds</td>
                         <td class="col-destination">{{ $line->destination_location ?: '-' }}</td>
                     </tr>

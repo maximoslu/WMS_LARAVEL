@@ -499,7 +499,11 @@
                                 @unless ($isClient)
                                     <td>
                                         @forelse ($pickingLocationSummaries as $pickingSummary)
-                                            <div><strong>{{ $pickingSummary['location'] }}</strong>{{ $pickingSummary['quantity'] ? ' · '.$pickingSummary['quantity'] : '' }}</div>
+                                            <div>
+                                                <strong>{{ $pickingSummary['location'] }}</strong>
+                                                {{ filled($pickingSummary['lot'] ?? null) ? ' · Lote '.$pickingSummary['lot'] : '' }}
+                                                {{ $pickingSummary['quantity'] ? ' · '.$pickingSummary['quantity'] : '' }}
+                                            </div>
                                         @empty
                                             Pendiente de asignar ubicación
                                         @endforelse

@@ -259,6 +259,7 @@ class StockVariantCatalog
     {
         $availablePallets = max(0, (int) $stockPallet->full_pallets);
         $availablePeaks = $this->countAvailablePeaks($stockPallet);
+        $unitsPerPallet = max(0, (int) $stockPallet->units_per_pallet);
         $location = filled($stockPallet->location_text) ? trim((string) $stockPallet->location_text) : null;
         $lot = LotNormalizer::normalize($stockPallet->lot);
 
@@ -276,7 +277,7 @@ class StockVariantCatalog
             'location_text' => $location,
             'stock_pallet_id' => $stockPallet->id,
             'stock_peak_index' => null,
-            'units_per_pallet' => (int) $item->units_per_pallet,
+            'units_per_pallet' => $unitsPerPallet,
             'units_per_peak' => null,
             'available_pallets' => $availablePallets,
             'available_peaks' => $availablePeaks,
@@ -284,7 +285,9 @@ class StockVariantCatalog
             'quantity_max' => $availablePallets > 0 ? $availablePallets : null,
             'meta' => $this->metaString([
                 'Lote '.$lot,
-                number_format((int) $item->units_per_pallet, 0, ',', '.').' uds/pallet',
+                $unitsPerPallet > 0
+                    ? number_format($unitsPerPallet, 0, ',', '.').' uds/pallet reales'
+                    : 'Sin uds/pallet reales registradas',
                 $availablePallets > 0 ? number_format($availablePallets, 0, ',', '.').' pallets disponibles' : null,
                 $availablePeaks > 0 ? number_format($availablePeaks, 0, ',', '.').' picos' : null,
                 $location ? 'Ubicación '.$location : null,
@@ -323,7 +326,7 @@ class StockVariantCatalog
             'location_text' => $location,
             'stock_pallet_id' => $stockPallet->id,
             'stock_peak_index' => $peakIndex,
-            'units_per_pallet' => (int) $item->units_per_pallet,
+            'units_per_pallet' => max(0, (int) $stockPallet->units_per_pallet),
             'units_per_peak' => $peakUnits,
             'available_pallets' => $availablePallets,
             'available_peaks' => $availablePeaks,

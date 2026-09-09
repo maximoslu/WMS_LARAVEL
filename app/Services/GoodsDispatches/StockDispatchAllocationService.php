@@ -307,6 +307,7 @@ class StockDispatchAllocationService
                 'stock_pallet_id' => $batch->id,
                 'lot' => $batch->lot,
                 'location_text' => $batch->location_text,
+                'units_per_pallet' => max(0, (int) $batch->units_per_pallet),
                 'loaded_pallets' => $take,
                 'loaded_partial_units' => 0,
                 'selected_peaks' => [],

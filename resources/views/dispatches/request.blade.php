@@ -289,7 +289,9 @@
                         ]]);
                     }
                     $servedPickingLocationLabels = $servedPickingLocationSummaries
-                        ->map(fn ($summary) => $summary['location'].($summary['quantity'] ? ' · '.$summary['quantity'] : ''))
+                        ->map(fn ($summary) => $summary['location']
+                            .(filled($summary['lot'] ?? null) ? ' · Lote '.$summary['lot'] : '')
+                            .($summary['quantity'] ? ' · '.$summary['quantity'] : ''))
                         ->values();
 
                     $stateClass = 'pending';
@@ -308,7 +310,7 @@
                     }
                 @endphp
 
-                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-required-units="{{ $requiredUnits ?? '' }}" data-served-units="{{ $servedUnits }}" data-served-picking-locations='@js($servedPickingLocationLabels->all())' data-units-per-pallet="{{ $dispatchLine?->units_per_pallet ?? $line->units_per_pallet ?? 0 }}">
+                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-required-units="{{ $requiredUnits ?? '' }}" data-served-units="{{ $servedUnits }}" data-served-picking-locations='@js($servedPickingLocationLabels->all())'>
                     <header class="warehouse-prep-line-head">
                         <div>
                             <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
@@ -331,7 +333,13 @@
                                     <dt>Ubicación de recogida</dt>
                                     <dd data-line-picking-locations>
                                         @forelse ($pickingLocationSummaries as $pickingSummary)
-                                            <span>{{ $pickingSummary['location'] }}{{ $pickingSummary['quantity'] ? ' · '.$pickingSummary['quantity'] : '' }}</span>
+                                            <span>
+                                                {{ $pickingSummary['location'] }}
+                                                @if (filled($pickingSummary['lot'] ?? null))
+                                                    · Lote {{ $pickingSummary['lot'] }}
+                                                @endif
+                                                {{ $pickingSummary['quantity'] ? ' · '.$pickingSummary['quantity'] : '' }}
+                                            </span>
                                         @empty
                                             <span>Pendiente de asignar ubicación</span>
                                         @endforelse
@@ -388,10 +396,13 @@
                                         $allocationLocationText = trim((string) ($allocation->location_text ?? ''));
                                         $pickingLocationLabel = $selectedStockPallet?->pickingLocationLabel()
                                             ?? ($allocationLocationText !== '' ? $allocationLocationText : null);
+                                        $allocationUnitsPerPallet = max(0, (int) ($allocation->units_per_pallet ?? $selectedStockPallet?->units_per_pallet ?? 0));
                                         $pickingQuantityParts = [];
                                         if ((int) ($allocation->loaded_pallets ?? 0) > 0) {
                                             $allocationPallets = (int) $allocation->loaded_pallets;
-                                            $pickingQuantityParts[] = number_format($allocationPallets, 0, ',', '.').' '.($allocationPallets === 1 ? 'pallet' : 'pallets');
+                                            $pickingQuantityParts[] = number_format($allocationPallets, 0, ',', '.').' '.($allocationPallets === 1 ? 'pallet' : 'pallets')
+                                                .' × '.number_format($allocationUnitsPerPallet, 0, ',', '.').' uds = '
+                                                .number_format($allocationPallets * $allocationUnitsPerPallet, 0, ',', '.').' uds';
                                         }
                                         if ((int) ($allocation->loaded_partial_units ?? 0) > 0) {
                                             $pickingQuantityParts[] = 'pico '.number_format((int) $allocation->loaded_partial_units, 0, ',', '.').' uds';
@@ -415,8 +426,8 @@
                                                             ->filter(fn ($peakUnits) => $peakUnits > 0)
                                                             ->values();
                                                     @endphp
-                                                    <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}" @selected((int) $selectedStockPalletId === (int) $stockOption->id)>
-                                                        Lote: {{ $stockOption->lot ?: 'NO LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                                    <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}" data-units-per-pallet="{{ max(0, (int) $stockOption->units_per_pallet) }}" @selected((int) $selectedStockPalletId === (int) $stockOption->id)>
+                                                        Lote: {{ $stockOption->lot ?: 'NO LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Uds/pallet reales: {{ number_format((int) $stockOption->units_per_pallet, 0, ',', '.') }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
                                                     </option>
                                                 @endforeach
                                             </select>
@@ -484,8 +495,8 @@
                                                             ->filter(fn ($peakUnits) => $peakUnits > 0)
                                                             ->values();
                                                     @endphp
-                                                    <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}">
-                                                        Lote: {{ $stockOption->lot ?: 'NO LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
+                                                    <option value="{{ $stockOption->id }}" data-picking-location="{{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }}" data-units-per-pallet="{{ max(0, (int) $stockOption->units_per_pallet) }}">
+                                                        Lote: {{ $stockOption->lot ?: 'NO LOTE' }} · Ubicación: {{ $stockOption->pickingLocationLabel() ?? 'Sin ubicación registrada' }} · Uds/pallet reales: {{ number_format((int) $stockOption->units_per_pallet, 0, ',', '.') }} · Stock: {{ number_format((int) $stockOption->full_pallets, 0, ',', '.') }} pallets · Picos: {{ $stockPeaks->isNotEmpty() ? $stockPeaks->implode(', ') : '0' }} · {{ number_format((int) $stockOption->quantity_units, 0, ',', '.') }} uds
                                                     </option>
                                                 @endforeach
                                             </select>

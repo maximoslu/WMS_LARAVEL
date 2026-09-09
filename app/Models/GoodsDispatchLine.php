@@ -192,6 +192,11 @@ class GoodsDispatchLine extends Model
 
     public function loadedUnitsTotal(): int
     {
+        if ($this->hasLoadingAllocations()) {
+            return (int) $this->loadingAllocations()
+                ->sum(fn (GoodsDispatchLineAllocation $allocation): int => $allocation->loadedUnits());
+        }
+
         return ($this->loadedPallets() * max(0, (int) ($this->units_per_pallet ?? 0)))
             + $this->loadedPartialUnits();
     }
@@ -371,7 +376,7 @@ class GoodsDispatchLine extends Model
     }
 
     /**
-     * @return Collection<int, array{location: string, quantity: string|null}>
+     * @return Collection<int, array{location: string, lot: string|null, quantity: string|null, units: int}>
      */
     public function pickingLocationSummaries(): Collection
     {
@@ -384,7 +389,9 @@ class GoodsDispatchLine extends Model
         if ($this->allocations->isNotEmpty()) {
             return $this->allocations->map(fn (GoodsDispatchLineAllocation $allocation): array => [
                 'location' => $allocation->pickingLocationLabel() ?? 'Sin ubicación registrada',
+                'lot' => $allocation->lot,
                 'quantity' => $allocation->pickingQuantityLabel(),
+                'units' => $allocation->loadedUnits(),
             ])->values();
         }
 
@@ -400,7 +407,9 @@ class GoodsDispatchLine extends Model
 
         return collect([[
             'location' => $this->stockPallet?->pickingLocationLabel() ?? 'Sin ubicación registrada',
+            'lot' => $this->lot,
             'quantity' => $hasRecordedLoading ? $this->loadedQuantityLabel() : null,
+            'units' => $hasRecordedLoading ? $this->loadedUnitsTotal() : 0,
         ]]);
     }
 
