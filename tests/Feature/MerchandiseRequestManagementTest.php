@@ -272,6 +272,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 4,
                 ],
@@ -341,6 +342,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'draft',
                 'notes' => 'Primer comentario del pedido',
             ])
@@ -369,6 +371,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($foreignCliente)
             ->patch(route('merchandise-requests.draft.update', $draft), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'draft',
                 'notes' => 'Intento ajeno',
             ])
@@ -387,6 +390,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->patch(route('merchandise-requests.draft.update', $draft), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'draft',
                 'notes' => 'Comentario actualizado',
                 'lines' => [
@@ -416,6 +420,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->patch(route('merchandise-requests.draft.update', $draft), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'submit',
                 'notes' => 'Enviar al final del dia',
                 'lines' => [
@@ -456,6 +461,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.draft.edit', $draft))
             ->patch(route('merchandise-requests.draft.update', $draft), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'submit',
             ])
             ->assertRedirect(route('merchandise-requests.draft.edit', $draft))
@@ -490,6 +496,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'submit',
                 'notes' => 'Cargar junto al pedido principal',
                 'lines' => [
@@ -550,6 +557,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $item->id,
@@ -587,6 +595,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $item->id,
@@ -630,6 +639,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $item->id,
@@ -665,6 +675,7 @@ class MerchandiseRequestManagementTest extends TestCase
             $this->actingAs($cliente)
                 ->from(route('merchandise-requests.create'))
                 ->post(route('merchandise-requests.store'), [
+                    'service_level' => 'standard_24h',
                     'lines' => [
                         'line_1' => [
                             'item_id' => $item->id,
@@ -698,6 +709,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'client_id' => $otherClient->id,
                 'lines' => [
                     'line_1' => [
@@ -735,6 +747,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'client_id' => $otherClient->id,
                 'lines' => [
                     'line_1' => [
@@ -779,6 +792,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($clienteSinClienteAsignado)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'client_id' => $client->id,
                 'lines' => [
                     'line_1' => [
@@ -810,6 +824,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 2,
                 ],
@@ -837,6 +852,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 2,
                 ],
@@ -864,6 +880,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 2,
                 ],
@@ -896,6 +913,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 2,
                 ],
@@ -925,6 +943,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->followingRedirects()
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 2,
                 ],
@@ -955,6 +974,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 3,
                 ],
@@ -998,6 +1018,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'peak_variant' => [
                         'item_id' => $item->id,
@@ -1047,6 +1068,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $firstItem->id,
@@ -1106,6 +1128,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'pallet_variant' => [
                         'item_id' => $item->id,
@@ -1148,6 +1171,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $firstItem->id => 2,
                 ],
@@ -1162,6 +1186,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $secondItem->id => 3,
                 ],
@@ -1192,6 +1217,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 0,
                 ],
@@ -1213,6 +1239,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $item->id,
@@ -1238,6 +1265,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => -1,
                 ],
@@ -1248,6 +1276,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => '1.5',
                 ],
@@ -2642,6 +2671,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $withoutStock->id,
@@ -2673,6 +2703,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $item->id,
@@ -2707,6 +2738,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($cliente)
             ->from(route('merchandise-requests.create'))
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'line_1' => [
                         'item_id' => $item->id,
@@ -2734,6 +2766,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $almacen = $this->makeUserWithRole(Role::ALMACEN);
         $this->actingAs($requester)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'draft',
                 'lines' => [[
                     'item_id' => $available->id,
@@ -2748,6 +2781,7 @@ class MerchandiseRequestManagementTest extends TestCase
         $this->actingAs($requester)
             ->from(route('merchandise-requests.draft.edit', $draft))
             ->patch(route('merchandise-requests.draft.update', $draft), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'draft',
                 'lines' => [[
                     'item_id' => $unavailable->id,
@@ -2845,6 +2879,7 @@ class MerchandiseRequestManagementTest extends TestCase
 
         $this->actingAs($internalUser)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'client_id' => $client->id,
                 'lines' => [
                     'line_1' => [

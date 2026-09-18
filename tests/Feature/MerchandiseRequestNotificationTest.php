@@ -56,6 +56,7 @@ class MerchandiseRequestNotificationTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'quantities' => [
                     $item->id => 3,
                 ],
@@ -193,6 +194,7 @@ class MerchandiseRequestNotificationTest extends TestCase
 
         $this->actingAs($internalCreator)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'client_id' => $client->id,
                 'quantities' => [
                     $item->id => 2,

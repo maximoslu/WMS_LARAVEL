@@ -55,6 +55,10 @@
                     <div class="meta-label">Fecha</div>
                     <strong>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') }}</strong>
                 </td>
+                <td>
+                    <div class="meta-label">Servicio</div>
+                    <strong>{{ $merchandiseRequest->serviceLevelLabel() }}</strong>
+                </td>
             </tr>
             <tr>
                 <td>

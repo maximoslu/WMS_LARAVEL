@@ -174,6 +174,7 @@ class MerchandiseRequestForecastTest extends TestCase
 
         $this->actingAs($cliente)
             ->patch(route('merchandise-requests.draft.update', $draft), [
+                'service_level' => 'standard_24h',
                 'submit_action' => 'submit',
                 'notes' => 'Pedido definitivo',
                 'lines' => [
@@ -224,6 +225,7 @@ class MerchandiseRequestForecastTest extends TestCase
 
             $this->actingAs($internal)
                 ->patch(route('merchandise-requests.draft.update', $draft), [
+                    'service_level' => 'standard_24h',
                     'client_id' => $client->id,
                     'submit_action' => 'draft',
                     'notes' => 'Borrador actualizado internamente',
@@ -269,6 +271,7 @@ class MerchandiseRequestForecastTest extends TestCase
 
             $this->actingAs($internal)
                 ->patch(route('merchandise-requests.draft.update', $draft), [
+                    'service_level' => 'standard_24h',
                     'client_id' => $client->id,
                     'submit_action' => 'submit',
                     'notes' => 'Pedido definitivo enviado internamente',

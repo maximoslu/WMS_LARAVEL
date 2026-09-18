@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\MerchandiseRequestServiceLevel;
 use App\Models\Client;
 use App\Models\Role;
 use App\Support\Stock\StockLinePayloadResolver;
@@ -82,6 +83,7 @@ class StoreMerchandiseRequestRequest extends FormRequest
             'camion_propio' => $this->boolean('camion_propio'),
             'delivery_address_override' => $this->boolean('delivery_address_override'),
             'delivery_address_text' => trim((string) $this->input('delivery_address_text')) ?: null,
+            'service_level' => trim((string) $this->input('service_level')) ?: null,
             'client_id' => $this->input('client_id') === '' ? null : $this->input('client_id'),
             'submit_action' => $this->input('submit_action') === 'draft' ? 'draft' : 'submit',
             'lines' => collect($submittedLines)
@@ -117,6 +119,11 @@ class StoreMerchandiseRequestRequest extends FormRequest
                 Rule::exists('clients', 'id')->where('active', true),
             ],
             'submit_action' => ['required', 'string', 'in:draft,submit'],
+            'service_level' => [
+                Rule::requiredIf(fn (): bool => ! $this->isDraftSubmission()),
+                'nullable',
+                Rule::enum(MerchandiseRequestServiceLevel::class),
+            ],
             'notes' => ['nullable', 'string', 'max:2000'],
             'lines' => [Rule::requiredIf(fn (): bool => ! $this->isDraftSubmission()), 'array'],
             'camion_propio' => ['boolean'],
@@ -234,6 +241,14 @@ class StoreMerchandiseRequestRequest extends FormRequest
     public function isDraftSubmission(): bool
     {
         return $this->input('submit_action') === 'draft';
+    }
+
+    public function messages(): array
+    {
+        return [
+            'service_level.required' => 'Selecciona si necesitas el pedido para hoy o por el cauce normal.',
+            'service_level.enum' => 'Selecciona un plazo de servicio válido.',
+        ];
     }
 
     /**

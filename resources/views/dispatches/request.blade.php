@@ -90,6 +90,10 @@
                 <dd>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') }}</dd>
             </div>
             <div>
+                <dt>Servicio</dt>
+                <dd>{{ $merchandiseRequest->serviceLevelLabel() }}</dd>
+            </div>
+            <div>
                 <dt>Pallets</dt>
                 <dd>{{ number_format($requestedPallets, 0, ',', '.') }}</dd>
             </div>

@@ -204,6 +204,7 @@ class MerchandiseRequestController extends Controller
                 'client_id' => $clientId,
                 'requested_by' => $user->id,
                 'status' => $isDraft ? MerchandiseRequest::STATUS_DRAFT : MerchandiseRequest::STATUS_PENDING,
+                'service_level' => $request->input('service_level'),
                 'requested_date' => now()->toDateString(),
                 'camion_propio' => $request->boolean('camion_propio'),
                 'delivery_address_override' => $request->boolean('delivery_address_override'),
@@ -238,6 +239,8 @@ class MerchandiseRequestController extends Controller
                 clientId: $clientId,
                 newValues: [
                     'status' => $requestModel->status,
+                    'service_level' => $requestModel->service_level?->value,
+                    'service_level_label' => $requestModel->serviceLevelLabel(),
                     'line_count' => count($requestedLines),
                     'requested_pallets' => collect($requestedLines)->sum('requested_pallets'),
                     'requested_peaks' => collect($requestedLines)->sum('requested_peaks'),
@@ -330,6 +333,7 @@ class MerchandiseRequestController extends Controller
 
             $lockedRequest->update([
                 'status' => $isDraft ? MerchandiseRequest::STATUS_DRAFT : MerchandiseRequest::STATUS_PENDING,
+                'service_level' => $request->input('service_level'),
                 'requested_date' => $isDraft ? $lockedRequest->requested_date : now()->toDateString(),
                 'camion_propio' => $request->boolean('camion_propio'),
                 'delivery_address_override' => $request->boolean('delivery_address_override'),
@@ -366,6 +370,8 @@ class MerchandiseRequestController extends Controller
                 clientId: $lockedRequest->client_id,
                 newValues: [
                     'status' => $lockedRequest->status,
+                    'service_level' => $lockedRequest->service_level?->value,
+                    'service_level_label' => $lockedRequest->serviceLevelLabel(),
                     'line_count' => count($requestedLines),
                     'requested_pallets' => collect($requestedLines)->sum('requested_pallets'),
                     'requested_peaks' => collect($requestedLines)->sum('requested_peaks'),

@@ -123,6 +123,10 @@
                     <dd>{{ $merchandiseRequest->submittedAt()?->format('d/m/Y H:i') ?? '—' }}</dd>
                 </div>
                 <div class="order-meta-item">
+                    <dt>Servicio</dt>
+                    <dd>{{ $merchandiseRequest->serviceLevelLabel() }}</dd>
+                </div>
+                <div class="order-meta-item">
                     <dt>Lineas</dt>
                     <dd>{{ number_format($lineCount, 0, ',', '.') }}</dd>
                 </div>

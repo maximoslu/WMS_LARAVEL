@@ -147,6 +147,35 @@
                     <textarea name="notes" maxlength="2000" rows="3" class="auth-input" placeholder="Opcional">{{ old('notes', $draft->notes ?? '') }}</textarea>
                 </label>
 
+                @php($selectedServiceLevel = old('service_level', $draft?->service_level?->value))
+                <section @class(['wms-action-card', 'order-service-level-card', 'has-error' => $errors->has('service_level')]) aria-labelledby="service-level-title">
+                    <div class="order-service-level-card-header">
+                        <strong id="service-level-title">¿Cuándo necesitas este pedido? <span aria-hidden="true">*</span></strong>
+                        <p>Indica el plazo de servicio antes de enviar el pedido.</p>
+                    </div>
+                    <fieldset class="order-service-level-options" aria-describedby="service-level-help">
+                        <legend class="sr-only">Plazo de servicio del pedido</legend>
+                        <label class="order-service-level-option">
+                            <input type="radio" name="service_level" value="same_day" @checked($selectedServiceLevel === \App\Enums\MerchandiseRequestServiceLevel::SAME_DAY->value)>
+                            <span class="order-service-level-option-copy">
+                                <strong>Para hoy</strong>
+                                <small>Necesito la entrega durante el día de hoy.</small>
+                            </span>
+                        </label>
+                        <label class="order-service-level-option">
+                            <input type="radio" name="service_level" value="standard_24h" @checked($selectedServiceLevel === \App\Enums\MerchandiseRequestServiceLevel::STANDARD_24H->value)>
+                            <span class="order-service-level-option-copy">
+                                <strong>Cauce normal</strong>
+                                <small>Entrega dentro de las 24 horas siguientes.</small>
+                            </span>
+                        </label>
+                    </fieldset>
+                    <p id="service-level-help" class="helper-text">Puedes guardar un borrador sin elegirlo, pero será obligatorio para enviar el pedido.</p>
+                    @error('service_level')
+                        <p class="order-service-level-error" role="alert">{{ $message }}</p>
+                    @enderror
+                </section>
+
                 <section class="wms-action-card delivery-address-card">
                     <div class="delivery-address-card-header">
                         <strong>Dirección de entrega</strong>

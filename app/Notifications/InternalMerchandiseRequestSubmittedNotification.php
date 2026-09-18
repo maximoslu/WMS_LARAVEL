@@ -48,8 +48,8 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             ->implode('; ');
 
         $message = (new MailMessage)
-            ->subject('Nuevo pedido de '.$clientLabel)
-            ->greeting('Nuevo pedido de '.$clientLabel)
+            ->subject('Nuevo pedido '.$request->serviceLevelEmailSubjectLabel().' · '.$clientLabel)
+            ->greeting('Nuevo pedido '.$request->serviceLevelEmailSubjectLabel().' de '.$clientLabel)
             ->line('El cliente ha realizado un pedido.')
             ->line('Solicitud: '.$request->referenceCode())
             ->line('Cliente: '.$request->client?->name)
@@ -57,6 +57,10 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             ->line('Fecha: '.$request->submittedAt()?->format('d/m/Y H:i'))
             ->line('Referencia: '.$request->referenceCode())
             ->line('Estado: '.$request->statusLabel());
+
+        $message
+            ->line('Servicio solicitado: '.$request->serviceLevelLabel())
+            ->line($request->serviceLevelDescription());
 
         if (filled($request->notes)) {
             $message->line('Comentarios del pedido: '.$request->notes);
@@ -85,6 +89,8 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             'reference' => $request->referenceCode(),
             'status' => $request->status,
             'status_label' => $request->statusLabel(),
+            'service_level' => $request->service_level?->value,
+            'service_level_label' => $request->serviceLevelLabel(),
             'requested_by' => $request->requestedBy?->name,
             'notes' => $request->notes,
             'submitted_at' => $request->submittedAt()?->toDateTimeString(),

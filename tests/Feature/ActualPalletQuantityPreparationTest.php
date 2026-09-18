@@ -138,6 +138,7 @@ class ActualPalletQuantityPreparationTest extends TestCase
 
         $this->actingAs($clientUser)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'pallet_real' => [
                         'item_id' => $item->id,

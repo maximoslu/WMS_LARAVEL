@@ -3285,6 +3285,7 @@ class GoodsDispatchManagementTest extends TestCase
 
         $this->actingAs($cliente)
             ->post(route('merchandise-requests.store'), [
+                'service_level' => 'standard_24h',
                 'lines' => [
                     'pallet_line' => [
                         'item_id' => $palletItem->id,

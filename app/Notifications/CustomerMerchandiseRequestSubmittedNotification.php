@@ -42,13 +42,17 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             ->all();
 
         $message = (new MailMessage)
-            ->subject('Tu pedido '.$request->referenceCode().' se ha registrado correctamente')
+            ->subject('Tu pedido '.$request->referenceCode().' · '.$request->serviceLevelEmailSubjectLabel())
             ->greeting('Pedido registrado correctamente')
             ->line('Tu pedido '.$request->referenceCode().' se ha registrado correctamente.')
             ->line('Referencia: '.$request->referenceCode())
             ->line('Fecha de solicitud: '.$request->submittedAt()?->format('d/m/Y H:i'))
             ->line('Estado inicial: '.$request->statusLabel())
             ->line('Total de pallets: '.number_format($request->requestedPalletsCount(), 0, ',', '.'));
+
+        $message
+            ->line('Servicio solicitado: '.$request->serviceLevelLabel())
+            ->line($request->serviceLevelDescription());
 
         if (filled($request->notes)) {
             $message->line('Comentarios del pedido: '.$request->notes);
@@ -80,6 +84,8 @@ class CustomerMerchandiseRequestSubmittedNotification extends Notification
             'reference' => $request->referenceCode(),
             'status' => $request->status,
             'status_label' => $request->statusLabel(),
+            'service_level' => $request->service_level?->value,
+            'service_level_label' => $request->serviceLevelLabel(),
             'notes' => $request->notes,
             'submitted_at' => $request->submittedAt()?->toDateTimeString(),
         ];

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MerchandiseRequestServiceLevel;
 use App\Support\WmsStatus;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -32,6 +33,7 @@ class MerchandiseRequest extends Model
         'client_id',
         'requested_by',
         'status',
+        'service_level',
         'delivery_reference',
         'delivery_address',
         'delivery_address_override',
@@ -56,6 +58,7 @@ class MerchandiseRequest extends Model
     {
         return [
             'requested_date' => 'date',
+            'service_level' => MerchandiseRequestServiceLevel::class,
             'prepared_at' => 'datetime',
             'shipped_at' => 'datetime',
             'completed_at' => 'datetime',
@@ -187,6 +190,21 @@ class MerchandiseRequest extends Model
     public function statusLabel(): string
     {
         return WmsStatus::merchandiseRequestLabel((string) $this->status);
+    }
+
+    public function serviceLevelLabel(): string
+    {
+        return $this->service_level?->label() ?? 'Plazo de servicio sin indicar';
+    }
+
+    public function serviceLevelDescription(): string
+    {
+        return $this->service_level?->description() ?? 'No se indicó un plazo de servicio.';
+    }
+
+    public function serviceLevelEmailSubjectLabel(): string
+    {
+        return $this->service_level?->emailSubjectLabel() ?? 'PLAZO SIN INDICAR';
     }
 
     public function hasDeliveryAddressOverride(): bool

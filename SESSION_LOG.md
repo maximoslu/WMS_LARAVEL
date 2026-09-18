@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-09-18 - PLAZO DE SERVICIO “PARA HOY” O “CAUCE NORMAL” EN PEDIDOS
+
+**Necesidad y regla:** al crear un pedido, el cliente debe indicar si lo necesita **Para hoy** o por **Cauce normal** (entrega dentro de las 24 horas siguientes). La palabra “urgente” no se muestra en la experiencia cliente. El dato es opcional mientras el pedido es borrador, pero obligatorio en servidor al enviar el pedido definitivo.
+
+**Modelo y compatibilidad:** la migración aditiva 2026_09_18_000001_add_service_level_to_merchandise_requests.php incorpora merchandise_requests.service_level nullable. MerchandiseRequestServiceLevel define los valores estables same_day y standard_24h, sus etiquetas y el texto de email. Los pedidos históricos no se rellenan ni se alteran: se mantienen legibles con el estado “Plazo de servicio sin indicar”. El campo queda disponible para que una fase posterior de Operaciones diferencie viajes, gestiones y movimientos de palés, sin implementar todavía contadores, tarifas ni facturación.
+
+**UX y flujo:** el formulario de pedido contiene dos tarjetas de radio accesibles, grandes y responsivas: “Para hoy” y “Cauce normal”. Al enviar sin seleccionar se muestra el error junto al bloque; guardar borrador sin plazo sigue permitido. Al editar un borrador se conserva la opción ya elegida. El detalle, la gestión interna de carga y la hoja PDF de preparación muestran el servicio solicitado.
+
+**Notificaciones:** los emails de pedido enviado, tanto para cliente como internos, incluyen el plazo en el asunto y cuerpo: PARA HOY o CAUCE NORMAL (24 H); el cuerpo declara “Servicio solicitado” y la descripción correspondiente. Las notificaciones de base de datos incluyen también los valores estructurado y legible.
+
+**Validación:** nuevas pruebas de plazo de servicio: **5 passed, 50 assertions**. Regresión de pedidos, previsión, notificaciones, salidas y composición real: **173 passed, 1.406 assertions**. Suite completa: **934 passed, 5.661 assertions**. npm run build, Pint sobre los cambios y git diff --check OK. El Pint global detecta cuatro incidencias preexistentes y no relacionadas fuera de esta entrega; no se modificaron.
+
 ## 2026-09-09 - UNIDADES REALES POR PALET EN PREPARACION Y CARGA
 
 **Causa raiz:** las variantes y lineas de pedido copiaban `items.units_per_pallet` aunque ya hubieran seleccionado una partida concreta. La preparacion permitia varias asignaciones reales de `stock_pallets`, pero el JavaScript y `GoodsDispatchLine::loadedUnitsTotal()` multiplicaban todos los pallets por el unico valor de la linea. Por ello 1 pallet de 5.700 y otro de 5.500 se mostraban y contabilizaban como 11.400, aunque el descuento de stock usaba correctamente 11.200 desde las partidas fisicas.
