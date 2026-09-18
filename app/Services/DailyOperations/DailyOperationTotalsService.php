@@ -2,6 +2,7 @@
 
 namespace App\Services\DailyOperations;
 
+use App\Enums\MerchandiseRequestServiceLevel;
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\GoodsDispatch;
@@ -11,6 +12,7 @@ use App\Models\GoodsReceiptLine;
 use App\Models\InventoryMovement;
 use App\Models\StockPallet;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class DailyOperationTotalsService
@@ -27,6 +29,48 @@ class DailyOperationTotalsService
                 $section => (int) $day->lines->where('section', $section)->sum('pallets'),
             ])
             ->all();
+    }
+
+    /**
+     * @return array{
+     *     normal:array{moved_pallets:int,truck_management:int,truck_trips:int},
+     *     ff:array{moved_pallets:int,truck_management:int,truck_trips:int},
+     *     ff_dispatch_ids:array<int, int>
+     * }
+     */
+    public function serviceLevelBreakdown(DailyOperationDay $day): array
+    {
+        $day->loadMissing('lines');
+        $dispatchIds = $day->lines
+            ->filter(fn (DailyOperationLine $line): bool => $line->source_type === DailyOperationLine::SOURCE_GOODS_DISPATCH
+                && $line->source_id !== null)
+            ->pluck('source_id')
+            ->map(fn ($sourceId): int => (int) $sourceId)
+            ->filter(fn (int $sourceId): bool => $sourceId > 0)
+            ->unique()
+            ->values();
+
+        $ffDispatchIds = $dispatchIds->isEmpty() || $day->client_id === null
+            ? []
+            : GoodsDispatch::query()
+                ->where('client_id', $day->client_id)
+                ->whereIn('id', $dispatchIds->all())
+                ->whereHas('merchandiseRequest', fn ($query) => $query->where(
+                    'service_level',
+                    MerchandiseRequestServiceLevel::SAME_DAY->value,
+                ))
+                ->pluck('id')
+                ->map(fn ($dispatchId): int => (int) $dispatchId)
+                ->all();
+
+        $ffLines = $day->lines->filter(fn (DailyOperationLine $line): bool => $line->source_type === DailyOperationLine::SOURCE_GOODS_DISPATCH
+            && in_array((int) $line->source_id, $ffDispatchIds, true));
+
+        return [
+            'normal' => $this->operationalServiceTotals($day->lines->diff($ffLines)),
+            'ff' => $this->operationalServiceTotals($ffLines),
+            'ff_dispatch_ids' => $ffDispatchIds,
+        ];
     }
 
     public function syncDay(DailyOperationDay $day, ?int $openingPallets = null, ?string $notes = null, ?int $updatedBy = null): DailyOperationDay
@@ -160,6 +204,30 @@ class DailyOperationTotalsService
         }
 
         return $this->stockBaseForClient((int) $day->client_id);
+    }
+
+    /**
+     * @param  Collection<int, DailyOperationLine>  $lines
+     * @return array{moved_pallets:int,truck_management:int,truck_trips:int}
+     */
+    private function operationalServiceTotals(Collection $lines): array
+    {
+        $movementSections = [
+            ...DailyOperationLine::movementInboundSections(),
+            ...DailyOperationLine::movementOutboundSections(),
+        ];
+
+        return [
+            'moved_pallets' => (int) $lines
+                ->whereIn('section', $movementSections)
+                ->sum('pallets'),
+            'truck_management' => (int) $lines
+                ->where('section', DailyOperationLine::SECTION_GESTION_CAMION)
+                ->sum('pallets'),
+            'truck_trips' => (int) $lines
+                ->where('section', DailyOperationLine::SECTION_VIAJE_CAMION)
+                ->sum('pallets'),
+        ];
     }
 
     public function receiptLogisticUnits(GoodsReceipt $receipt): int

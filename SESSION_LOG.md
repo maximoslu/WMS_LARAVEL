@@ -4,6 +4,16 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-09-18 - DESGLOSE FF EN OPERACIONES DIARIAS
+
+**Regla operativa:** los envíos generados desde pedidos con plazo `same_day` (la opción cliente **Para hoy**) se identifican en Operaciones diarias como **FF**. Los pedidos de `standard_24h`, los pedidos históricos sin plazo y las líneas manuales o de entrada se mantienen en el cauce normal. No se duplica ni se persiste un contador nuevo: el desglose se calcula desde las líneas diarias ya generadas y el pedido origen de cada salida, por lo que no requiere migración ni modifica datos existentes.
+
+**Métricas y compatibilidad:** para cada día y cliente se separan palets/picos movidos, gestiones de camión y viajes de camión propio entre normal y FF. Los totales existentes del parte diario (`moved_pallets_today`, stock, secciones y recálculo) no cambian; FF es una clasificación adicional para identificar la futura facturación diferenciada. El detalle de cada salida también muestra `FF · Para hoy` o `Cauce normal`.
+
+**UX:** el panel principal mantiene las tarjetas de cauce normal y añade justo debajo un bloque visible `SERVICIOS FF · PARA HOY` en rojo pastel, con recargo FF y los tres contadores. La composición responde en tres columnas, dos columnas y una columna según el ancho de pantalla.
+
+**Validación:** prueba nueva de desglose FF: **1 passed, 12 assertions**. Regresión de Operaciones diarias más esa prueba: **32 passed, 347 assertions**. `php artisan test` completo, `npm run build`, sintaxis PHP de los archivos modificados y `git diff --check` correctos. El test nuevo también pasa Pint; el Pint global mantiene incidencias de formato preexistentes en archivos no relacionados, que no se han reformateado en esta entrega.
+
 ## 2026-09-18 - PLAZO DE SERVICIO “PARA HOY” O “CAUCE NORMAL” EN PEDIDOS
 
 **Necesidad y regla:** al crear un pedido, el cliente debe indicar si lo necesita **Para hoy** o por **Cauce normal** (entrega dentro de las 24 horas siguientes). La palabra “urgente” no se muestra en la experiencia cliente. El dato es opcional mientras el pedido es borrador, pero obligatorio en servidor al enviar el pedido definitivo.

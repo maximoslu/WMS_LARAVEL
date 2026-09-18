@@ -19,8 +19,8 @@
         $storedPallets = $day?->stored_pallets_today ?? 0;
         $movedPallets = $day?->moved_pallets_today ?? 0;
         $expectedTomorrow = $day?->expected_pallets_tomorrow ?? 0;
-        $truckManagement = $sectionTotals[\App\Models\DailyOperationLine::SECTION_GESTION_CAMION] ?? 0;
-        $truckTrips = $sectionTotals[\App\Models\DailyOperationLine::SECTION_VIAJE_CAMION] ?? 0;
+        $normalOperations = $serviceLevelBreakdown['normal'];
+        $ffOperations = $serviceLevelBreakdown['ff'];
         $visibleSectionTotals = collect($sectionOptions)
             ->map(fn (string $label, string $section) => [
                 'label' => $label,
@@ -158,20 +158,44 @@
                     <small>Stock base de apertura + entradas descargadas del dia.</small>
                 </article>
                 <article class="surface-card compact-card wms-daily-ops-kpi">
-                    <strong>PALLETS MOVIDOS DEL DIA</strong>
-                    <span>{{ number_format($movedPallets, 0, ',', '.') }}</span>
-                    <small>Descargas + salidas/envios, contando pallets y picos.</small>
+                    <strong>PALLETS MOVIDOS DEL DIA · CAUCE NORMAL</strong>
+                    <span>{{ number_format($normalOperations['moved_pallets'], 0, ',', '.') }}</span>
+                    <small>Descargas y salidas del cauce ordinario, contando pallets y picos.</small>
                 </article>
                 <article class="surface-card compact-card wms-daily-ops-kpi">
-                    <strong>GESTIONES DE CAMION</strong>
-                    <span>{{ number_format($truckManagement, 0, ',', '.') }}</span>
-                    <small>Una gestion por entrada o salida independiente.</small>
+                    <strong>GESTIONES DE CAMION · NORMAL</strong>
+                    <span>{{ number_format($normalOperations['truck_management'], 0, ',', '.') }}</span>
+                    <small>Una gestion por entrada o salida del cauce ordinario.</small>
                 </article>
                 <article class="surface-card compact-card wms-daily-ops-kpi">
-                    <strong>VIAJES</strong>
-                    <span>{{ number_format($truckTrips, 0, ',', '.') }}</span>
-                    <small>Solo documentos marcados como camion propio.</small>
+                    <strong>VIAJES · NORMAL</strong>
+                    <span>{{ number_format($normalOperations['truck_trips'], 0, ',', '.') }}</span>
+                    <small>Solo documentos de camion propio del cauce ordinario.</small>
                 </article>
+            </section>
+
+            <section class="wms-daily-ops-ff" aria-label="Servicios FF para hoy">
+                <div class="wms-daily-ops-ff-heading">
+                    <div>
+                        <strong>SERVICIOS FF · PARA HOY</strong>
+                        <span>Operativa fuera de cauce normal, identificada para su facturacion diferenciada.</span>
+                    </div>
+                    <span class="wms-daily-ops-ff-badge">RECARGO FF</span>
+                </div>
+                <div class="wms-daily-ops-ff-metrics">
+                    <div>
+                        <span>PALETS MOVIDOS FF</span>
+                        <strong>{{ number_format($ffOperations['moved_pallets'], 0, ',', '.') }}</strong>
+                    </div>
+                    <div>
+                        <span>GESTIONES DE CAMION FF</span>
+                        <strong>{{ number_format($ffOperations['truck_management'], 0, ',', '.') }}</strong>
+                    </div>
+                    <div>
+                        <span>VIAJES FF</span>
+                        <strong>{{ number_format($ffOperations['truck_trips'], 0, ',', '.') }}</strong>
+                    </div>
+                </div>
             </section>
 
             <section class="surface-card compact-card wms-daily-ops-balance">
@@ -234,6 +258,7 @@
                                 <tr>
                                     <th>Tipo</th>
                                     <th>Documento</th>
+                                    <th>Servicio</th>
                                     <th class="wms-table-number">Pallets/picos</th>
                                     <th>Gestion camion</th>
                                     <th>Viaje</th>
@@ -250,6 +275,12 @@
                                                 <strong>{{ $detail['document'] }}</strong>
                                                 <span>{{ $operationDateLabel }} - {{ $selectedClient->name }}</span>
                                             </div>
+                                        </td>
+                                        <td>
+                                            <span @class([
+                                                'wms-daily-ops-service-chip',
+                                                'wms-daily-ops-service-chip--ff' => $detail['is_ff'],
+                                            ])>{{ $detail['service'] }}</span>
                                         </td>
                                         <td class="wms-table-number">{{ number_format($detail['pallets'], 0, ',', '.') }}</td>
                                         <td>{{ $detail['management'] ? 'Si' : 'No' }}</td>

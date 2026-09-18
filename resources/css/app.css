@@ -14414,6 +14414,94 @@ body.brand-body.app-shell-body .wms-daily-ops-kpi small {
     line-height: 1.3;
 }
 
+body.brand-body.app-shell-body .wms-daily-ops-ff {
+    display: grid;
+    gap: 0.62rem;
+    padding: 0.82rem;
+    border: 1px solid #f1b7b2;
+    border-left: 4px solid #dc5149;
+    border-radius: 7px;
+    background: #fff1f0;
+    box-shadow: 0 10px 24px rgba(185, 58, 51, 0.08);
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-heading > div {
+    display: grid;
+    gap: 0.12rem;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-heading strong,
+body.brand-body.app-shell-body .wms-daily-ops-ff-metrics span {
+    color: #9e2721;
+    font-size: 0.68rem;
+    font-weight: 950;
+    line-height: 1.15;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-heading span:not(.wms-daily-ops-ff-badge) {
+    color: #8d4a46;
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-badge,
+body.brand-body.app-shell-body .wms-daily-ops-service-chip {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 1.55rem;
+    padding: 0.2rem 0.48rem;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-badge,
+body.brand-body.app-shell-body .wms-daily-ops-service-chip--ff {
+    border: 1px solid #efaaa5;
+    background: #fee2e0;
+    color: #a12720;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-service-chip {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #52687a;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-metrics > div {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.62rem 0.68rem;
+    border: 1px solid rgba(185, 58, 51, 0.16);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.58);
+}
+
+body.brand-body.app-shell-body .wms-daily-ops-ff-metrics strong {
+    color: #8e201b;
+    font-size: 1.3rem;
+    font-weight: 950;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
 body.brand-body.app-shell-body .wms-daily-ops-balance {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -14492,7 +14580,7 @@ body.brand-body.app-shell-body .wms-daily-ops-section-strip--empty {
 }
 
 body.brand-body.app-shell-body .wms-daily-ops-table {
-    min-width: 48rem;
+    min-width: 55rem;
 }
 
 body.brand-body.app-shell-body .wms-daily-ops-document {
@@ -14529,7 +14617,8 @@ body.brand-body.app-shell-body .wms-daily-ops-empty {
     }
 
     body.brand-body.app-shell-body .wms-daily-ops-kpis,
-    body.brand-body.app-shell-body .wms-daily-ops-balance {
+    body.brand-body.app-shell-body .wms-daily-ops-balance,
+    body.brand-body.app-shell-body .wms-daily-ops-ff-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -14545,12 +14634,18 @@ body.brand-body.app-shell-body .wms-daily-ops-empty {
 @media (max-width: 639px) {
     body.brand-body.app-shell-body .wms-daily-ops-header-metrics,
     body.brand-body.app-shell-body .wms-daily-ops-kpis,
-    body.brand-body.app-shell-body .wms-daily-ops-balance {
+    body.brand-body.app-shell-body .wms-daily-ops-balance,
+    body.brand-body.app-shell-body .wms-daily-ops-ff-metrics {
         grid-template-columns: 1fr;
     }
 
     body.brand-body.app-shell-body .wms-daily-ops-header-metrics dd {
         max-width: none;
+    }
+
+    body.brand-body.app-shell-body .wms-daily-ops-ff-heading {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     body.brand-body.app-shell-body .wms-daily-ops-filter-grid .button-secondary,

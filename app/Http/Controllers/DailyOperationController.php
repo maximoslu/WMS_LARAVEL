@@ -57,6 +57,9 @@ class DailyOperationController extends Controller
         $sectionBreakdown = $day !== null
             ? $this->totalsService->sectionBreakdown($day)
             : collect(DailyOperationLine::sections())->mapWithKeys(fn (string $section) => [$section => 0])->all();
+        $serviceLevelBreakdown = $day !== null
+            ? $this->totalsService->serviceLevelBreakdown($day)
+            : $this->emptyServiceLevelBreakdown();
 
         return view('daily-operations.index', [
             'day' => $day,
@@ -65,7 +68,8 @@ class DailyOperationController extends Controller
             'selectedDate' => $selectedDate,
             'sectionOptions' => DailyOperationLine::sectionOptions(),
             'sectionTotals' => $sectionBreakdown,
-            'billingDetails' => $day !== null ? $this->billingDetails($day) : [],
+            'serviceLevelBreakdown' => $serviceLevelBreakdown,
+            'billingDetails' => $day !== null ? $this->billingDetails($day, $serviceLevelBreakdown['ff_dispatch_ids']) : [],
             'canManage' => $request->user()?->canAccessRole(Role::ALMACEN) === true,
             'canAdjustHistoricalBase' => $request->user()?->canAccessRole(Role::ADMINISTRACION) === true,
             'lineBeingEdited' => $lineBeingEdited,
@@ -281,9 +285,26 @@ class DailyOperationController extends Controller
     }
 
     /**
-     * @return array<int, array{type:string, document:string, pallets:int, management:bool, trip:bool}>
+     * @return array{
+     *     normal:array{moved_pallets:int,truck_management:int,truck_trips:int},
+     *     ff:array{moved_pallets:int,truck_management:int,truck_trips:int},
+     *     ff_dispatch_ids:array<int, int>
+     * }
      */
-    private function billingDetails(DailyOperationDay $day): array
+    private function emptyServiceLevelBreakdown(): array
+    {
+        return [
+            'normal' => ['moved_pallets' => 0, 'truck_management' => 0, 'truck_trips' => 0],
+            'ff' => ['moved_pallets' => 0, 'truck_management' => 0, 'truck_trips' => 0],
+            'ff_dispatch_ids' => [],
+        ];
+    }
+
+    /**
+     * @param  array<int, int>  $ffDispatchIds
+     * @return array<int, array{type:string, document:string, pallets:int, management:bool, trip:bool, service:string, is_ff:bool}>
+     */
+    private function billingDetails(DailyOperationDay $day, array $ffDispatchIds): array
     {
         $day->loadMissing('lines');
         $lines = $day->lines;
@@ -294,7 +315,7 @@ class DailyOperationController extends Controller
                 DailyOperationLine::SECTION_CARGA,
                 DailyOperationLine::SECTION_ENVIO,
             ], true))
-            ->map(function (DailyOperationLine $line) use ($lines): array {
+            ->map(function (DailyOperationLine $line) use ($ffDispatchIds, $lines): array {
                 $sameSource = fn (DailyOperationLine $candidate): bool => $line->source_type !== null
                     && $line->source_id !== null
                     && $candidate->source_type === $line->source_type
@@ -304,6 +325,8 @@ class DailyOperationController extends Controller
                     && $candidate->section === DailyOperationLine::SECTION_GESTION_CAMION);
                 $trip = $lines->contains(fn (DailyOperationLine $candidate): bool => $sameSource($candidate)
                     && $candidate->section === DailyOperationLine::SECTION_VIAJE_CAMION);
+                $isFf = $line->source_type === DailyOperationLine::SOURCE_GOODS_DISPATCH
+                    && in_array((int) $line->source_id, $ffDispatchIds, true);
 
                 return [
                     'type' => $line->section === DailyOperationLine::SECTION_DESCARGA ? 'Entrada' : 'Salida',
@@ -311,6 +334,8 @@ class DailyOperationController extends Controller
                     'pallets' => (int) $line->pallets,
                     'management' => $management || $line->requiresTruckManagement(),
                     'trip' => $trip,
+                    'service' => $isFf ? 'FF · Para hoy' : 'Cauce normal',
+                    'is_ff' => $isFf,
                 ];
             })
             ->values()
