@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Client;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
+use App\Models\InventoryMovement;
 use App\Models\Item;
 use App\Models\MerchandiseRequest;
 use App\Models\Role;
@@ -310,6 +311,99 @@ class ActualPalletQuantityPreparationTest extends TestCase
         $this->assertStringContainsString('1 pallet × 5.500 uds = 5.500 uds', $html);
         $this->assertStringContainsString('pico 1.100 uds', $html);
         $this->assertStringContainsString('22.900', $html);
+    }
+
+    public function test_finalized_loading_deducts_the_selected_physical_pallet_not_the_requested_quantity(): void
+    {
+        Bus::fake();
+        $this->seed([RoleSeeder::class, ClientSeeder::class]);
+        $client = Client::query()->where('code', 'FRIESLAND')->firstOrFail();
+        $warehouseUser = $this->userWithRole(Role::ALMACEN);
+        $item = Item::factory()->create([
+            'client_id' => $client->id,
+            'sku' => '107x77 70 GR-REGRESSION',
+            'units_per_pallet' => 8500,
+        ]);
+        $stock11500 = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => '11.500-REAL',
+            'units_per_pallet' => 11500,
+            'quantity_units' => 80500,
+            'full_pallets' => 7,
+            'warehouse_pallets' => 7,
+            'peak_1' => 0,
+        ]);
+        $stock8000 = StockPallet::factory()->create([
+            'client_id' => $client->id,
+            'item_id' => $item->id,
+            'lot' => '8.000-REAL',
+            'units_per_pallet' => 8000,
+            'quantity_units' => 8000,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 1,
+            'peak_1' => 0,
+        ]);
+        $request = MerchandiseRequest::factory()->create([
+            'client_id' => $client->id,
+            'status' => MerchandiseRequest::STATUS_PREPARING,
+        ]);
+        $requestLine = $request->lines()->create([
+            'item_id' => $item->id,
+            'stock_pallet_id' => $stock8000->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 8500,
+            'requested_pallets' => 1,
+            'requested_units' => 8500,
+            'required_units' => 8500,
+        ]);
+        $dispatch = GoodsDispatch::factory()->create([
+            'client_id' => $client->id,
+            'merchandise_request_id' => $request->id,
+            'status' => GoodsDispatch::STATUS_PREPARING,
+        ]);
+        $line = GoodsDispatchLine::factory()->create([
+            'goods_dispatch_id' => $dispatch->id,
+            'item_id' => $item->id,
+            'source_request_line_id' => $requestLine->id,
+            'line_type' => 'pallet',
+            'sku' => $item->sku,
+            'description' => $item->description,
+            'units_per_pallet' => 8500,
+            'requested_pallets' => 1,
+            'requested_units' => 8500,
+        ]);
+
+        $this->actingAs($warehouseUser)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '1',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock11500->id,
+                            'loaded_pallets' => 1,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $request));
+
+        $line->refresh()->load('allocations');
+        $movement = InventoryMovement::query()
+            ->where('movement_type', InventoryMovement::DISPATCH)
+            ->where('stock_pallet_id', $stock11500->id)
+            ->sole();
+
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $dispatch->fresh()->status);
+        $this->assertSame(11500, $line->loadedUnitsTotal());
+        $this->assertSame(11500, $line->allocations->sole()->units_per_pallet);
+        $this->assertSame(69000, $stock11500->fresh()->quantity_units);
+        $this->assertSame(6, $stock11500->fresh()->full_pallets);
+        $this->assertSame(8000, $stock8000->fresh()->quantity_units);
+        $this->assertSame(-11500, $movement->units_delta);
+        $this->assertSame(69000, $movement->units_after);
     }
 
     public function test_loading_rejects_a_real_pallet_without_a_physical_units_per_pallet_value(): void
