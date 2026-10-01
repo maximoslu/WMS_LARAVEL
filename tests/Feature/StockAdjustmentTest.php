@@ -207,7 +207,8 @@ class StockAdjustmentTest extends TestCase
             ->assertSee('Añadir pico')
             ->assertSee('Motivo de regularización')
             ->assertSee('Total calculado')
-            ->assertSee('Diferencia a aplicar');
+            ->assertSee('Diferencia a aplicar')
+            ->assertDontSee('name="location_id"', false);
     }
 
     public function test_adjustment_page_automatically_targets_the_only_batch_with_stock(): void

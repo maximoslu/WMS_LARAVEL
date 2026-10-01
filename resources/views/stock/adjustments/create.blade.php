@@ -151,7 +151,6 @@
                             <input type="hidden" name="mode" value="existing" data-adjustment-mode>
                             <input type="hidden" name="stock_pallet_id" value="{{ $summaryStockPallet->id }}">
                             <input type="hidden" name="lot" value="{{ $summaryStockPallet->lot }}">
-                            <input type="hidden" name="location_id" value="{{ $summaryStockPallet->location_id }}">
                             <input type="hidden" name="status" value="{{ $summaryStockPallet->status }}">
                             <input type="hidden" name="stock_category" value="{{ $summaryStockPallet->stock_category }}">
 
