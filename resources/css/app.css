@@ -16371,6 +16371,150 @@ body.brand-body.app-shell-body .wms-adjustment-form-grid .item-form-field--full 
     grid-column: 1 / -1;
 }
 
+body.brand-body.app-shell-body .wms-adjustment-form-grid--workflow {
+    align-items: start;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-target {
+    display: grid;
+    gap: 0.16rem;
+    padding: 0.72rem 0.82rem;
+    border: 1px solid rgba(14, 116, 144, 0.26);
+    border-left: 4px solid var(--brand-teal);
+    border-radius: 8px;
+    background: #f1fafc;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-target > span,
+body.brand-body.app-shell-body .wms-adjustment-target small,
+body.brand-body.app-shell-body .wms-adjustment-new-fields-title {
+    color: var(--ops-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+    line-height: 1.3;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-target > span,
+body.brand-body.app-shell-body .wms-adjustment-new-fields-title {
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-target strong {
+    color: var(--ops-text);
+    font-size: 0.92rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-new-batch-link {
+    width: fit-content;
+    color: #0e7490;
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-decoration: underline;
+    text-underline-offset: 0.14rem;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-choice,
+body.brand-body.app-shell-body .wms-adjustment-action-choice {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.56rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-choice legend,
+body.brand-body.app-shell-body .wms-adjustment-action-choice legend {
+    grid-column: 1 / -1;
+    padding: 0;
+    color: var(--ops-text);
+    font-size: 0.84rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-option,
+body.brand-body.app-shell-body .wms-adjustment-action-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.62rem;
+    min-width: 0;
+    padding: 0.72rem 0.78rem;
+    border: 1px solid var(--ops-border);
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-option input,
+body.brand-body.app-shell-body .wms-adjustment-action-option input {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+    margin: 0.12rem 0 0;
+    accent-color: var(--brand-teal);
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-option > span,
+body.brand-body.app-shell-body .wms-adjustment-action-option > span {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-option strong,
+body.brand-body.app-shell-body .wms-adjustment-action-option strong {
+    color: var(--ops-text);
+    font-size: 0.84rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-option small,
+body.brand-body.app-shell-body .wms-adjustment-action-option small {
+    color: var(--ops-muted);
+    font-size: 0.72rem;
+    line-height: 1.28;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-mode-option.is-selected,
+body.brand-body.app-shell-body .wms-adjustment-action-option--add.is-selected {
+    border-color: rgba(14, 116, 144, 0.44);
+    box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.1);
+    background: #f1fafc;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-action-option--remove.is-selected {
+    border-color: rgba(190, 73, 73, 0.48);
+    box-shadow: 0 0 0 2px rgba(190, 73, 73, 0.1);
+    background: #fff3f1;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-action-option--remove.is-selected input {
+    accent-color: #b65353;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-new-fields {
+    display: grid;
+    gap: 0.52rem;
+    padding: 0.72rem;
+    border: 1px dashed rgba(84, 103, 119, 0.34);
+    border-radius: 8px;
+    background: #fafcfd;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-new-fields-title {
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .wms-adjustment-new-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.56rem;
+}
+
 body.brand-body.app-shell-body .wms-adjustment-breakdown {
     display: grid;
     gap: 0.7rem;
@@ -16522,6 +16666,7 @@ body.brand-body.app-shell-body .wms-adjustment-empty {
     body.brand-body.app-shell-body .wms-adjustment-filter-form,
     body.brand-body.app-shell-body .wms-adjustment-summary,
     body.brand-body.app-shell-body .wms-adjustment-form-grid,
+    body.brand-body.app-shell-body .wms-adjustment-new-fields-grid,
     body.brand-body.app-shell-body .wms-adjustment-selected-grid,
     body.brand-body.app-shell-body .wms-adjustment-history-row {
         grid-template-columns: 1fr;
@@ -16535,6 +16680,11 @@ body.brand-body.app-shell-body .wms-adjustment-empty {
     }
 
     body.brand-body.app-shell-body .wms-adjustment-breakdown-grid {
+        grid-template-columns: 1fr;
+    }
+
+    body.brand-body.app-shell-body .wms-adjustment-mode-choice,
+    body.brand-body.app-shell-body .wms-adjustment-action-choice {
         grid-template-columns: 1fr;
     }
 

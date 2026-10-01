@@ -199,13 +199,36 @@ class StockAdjustmentTest extends TestCase
                 'stock_pallet_id' => $stockPallet->id,
             ]))
             ->assertOk()
-            ->assertSee('Ajuste a aplicar')
-            ->assertSee('Palets completos')
-            ->assertSee('Uds/palet')
+            ->assertSee('Vas a regularizar esta partida')
+            ->assertSee('¿Qué quieres regularizar?')
+            ->assertSee('Quitar stock')
+            ->assertSee('Palés completos a añadir')
+            ->assertSee('Unidades por palé')
             ->assertSee('Añadir pico')
             ->assertSee('Motivo de regularización')
             ->assertSee('Total calculado')
             ->assertSee('Diferencia a aplicar');
+    }
+
+    public function test_adjustment_page_automatically_targets_the_only_batch_with_stock(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture([
+            'quantity_units' => 7000,
+            'units_per_pallet' => 7000,
+            'full_pallets' => 1,
+        ]);
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->get(route('stock.adjustments.create', [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+            ]))
+            ->assertOk()
+            ->assertSee('Vas a regularizar esta partida')
+            ->assertSee('1 palé')
+            ->assertSee('7.000 uds disponibles')
+            ->assertSee('name="stock_pallet_id" value="'.$stockPallet->id.'"', false)
+            ->assertSee('name="units_per_pallet" value="7000"', false);
     }
 
     public function test_superadmin_creates_new_batch_without_goods_receipt_or_dispatch(): void
@@ -405,6 +428,7 @@ class StockAdjustmentTest extends TestCase
             ->get(route('stock.adjustments.create', [
                 'client_id' => $client->id,
                 'item_id' => $item->id,
+                'new_batch' => 1,
             ]))
             ->assertOk()
             ->assertSee('value="'.$canonicalLocation->id.'"', false)

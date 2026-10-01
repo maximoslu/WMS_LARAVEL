@@ -12,9 +12,12 @@
         ];
         $selectedClient = $clients->firstWhere('id', $filters['client_id']);
         $selectedItem = $items->firstWhere('id', $filters['item_id']);
-        $selectedStockPallet = $stockPallets->firstWhere('id', old('stock_pallet_id', $filters['stock_pallet_id']));
+        $isNewBatchRequest = (bool) ($filters['new_batch'] ?? false);
+        $selectedStockPallet = $isNewBatchRequest ? null : $stockPallets->firstWhere('id', old('stock_pallet_id', $filters['stock_pallet_id']));
+        $stockPalletsWithStock = $stockPallets->filter(fn ($stockPallet): bool => (int) $stockPallet->quantity_units > 0);
         $singleStockPallet = $stockPallets->count() === 1 ? $stockPallets->first() : null;
-        $summaryStockPallet = $selectedStockPallet ?? $singleStockPallet;
+        $singleStockPalletWithStock = $stockPalletsWithStock->count() === 1 ? $stockPalletsWithStock->first() : null;
+        $summaryStockPallet = $isNewBatchRequest ? null : ($selectedStockPallet ?? $singleStockPalletWithStock ?? $singleStockPallet);
         $summaryPeakValues = $summaryStockPallet
             ? collect(range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS))
                 ->map(fn (int $peakNumber): int => (int) ($summaryStockPallet->{'peak_'.$peakNumber} ?? 0))
@@ -24,7 +27,7 @@
         $summaryPeakUnits = $summaryPeakValues->sum();
         $defaultUnitsPerPallet = old('units_per_pallet', $summaryStockPallet?->units_per_pallet ?: $selectedItem?->units_per_pallet ?: 1);
         $defaultAction = old('action', 'add');
-        $defaultMode = old('mode', $summaryStockPallet ? 'existing' : 'new');
+        $defaultMode = old('mode', $isNewBatchRequest ? 'new' : ($summaryStockPallet || $stockPallets->isNotEmpty() ? 'existing' : 'new'));
         $adjustmentPeaks = collect(old('peaks', []))
             ->filter(fn ($peak) => $peak !== null && $peak !== '')
             ->values()
@@ -140,105 +143,128 @@
                         </div>
                     </div>
 
-                    <div class="wms-adjustment-form-grid">
-                        <label class="auth-field">
-                            <span>Cliente</span>
-                            <select name="client_id" class="auth-input" required>
-                                @foreach ($clients as $client)
-                                    <option value="{{ $client->id }}" @selected((string) old('client_id', $filters['client_id']) === (string) $client->id)>
-                                        {{ $client->name }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </label>
+                    <div class="wms-adjustment-form-grid wms-adjustment-form-grid--workflow">
+                        <input type="hidden" name="client_id" value="{{ old('client_id', $filters['client_id']) }}">
+                        <input type="hidden" name="item_id" value="{{ old('item_id', $filters['item_id']) }}">
 
-                        <label class="auth-field">
-                            <span>Referencia / articulo</span>
-                            <select name="item_id" class="auth-input" required>
-                                @foreach ($items as $item)
-                                    <option value="{{ $item->id }}" @selected((string) old('item_id', $filters['item_id']) === (string) $item->id)>
-                                        {{ $item->sku }} - {{ $item->description }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </label>
+                        @if ($summaryStockPallet)
+                            <input type="hidden" name="mode" value="existing" data-adjustment-mode>
+                            <input type="hidden" name="stock_pallet_id" value="{{ $summaryStockPallet->id }}">
+                            <input type="hidden" name="lot" value="{{ $summaryStockPallet->lot }}">
+                            <input type="hidden" name="location_id" value="{{ $summaryStockPallet->location_id }}">
+                            <input type="hidden" name="status" value="{{ $summaryStockPallet->status }}">
+                            <input type="hidden" name="stock_category" value="{{ $summaryStockPallet->stock_category }}">
 
-                        <label class="auth-field">
-                            <span>Accion</span>
-                            <select name="action" class="auth-input" data-adjustment-action required>
-                                <option value="add" @selected($defaultAction === 'add')>Anadir stock</option>
-                                <option value="remove" @selected($defaultAction === 'remove')>Quitar stock</option>
-                            </select>
-                        </label>
+                            <article class="wms-adjustment-target item-form-field--full" aria-label="Partida que se regulariza">
+                                <span>Vas a regularizar esta partida</span>
+                                <strong>{{ $selectedItem?->sku }} · {{ number_format((int) $summaryStockPallet->full_pallets, 0, ',', '.') }} {{ (int) $summaryStockPallet->full_pallets === 1 ? 'palé' : 'palés' }}{{ $summaryStockPallet->peaks_count ? ' y '.number_format((int) $summaryStockPallet->peaks_count, 0, ',', '.').' picos' : '' }}</strong>
+                                <small>Lote {{ $summaryStockPallet->lot ?: 'NO LOTE' }} · {{ $summaryStockPallet->pickingLocationLabel() ?? 'Sin ubicación' }} · {{ number_format((int) $summaryStockPallet->quantity_units, 0, ',', '.') }} uds disponibles</small>
+                                <a href="{{ route('stock.adjustments.create', ['client_id' => $filters['client_id'], 'item_id' => $filters['item_id'], 'new_batch' => 1]) }}" class="wms-adjustment-new-batch-link">¿Necesitas crear una partida nueva?</a>
+                            </article>
+                        @else
+                            <fieldset class="wms-adjustment-mode-choice item-form-field--full" data-adjustment-mode-choice>
+                                <legend>¿Dónde quieres hacer el ajuste?</legend>
+                                <label class="wms-adjustment-mode-option">
+                                    <input type="radio" name="mode" value="existing" data-adjustment-mode @checked($defaultMode === 'existing')>
+                                    <span>
+                                        <strong>En una partida existente</strong>
+                                        <small>Para añadir o quitar stock de un lote que ya está registrado.</small>
+                                    </span>
+                                </label>
+                                <label class="wms-adjustment-mode-option">
+                                    <input type="radio" name="mode" value="new" data-adjustment-mode @checked($defaultMode === 'new')>
+                                    <span>
+                                        <strong>Crear una partida nueva</strong>
+                                        <small>Solo si ese stock todavía no existe en el sistema.</small>
+                                    </span>
+                                </label>
+                            </fieldset>
 
-                        <label class="auth-field">
-                            <span>Modo</span>
-                            <select name="mode" class="auth-input" required>
-                                <option value="existing" @selected($defaultMode === 'existing')>Sobre partida existente</option>
-                                <option value="new" @selected($defaultMode === 'new')>Crear nueva partida</option>
-                            </select>
-                        </label>
+                            <label class="auth-field item-form-field--full" data-adjustment-existing-fields>
+                                <span>Partida que quieres regularizar</span>
+                                <select name="stock_pallet_id" class="auth-input" data-adjustment-stock-pallet>
+                                    <option value="">Selecciona la partida concreta</option>
+                                    @foreach ($stockPallets as $stockPallet)
+                                        @php
+                                            $peakUnits = collect(range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS))
+                                                ->sum(fn (int $peakNumber): int => (int) ($stockPallet->{'peak_'.$peakNumber} ?? 0));
+                                        @endphp
+                                        <option value="{{ $stockPallet->id }}" @selected((string) old('stock_pallet_id', $filters['stock_pallet_id']) === (string) $stockPallet->id)>
+                                            {{ number_format((int) $stockPallet->full_pallets, 0, ',', '.') }} palés · {{ number_format($peakUnits, 0, ',', '.') }} uds en picos · {{ number_format((int) $stockPallet->quantity_units, 0, ',', '.') }} uds · Lote {{ $stockPallet->lot ?: 'NO LOTE' }} · {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicación' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="helper-text">Elige una partida para quitar stock. Si hay varias, puedes volver arriba y pulsar «Mostrar selección» para ver su detalle antes de confirmar.</small>
+                            </label>
 
-                        <label class="auth-field item-form-field--full">
-                            <span>Partida existente</span>
-                            <select name="stock_pallet_id" class="auth-input">
-                                <option value="">Sin partida existente</option>
-                                @foreach ($stockPallets as $stockPallet)
-                                    @php
-                                        $peakUnits = collect(range(1, \App\Models\StockPallet::MAX_PEAK_COLUMNS))
-                                            ->sum(fn (int $peakNumber): int => (int) ($stockPallet->{'peak_'.$peakNumber} ?? 0));
-                                    @endphp
-                                    <option value="{{ $stockPallet->id }}" @selected((string) old('stock_pallet_id', $filters['stock_pallet_id'] ?? $singleStockPallet?->id) === (string) $stockPallet->id)>
-                                        #{{ $stockPallet->id }} / Lote {{ $stockPallet->lot ?: 'NO LOTE' }} / {{ $stockPallet->pickingLocationLabel() ?? 'Sin ubicacion' }} / {{ number_format((int) $stockPallet->full_pallets, 0, ',', '.') }} pallets / {{ number_format($peakUnits, 0, ',', '.') }} uds pico / {{ number_format((int) $stockPallet->quantity_units, 0, ',', '.') }} uds / {{ $stockPallet->stockCategoryLabel() }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </label>
+                            <div class="wms-adjustment-new-fields item-form-field--full" data-adjustment-new-fields>
+                                <p class="wms-adjustment-new-fields-title">Datos de la nueva partida</p>
+                                <div class="wms-adjustment-new-fields-grid">
+                                    <label class="auth-field">
+                                        <span>Lote</span>
+                                        <input type="text" name="lot" value="{{ old('lot', 'NO LOTE') }}" class="auth-input" maxlength="100">
+                                    </label>
 
-                        <label class="auth-field">
-                            <span>Lote nueva partida</span>
-                            <input type="text" name="lot" value="{{ old('lot', $summaryStockPallet?->lot ?: 'NO LOTE') }}" class="auth-input" maxlength="100">
-                        </label>
+                                    <label class="auth-field">
+                                        <span>Ubicación</span>
+                                        <select name="location_id" class="auth-input">
+                                            <option value="">Sin ubicación</option>
+                                            @foreach ($locations as $location)
+                                                <option value="{{ $location->id }}" @selected((string) old('location_id') === (string) $location->id)>
+                                                    {{ $location->displayLabel() }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </label>
 
-                        <label class="auth-field">
-                            <span>Ubicacion nueva partida</span>
-                            <select name="location_id" class="auth-input">
-                                <option value="">Sin ubicacion</option>
-                                @foreach ($locations as $location)
-                                    <option value="{{ $location->id }}" @selected((string) old('location_id', $summaryStockPallet?->location_id) === (string) $location->id)>
-                                        {{ $location->displayLabel() }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </label>
+                                    <label class="auth-field">
+                                        <span>Estado</span>
+                                        <select name="status" class="auth-input">
+                                            @foreach ($statusOptions as $value => $label)
+                                                <option value="{{ $value }}" @selected((string) old('status', \App\Models\StockPallet::STATUS_AVAILABLE) === (string) $value)>
+                                                    {{ $label }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </label>
 
-                        <label class="auth-field">
-                            <span>Estado nueva partida</span>
-                            <select name="status" class="auth-input" required>
-                                @foreach ($statusOptions as $value => $label)
-                                    <option value="{{ $value }}" @selected((string) old('status', $summaryStockPallet?->status ?? \App\Models\StockPallet::STATUS_AVAILABLE) === (string) $value)>
-                                        {{ $label }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </label>
+                                    <label class="auth-field">
+                                        <span>Categoría</span>
+                                        <select name="stock_category" class="auth-input">
+                                            @foreach ($categoryOptions as $value => $label)
+                                                <option value="{{ $value }}" @selected((string) old('stock_category', $selectedItem?->stock_category ?? \App\Models\StockPallet::CATEGORY_IN_USE) === (string) $value)>
+                                                    {{ $label }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+                        @endif
 
-                        <label class="auth-field">
-                            <span>Categoria nueva partida</span>
-                            <select name="stock_category" class="auth-input" required>
-                                @foreach ($categoryOptions as $value => $label)
-                                    <option value="{{ $value }}" @selected((string) old('stock_category', $summaryStockPallet?->stock_category ?? $selectedItem?->stock_category ?? \App\Models\StockPallet::CATEGORY_IN_USE) === (string) $value)>
-                                        {{ $label }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </label>
+                        <fieldset class="wms-adjustment-action-choice item-form-field--full">
+                            <legend>¿Qué quieres regularizar?</legend>
+                            <label class="wms-adjustment-action-option wms-adjustment-action-option--add">
+                                <input type="radio" name="action" value="add" data-adjustment-action @checked($defaultAction === 'add') required>
+                                <span>
+                                    <strong>Añadir stock</strong>
+                                    <small>El palé o pico existe físicamente y falta en el sistema.</small>
+                                </span>
+                            </label>
+                            <label class="wms-adjustment-action-option wms-adjustment-action-option--remove">
+                                <input type="radio" name="action" value="remove" data-adjustment-action @checked($defaultAction === 'remove')>
+                                <span>
+                                    <strong>Quitar stock</strong>
+                                    <small>El palé o pico ya no está físicamente en esta partida.</small>
+                                </span>
+                            </label>
+                        </fieldset>
 
                         <section class="wms-adjustment-breakdown item-form-field--full" data-adjustment-breakdown>
                             <div class="wms-adjustment-breakdown-head">
                                 <div>
-                                    <strong>Composición del ajuste</strong>
-                                    <p>Indica palets completos y cada pico por separado. El total se calcula automáticamente.</p>
+                                    <strong>¿Cuánto stock quieres ajustar?</strong>
+                                    <p>Un palé completo usa automáticamente su cantidad habitual. Añade un pico solo si es un palé parcial.</p>
                                 </div>
                                 <div class="wms-adjustment-total" aria-live="polite">
                                     <span>Total calculado</span>
@@ -249,19 +275,19 @@
 
                             <div class="wms-adjustment-breakdown-grid">
                                 <label class="auth-field">
-                                    <span>Palets completos</span>
+                                    <span data-adjustment-pallet-label>Palés completos a añadir</span>
                                     <input type="number" name="full_pallets" value="{{ old('full_pallets', 0) }}" min="0" step="1" class="auth-input" data-adjustment-pallets required>
                                 </label>
 
                                 <label class="auth-field">
-                                    <span>Uds/palet</span>
-                                    <input type="number" name="units_per_pallet" value="{{ $defaultUnitsPerPallet }}" min="1" step="1" class="auth-input" data-adjustment-units-per-pallet required>
+                                    <span>Unidades por palé</span>
+                                    <input type="number" name="units_per_pallet" value="{{ $defaultUnitsPerPallet }}" min="1" step="1" class="auth-input" data-adjustment-units-per-pallet required @readonly($summaryStockPallet)>
                                 </label>
 
                                 <div class="wms-adjustment-total-detail">
                                     <span>Palets almacén</span>
                                     <strong><span data-adjustment-pallet-total>0</span></strong>
-                                    <small><span data-adjustment-peak-count>0</span> picos añadidos</small>
+                                    <small><span data-adjustment-peak-count>0</span> <span data-adjustment-peak-label>picos en el ajuste</span></small>
                                 </div>
                             </div>
 
@@ -269,7 +295,7 @@
                                 <div class="wms-adjustment-peaks-head">
                                     <div>
                                         <strong>Picos</strong>
-                                        <span>Unidades de cada palet parcial</span>
+                                        <span>Unidades de cada palé parcial</span>
                                     </div>
                                     <button type="button" class="button-secondary compact-button btn-compact" data-add-peak>Añadir pico</button>
                                 </div>
@@ -396,9 +422,56 @@
             const palletTotal = breakdown.querySelector('[data-adjustment-pallet-total]');
             const peakCount = breakdown.querySelector('[data-adjustment-peak-count]');
             const difference = breakdown.querySelector('[data-adjustment-difference]');
-            const action = form.querySelector('[data-adjustment-action]');
+            const actionInputs = [...form.querySelectorAll('[data-adjustment-action]')];
+            const modeInputs = [...form.querySelectorAll('[data-adjustment-mode]')];
+            const existingFields = [...form.querySelectorAll('[data-adjustment-existing-fields]')];
+            const newFields = [...form.querySelectorAll('[data-adjustment-new-fields]')];
+            const peakLabel = breakdown.querySelector('[data-adjustment-peak-label]');
+            const palletLabel = breakdown.querySelector('[data-adjustment-pallet-label]');
             const format = new Intl.NumberFormat('es-ES');
             const maxPeaks = {{ $maxPeakColumns }};
+
+            const selectedAction = () => actionInputs.find((input) => input.checked)?.value ?? 'add';
+            const selectedMode = () => modeInputs.find((input) => input.checked)?.value ?? 'existing';
+
+            const setFieldsVisible = (fields, visible) => {
+                fields.forEach((field) => {
+                    field.hidden = !visible;
+                    field.querySelectorAll('input, select, textarea').forEach((input) => {
+                        input.disabled = !visible;
+                    });
+                });
+            };
+
+            const syncWorkflow = () => {
+                const mode = selectedMode();
+                const isExisting = mode === 'existing';
+
+                if (selectedAction() === 'remove' && !isExisting) {
+                    const existingMode = modeInputs.find((input) => input.value === 'existing');
+
+                    if (existingMode) {
+                        existingMode.checked = true;
+                    }
+                }
+
+                const finalMode = selectedMode();
+                setFieldsVisible(existingFields, finalMode === 'existing');
+                setFieldsVisible(newFields, finalMode === 'new');
+
+                if (finalMode === 'new' && selectedAction() === 'remove') {
+                    const addAction = actionInputs.find((input) => input.value === 'add');
+
+                    if (addAction) {
+                        addAction.checked = true;
+                    }
+                }
+
+                form.querySelectorAll('[data-adjustment-mode-choice] label, .wms-adjustment-action-option').forEach((option) => {
+                    const input = option.querySelector('input');
+                    option.classList.toggle('is-selected', Boolean(input?.checked));
+                });
+            };
 
             const recalculate = () => {
                 const fullPallets = Math.max(0, Number.parseInt(pallets.value, 10) || 0);
@@ -410,7 +483,9 @@
                 total.textContent = format.format(calculated);
                 palletTotal.textContent = format.format(fullPallets);
                 peakCount.textContent = format.format(peakValues.length);
-                difference.textContent = `${action.value === 'remove' ? '-' : '+'}${format.format(calculated)}`;
+                difference.textContent = `${selectedAction() === 'remove' ? '-' : '+'}${format.format(calculated)}`;
+                peakLabel.textContent = selectedAction() === 'remove' ? 'picos a quitar' : 'picos en el ajuste';
+                palletLabel.textContent = selectedAction() === 'remove' ? 'Palés completos a quitar' : 'Palés completos a añadir';
                 emptyState.hidden = peakValues.length > 0;
             };
 
@@ -434,7 +509,15 @@
             breakdown.querySelector('[data-add-peak]').addEventListener('click', () => addPeak());
             pallets.addEventListener('input', recalculate);
             unitsPerPallet.addEventListener('input', recalculate);
-            action.addEventListener('change', recalculate);
+            actionInputs.forEach((input) => input.addEventListener('change', () => {
+                syncWorkflow();
+                recalculate();
+            }));
+            modeInputs.forEach((input) => input.addEventListener('change', () => {
+                syncWorkflow();
+                recalculate();
+            }));
+            syncWorkflow();
             recalculate();
         })();
     </script>

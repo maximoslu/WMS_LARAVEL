@@ -33,6 +33,7 @@ class StockAdjustmentController extends Controller
             'client_id' => $request->integer('client_id') > 0 ? $request->integer('client_id') : null,
             'item_id' => $request->integer('item_id') > 0 ? $request->integer('item_id') : null,
             'stock_pallet_id' => $request->integer('stock_pallet_id') > 0 ? $request->integer('stock_pallet_id') : null,
+            'new_batch' => $request->boolean('new_batch'),
         ];
 
         $stockPallets = $filters['client_id'] !== null && $filters['item_id'] !== null
