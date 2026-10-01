@@ -64,6 +64,26 @@ return [
 
     'navigation_sections' => [
         [
+            'key' => 'deca',
+            'title' => 'DECA',
+            'summary' => 'Cartas de porte digitales para MAXIMO y Transportes MOJE.',
+            'minimum_role' => 'almacen',
+            'children' => [
+                [
+                    'key' => 'deca',
+                    'route' => 'deca.index',
+                    'path' => '/deca',
+                    'title' => 'Cartas de porte digitales',
+                    'icon' => 'items',
+                    'summary' => 'Espacio DECA para preparar documentos desde el móvil.',
+                    'minimum_role' => 'almacen',
+                    'tag' => 'Transporte',
+                    'status' => 'ready',
+                    'active_patterns' => ['deca.*'],
+                ],
+            ],
+        ],
+        [
             'key' => 'stock',
             'title' => 'Stock',
             'summary' => 'Visibilidad operativa por articulo, palet y estructura fisica del almacen.',

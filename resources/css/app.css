@@ -1,5 +1,6 @@
 @import url('https://fonts.bunny.net/css?family=manrope:400,500,600,700,800|space-grotesk:500,700');
 @import 'tailwindcss';
+@import './deca.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';

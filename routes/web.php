@@ -128,6 +128,9 @@ Route::middleware('auth')->group(function (): void {
         ->name('ajax.suppliers');
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/deca', \App\Http\Controllers\DecaController::class)
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('deca.index');
     Route::get('/google-calendar/oauth/redirect', [GoogleCalendarOAuthController::class, 'redirect'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('google-calendar.oauth.redirect');

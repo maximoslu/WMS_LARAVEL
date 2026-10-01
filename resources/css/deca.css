@@ -1,0 +1,14 @@
+.deca-home { display: grid; gap: 20px; width: 100%; max-width: 1100px; margin: 0 auto; }
+.deca-home .deca-intro, .deca-home .deca-action { padding: clamp(20px, 4vw, 32px); min-width: 0; }
+.deca-home h1 { font-size: clamp(26px, 5vw, 38px); line-height: 1.2; margin: 16px 0; }
+.deca-home h2 { font-size: 22px; line-height: 1.3; margin: 0; }
+.deca-home p, .deca-home li { font-size: 16px; line-height: 1.6; }
+.deca-home .deca-notice { background: #eff6ff; color: #1e3a5f; border-left: 4px solid #2563eb; padding: 16px; border-radius: 8px; margin-top: 20px; }
+.deca-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.deca-action { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.deca-action p { margin: 0; flex: 1; }
+.deca-home .deca-action button { min-height: 48px; width: 100%; white-space: normal; padding: 12px 16px; cursor: not-allowed; opacity: .65; }
+.deca-action small { font-size: 14px; }
+.deca-steps { display: grid; gap: 20px; padding-left: 24px; margin: 20px 0 0; }
+.deca-steps strong, .deca-steps span { display: block; }
+@media (min-width: 720px) { .deca-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
