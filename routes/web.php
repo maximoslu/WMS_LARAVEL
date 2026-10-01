@@ -67,6 +67,10 @@ Route::get('/documentos/entradas/{goodsReceipt}/descargar', [ClientGoodsReceiptD
     ->middleware('signed')
     ->name('client-goods-receipts.signed-download');
 
+Route::get('/documentos/deca/{token}.pdf', [\App\Http\Controllers\DecaController::class, 'publicDownload'])
+    ->where('token', '[a-f0-9]{64}')
+    ->name('deca.public-download');
+
 Route::middleware('auth')->group(function (): void {
     Route::post('/actividad/heartbeat', ActivityHeartbeatController::class)
         ->name('traceability.activity.heartbeat');
@@ -131,6 +135,13 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/deca', \App\Http\Controllers\DecaController::class)
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('deca.index');
+    Route::middleware('minimum.role:'.Role::ALMACEN)->prefix('deca')->name('deca.')->group(function (): void {
+        Route::get('/crear', [\App\Http\Controllers\DecaController::class, 'create'])->name('create');
+        Route::post('/documentos', [\App\Http\Controllers\DecaController::class, 'store'])->middleware('throttle:20,1')->name('store');
+        Route::get('/documentos', [\App\Http\Controllers\DecaController::class, 'documents'])->name('documents');
+        Route::get('/documentos/{decaDocument}', [\App\Http\Controllers\DecaController::class, 'show'])->name('show');
+        Route::get('/documentos/{decaDocument}/pdf', [\App\Http\Controllers\DecaController::class, 'download'])->name('download');
+    });
     Route::get('/google-calendar/oauth/redirect', [GoogleCalendarOAuthController::class, 'redirect'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('google-calendar.oauth.redirect');

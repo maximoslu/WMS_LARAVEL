@@ -11,10 +11,10 @@
 
     <div class="deca-home">
         <section class="surface-card deca-intro" aria-labelledby="deca-title">
-            <span class="module-tag">MAXIMO · Transportes MOJE</span>
+            <span class="module-tag">MAXIMO · Transportes Monge</span>
             <h1 id="deca-title">Cartas de porte digitales</h1>
             <p>Tu espacio para preparar la documentación de transporte desde el móvil.</p>
-            <p class="deca-notice">Sección en preparación. La creación de documentos y la emisión de PDF con QR estarán disponibles en la siguiente fase.</p>
+            <p class="deca-notice">Rellena el transporte antes de salir, revisa los datos y emite tu PDF con QR.</p>
         </section>
 
         <div class="deca-actions">
@@ -22,15 +22,13 @@
                 <span class="module-tag">01 · Preparar</span>
                 <h2 id="deca-create-title">Crear DECA</h2>
                 <p>Completa los datos del transporte en pocos pasos: empresas, trayecto, mercancía y vehículo.</p>
-                <button type="button" class="button-primary" disabled aria-describedby="deca-create-status">Crear DECA manual</button>
-                <small id="deca-create-status">Próximamente · Formulario adaptado a móvil</small>
+                <a href="{{ route('deca.create') }}" class="button-primary">Crear DECA manual</a>
             </section>
             <section class="surface-card deca-action" aria-labelledby="deca-documents-title">
                 <span class="module-tag">02 · Consultar</span>
                 <h2 id="deca-documents-title">Mis documentos</h2>
                 <p>Aquí podrás consultar los documentos emitidos, descargar su PDF y acceder al QR.</p>
-                <button type="button" class="button-secondary" disabled aria-describedby="deca-documents-status">Consultar documentos</button>
-                <small id="deca-documents-status">Próximamente · Historial de documentos</small>
+                <a href="{{ route('deca.documents') }}" class="button-secondary">Consultar documentos</a>
             </section>
         </div>
 

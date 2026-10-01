@@ -12,3 +12,25 @@
 .deca-steps { display: grid; gap: 20px; padding-left: 24px; margin: 20px 0 0; }
 .deca-steps strong, .deca-steps span { display: block; }
 @media (min-width: 720px) { .deca-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.deca-home.deca-form-page { max-width: 720px; }
+.deca-form { display: grid; gap: 24px; }
+.deca-home .deca-fields { display: flex; flex-direction: column; gap: 12px; padding: 20px; min-width: 0; }
+.deca-fields legend { padding: 0 8px; font-size: 20px; font-weight: 800; }
+.deca-fields label { font-size: 15px; font-weight: 700; }
+.deca-fields input:not([type="checkbox"]):not([type="hidden"]), .deca-fields select, .deca-fields textarea { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 48px; border: 1px solid #9caeb8; border-radius: 8px; padding: 12px; background: #fff; color: #152b38; font-size: 16px; }
+.deca-fields input:focus-visible, .deca-fields select:focus-visible, .deca-fields textarea:focus-visible, .deca-home a:focus-visible, .deca-home button:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.deca-fields textarea { resize: vertical; }
+.deca-fields .deca-check { display: flex; align-items: flex-start; gap: 12px; min-height: 48px; padding: 10px 0; line-height: 1.5; }
+.deca-check input { flex-shrink: 0; width: 22px; height: 22px; margin-top: 2px; }
+.deca-carrier-details { background: #eff6f8; border-radius: 8px; padding: 14px; }
+.deca-carrier-details span, .deca-carrier-details strong { display: block; overflow-wrap: anywhere; }
+.deca-home [hidden] { display: none !important; }
+.deca-home .deca-help, .deca-fields small { font-size: 14px; line-height: 1.5; color: #405664; margin: 0; }
+.deca-home .button-primary, .deca-home .button-secondary, .deca-back { min-height: 48px; padding: 12px 16px; text-align: center; white-space: normal; }
+.deca-home .deca-submit:disabled { opacity: .65; cursor: wait; }
+.deca-errors { background: #fff1f2; color: #9f1239; border: 1px solid #fda4af; padding: 20px; border-radius: 10px; }
+.deca-errors ul { padding-left: 20px; list-style: disc; }
+.deca-number, .deca-summary dd, .deca-fields p { overflow-wrap: anywhere; }
+.deca-summary { margin: 0; } .deca-summary dt { font-size: 14px; color: #405664; margin-top: 12px; } .deca-summary dd { margin: 2px 0 12px; }
+.deca-qr { display: block; width: 240px; height: 240px; max-width: 100%; margin: 0 auto; }
+[data-deca-conditional] label { display: block; margin-bottom: 8px; }

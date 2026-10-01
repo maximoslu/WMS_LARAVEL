@@ -48,6 +48,7 @@ return [
                 'stock_pallets',
             ],
             'operations' => [
+                'deca_documents',
                 'merchandise_requests',
                 'merchandise_request_lines',
                 'goods_dispatches',
@@ -66,7 +67,7 @@ return [
         [
             'key' => 'deca',
             'title' => 'DECA',
-            'summary' => 'Cartas de porte digitales para MAXIMO y Transportes MOJE.',
+            'summary' => 'Cartas de porte digitales para MAXIMO y Transportes Monge.',
             'minimum_role' => 'almacen',
             'children' => [
                 [

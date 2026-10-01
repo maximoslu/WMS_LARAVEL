@@ -27,11 +27,10 @@ class DecaModuleTest extends TestCase
 
             $this->actingAs($user)->get('/deca')
                 ->assertOk()
-                ->assertSee('Transportes MOJE')
+                ->assertSee('Transportes Monge')
                 ->assertSee('Crear DECA manual')
                 ->assertSee('Mis documentos')
-                ->assertSee('Sección en preparación.')
-                ->assertSee('disabled aria-describedby="deca-create-status"', false);
+                ->assertSee(route('deca.create'), false);
 
             $this->assertContains('deca', array_column(WmsNavigation::sectionsForUser($user), 'key'));
         }
