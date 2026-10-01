@@ -53,6 +53,16 @@ class MerchandiseRequestFulfillmentService
                 ->sum(fn (GoodsDispatchLine $dispatchLine): int => $dispatchLine->loadedUnitsTotal());
             $currentUnits = (int) ($currentLinesByRequestLine->get($line->id, collect()))
                 ->sum(fn (GoodsDispatchLine $dispatchLine): int => $dispatchLine->loadedUnitsTotal());
+            $servedPallets = (int) $servedLines
+                ->sum(fn (GoodsDispatchLine $dispatchLine): int => $dispatchLine->loadedPallets());
+            $currentPallets = (int) ($currentLinesByRequestLine->get($line->id, collect()))
+                ->sum(fn (GoodsDispatchLine $dispatchLine): int => $dispatchLine->loadedPallets());
+            $servedPeaks = (int) $servedLines
+                ->sum(fn (GoodsDispatchLine $dispatchLine): int => $this->loadedPeakCount($dispatchLine));
+            $currentPeaks = (int) ($currentLinesByRequestLine->get($line->id, collect()))
+                ->sum(fn (GoodsDispatchLine $dispatchLine): int => $this->loadedPeakCount($dispatchLine));
+            $targetPallets = $line->requestedPalletsCount();
+            $targetPeaks = $line->requestedPeaksCount();
             $pendingBeforeCurrent = max(0, $targetUnits - $servedUnits);
             $pendingAfterCurrent = max(0, $targetUnits - $servedUnits - $currentUnits);
 
@@ -61,6 +71,14 @@ class MerchandiseRequestFulfillmentService
                 'target_units' => $targetUnits,
                 'served_units' => $servedUnits,
                 'current_units' => $currentUnits,
+                'target_pallets' => $targetPallets,
+                'served_pallets' => $servedPallets,
+                'current_pallets' => $currentPallets,
+                'pending_pallets_after_current' => max(0, $targetPallets - $servedPallets - $currentPallets),
+                'target_peaks' => $targetPeaks,
+                'served_peaks' => $servedPeaks,
+                'current_peaks' => $currentPeaks,
+                'pending_peaks_after_current' => max(0, $targetPeaks - $servedPeaks - $currentPeaks),
                 'pending_units' => $pendingBeforeCurrent,
                 'pending_units_after_current' => $pendingAfterCurrent,
                 'is_fully_served' => $pendingAfterCurrent === 0,
@@ -87,6 +105,16 @@ class MerchandiseRequestFulfillmentService
             'has_pending_before_current' => $pendingUnits > 0,
             'has_pending_after_current' => $pendingAfterCurrent > 0,
         ];
+    }
+
+    private function loadedPeakCount(GoodsDispatchLine $line): int
+    {
+        if ($line->hasLoadingAllocations()) {
+            return (int) $line->allocations
+                ->sum(fn ($allocation): int => count($allocation->selected_peaks ?? []));
+        }
+
+        return $line->loadedPeaks();
     }
 
     /**

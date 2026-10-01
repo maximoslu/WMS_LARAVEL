@@ -250,6 +250,16 @@
                     $requestedUnits = (int) ($lineFulfillment['target_units'] ?? ($dispatchLine?->requestedUnitsTotal() ?? $line->requestedUnitsTotal()));
                     $servedUnits = (int) ($lineFulfillment['served_units'] ?? 0);
                     $loadedUnits = $dispatchLine?->loadedUnitsTotal() ?? 0;
+                    $requestedPallets = (int) ($lineFulfillment['target_pallets'] ?? $line->requestedPalletsCount());
+                    $servedPallets = (int) ($lineFulfillment['served_pallets'] ?? 0);
+                    $loadedPallets = $dispatchLine?->loadedPallets() ?? 0;
+                    $totalLoadedPallets = $servedPallets + $loadedPallets;
+                    $pendingPallets = (int) ($lineFulfillment['pending_pallets_after_current'] ?? max(0, $requestedPallets - $totalLoadedPallets));
+                    $requestedPeaks = (int) ($lineFulfillment['target_peaks'] ?? $line->requestedPeaksCount());
+                    $servedPeaks = (int) ($lineFulfillment['served_peaks'] ?? 0);
+                    $loadedPeaks = (int) ($lineFulfillment['current_peaks'] ?? ($dispatchLine?->loadedPeaks() ?? 0));
+                    $totalLoadedPeaks = $servedPeaks + $loadedPeaks;
+                    $pendingPeaks = (int) ($lineFulfillment['pending_peaks_after_current'] ?? max(0, $requestedPeaks - $totalLoadedPeaks));
                     $requiredUnits = $line->requiredUnits();
                     $coverageTargetUnits = $requiredUnits ?? $requestedUnits;
                     $totalLoadedUnits = $servedUnits + $loadedUnits;
@@ -314,7 +324,7 @@
                     }
                 @endphp
 
-                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-required-units="{{ $requiredUnits ?? '' }}" data-served-units="{{ $servedUnits }}" data-served-picking-locations='@js($servedPickingLocationLabels->all())'>
+                <article class="warehouse-prep-line wms-load-line" data-prep-line data-requested-units="{{ $requestedUnits }}" data-required-units="{{ $requiredUnits ?? '' }}" data-served-units="{{ $servedUnits }}" data-requested-pallets="{{ $requestedPallets }}" data-served-pallets="{{ $servedPallets }}" data-requested-peaks="{{ $requestedPeaks }}" data-served-peaks="{{ $servedPeaks }}" data-served-picking-locations='@js($servedPickingLocationLabels->all())'>
                     <header class="warehouse-prep-line-head">
                         <div>
                             <strong>{{ $line->item?->sku ?? 'Artículo eliminado' }}</strong>
@@ -349,29 +359,35 @@
                                         @endforelse
                                     </dd>
                                 </div>
-                                <div>
+                                <div class="wms-load-progress-item wms-load-progress-item--requested">
                                     <dt>Solicitado</dt>
-                                    <dd>{{ number_format($line->requestedPalletsCount(), 0, ',', '.') }} pallets · {{ number_format($line->requestedPeaksCount(), 0, ',', '.') }} picos</dd>
+                                    <dd>
+                                        <span data-requested-load-summary>{{ number_format($requestedPallets, 0, ',', '.') }} {{ $requestedPallets === 1 ? 'pallet' : 'pallets' }} · {{ number_format($requestedPeaks, 0, ',', '.') }} {{ $requestedPeaks === 1 ? 'pico' : 'picos' }}</span>
+                                    </dd>
                                 </div>
-                                <div>
-                                    <dt>Unidades solicitadas</dt>
-                                    <dd>{{ number_format($requestedUnits, 0, ',', '.') }} uds</dd>
+                                <div class="wms-load-progress-item wms-load-progress-item--loaded">
+                                    <dt>Ya cargado</dt>
+                                    <dd>
+                                        <span data-loaded-load-summary>{{ number_format($totalLoadedPallets, 0, ',', '.') }} {{ $totalLoadedPallets === 1 ? 'pallet' : 'pallets' }} · {{ number_format($totalLoadedPeaks, 0, ',', '.') }} {{ $totalLoadedPeaks === 1 ? 'pico' : 'picos' }}</span>
+                                    </dd>
+                                </div>
+                                <div class="wms-load-progress-item wms-load-progress-item--pending">
+                                    <dt>Falta por cargar</dt>
+                                    <dd>
+                                        <span data-pending-load-summary>{{ number_format($pendingPallets, 0, ',', '.') }} {{ $pendingPallets === 1 ? 'pallet' : 'pallets' }} · {{ number_format($pendingPeaks, 0, ',', '.') }} {{ $pendingPeaks === 1 ? 'pico' : 'picos' }}</span>
+                                    </dd>
                                 </div>
                                 @if ($requiredUnits !== null)
-                                    <div>
+                                    <div class="wms-load-units-detail">
                                         <dt>Necesidad a cubrir</dt>
                                         <dd>{{ number_format($requiredUnits, 0, ',', '.') }} uds</dd>
                                     </div>
                                 @endif
-                                <div>
-                                    <dt>Cargado</dt>
-                                    <dd><span data-loaded-units>{{ number_format($totalLoadedUnits, 0, ',', '.') }}</span> uds</dd>
+                                <div class="wms-load-units-detail">
+                                    <dt>Detalle en unidades</dt>
+                                    <dd><span data-loaded-units>{{ number_format($totalLoadedUnits, 0, ',', '.') }}</span> cargadas · <span data-pending-units>{{ number_format($pendingUnits, 0, ',', '.') }}</span> pendientes</dd>
                                 </div>
-                                <div>
-                                    <dt>Pendiente acumulado</dt>
-                                    <dd>{{ number_format($pendingUnits, 0, ',', '.') }} uds</dd>
-                                </div>
-                                <div>
+                                <div class="wms-load-excess" data-excess-summary @if ($unitDifference <= 0) hidden @endif>
                                     <dt data-difference-label>{{ $differenceLabel }}</dt>
                                     <dd><span data-difference-units>{{ number_format(abs($unitDifference), 0, ',', '.') }}</span> uds</dd>
                                 </div>

@@ -2203,7 +2203,8 @@ const setupWarehouseRequestAllocations = () => {
         const unitsPerPallet = parsePositiveInteger(selectedOption?.dataset.unitsPerPallet ?? '0');
         const loadedPallets = parsePositiveInteger(assignment.querySelector('[data-loaded-pallets]')?.value ?? '0');
         const manualPartialUnits = parsePositiveInteger(assignment.querySelector('[data-loaded-partial-units]')?.value ?? '0');
-        const selectedPeakUnits = Array.from(assignment.querySelectorAll('[data-peak-group]:not([hidden]) input[type="checkbox"]:checked'))
+        const selectedPeakCheckboxes = Array.from(assignment.querySelectorAll('[data-peak-group]:not([hidden]) input[type="checkbox"]:checked'));
+        const selectedPeakUnits = selectedPeakCheckboxes
             .reduce((total, checkbox) => total + parsePositiveInteger(checkbox.dataset.peakUnits ?? '0'), 0);
         const partialUnits = manualPartialUnits + selectedPeakUnits;
         const totalUnits = (loadedPallets * unitsPerPallet) + partialUnits;
@@ -2244,6 +2245,7 @@ const setupWarehouseRequestAllocations = () => {
 
         return {
             loadedPallets,
+            selectedPeakCount: selectedPeakCheckboxes.length,
             partialUnits,
             totalUnits,
         };
@@ -2251,12 +2253,14 @@ const setupWarehouseRequestAllocations = () => {
 
     const updateLine = (line) => {
         let totalPallets = 0;
+        let totalPeaks = 0;
         let totalPartialUnits = 0;
         let totalUnits = 0;
 
         line.querySelectorAll('[data-assignment]').forEach((assignment) => {
             const totals = updateAssignment(assignment, line);
             totalPallets += totals.loadedPallets;
+            totalPeaks += totals.selectedPeakCount;
             totalPartialUnits += totals.partialUnits;
             totalUnits += totals.totalUnits;
         });
@@ -2288,15 +2292,28 @@ const setupWarehouseRequestAllocations = () => {
         const requestedUnits = parsePositiveInteger(line.dataset.requestedUnits);
         const requiredUnits = parsePositiveInteger(line.dataset.requiredUnits);
         const servedUnits = parsePositiveInteger(line.dataset.servedUnits);
+        const requestedPallets = parsePositiveInteger(line.dataset.requestedPallets);
+        const servedPallets = parsePositiveInteger(line.dataset.servedPallets);
+        const requestedPeaks = parsePositiveInteger(line.dataset.requestedPeaks);
+        const servedPeaks = parsePositiveInteger(line.dataset.servedPeaks);
         const coverageTargetUnits = Number.isFinite(requiredUnits) && requiredUnits > 0 ? requiredUnits : requestedUnits;
         const cumulativeUnits = servedUnits + totalUnits;
         const pendingUnits = Math.max(coverageTargetUnits - cumulativeUnits, 0);
         const differenceUnits = cumulativeUnits - coverageTargetUnits;
+        const cumulativePallets = servedPallets + totalPallets;
+        const pendingPallets = Math.max(requestedPallets - cumulativePallets, 0);
+        const cumulativePeaks = servedPeaks + totalPeaks;
+        const pendingPeaks = Math.max(requestedPeaks - cumulativePeaks, 0);
         const loadedPalletsField = line.querySelector('[data-line-loaded-pallets]');
         const loadedPartialUnitsField = line.querySelector('[data-line-loaded-partial-units]');
         const loadedUnitsNode = line.querySelector('[data-loaded-units]');
         const differenceUnitsNode = line.querySelector('[data-difference-units]');
         const differenceLabelNode = line.querySelector('[data-difference-label]');
+        const requestedLoadSummaryNode = line.querySelector('[data-requested-load-summary]');
+        const loadedLoadSummaryNode = line.querySelector('[data-loaded-load-summary]');
+        const pendingLoadSummaryNode = line.querySelector('[data-pending-load-summary]');
+        const pendingUnitsNode = line.querySelector('[data-pending-units]');
+        const excessSummaryNode = line.querySelector('[data-excess-summary]');
         const stateNode = line.querySelector('[data-prep-state]');
 
         if (loadedPalletsField) {
@@ -2311,12 +2328,34 @@ const setupWarehouseRequestAllocations = () => {
             loadedUnitsNode.textContent = formatNumber.format(cumulativeUnits);
         }
 
+        const loadSummary = (pallets, peaks) => `${formatNumber.format(pallets)} ${pallets === 1 ? 'pallet' : 'pallets'} · ${formatNumber.format(peaks)} ${peaks === 1 ? 'pico' : 'picos'}`;
+
+        if (requestedLoadSummaryNode) {
+            requestedLoadSummaryNode.textContent = loadSummary(requestedPallets, requestedPeaks);
+        }
+
+        if (loadedLoadSummaryNode) {
+            loadedLoadSummaryNode.textContent = loadSummary(cumulativePallets, cumulativePeaks);
+        }
+
+        if (pendingLoadSummaryNode) {
+            pendingLoadSummaryNode.textContent = loadSummary(pendingPallets, pendingPeaks);
+        }
+
+        if (pendingUnitsNode) {
+            pendingUnitsNode.textContent = formatNumber.format(pendingUnits);
+        }
+
         if (differenceUnitsNode) {
             differenceUnitsNode.textContent = formatNumber.format(Math.abs(differenceUnits));
         }
 
         if (differenceLabelNode) {
             differenceLabelNode.textContent = differenceUnits > 0 ? 'Exceso operativo' : pendingUnits === 0 ? 'Cubierto' : 'Pendiente';
+        }
+
+        if (excessSummaryNode) {
+            excessSummaryNode.hidden = differenceUnits <= 0;
         }
 
         if (stateNode) {

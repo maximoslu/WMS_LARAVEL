@@ -15468,6 +15468,49 @@ body.brand-body.app-shell-body .wms-load-quantity dd {
     line-height: 1.22;
 }
 
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-progress-item {
+    gap: 0.14rem;
+    padding: 0.48rem 0.56rem;
+    border-radius: 6px;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-progress-item--requested {
+    background: #ffffff;
+    border: 1px solid var(--ops-border);
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-progress-item--loaded {
+    background: #e8f4f6;
+    border-left: 3px solid var(--brand-cyan);
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-progress-item--pending {
+    background: #fff3d6;
+    border-left: 3px solid #d78a00;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-progress-item dd {
+    font-size: 0.88rem;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-units-detail {
+    gap: 0.1rem;
+    padding-top: 0.1rem;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-units-detail dd {
+    color: var(--ops-muted);
+    font-size: 0.73rem;
+}
+
+body.brand-body.app-shell-body .wms-load-quantity .wms-load-excess {
+    gap: 0.1rem;
+    padding: 0.42rem 0.56rem;
+    border-radius: 6px;
+    background: #d8eef1;
+    color: #0b6270;
+}
+
 body.brand-body.app-shell-body .wms-load-quantity .warehouse-prep-picking-summary {
     padding: 0.58rem 0.62rem;
     border: 1px solid rgba(15, 127, 147, 0.18);

@@ -3691,8 +3691,10 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertStringContainsString('Completo', $lineABlock);
         $this->assertStringContainsString('data-served-units="20000"', $lineABlock);
         $this->assertStringContainsString('20.000', $lineABlock);
-        $this->assertStringContainsString('Pendiente acumulado', $lineABlock);
-        $this->assertStringContainsString('0 uds', $lineABlock);
+        $this->assertStringContainsString('Ya cargado', $lineABlock);
+        $this->assertStringContainsString('Falta por cargar', $lineABlock);
+        $this->assertStringContainsString('4 pallets · 0 picos', $lineABlock);
+        $this->assertStringContainsString('0 pallets · 0 picos', $lineABlock);
         $this->assertStringNotContainsString('Sin preparar', $lineABlock);
         $this->assertStringNotContainsString('Pendiente de asignar', $lineABlock);
         $this->assertStringNotContainsString('name="lines[', $lineABlock);
@@ -3710,6 +3712,55 @@ class GoodsDispatchManagementTest extends TestCase
 
         $this->assertStringNotContainsString('PARTIAL-A-FULLY-SERVED', $deliveryHtml);
         $this->assertStringContainsString('PARTIAL-B-CURRENT', $deliveryHtml);
+    }
+
+    public function test_loading_progress_prioritizes_requested_loaded_and_pending_pallets(): void
+    {
+        Bus::fake();
+        $this->seedBaseData();
+
+        [, $almacen, $merchandiseRequest, , $stock] = $this->createPendingPalletRequest(requestedPallets: 8);
+
+        $this->actingAs($almacen)
+            ->post(route('dispatches.requests.generate', $merchandiseRequest))
+            ->assertRedirect();
+
+        $dispatch = GoodsDispatch::query()
+            ->where('merchandise_request_id', $merchandiseRequest->id)
+            ->firstOrFail();
+        $line = $dispatch->lines()->firstOrFail();
+
+        $this->actingAs($almacen)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'stock_pallet_id' => $stock->id,
+                        'loaded_pallets' => 4,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 4,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $merchandiseRequest));
+
+        $response = $this->actingAs($almacen)
+            ->get(route('dispatches.requests.show', $merchandiseRequest))
+            ->assertOk();
+        $lineBlock = $this->extractArticleContaining($response->getContent(), 'MULTI-DISPATCH-001');
+
+        $this->assertStringContainsString('Solicitado', $lineBlock);
+        $this->assertStringContainsString('8 pallets · 0 picos', $lineBlock);
+        $this->assertStringContainsString('Ya cargado', $lineBlock);
+        $this->assertStringContainsString('4 pallets · 0 picos', $lineBlock);
+        $this->assertStringContainsString('Falta por cargar', $lineBlock);
+        $this->assertStringContainsString('4 pallets · 0 picos', $lineBlock);
+        $this->assertStringContainsString('Detalle en unidades', $lineBlock);
     }
 
     public function test_partial_remainder_can_be_explicitly_closed_without_changing_original_request(): void
@@ -3906,9 +3957,9 @@ class GoodsDispatchManagementTest extends TestCase
             'client_id' => $client->id,
             'item_id' => $item->id,
             'units_per_pallet' => 100,
-            'quantity_units' => 500,
-            'full_pallets' => 5,
-            'warehouse_pallets' => 5,
+            'quantity_units' => max(500, $requestedPallets * 100),
+            'full_pallets' => max(5, $requestedPallets),
+            'warehouse_pallets' => max(5, $requestedPallets),
             'peak_1' => 0,
         ]);
         $merchandiseRequest = MerchandiseRequest::factory()->create([
