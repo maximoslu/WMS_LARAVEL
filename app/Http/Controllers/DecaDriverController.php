@@ -22,10 +22,10 @@ class DecaDriverController extends Controller
 
     public function authenticate(Request $request)
     {
-        $data = $request->validate(['password' => ['required', 'string', 'max:200']]);
+        $data = $request->validate(['password' => ['required', 'string', 'regex:/\A[0-9]{4}\z/']], ['password.regex' => 'Introduce un PIN de cuatro dígitos.']);
         $access = DB::table('deca_driver_access')->find(1);
         if (! $access || ! Hash::check($data['password'], $access->password_hash)) {
-            throw ValidationException::withMessages(['password' => 'Contraseña incorrecta o acceso todavía no activado.']);
+            throw ValidationException::withMessages(['password' => 'PIN incorrecto o acceso todavía no activado.']);
         }
         $request->session()->regenerate();
         $request->session()->put('deca_driver', [
@@ -91,12 +91,12 @@ class DecaDriverController extends Controller
 
     public function saveSettings(Request $request)
     {
-        $data = $request->validate(['password' => ['required', 'string', 'min:12', 'max:200', 'confirmed']]);
+        $data = $request->validate(['password' => ['required', 'string', 'regex:/\A[0-9]{4}\z/', 'confirmed']], ['password.regex' => 'Introduce un PIN de cuatro dígitos.', 'password.confirmed' => 'Los PIN no coinciden.']);
         DB::table('deca_driver_access')->updateOrInsert(['id' => 1], [
             'password_hash' => Hash::make($data['password']), 'version' => (string) Str::uuid(),
             'owner_id' => $request->user()->id, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        return back()->with('status', 'Acceso de chóferes activado. Las sesiones anteriores han quedado cerradas.');
+        return back()->with('status', 'PIN de chóferes guardado. Las sesiones anteriores han quedado cerradas.');
     }
 }
