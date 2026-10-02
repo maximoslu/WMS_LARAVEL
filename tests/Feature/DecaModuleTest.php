@@ -36,7 +36,7 @@ class DecaModuleTest extends TestCase
 
             $this->get(route('deca.quick'))
                 ->assertOk()
-                ->assertSee('Todavía no hay DECA rápidos configurados')
+                ->assertSee('Edelvives → Supply Chain')->assertSee('INSOCA → Pastas Romero')
                 ->assertSee(route('deca.create'), false)
                 ->assertSee(route('deca.index'), false);
 

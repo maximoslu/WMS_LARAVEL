@@ -17,11 +17,14 @@
             <p>Aquí encontrarás tus servicios habituales con el origen, el destino y la carga ya preparados.</p>
         </section>
 
-        <section class="surface-card deca-action" aria-labelledby="deca-quick-empty-title">
-            <h2 id="deca-quick-empty-title">Todavía no hay DECA rápidos configurados</h2>
-            <p>Cuando estén disponibles, aparecerá un botón para elegir cada transporte. Mientras tanto, puedes crear un DECA manual.</p>
-            <a href="{{ route('deca.create') }}" class="button-primary">Crear DECA manual</a>
-        </section>
+        @foreach($templates as $key => $preset)
+            <section class="surface-card deca-action">
+                <h2>{{ $preset['title'] }}</h2>
+                <p>{{ $preset['goods'] }} · {{ number_format($preset['weight_kg'], 0, ',', '.') }} kg aprox.</p>
+                <a href="{{ route('deca.quick.create', $key) }}" class="button-primary">{{ $preset['title'] }} · Elegir vehículo</a>
+            </section>
+        @endforeach
+        <a href="{{ route('deca.create') }}" class="button-secondary">Crear DECA manual</a>
 
         <a href="{{ route('deca.index') }}" class="button-secondary deca-back">Volver a DECA</a>
     </div>

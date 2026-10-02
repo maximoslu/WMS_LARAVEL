@@ -92,7 +92,7 @@ return [
                     'minimum_role' => 'almacen',
                     'tag' => 'Transporte',
                     'status' => 'ready',
-                    'active_patterns' => ['deca.quick'],
+                    'active_patterns' => ['deca.quick', 'deca.quick.*'],
                 ],
             ],
         ],

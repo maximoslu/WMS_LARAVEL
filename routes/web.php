@@ -138,6 +138,8 @@ Route::middleware('auth')->group(function (): void {
         ->name('deca.index');
     Route::middleware('minimum.role:'.Role::ALMACEN)->prefix('deca')->name('deca.')->group(function (): void {
         Route::get('/rapido', [DecaController::class, 'quick'])->name('quick');
+        Route::get('/rapido/{template}', [DecaController::class, 'quickCreate'])->name('quick.create');
+        Route::post('/rapido/{template}', [DecaController::class, 'quickStore'])->middleware('throttle:20,1')->name('quick.store');
         Route::get('/crear', [DecaController::class, 'create'])->name('create');
         Route::post('/documentos', [DecaController::class, 'store'])->middleware('throttle:20,1')->name('store');
         Route::get('/documentos', [DecaController::class, 'documents'])->name('documents');

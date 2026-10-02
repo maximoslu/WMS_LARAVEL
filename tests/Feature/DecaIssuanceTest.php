@@ -45,6 +45,41 @@ class DecaIssuanceTest extends TestCase
         $this->get(route('deca.documents'))->assertOk()->assertSee('Todavía no hay documentos');
     }
 
+    public function test_quick_templates_issue_their_fixed_data_and_require_vehicle_selection(): void
+    {
+        $this->actingAs($this->operator);
+        foreach (config('deca_quick.templates') as $key => $preset) {
+            $this->get(route('deca.quick.create', $key))->assertOk()
+                ->assertSee($preset['title'])->assertSee('1933MYN')->assertSee('3100KGC');
+            $url = route('deca.quick.store', $key);
+            foreach (['', '9999XXX'] as $plate) {
+                $this->post($url, $this->payload(['tractor_plate' => $plate]))
+                    ->assertSessionHasErrors('tractor_plate');
+            }
+            $payload = $this->payload(['tractor_plate' => '1933MYN', 'goods' => 'Manipulated', 'weight_kg' => 1]);
+            $this->post($url, $payload)->assertSessionHasNoErrors()->assertRedirect();
+            $document = DecaDocument::latest('id')->firstOrFail();
+            foreach (['shipper_name', 'shipper_tax_id', 'shipper_address', 'origin', 'destination', 'goods', 'weight_kg'] as $field) {
+                $this->assertSame($preset[$field], $document->snapshot[$field]);
+            }
+            $this->assertSame('1933MYN', $document->snapshot['tractor_plate']);
+            $this->get($document->public_url)->assertOk()->assertHeader('Content-Type', 'application/pdf');
+            $this->post($url, $payload)->assertSessionHasNoErrors();
+        }
+        $this->assertDatabaseCount('deca_documents', 2);
+    }
+
+    public function test_quick_routes_reject_unknown_templates_and_unauthorized_users(): void
+    {
+        $this->get(route('deca.quick.create', 'edelvives-supply-chain'))->assertRedirect(route('login'));
+        $this->actingAs($this->operator)->get(route('deca.quick.create', 'unknown'))->assertNotFound();
+        $this->post(route('deca.quick.store', 'unknown'), $this->payload())->assertNotFound();
+        $client = User::factory()->create(['role_id' => Role::where('slug', Role::CLIENTE)->firstOrFail()->id]);
+        $this->actingAs($client)->get(route('deca.quick.create', 'edelvives-supply-chain'))->assertForbidden();
+        $this->post(route('deca.quick.store', 'edelvives-supply-chain'), $this->payload())->assertForbidden();
+        $this->assertDatabaseCount('deca_documents', 0);
+    }
+
     public function test_issuance_preserves_pdf_and_guest_qr_download_is_identical(): void
     {
         $this->actingAs($this->operator)->post(route('deca.store'), $this->payload())->assertSessionHasNoErrors()->assertRedirect();

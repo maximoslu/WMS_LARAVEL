@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreDecaDocumentRequest;
+use App\Http\Requests\StoreQuickDecaDocumentRequest;
 use App\Models\DecaDocument;
 use App\Services\Deca\DecaIssuanceService;
 use App\Services\Deca\DecaPdfService;
@@ -26,6 +27,7 @@ class DecaController extends Controller
     public function quick(Request $request): View
     {
         return view('deca.quick', [
+            'templates' => config('deca_quick.templates'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
     }
@@ -37,6 +39,28 @@ class DecaController extends Controller
             'carriers' => config('deca.carriers'),
             'submissionKey' => (string) Str::uuid(),
         ]);
+    }
+
+    public function quickCreate(Request $request, string $template): View
+    {
+        $preset = config('deca_quick.templates')[$template] ?? null;
+        abort_unless($preset, 404);
+
+        return view('deca.quick-create', [
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
+            'templateKey' => $template,
+            'preset' => $preset,
+            'plates' => config('deca_quick.plates'),
+            'carriers' => config('deca.carriers'),
+            'submissionKey' => (string) Str::uuid(),
+        ]);
+    }
+
+    public function quickStore(StoreQuickDecaDocumentRequest $request, string $template, DecaIssuanceService $service): RedirectResponse
+    {
+        $document = $service->issue($request->user(), $request->validated());
+
+        return to_route('deca.show', $document)->with('status', 'DECA emitido. Descarga el PDF con QR.');
     }
 
     public function store(StoreDecaDocumentRequest $request, DecaIssuanceService $service): RedirectResponse
