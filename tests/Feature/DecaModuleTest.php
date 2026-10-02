@@ -16,6 +16,7 @@ class DecaModuleTest extends TestCase
     public function test_guests_must_log_in(): void
     {
         $this->get('/deca')->assertRedirect(route('login'));
+        $this->get(route('deca.quick'))->assertRedirect(route('login'));
     }
 
     public function test_operational_roles_can_access_the_initial_section(): void
@@ -30,8 +31,18 @@ class DecaModuleTest extends TestCase
                 ->assertSee('Transportes Monge')
                 ->assertSee('Crear DECA manual')
                 ->assertSee('Mis documentos')
+                ->assertSee(route('deca.quick'), false)
                 ->assertSee(route('deca.create'), false);
 
+            $this->get(route('deca.quick'))
+                ->assertOk()
+                ->assertSee('Todavía no hay DECA rápidos configurados')
+                ->assertSee(route('deca.create'), false)
+                ->assertSee(route('deca.index'), false);
+
+            $sections = WmsNavigation::sectionsForUser($user);
+            $decaSection = collect($sections)->firstWhere('key', 'deca');
+            $this->assertContains('deca-quick', array_column($decaSection['children'], 'key'));
             $this->assertContains('deca', array_column(WmsNavigation::sectionsForUser($user), 'key'));
         }
     }
@@ -42,6 +53,7 @@ class DecaModuleTest extends TestCase
         $user = User::factory()->create(['role_id' => Role::where('slug', Role::CLIENTE)->firstOrFail()->id]);
 
         $this->actingAs($user)->get('/deca')->assertForbidden();
+        $this->get(route('deca.quick'))->assertForbidden();
         $this->assertNotContains('deca', array_column(WmsNavigation::sectionsForUser($user), 'key'));
     }
 }

@@ -23,6 +23,13 @@ class DecaController extends Controller
         ]);
     }
 
+    public function quick(Request $request): View
+    {
+        return view('deca.quick', [
+            'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
+        ]);
+    }
+
     public function create(Request $request): View
     {
         return view('deca.create', [

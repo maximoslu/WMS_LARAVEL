@@ -17,6 +17,7 @@
 6. Mantener el código claro, mantenible y alineado con convenciones de Laravel.
 7. Priorizar compatibilidad con despliegue en Forge.
 8. Evitar introducir complejidad de negocio antes de la fase correspondiente del roadmap.
+9. Preferencia permanente de Jorge: completar los cambios solicitados con su despliegue en producción mediante GitHub -> Forge -> servidor, sin pedir otra confirmación, salvo que indique expresamente lo contrario. Ejecutar las comprobaciones pertinentes y verificar el despliegue y el resultado en producción antes de dar el trabajo por terminado. No dejar los cambios solo en local. Esta autorización no implica editar código directamente en producción; si existe un bloqueo real, comunicarlo claramente.
 
 ## Criterios técnicos
 

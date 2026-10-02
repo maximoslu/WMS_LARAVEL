@@ -18,6 +18,12 @@
         </section>
 
         <div class="deca-actions">
+            <section class="surface-card deca-action" aria-labelledby="deca-quick-title">
+                <span class="module-tag">Transportes habituales</span>
+                <h2 id="deca-quick-title">DECA rápido</h2>
+                <p>Accede a los transportes con origen, destino y carga preconfigurados.</p>
+                <a href="{{ route('deca.quick') }}" class="button-primary">Ver DECA rápidos</a>
+            </section>
             <section class="surface-card deca-action" aria-labelledby="deca-create-title">
                 <span class="module-tag">01 · Preparar</span>
                 <h2 id="deca-create-title">Crear DECA</h2>
