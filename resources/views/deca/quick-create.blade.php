@@ -1,14 +1,16 @@
-@extends('layouts.dashboard')
+@extends(($driverPortal ?? false) ? 'layouts.deca-driver' : 'layouts.dashboard')
 @section('title', 'DECA rápido | MAXIMO WMS')
 @section('topbar_title', 'DECA rápido')
 @section('content')
-<x-breadcrumbs :items="[['label' => 'DECA', 'href' => route('deca.index')], ['label' => 'DECA rápido', 'href' => route('deca.quick')], ['label' => $preset['title']]]" />
+@unless($driverPortal ?? false)
+<x-breadcrumbs :items="[['label' => 'DECA', 'href' => route('deca.index')], ['label' => 'DECA rápido', 'href' => route(($driverPortal ?? false) ? 'driver.quick' : 'deca.quick')], ['label' => $preset['title']]]" />
+@endunless
 <div class="deca-home deca-form-page">
     <header><h1>{{ $preset['title'] }}</h1><p>Revisa el servicio, selecciona el vehículo y genera el PDF con QR.</p></header>
     @if($errors->any())
         <div class="deca-errors" role="alert"><strong>Revisa estos datos:</strong><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>
     @endif
-    <form method="POST" action="{{ route('deca.quick.store', $templateKey) }}" class="deca-form" data-deca-form>
+    <form method="POST" action="{{ route(($driverPortal ?? false) ? 'driver.store' : 'deca.quick.store', $templateKey) }}" class="deca-form" data-deca-form>
         @csrf
         <input type="hidden" name="submission_key" value="{{ old('submission_key', $submissionKey) }}">
         <fieldset class="surface-card deca-fields">
@@ -53,7 +55,7 @@
         <div class="surface-card deca-fields">
             <label class="deca-check"><input type="checkbox" name="confirmed" value="1" required @checked(old('confirmed'))> He revisado los datos y el servicio de transporte todavía no ha comenzado.</label>
             <p class="deca-help">Al emitir se guarda el documento definitivo. Entrega el PDF al conductor antes de la salida.</p>
-            <button class="button-primary deca-submit" type="submit">Generar PDF con QR</button><a href="{{ route('deca.quick') }}" class="deca-back">Volver a DECA rápido</a>
+            <button class="button-primary deca-submit" type="submit">Generar PDF con QR</button><a href="{{ route(($driverPortal ?? false) ? 'driver.quick' : 'deca.quick') }}" class="deca-back">Volver a DECA rápido</a>
         </div>
     </form>
 </div>

@@ -17,6 +17,9 @@
             <p class="deca-notice">Rellena el transporte antes de salir, revisa los datos y emite tu PDF con QR.</p>
         </section>
 
+        @if(auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
+            <a href="{{ route('deca.driver.settings') }}" class="button-secondary">Contraseña de acceso para chóferes</a>
+        @endif
         <div class="deca-actions">
             <section class="surface-card deca-action" aria-labelledby="deca-quick-title">
                 <span class="module-tag">Transportes habituales</span>

@@ -1,5 +1,11 @@
 # DECA manual
 
+## Acceso compartido para chóferes
+
+`/deca-choferes` ofrece contraseña única y sesión independiente de la autenticación WMS. Administración configura la contraseña en `/deca/acceso-choferes`; inicialmente el acceso está desactivado hasta guardar una. Solo se conserva su hash. Cambiarla revoca sesiones anteriores; cada sesión dura como máximo 12 horas y se aplica además la caducidad habitual de Laravel. Login limitado a cinco intentos por minuto/IP.
+
+El portal permite exclusivamente los servicios rápidos, el documento recién emitido en esa sesión y su PDF/QR. No inicia sesión como usuario del WMS, no muestra el historial general ni enlaza al formulario manual. Las emisiones registran `access_channel=shared_driver_portal` y una huella de sesión; `created_by` identifica al administrador responsable que configuró el acceso, no al conductor individual. Una contraseña compartida no permite atribución individual. La migración `2026_10_02_150000_create_deca_driver_access_table` crea la configuración privada; incluir esta tabla en las copias completas de MySQL.
+
 Acceso del equipo interno: `/deca/crear` (almacén o superior). Los usuarios cliente no acceden al listado ni al formulario. El equipo comparte los documentos de las dos empresas transportistas propias.
 
 ## Configuración privada en Forge

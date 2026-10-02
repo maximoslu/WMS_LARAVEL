@@ -13,6 +13,7 @@ use App\Http\Controllers\ClientGoodsReceiptDocumentController;
 use App\Http\Controllers\DailyOperationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DecaController;
+use App\Http\Controllers\DecaDriverController;
 use App\Http\Controllers\DeliveryNoteManagementController;
 use App\Http\Controllers\GoodsDispatchController;
 use App\Http\Controllers\GoodsReceiptController;
@@ -42,6 +43,7 @@ use App\Http\Controllers\Traceability\TraceabilityReportController;
 use App\Http\Controllers\Traceability\UserActivityController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\WarehouseController;
+use App\Http\Middleware\EnsureDecaDriverAccess;
 use App\Models\Role;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -71,6 +73,22 @@ Route::get('/documentos/entradas/{goodsReceipt}/descargar', [ClientGoodsReceiptD
 Route::get('/documentos/deca/{token}.pdf', [DecaController::class, 'publicDownload'])
     ->where('token', '[a-f0-9]{64}')
     ->name('deca.public-download');
+
+Route::prefix('deca-choferes')->name('driver.')->group(function (): void {
+    Route::get('/', [DecaDriverController::class, 'login'])->name('login');
+    Route::post('/', [DecaDriverController::class, 'authenticate'])->middleware('throttle:5,1')->name('authenticate');
+    Route::middleware(EnsureDecaDriverAccess::class)->group(function (): void {
+        Route::post('/salir', [DecaDriverController::class, 'logout'])->name('logout');
+        Route::get('/rapido', [DecaDriverController::class, 'index'])->name('quick');
+        Route::get('/rapido/{template}', [DecaDriverController::class, 'create'])->name('create');
+        Route::post('/rapido/{template}', [DecaDriverController::class, 'store'])->middleware('throttle:20,1')->name('store');
+        Route::get('/documentos/{decaDocument}', [DecaDriverController::class, 'show'])->name('show');
+    });
+});
+Route::middleware(['auth', 'minimum.role:'.Role::ADMINISTRACION])->group(function (): void {
+    Route::get('/deca/acceso-choferes', [DecaDriverController::class, 'settings'])->name('deca.driver.settings');
+    Route::post('/deca/acceso-choferes', [DecaDriverController::class, 'saveSettings'])->middleware('throttle:5,1')->name('deca.driver.save');
+});
 
 Route::middleware('auth')->group(function (): void {
     Route::post('/actividad/heartbeat', ActivityHeartbeatController::class)
