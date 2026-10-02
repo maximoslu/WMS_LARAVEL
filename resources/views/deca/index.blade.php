@@ -18,7 +18,7 @@
         </section>
 
         @if(auth()->user()->canAccessRole(\App\Models\Role::ADMINISTRACION))
-            <a href="{{ route('deca.driver.settings') }}" class="button-secondary">Contraseña de acceso para chóferes</a>
+            <a href="{{ route('deca.driver.settings') }}" class="button-secondary">ContraseÃ±a de acceso para chÃ³feres</a>
         @endif
         <div class="deca-actions">
             <section class="surface-card deca-action" aria-labelledby="deca-quick-title">

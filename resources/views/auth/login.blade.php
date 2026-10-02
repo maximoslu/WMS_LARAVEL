@@ -50,7 +50,7 @@
         </div>
     </form>
 
-    <a href="{{ route('driver.login') }}" class="auth-button button-primary">DECA para chóferes</a>
+    <a href="{{ route('driver.login') }}" class="auth-button button-primary">DECA para chÃ³feres</a>
     <div class="auth-links">
         <a href="{{ route('access-requests.create') }}" class="auth-link">Solicitar acceso</a>
         <a href="{{ route('password.request') }}" class="auth-link">Recuperar contrasena</a>
