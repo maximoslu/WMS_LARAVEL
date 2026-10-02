@@ -66,7 +66,7 @@ class DecaIssuanceTest extends TestCase
             $this->get($document->public_url)->assertOk()->assertHeader('Content-Type', 'application/pdf');
             $this->post($url, $payload)->assertSessionHasNoErrors();
         }
-        $this->assertDatabaseCount('deca_documents', 2);
+        $this->assertDatabaseCount('deca_documents', count(config('deca_quick.templates')));
     }
 
     public function test_quick_routes_reject_unknown_templates_and_unauthorized_users(): void
