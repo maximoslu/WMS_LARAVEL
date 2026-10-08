@@ -152,6 +152,16 @@
         </div>
     </section>
 
+    @if ($receipt->hasIncident())
+        <section class="goods-receipt-incident-summary" aria-label="Incidencia de entrada">
+            <span class="goods-receipt-incident-toggle-icon" aria-hidden="true">!</span>
+            <div>
+                <strong>Incidencia registrada</strong>
+                <p>{{ $receipt->incident_notes }}</p>
+            </div>
+        </section>
+    @endif
+
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif
@@ -255,6 +265,8 @@
                         <small class="form-error">{{ $message }}</small>
                     @enderror
                 </label>
+
+                @include('goods-receipts._incident-fields', ['receipt' => $receipt])
             </div>
 
             <div class="goods-receipt-document-strip">

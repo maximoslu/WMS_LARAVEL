@@ -44,7 +44,11 @@ class GoodsReceiptDocumentNotificationService
             return;
         }
 
-        $eventVersion = hash('sha256', (string) $receipt->document_path);
+        $eventVersion = hash('sha256', implode('|', [
+            (string) $receipt->document_path,
+            $receipt->hasIncident() ? 'incident' : 'no-incident',
+            (string) $receipt->incident_notes,
+        ]));
 
         foreach ($userRecipients as $recipient) {
             $this->deliveries->deliverToUser(

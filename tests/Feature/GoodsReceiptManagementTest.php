@@ -13,6 +13,7 @@ use App\Models\StockPallet;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Notifications\ClientGoodsReceiptDocumentAvailableNotification;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractionResult;
 use App\Services\GoodsReceipts\GoodsReceiptAiExtractorInterface;
 use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
@@ -188,6 +189,122 @@ class GoodsReceiptManagementTest extends TestCase
             ->assertSee('Cami&oacute;n propio', false)
             ->assertSee('Formatos admitidos: PDF, JPG, JPEG o PNG. Tamaño máximo: 50 MB.')
             ->assertSee('Si vas a interpretar un albaran con IA, puedes dejar las lineas vacias.');
+    }
+
+    public function test_warehouse_can_record_a_client_visible_incident_when_creating_a_goods_receipt(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $warehouseUser = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($warehouseUser)
+            ->get(route('goods-receipts.create'))
+            ->assertOk()
+            ->assertSee('Incidencia')
+            ->assertSee('Observación de incidencia');
+
+        $this->actingAs($warehouseUser)
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-INC-001',
+                'received_at' => '2026-10-08',
+                'has_incident' => '1',
+                'incident_notes' => 'Un pallet llegó con embalaje exterior dañado.',
+                'lines' => [[
+                    'item_id' => '',
+                    'sku' => 'SKU-INC-001',
+                    'description' => 'Artículo con incidencia',
+                    'lot' => 'LOT-INC',
+                    'quantity_units' => 100,
+                    'units_per_pallet' => 100,
+                    'pallet_count' => 1,
+                    'pico_units' => '',
+                    'location_id' => $location->id,
+                ]],
+            ])
+            ->assertRedirect();
+
+        $receipt = GoodsReceipt::query()->where('receipt_number', 'ALB-INC-001')->firstOrFail();
+
+        $this->assertTrue($receipt->hasIncident());
+        $this->assertSame('Un pallet llegó con embalaje exterior dañado.', $receipt->incident_notes);
+        $this->assertFalse($receipt->hasStockApplied());
+
+        $this->actingAs($warehouseUser)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('Incidencia registrada')
+            ->assertSee('Un pallet llegó con embalaje exterior dañado.');
+    }
+
+    public function test_goods_receipt_incident_requires_an_observation(): void
+    {
+        $this->seed(RoleSeeder::class);
+
+        $warehouseUser = $this->makeUserWithRole(Role::ALMACEN);
+        [$client, $supplier, $location] = $this->makeReceiptContext();
+
+        $this->actingAs($warehouseUser)
+            ->from(route('goods-receipts.create'))
+            ->post(route('goods-receipts.store'), [
+                'client_id' => $client->id,
+                'supplier_id' => $supplier->id,
+                'receipt_number' => 'ALB-INC-EMPTY',
+                'has_incident' => '1',
+                'incident_notes' => '   ',
+                'lines' => [[
+                    'item_id' => '',
+                    'sku' => 'SKU-INC-EMPTY',
+                    'description' => 'Artículo de validación',
+                    'quantity_units' => 100,
+                    'units_per_pallet' => 100,
+                    'pallet_count' => 1,
+                    'location_id' => $location->id,
+                ]],
+            ])
+            ->assertRedirect(route('goods-receipts.create'))
+            ->assertSessionHasErrors('incident_notes');
+
+        $this->assertDatabaseMissing('goods_receipts', ['receipt_number' => 'ALB-INC-EMPTY']);
+    }
+
+    public function test_client_document_alert_and_portal_identify_receipt_incidents(): void
+    {
+        Storage::fake('local');
+        $this->seed(RoleSeeder::class);
+
+        $warehouseUser = $this->makeUserWithRole(Role::ALMACEN);
+        $receipt = $this->attachStoredDocument($this->createDraftReceipt($warehouseUser));
+        $receipt->update([
+            'has_incident' => true,
+            'incident_notes' => 'Se ha recibido una unidad con film protector roto.',
+        ]);
+        $receipt->refresh()->load(['client', 'supplier']);
+
+        $clientRoleId = Role::query()->where('slug', Role::CLIENTE)->value('id');
+        $clientUser = User::factory()->create([
+            'role_id' => $clientRoleId,
+            'client_id' => $receipt->client_id,
+        ]);
+
+        $notification = new ClientGoodsReceiptDocumentAvailableNotification($receipt, ['database', 'mail']);
+        $mail = $notification->toMail($clientUser);
+        $payload = $notification->toArray($clientUser);
+
+        $this->assertSame('Albarán disponible con incidencia - Entrada #'.$receipt->id, $mail->subject);
+        $this->assertSame('error', $mail->level);
+        $this->assertContains('Incidencia: Se ha recibido una unidad con film protector roto.', $mail->introLines);
+        $this->assertSame('Albarán disponible con incidencia', $payload['title']);
+        $this->assertTrue($payload['has_incident']);
+        $this->assertSame('Se ha recibido una unidad con film protector roto.', $payload['incident_notes']);
+
+        $this->actingAs($clientUser)
+            ->get(route('client-goods-receipts.index'))
+            ->assertOk()
+            ->assertSee('Incidencia registrada')
+            ->assertSee('Se ha recibido una unidad con film protector roto.');
     }
 
     public function test_goods_receipt_location_selector_is_canonical_and_naturally_sorted(): void

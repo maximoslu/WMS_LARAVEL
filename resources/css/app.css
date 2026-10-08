@@ -14851,6 +14851,121 @@ body.brand-body.app-shell-body .wms-receipt-detail .goods-receipt-lines-card {
     margin: 0.72rem 0.82rem;
 }
 
+body.brand-body.app-shell-body .goods-receipt-incident-field {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 0.55rem;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.62rem;
+    min-height: 3.45rem;
+    padding: 0.62rem 0.74rem;
+    border: 1px solid #e8b5b5;
+    border-radius: 8px;
+    background: #fdf0f0;
+    color: #8f3030;
+    cursor: pointer;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle:hover {
+    border-color: #d88f8f;
+    background: #fbe4e4;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle:has(input:focus-visible) {
+    outline: 2px solid #b34a4a;
+    outline-offset: 2px;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle input {
+    width: 1.1rem;
+    height: 1.1rem;
+    margin: 0;
+    accent-color: #a73a3a;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle > span:last-child {
+    display: grid;
+    gap: 0.08rem;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle strong {
+    color: #8f3030;
+    font-size: 0.92rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle small {
+    color: #9e5555;
+    font-size: 0.74rem;
+    line-height: 1.3;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-toggle-icon {
+    display: inline-grid;
+    flex: 0 0 auto;
+    width: 1.35rem;
+    height: 1.35rem;
+    place-items: center;
+    border-radius: 999px;
+    background: #b54a4a;
+    color: #ffffff;
+    font-size: 0.84rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-notes {
+    padding: 0.68rem 0.74rem;
+    border: 1px solid #efd0d0;
+    border-radius: 8px;
+    background: #fffafa;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-notes .auth-field {
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.62rem;
+    padding: 0.72rem 0.82rem;
+    border: 1px solid #ebc0c0;
+    border-left: 4px solid #b54a4a;
+    border-radius: 8px;
+    background: #fdf0f0;
+    color: #843030;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-summary > div {
+    display: grid;
+    gap: 0.14rem;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-summary strong {
+    font-size: 0.86rem;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .goods-receipt-incident-summary p {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.42;
+}
+
+body.brand-body.app-shell-body .client-delivery-note-incident {
+    color: #9b3434 !important;
+    font-weight: 900;
+}
+
+body.brand-body.app-shell-body .client-delivery-note-incident-note {
+    color: #9e5555 !important;
+}
+
 body.brand-body.app-shell-body .wms-receipt-detail .goods-receipt-lines-card {
     padding: 0;
     border: 1px solid var(--ops-border);

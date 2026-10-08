@@ -42,6 +42,7 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
         $receipt = $this->receipt;
         $documentName = DocumentDisplayNamer::baseName($receipt);
         $isAnonymous = $notifiable instanceof AnonymousNotifiable;
+        $hasIncident = $receipt->hasIncident();
 
         $downloadUrl = URL::temporarySignedRoute(
             'client-goods-receipts.signed-download',
@@ -50,13 +51,23 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
         );
 
         $message = (new MailMessage)
-            ->subject('Nuevo albarán disponible - Entrada #'.$receipt->id)
+            ->subject(($hasIncident ? 'Albarán disponible con incidencia' : 'Nuevo albarán disponible').' - Entrada #'.$receipt->id)
             ->greeting('Hola,')
-            ->line('Hay un nuevo albarán disponible en WMS para tu mercancía.')
+            ->line($hasIncident
+                ? 'Hay un nuevo albarán disponible en WMS para tu mercancía. Se ha registrado una incidencia en la entrada.'
+                : 'Hay un nuevo albarán disponible en WMS para tu mercancía.')
             ->line('Cliente: '.($receipt->client?->name ?? ''))
             ->line('Proveedor: '.($receipt->supplier?->name ?: 'Sin proveedor'))
             ->line('Fecha de entrada: '.(optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente'))
-            ->line('Entrada: '.$documentName)
+            ->line('Entrada: '.$documentName);
+
+        if ($hasIncident) {
+            $message
+                ->error()
+                ->line('Incidencia: '.($receipt->incident_notes ?: 'Hay una incidencia registrada en esta entrada.'));
+        }
+
+        $message
             ->action('Descargar albaran', $downloadUrl)
             ->line('El enlace de descarga es privado y caduca en 15 dias.');
 
@@ -88,15 +99,19 @@ class ClientGoodsReceiptDocumentAvailableNotification extends Notification
 
         return [
             'type' => 'goods_receipt_document_available',
-            'title' => 'Nuevo albarán disponible',
+            'title' => $receipt->hasIncident() ? 'Albarán disponible con incidencia' : 'Nuevo albarán disponible',
             'body' => sprintf(
-                'Entrada #%d de %s ya tiene albarán disponible en ALBARANES.',
+                $receipt->hasIncident()
+                    ? 'Entrada #%d de %s ya tiene albarán disponible con una incidencia registrada.'
+                    : 'Entrada #%d de %s ya tiene albarán disponible en ALBARANES.',
                 $receipt->id,
                 $receipt->supplier?->name ?: 'proveedor sin especificar'
             ),
             'url' => route('client-goods-receipts.index'),
             'goods_receipt_id' => $receipt->id,
             'received_at' => $receipt->received_at?->toDateString(),
+            'has_incident' => $receipt->hasIncident(),
+            'incident_notes' => $receipt->hasIncident() ? $receipt->incident_notes : null,
         ];
     }
 }

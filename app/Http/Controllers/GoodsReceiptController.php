@@ -192,6 +192,8 @@ class GoodsReceiptController extends Controller
                     'status' => GoodsReceipt::STATUS_DRAFT,
                     'received_at' => $validated['received_at'] ?? today()->toDateString(),
                     'notes' => $validated['notes'] ?? null,
+                    'has_incident' => (bool) ($validated['has_incident'] ?? false),
+                    'incident_notes' => $validated['incident_notes'] ?? null,
                     'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
                     'created_by' => $request->user()->id,
                     ...$documentPayload,
@@ -206,7 +208,7 @@ class GoodsReceiptController extends Controller
                     auditable: $receipt,
                     user: $request->user(),
                     clientId: $receipt->client_id,
-                    newValues: $receipt->only(['client_id', 'supplier_id', 'receipt_number', 'received_at', 'status']),
+                    newValues: $receipt->only(['client_id', 'supplier_id', 'receipt_number', 'received_at', 'status', 'has_incident', 'incident_notes']),
                 );
 
                 return $receipt;
@@ -320,7 +322,7 @@ class GoodsReceiptController extends Controller
         try {
             DB::transaction(function () use ($request, $validated, $goodsReceipt, $documentPayload, $wasConfirmed, $hadStockApplied): void {
                 $correlationId = $this->audit->correlationId();
-                $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status']);
+                $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status', 'has_incident', 'incident_notes']);
                 $mustReapplyStock = $wasConfirmed && $hadStockApplied;
                 $mustApplyConfirmedStock = $wasConfirmed && ! $hadStockApplied;
 
@@ -335,6 +337,8 @@ class GoodsReceiptController extends Controller
                     'external_document_number' => $validated['external_document_number'] ?? null,
                     'received_at' => $validated['received_at'] ?? null,
                     'notes' => $validated['notes'] ?? null,
+                    'has_incident' => (bool) ($validated['has_incident'] ?? false),
+                    'incident_notes' => $validated['incident_notes'] ?? null,
                     'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
                 ];
 

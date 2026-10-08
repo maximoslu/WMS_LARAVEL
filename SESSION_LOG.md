@@ -4,6 +4,18 @@ Registro manual de sesiones de trabajo con asistencia de IA (ChatGPT / Claude Co
 
 ---
 
+## 2026-10-08 - INCIDENCIAS COMUNICABLES EN ENTRADAS
+
+**Necesidad y alcance:** almacén puede registrar una incidencia concreta al crear o editar una entrada, sin alterar líneas, stock, confirmación, documentos ni el flujo de albaranes. Se mantienen las notas operativas generales y se añade un dato independiente, opcional y explícitamente comunicable al cliente.
+
+**Modelo y validación:** la migración aditiva `2026_10_08_000001_add_incident_to_goods_receipts_table.php` añade `has_incident` y `incident_notes` a `goods_receipts`. La incidencia requiere una observación de hasta 2.000 caracteres; al desmarcarla el texto deja de persistirse. La creación y edición quedan auditadas con ambos valores. No se modifican registros históricos, que permanecen sin incidencia.
+
+**UX y cliente:** el formulario de entrada muestra una tarjeta/selector `Incidencia` en rojo pastel y, al marcarla, solicita la `Observación de incidencia`. La entrada muestra el resumen internamente. Si existe documento, el portal `ALBARANES` del cliente muestra el aviso en rojo pastel y la observación. El email y la notificación de disponibilidad cambian a `Albarán disponible con incidencia`, incluyen el texto y usan el nivel visual de aviso. La identidad de entrega incluye la incidencia para mantener la idempotencia correcta de avisos.
+
+**Validación:** `GoodsReceiptManagementTest` completo: **125 passed, 738 assertions**; sintaxis PHP de los archivos nuevos/modificados, Pint focalizado, `npm run build` y `git diff --check`: OK. La suite global detectó cuatro fallos ajenos a esta entrega: tres aserciones de email adicional de entrada, desalineadas con la migración local pendiente a Brevo, y una regresión FF que intenta reconstruir un día sin ancla histórica. No se tocaron por quedar fuera del alcance de incidencias.
+
+---
+
 ## 2026-09-18 - DESGLOSE FF EN OPERACIONES DIARIAS
 
 **Regla operativa:** los envíos generados desde pedidos con plazo `same_day` (la opción cliente **Para hoy**) se identifican en Operaciones diarias como **FF**. Los pedidos de `standard_24h`, los pedidos históricos sin plazo y las líneas manuales o de entrada se mantienen en el cauce normal. No se duplica ni se persiste un contador nuevo: el desglose se calcula desde las líneas diarias ya generadas y el pedido origen de cada salida, por lo que no requiere migración ni modifica datos existentes.

@@ -132,6 +132,10 @@
                                 <div class="client-delivery-note-main">
                                     <strong>{{ $displayNames[$receipt->id] ?? $receipt->document_original_name }}</strong>
                                     <span>{{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }} · {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
+                                    @if ($receipt->hasIncident())
+                                        <span class="client-delivery-note-incident">Incidencia registrada</span>
+                                        <span class="client-delivery-note-incident-note">{{ $receipt->incident_notes }}</span>
+                                    @endif
                                 </div>
                                 <div class="wms-row-actions client-delivery-note-actions">
                                     <a href="{{ route('client-goods-receipts.download', $receipt) }}" class="button-secondary compact-button btn-table">Descargar</a>

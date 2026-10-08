@@ -100,6 +100,8 @@
                     @enderror
                 </label>
 
+                @include('goods-receipts._incident-fields', ['receipt' => $receipt])
+
                 <label class="auth-field item-form-field--full">
                     <span>
                         <input type="hidden" name="camion_propio" value="0">

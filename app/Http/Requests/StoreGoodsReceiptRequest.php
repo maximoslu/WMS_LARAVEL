@@ -26,6 +26,7 @@ class StoreGoodsReceiptRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $clientId = $this->normalizeNullableInteger($this->input('client_id'));
+        $hasIncident = $this->boolean('has_incident');
 
         $lines = collect($this->input('lines', []))
             ->map(function (mixed $line) use ($clientId): array {
@@ -113,6 +114,8 @@ class StoreGoodsReceiptRequest extends FormRequest
             'receipt_number' => $this->normalizeNullableUpper($this->input('receipt_number')),
             'external_document_number' => $this->normalizeNullableUpper($this->input('external_document_number')),
             'notes' => $this->normalizeNullableText($this->input('notes')),
+            'has_incident' => $hasIncident,
+            'incident_notes' => $hasIncident ? $this->normalizeNullableText($this->input('incident_notes')) : null,
             'camion_propio' => $this->boolean('camion_propio'),
             'lines' => $lines,
         ]);
@@ -128,6 +131,8 @@ class StoreGoodsReceiptRequest extends FormRequest
             'external_document_number' => ['nullable', 'string', 'max:150'],
             'received_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
+            'has_incident' => ['boolean'],
+            'incident_notes' => ['nullable', 'string', 'max:2000'],
             'camion_propio' => ['boolean'],
             'document' => GoodsReceiptDocumentRules::rules(),
             'lines' => $this->expectsAiCreationFlow()
@@ -162,6 +167,10 @@ class StoreGoodsReceiptRequest extends FormRequest
                 $validator->errors()->add('lines', 'Añade al menos una linea o usa "Crear borrador e interpretar con IA" con un documento adjunto.');
 
                 return;
+            }
+
+            if ($this->boolean('has_incident') && blank($this->input('incident_notes'))) {
+                $validator->errors()->add('incident_notes', 'Describe brevemente la incidencia para poder comunicarla al cliente.');
             }
 
             $clientId = $this->integer('client_id');

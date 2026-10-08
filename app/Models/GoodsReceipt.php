@@ -40,6 +40,8 @@ class GoodsReceipt extends Model
         'status',
         'received_at',
         'notes',
+        'has_incident',
+        'incident_notes',
         'camion_propio',
         'document_path',
         'document_original_name',
@@ -64,6 +66,7 @@ class GoodsReceipt extends Model
             'stock_applied_at' => 'datetime',
             'ai_extracted_data' => 'array',
             'camion_propio' => 'boolean',
+            'has_incident' => 'boolean',
         ];
     }
 
@@ -110,6 +113,11 @@ class GoodsReceipt extends Model
     public function hasStockApplied(): bool
     {
         return $this->stock_applied_at !== null;
+    }
+
+    public function hasIncident(): bool
+    {
+        return $this->has_incident;
     }
 
     public function statusLabel(): string

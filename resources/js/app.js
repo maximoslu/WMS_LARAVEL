@@ -706,6 +706,32 @@ const setupStockDetailToggles = () => {
     });
 };
 
+const setupGoodsReceiptIncidentFields = () => {
+    document.querySelectorAll('[data-goods-receipt-incident]').forEach((field) => {
+        if (field.dataset.incidentBound === 'true') {
+            return;
+        }
+
+        const toggle = field.querySelector('[data-goods-receipt-incident-toggle]');
+        const notes = field.querySelector('[data-goods-receipt-incident-notes]');
+        const input = field.querySelector('[data-goods-receipt-incident-notes-input]');
+
+        if (!toggle || !notes || !input) {
+            return;
+        }
+
+        const sync = () => {
+            notes.hidden = !toggle.checked;
+            input.required = toggle.checked;
+            toggle.setAttribute('aria-expanded', toggle.checked ? 'true' : 'false');
+        };
+
+        toggle.addEventListener('change', sync);
+        field.dataset.incidentBound = 'true';
+        sync();
+    });
+};
+
 const setupMerchandiseRequestBuilder = () => {
     const form = document.querySelector('[data-merchandise-request-form]');
 
@@ -2439,6 +2465,7 @@ const boot = () => {
     setupStockFilters();
     setupStockExportModal();
     setupStockDetailToggles();
+    setupGoodsReceiptIncidentFields();
     setupGoodsReceiptLines();
     setupItemFormLocations();
     setupSupplierPicker();
