@@ -1,6 +1,7 @@
 ﻿import './bootstrap';
 
 import './deca';
+import './dispatch-deca';
 
 const setupAppDrawer = () => {
     const body = document.body;

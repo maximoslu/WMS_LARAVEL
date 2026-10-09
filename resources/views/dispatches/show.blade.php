@@ -18,7 +18,7 @@
     $loadedUnits = $dispatch->loadedUnitsCount();
     $lineCount = $dispatch->lines->count();
     $sourceLabel = $dispatch->type === \App\Models\GoodsDispatch::TYPE_REQUEST ? 'Salida desde pedido' : 'Salida manual';
-    $canCorrectSentDispatch = auth()->user()?->isSuperAdmin() && $dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT;
+    $canCorrectSentDispatch = auth()->user()?->isSuperAdmin() && $dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT && $dispatch->deca_document_id === null;
     $deliveryNoteLabel = in_array($dispatch->status, [\App\Models\GoodsDispatch::STATUS_SENT, \App\Models\GoodsDispatch::STATUS_COMPLETED], true)
         ? 'Albaran disponible'
         : 'Albaran pendiente';
@@ -224,6 +224,9 @@
 
                 <div class="wms-action-card">
                     <strong>Accesos rápidos</strong>
+                    @if ($dispatch->decaDocument)
+                        <a href="{{ route('deca.download', $dispatch->decaDocument) }}" class="button-secondary compact-button" target="_blank" rel="noopener noreferrer">Descargar DECA</a>
+                    @endif
                     <p>Todo lo necesario para revisar el origen y emitir documentación.</p>
 
                     @if ($dispatch->merchandiseRequest)
@@ -248,10 +251,12 @@
                     @endif
                 </div>
 
+                @if ($dispatch->deca_document_id === null)
                 <form method="POST" action="{{ route('dispatches.own-truck.update', $dispatch) }}" class="wms-action-card">
                     @csrf
                     @method('PUT')
                     <strong class="wms-action-card-title"><x-module-icon name="truck" /> Transporte</strong>
+                    @unless (config('deca.dispatch.enabled'))
                     <p>Indica si la entrega sale con camión propio de MAXIMO o transporte externo.</p>
 
                     <fieldset class="warehouse-request-transport">
@@ -264,6 +269,9 @@
                             Camión externo
                         </label>
                     </fieldset>
+                    @else
+                        <p>El transportista se indica en los datos DECA al confirmar la carga.</p>
+                    @endunless
 
                     <strong class="wms-action-card-title">Dirección de entrega</strong>
                     @if ($dispatch->canEditDeliveryAddress())
@@ -281,6 +289,9 @@
 
                     <button type="submit" class="button-secondary compact-button btn-compact">{{ $dispatch->canEditDeliveryAddress() ? 'Actualizar transporte y dirección' : 'Actualizar transporte' }}</button>
                 </form>
+                @else
+                    <div class="wms-action-card"><strong>Transporte documentado</strong><p>El transporte y la carga quedan fijados en el DECA emitido.</p><p>{{ $dispatch->decaDocument->snapshot['destination'] }}</p></div>
+                @endif
             </div>
         </article>
     </section>
@@ -361,6 +372,7 @@
         <form method="POST" action="{{ route('dispatches.confirm-loading', $dispatch) }}" class="dispatch-loading-form" data-dispatch-loading-editor data-client-id="{{ $dispatch->client_id }}" data-search-endpoint="{{ $searchEndpoint }}">
             @csrf
             @method('PATCH')
+            @include('dispatches._deca-transport')
 
             <div class="wms-loading-editor-list" data-dispatch-loading-rows>
                 @foreach ($dispatch->lines as $line)

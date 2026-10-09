@@ -71,6 +71,25 @@
             </tr>
         </table>
 
+        @if ($dispatch->decaDocument)
+            @php($deca = $dispatch->decaDocument)
+            <table style="margin: 8px 0; border: 1px solid #c4d0d8; page-break-inside: avoid;">
+                <tr>
+                    <td style="padding: 7px; vertical-align: middle;">
+                        <strong>DECA · Documento de control del transporte</strong><br>
+                        <span style="font-size: 8px;">{{ $deca->number }}</span><br>
+                        Matrícula: <strong>{{ $deca->snapshot['tractor_plate'] }}</strong>
+                        @if (!empty($deca->snapshot['trailer_plate'])) · Remolque: {{ $deca->snapshot['trailer_plate'] }} @endif
+                        <br>Peso: <strong>{{ number_format((float) $deca->snapshot['weight_kg'], 3, ',', '.') }} kg</strong><br>
+                        Escanea el QR para abrir el DECA en PDF.
+                    </td>
+                    <td style="width: 105px; padding: 5px; text-align: center;">
+                        <a href="{{ $deca->public_url }}"><img src="data:image/svg+xml;base64,{{ base64_encode(app(\App\Services\Deca\DecaPdfService::class)->qr($deca->public_url)) }}" width="100" height="100" alt="QR del DECA"></a>
+                    </td>
+                </tr>
+            </table>
+        @endif
+
         <table class="meta-grid">
             <tr>
                 <td>

@@ -47,11 +47,14 @@ class GoodsDispatch extends Model
         'camion_propio',
         'delivery_address_override',
         'delivery_address_text',
+        'transport_data',
+        'deca_document_id',
     ];
 
     protected function casts(): array
     {
         return [
+            'transport_data' => 'array',
             'sent_at' => 'datetime',
             'completed_at' => 'datetime',
             'delivery_note_sent_at' => 'datetime',
@@ -99,6 +102,11 @@ class GoodsDispatch extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function decaDocument(): BelongsTo
+    {
+        return $this->belongsTo(DecaDocument::class);
     }
 
     public function merchandiseRequest(): BelongsTo

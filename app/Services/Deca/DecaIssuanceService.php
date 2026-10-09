@@ -16,11 +16,11 @@ class DecaIssuanceService
 {
     public function __construct(private DecaPdfService $pdf) {}
 
-    public function issue(User $user, array $data): DecaDocument
+    public function issue(User $user, array $data, ?array $carrierOverride = null): DecaDocument
     {
         $path = null;
         try {
-            return DB::transaction(function () use ($user, $data, &$path): DecaDocument {
+            return DB::transaction(function () use ($user, $data, $carrierOverride, &$path): DecaDocument {
                 // Serialize submissions for this operator, including double taps/retries.
                 User::whereKey($user->id)->lockForUpdate()->firstOrFail();
                 $existing = DecaDocument::where('created_by', $user->id)
@@ -33,7 +33,7 @@ class DecaIssuanceService
                 if (parse_url($base, PHP_URL_SCHEME) !== 'https' || ! parse_url($base, PHP_URL_HOST)) {
                     throw ValidationException::withMessages(['carrier_key' => 'Administración debe configurar la dirección HTTPS pública del DECA antes de emitir.']);
                 }
-                $carrier = config('deca.carriers.'.$data['carrier_key']);
+                $carrier = $carrierOverride ?? config('deca.carriers.'.$data['carrier_key']);
                 if (! $carrier || blank($carrier['tax_id'])) {
                     throw ValidationException::withMessages(['carrier_key' => 'El transportista no tiene sus datos fiscales configurados.']);
                 }

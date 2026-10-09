@@ -569,6 +569,7 @@
 
         @if ($dispatch)
                 @if ($canEditLoading)
+                    @include('dispatches._deca-transport')
                     <div class="warehouse-request-save-row wms-load-confirmation">
                         <div class="warehouse-request-close-panel">
                             <div>
@@ -576,6 +577,7 @@
                                 <span>Carga: {{ $dispatch->hasConfirmedLoading() ? 'confirmada' : 'pendiente de confirmar' }}</span>
                             </div>
 
+                            @unless (config('deca.dispatch.enabled'))
                             <fieldset class="warehouse-request-transport">
                                 <legend><x-module-icon name="truck" /> Transporte</legend>
                                 <label>
@@ -588,6 +590,7 @@
                                 </label>
                                 <small>Indica si la entrega sale con camión propio de MAXIMO o transporte externo.</small>
                             </fieldset>
+                            @endunless
                         </div>
 
                         <div class="warehouse-request-save-actions">

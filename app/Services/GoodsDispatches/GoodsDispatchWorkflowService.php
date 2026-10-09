@@ -9,6 +9,7 @@ use App\Models\MerchandiseRequest;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
+use App\Services\Deca\DispatchDecaService;
 use App\Services\Inventory\InventoryMovementService;
 use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
@@ -66,6 +67,10 @@ class GoodsDispatchWorkflowService
             $dispatch->load(['lines.allocations', 'merchandiseRequest']);
 
             $isCorrection = $dispatch->status === GoodsDispatch::STATUS_SENT;
+
+            if ($dispatch->deca_document_id !== null) {
+                throw ValidationException::withMessages(['dispatch' => 'Esta salida tiene un DECA emitido. No se puede modificar su carga sin un proceso de rectificación documental.']);
+            }
 
             if ($isCorrection && ! $user->isSuperAdmin()) {
                 throw ValidationException::withMessages([
@@ -339,146 +344,163 @@ class GoodsDispatchWorkflowService
         ?string $remainderCloseReason = null,
     ): ?string {
         $correlationId = $this->audit->correlationId();
-        $result = DB::transaction(function () use ($dispatch, $newStatus, $user, $completionMode, $remainderCloseReason, $correlationId): array {
-            $lockedDispatch = GoodsDispatch::query()
-                ->whereKey($dispatch->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-            $lockedDispatch->load([
-                'client',
-                'merchandiseRequest.lines.item',
-                'merchandiseRequest.goodsDispatches.lines.allocations',
-                'merchandiseRequest.goodsDispatches.lines.sourceRequestLine',
-                'lines.item',
-                'lines.sourceRequestLine',
-                'lines.allocations',
-            ]);
+        $issuedDocument = null;
+        try {
+            $result = DB::transaction(function () use ($dispatch, $newStatus, $user, $completionMode, $remainderCloseReason, $correlationId, &$issuedDocument): array {
+                $lockedDispatch = GoodsDispatch::query()
+                    ->whereKey($dispatch->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $lockedDispatch->load([
+                    'client',
+                    'merchandiseRequest.lines.item',
+                    'merchandiseRequest.goodsDispatches.lines.allocations',
+                    'merchandiseRequest.goodsDispatches.lines.sourceRequestLine',
+                    'lines.item',
+                    'lines.sourceRequestLine',
+                    'lines.allocations',
+                ]);
 
-            if ($lockedDispatch->status === $newStatus) {
-                return ['changed' => false, 'previous_request_status' => null];
-            }
+                if ($lockedDispatch->status === $newStatus) {
+                    return ['changed' => false, 'previous_request_status' => null];
+                }
 
-            $previousDispatchStatus = $lockedDispatch->status;
-            $this->guardStatusTransition($lockedDispatch, $newStatus);
-            $previousRequestStatus = $lockedDispatch->merchandiseRequest?->status;
-            $dispatchPayload = [
-                'status' => $newStatus,
-            ];
+                $previousDispatchStatus = $lockedDispatch->status;
+                $shouldIssueDeca = config('deca.dispatch.enabled') && $lockedDispatch->sent_at === null
+                    && in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)
+                    && $lockedDispatch->deca_document_id === null;
+                $this->guardStatusTransition($lockedDispatch, $newStatus);
+                $previousRequestStatus = $lockedDispatch->merchandiseRequest?->status;
+                $dispatchPayload = [
+                    'status' => $newStatus,
+                ];
 
-            if (in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true) && $lockedDispatch->sent_at === null) {
-                $dispatchPayload['sent_at'] = now();
-            }
+                if (in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true) && $lockedDispatch->sent_at === null) {
+                    $dispatchPayload['sent_at'] = now();
+                }
 
-            if ($newStatus === GoodsDispatch::STATUS_COMPLETED && $lockedDispatch->completed_at === null) {
-                $dispatchPayload['completed_at'] = now();
-            }
+                if ($newStatus === GoodsDispatch::STATUS_COMPLETED && $lockedDispatch->completed_at === null) {
+                    $dispatchPayload['completed_at'] = now();
+                }
 
-            if (
-                in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)
-                && ! $lockedDispatch->hasStockApplied()
-            ) {
-                $this->stockAllocationService->apply($lockedDispatch, $user, $correlationId);
+                if (
+                    in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)
+                    && ! $lockedDispatch->hasStockApplied()
+                ) {
+                    $this->stockAllocationService->apply($lockedDispatch, $user, $correlationId);
 
-                $dispatchPayload['stock_applied_at'] = now();
-                $dispatchPayload['stock_applied_by'] = $user->id;
-                $dispatchPayload['warehouse_stock_applied_at'] = now();
-                $dispatchPayload['warehouse_stock_applied_by'] = $user->id;
-            }
+                    $dispatchPayload['stock_applied_at'] = now();
+                    $dispatchPayload['stock_applied_by'] = $user->id;
+                    $dispatchPayload['warehouse_stock_applied_at'] = now();
+                    $dispatchPayload['warehouse_stock_applied_by'] = $user->id;
+                }
 
-            $lockedDispatch->update($dispatchPayload);
+                $lockedDispatch->update($dispatchPayload);
 
-            $this->audit->record(
-                event: 'goods_dispatch_status_changed',
-                module: 'goods_dispatches',
-                description: "Estado de salida cambiado de {$previousDispatchStatus} a {$newStatus}.",
-                auditable: $lockedDispatch,
-                subject: $lockedDispatch->merchandiseRequest,
-                user: $user,
-                clientId: $lockedDispatch->client_id,
-                oldValues: ['status' => $previousDispatchStatus],
-                newValues: ['status' => $newStatus, 'stock_applied_at' => $dispatchPayload['stock_applied_at'] ?? null],
-                correlationId: $correlationId,
-                severity: in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true) ? 'important' : 'info',
-            );
+                $this->audit->record(
+                    event: 'goods_dispatch_status_changed',
+                    module: 'goods_dispatches',
+                    description: "Estado de salida cambiado de {$previousDispatchStatus} a {$newStatus}.",
+                    auditable: $lockedDispatch,
+                    subject: $lockedDispatch->merchandiseRequest,
+                    user: $user,
+                    clientId: $lockedDispatch->client_id,
+                    oldValues: ['status' => $previousDispatchStatus],
+                    newValues: ['status' => $newStatus, 'stock_applied_at' => $dispatchPayload['stock_applied_at'] ?? null],
+                    correlationId: $correlationId,
+                    severity: in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true) ? 'important' : 'info',
+                );
 
-            $merchandiseRequest = $lockedDispatch->merchandiseRequest;
+                $merchandiseRequest = $lockedDispatch->merchandiseRequest;
 
-            if ($merchandiseRequest === null) {
-                return ['changed' => true, 'previous_request_status' => null];
-            }
+                if ($merchandiseRequest === null) {
+                    if ($shouldIssueDeca) {
+                        $issuedDocument = app(DispatchDecaService::class)->issue($lockedDispatch, $user);
+                    }
 
-            $requestPayload = [];
+                    return ['changed' => true, 'previous_request_status' => null];
+                }
 
-            if ($newStatus === MerchandiseRequest::STATUS_PREPARING) {
-                $requestPayload['status'] = MerchandiseRequest::STATUS_PREPARING;
-                $requestPayload['prepared_by'] = $user->id;
-                $requestPayload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
-            }
+                $requestPayload = [];
 
-            if (in_array($newStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)) {
-                $fulfillment = $this->fulfillmentService->summary($merchandiseRequest, $lockedDispatch);
+                if ($newStatus === MerchandiseRequest::STATUS_PREPARING) {
+                    $requestPayload['status'] = MerchandiseRequest::STATUS_PREPARING;
+                    $requestPayload['prepared_by'] = $user->id;
+                    $requestPayload['prepared_at'] = $merchandiseRequest->prepared_at ?? now();
+                }
 
-                if ($fulfillment['has_pending_after_current']) {
-                    if ($completionMode === 'leave_pending') {
-                        $requestPayload['status'] = MerchandiseRequest::STATUS_PARTIALLY_FULFILLED;
-                    } elseif ($completionMode === 'close_remainder') {
-                        if (! filled($remainderCloseReason)) {
+                if (in_array($newStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)) {
+                    $fulfillment = $this->fulfillmentService->summary($merchandiseRequest, $lockedDispatch);
+
+                    if ($fulfillment['has_pending_after_current']) {
+                        if ($completionMode === 'leave_pending') {
+                            $requestPayload['status'] = MerchandiseRequest::STATUS_PARTIALLY_FULFILLED;
+                        } elseif ($completionMode === 'close_remainder') {
+                            if (! filled($remainderCloseReason)) {
+                                throw ValidationException::withMessages([
+                                    'remainder_close_reason' => 'Indica el motivo para finalizar el pedido dejando unidades pendientes.',
+                                ]);
+                            }
+
+                            $requestPayload['status'] = MerchandiseRequest::STATUS_COMPLETED;
+                            $requestPayload['completed_with_shortfall'] = true;
+                            $requestPayload['completed_at'] = $merchandiseRequest->completed_at ?? now();
+                            $requestPayload['remainder_closed_at'] = now();
+                            $requestPayload['remainder_closed_by'] = $user->id;
+                            $requestPayload['remainder_close_reason'] = trim((string) $remainderCloseReason);
+                            $requestPayload['remainder_close_snapshot'] = $this->fulfillmentService->closureSnapshot($fulfillment);
+                        } else {
                             throw ValidationException::withMessages([
-                                'remainder_close_reason' => 'Indica el motivo para finalizar el pedido dejando unidades pendientes.',
+                                'completion_mode' => 'La carga no cubre todo el pedido. Elige dejar el resto pendiente o finalizarlo con motivo.',
                             ]);
                         }
-
-                        $requestPayload['status'] = MerchandiseRequest::STATUS_COMPLETED;
-                        $requestPayload['completed_with_shortfall'] = true;
-                        $requestPayload['completed_at'] = $merchandiseRequest->completed_at ?? now();
-                        $requestPayload['remainder_closed_at'] = now();
-                        $requestPayload['remainder_closed_by'] = $user->id;
-                        $requestPayload['remainder_close_reason'] = trim((string) $remainderCloseReason);
-                        $requestPayload['remainder_close_snapshot'] = $this->fulfillmentService->closureSnapshot($fulfillment);
                     } else {
-                        throw ValidationException::withMessages([
-                            'completion_mode' => 'La carga no cubre todo el pedido. Elige dejar el resto pendiente o finalizarlo con motivo.',
-                        ]);
-                    }
-                } else {
-                    $requestPayload['status'] = $newStatus;
+                        $requestPayload['status'] = $newStatus;
 
-                    if ($newStatus === MerchandiseRequest::STATUS_COMPLETED && $merchandiseRequest->completed_at === null) {
-                        $requestPayload['completed_at'] = now();
+                        if ($newStatus === MerchandiseRequest::STATUS_COMPLETED && $merchandiseRequest->completed_at === null) {
+                            $requestPayload['completed_at'] = now();
+                        }
+                    }
+
+                    if ($merchandiseRequest->shipped_at === null) {
+                        $requestPayload['shipped_by'] = $user->id;
+                        $requestPayload['shipped_at'] = now();
                     }
                 }
 
-                if ($merchandiseRequest->shipped_at === null) {
-                    $requestPayload['shipped_by'] = $user->id;
-                    $requestPayload['shipped_at'] = now();
+                if ($newStatus === MerchandiseRequest::STATUS_CANCELLED) {
+                    $requestPayload['status'] = MerchandiseRequest::STATUS_CANCELLED;
+                    $requestPayload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
                 }
-            }
 
-            if ($newStatus === MerchandiseRequest::STATUS_CANCELLED) {
-                $requestPayload['status'] = MerchandiseRequest::STATUS_CANCELLED;
-                $requestPayload['cancelled_at'] = $merchandiseRequest->cancelled_at ?? now();
-            }
+                if ($requestPayload !== []) {
+                    $merchandiseRequest->update($requestPayload);
+                }
 
-            if ($requestPayload !== []) {
-                $merchandiseRequest->update($requestPayload);
-            }
+                $this->audit->record(
+                    event: 'merchandise_request_status_changed',
+                    module: 'merchandise_requests',
+                    description: "Estado de pedido cambiado de {$previousRequestStatus} a ".($requestPayload['status'] ?? $merchandiseRequest->status).' desde su salida.',
+                    auditable: $merchandiseRequest,
+                    subject: $lockedDispatch,
+                    user: $user,
+                    clientId: $merchandiseRequest->client_id,
+                    oldValues: ['status' => $previousRequestStatus],
+                    newValues: ['status' => $requestPayload['status'] ?? $merchandiseRequest->status],
+                    correlationId: $correlationId,
+                    severity: in_array($requestPayload['status'] ?? null, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true) ? 'important' : 'info',
+                );
 
-            $this->audit->record(
-                event: 'merchandise_request_status_changed',
-                module: 'merchandise_requests',
-                description: "Estado de pedido cambiado de {$previousRequestStatus} a ".($requestPayload['status'] ?? $merchandiseRequest->status).' desde su salida.',
-                auditable: $merchandiseRequest,
-                subject: $lockedDispatch,
-                user: $user,
-                clientId: $merchandiseRequest->client_id,
-                oldValues: ['status' => $previousRequestStatus],
-                newValues: ['status' => $requestPayload['status'] ?? $merchandiseRequest->status],
-                correlationId: $correlationId,
-                severity: in_array($requestPayload['status'] ?? null, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true) ? 'important' : 'info',
-            );
+                if ($shouldIssueDeca) {
+                    $issuedDocument = app(DispatchDecaService::class)->issue($lockedDispatch, $user);
+                }
 
-            return ['changed' => true, 'previous_request_status' => $previousRequestStatus, 'request_status' => $requestPayload['status'] ?? $merchandiseRequest->status];
-        });
+                return ['changed' => true, 'previous_request_status' => $previousRequestStatus, 'request_status' => $requestPayload['status'] ?? $merchandiseRequest->status];
+            });
+        } catch (\Throwable $exception) {
+            app(DispatchDecaService::class)->discardRolledBackDocument($issuedDocument);
+            throw $exception;
+        }
 
         if ($result['changed'] && $result['previous_request_status'] !== null) {
             $this->notificationService->notifyDispatchStatusChanged(

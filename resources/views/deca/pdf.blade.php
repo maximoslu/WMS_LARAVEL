@@ -11,6 +11,7 @@ p { margin: 3px 0 8px; } .muted { color: #4a606e; font-size: 9px; }
 </style></head><body>
 <table class="header"><tr><td><h1>DECA</h1><p>Documento electrónico de control administrativo</p><strong>{{ $document->number }}</strong>
 <p class="muted">Emitido: {{ $document->issued_at->timezone('Europe/Madrid')->format('d/m/Y H:i:s') }} (Europe/Madrid)</p>
+@if(!empty($data['dispatch_number']))<p>Albarán de salida: <strong>{{ $data['dispatch_number'] }}</strong></p>@endif
 <p><strong>Fecha del transporte: {{ $document->transport_date->format('d/m/Y') }}</strong></p>
 </td><td class="qr"><img src="{{ $qr }}" alt="QR del documento"><div class="muted">Descarga del PDF original</div></td></tr></table>
 <section class="block"><h2>1. Cargador contractual</h2><p><strong>{{ $data['shipper_name'] }}</strong><br>NIF: {{ $data['shipper_tax_id'] }}<br>{{ $data['shipper_address'] }}</p></section>
