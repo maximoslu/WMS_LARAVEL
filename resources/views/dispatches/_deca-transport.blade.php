@@ -20,8 +20,12 @@
             <label class="auth-field"><span>Razón social del transportista externo</span><input name="transport[carrier_name]" maxlength="180" class="auth-input" value="{{ old('transport.carrier_name', $transport['carrier_name'] ?? '') }}"></label>
             <label class="auth-field"><span>NIF del transportista externo</span><input name="transport[carrier_tax_id]" maxlength="30" class="auth-input" value="{{ old('transport.carrier_tax_id', $transport['carrier_tax_id'] ?? '') }}"></label>
         </div>
+        @if ($dispatch->client->requiresVehicleType())
+            <p>El remolque se determina a partir del tipo de vehículo seleccionado.</p>
+        @else
         <input type="hidden" name="transport[articulated]" value="0">
         <label><input type="checkbox" name="transport[articulated]" value="1" data-deca-articulated @checked(old('transport.articulated', $transport['articulated'] ?? false))> Lleva remolque / semirremolque</label>
+        @endif
         <label class="auth-field" data-deca-trailer><span>Matrícula del remolque / semirremolque</span><input name="transport[trailer_plate]" maxlength="20" class="auth-input" value="{{ old('transport.trailer_plate', $transport['trailer_plate'] ?? '') }}"></label>
         <input type="hidden" name="transport[special_authorization]" value="0">
         <label><input type="checkbox" name="transport[special_authorization]" value="1" data-deca-special @checked(old('transport.special_authorization', $transport['special_authorization'] ?? false))> Requiere autorización especial de circulación</label>

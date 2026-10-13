@@ -43,6 +43,7 @@ class GoodsReceipt extends Model
         'has_incident',
         'incident_notes',
         'camion_propio',
+        'vehicle_type',
         'document_path',
         'document_original_name',
         'document_mime',

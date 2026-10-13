@@ -24,6 +24,7 @@ use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Services\GoodsReceipts\GoodsReceiptStockApplicationService;
 use App\Services\GoodsReceipts\GoodsReceiptSupplierResolver;
 use App\Services\Locations\LocationIntegrityService;
+use App\Support\VehicleType;
 use App\Support\WmsNavigation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -195,6 +196,7 @@ class GoodsReceiptController extends Controller
                     'has_incident' => (bool) ($validated['has_incident'] ?? false),
                     'incident_notes' => $validated['incident_notes'] ?? null,
                     'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
+                    'vehicle_type' => Client::find($validated['client_id'])?->requiresVehicleType() ? ($validated['vehicle_type'] ?? null) : null,
                     'created_by' => $request->user()->id,
                     ...$documentPayload,
                 ]);
@@ -322,7 +324,7 @@ class GoodsReceiptController extends Controller
         try {
             DB::transaction(function () use ($request, $validated, $goodsReceipt, $documentPayload, $wasConfirmed, $hadStockApplied): void {
                 $correlationId = $this->audit->correlationId();
-                $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status', 'has_incident', 'incident_notes']);
+                $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status', 'has_incident', 'incident_notes', 'camion_propio', 'vehicle_type']);
                 $mustReapplyStock = $wasConfirmed && $hadStockApplied;
                 $mustApplyConfirmedStock = $wasConfirmed && ! $hadStockApplied;
 
@@ -340,12 +342,16 @@ class GoodsReceiptController extends Controller
                     'has_incident' => (bool) ($validated['has_incident'] ?? false),
                     'incident_notes' => $validated['incident_notes'] ?? null,
                     'camion_propio' => (bool) ($validated['camion_propio'] ?? false),
+                    'vehicle_type' => Client::find($validated['client_id'])?->requiresVehicleType() ? ($validated['vehicle_type'] ?? ($request->has('vehicle_type') ? null : $goodsReceipt->vehicle_type)) : null,
                 ];
 
                 if ($documentPayload !== []) {
                     $payload = [...$payload, ...$documentPayload];
                 }
 
+                if ($wasConfirmed && ($goodsReceipt->vehicle_type !== null || $payload['vehicle_type'] !== null)) {
+                    VehicleType::requireForClient(Client::find($validated['client_id']), $payload['vehicle_type']);
+                }
                 $goodsReceipt->update($payload);
                 $this->syncLines($goodsReceipt, $validated['lines']);
 

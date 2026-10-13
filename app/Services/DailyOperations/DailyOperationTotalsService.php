@@ -3,6 +3,7 @@
 namespace App\Services\DailyOperations;
 
 use App\Enums\MerchandiseRequestServiceLevel;
+use App\Models\Client;
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\GoodsDispatch;
@@ -11,6 +12,7 @@ use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
 use App\Models\InventoryMovement;
 use App\Models\StockPallet;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -73,6 +75,21 @@ class DailyOperationTotalsService
         ];
     }
 
+    public function dispatchesForDate(string $date, int $clientId): Builder
+    {
+        $query = GoodsDispatch::query()->where('client_id', $clientId)
+            ->whereIn('status', [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED]);
+        if (Client::find($clientId)?->requiresVehicleType()) {
+            // Closing an expedition later must not move or duplicate the physical service.
+            return $query->whereDate(DB::raw('COALESCE(sent_at, completed_at)'), $date);
+        }
+
+        return $query->where(function ($query) use ($date): void {
+            $query->where(fn ($query) => $query->where('status', GoodsDispatch::STATUS_COMPLETED)->whereDate('completed_at', $date))
+                ->orWhere(fn ($query) => $query->where('status', GoodsDispatch::STATUS_SENT)->whereDate('sent_at', $date));
+        });
+    }
+
     public function syncDay(DailyOperationDay $day, ?int $openingPallets = null, ?string $notes = null, ?int $updatedBy = null): DailyOperationDay
     {
         $day->loadMissing('lines');
@@ -125,21 +142,8 @@ class DailyOperationTotalsService
             ->get()
             ->each(fn (GoodsReceipt $receipt) => $inbound += $this->receiptLogisticUnits($receipt));
 
-        GoodsDispatch::query()
+        $this->dispatchesForDate($date, $clientId)
             ->with('lines.allocations')
-            ->where('client_id', $clientId)
-            ->whereIn('status', [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED])
-            ->where(function ($query) use ($date): void {
-                $query
-                    ->where(function ($query) use ($date): void {
-                        $query->where('status', GoodsDispatch::STATUS_COMPLETED)
-                            ->whereDate('completed_at', $date);
-                    })
-                    ->orWhere(function ($query) use ($date): void {
-                        $query->where('status', GoodsDispatch::STATUS_SENT)
-                            ->whereDate('sent_at', $date);
-                    });
-            })
             ->get()
             ->each(fn (GoodsDispatch $dispatch) => $outbound += $this->dispatchLogisticUnits($dispatch));
 
@@ -152,8 +156,7 @@ class DailyOperationTotalsService
         int $inboundPallets,
         int $outboundPallets,
         ?int $storedOpeningPallets = null,
-    ): int
-    {
+    ): int {
         $date = Carbon::parse($operationDate)->toDateString();
         $openingFromCurrentStock = $this->openingPalletsFromCurrentStockForDate($clientId, $inboundPallets, $outboundPallets);
 

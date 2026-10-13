@@ -45,6 +45,7 @@ class GoodsDispatch extends Model
         'warehouse_stock_applied_by',
         'notes',
         'camion_propio',
+        'vehicle_type',
         'delivery_address_override',
         'delivery_address_text',
         'transport_data',

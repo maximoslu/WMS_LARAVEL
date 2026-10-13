@@ -13,6 +13,7 @@ use App\Services\Deca\DispatchDecaService;
 use App\Services\Inventory\InventoryMovementService;
 use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
+use App\Support\VehicleType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -363,6 +364,10 @@ class GoodsDispatchWorkflowService
 
                 if ($lockedDispatch->status === $newStatus) {
                     return ['changed' => false, 'previous_request_status' => null];
+                }
+
+                if ($lockedDispatch->sent_at === null && in_array($newStatus, [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)) {
+                    VehicleType::requireForClient($lockedDispatch->client, $lockedDispatch->vehicle_type);
                 }
 
                 $previousDispatchStatus = $lockedDispatch->status;

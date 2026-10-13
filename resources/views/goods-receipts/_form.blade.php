@@ -46,7 +46,7 @@
                     <select name="client_id" class="auth-input" required data-receipt-client>
                         <option value="">Selecciona cliente</option>
                         @foreach ($clients as $client)
-                            <option value="{{ $client->id }}" @selected((string) old('client_id', $receipt->client_id) === (string) $client->id)>
+                            <option value="{{ $client->id }}" data-requires-vehicle-type="{{ $client->requiresVehicleType() ? 1 : 0 }}" @selected((string) old('client_id', $receipt->client_id) === (string) $client->id)>
                                 {{ $client->name }}
                             </option>
                         @endforeach
@@ -101,6 +101,17 @@
                 </label>
 
                 @include('goods-receipts._incident-fields', ['receipt' => $receipt])
+                <label class="auth-field" data-receipt-vehicle-type>
+                    <span>Tipo de vehículo · TI Automotive</span>
+                    <select name="vehicle_type" class="auth-input">
+                        <option value="">Selecciona rígido o tráiler</option>
+                        @foreach (\App\Support\VehicleType::OPTIONS as $value => $label)
+                            <option value="{{ $value }}" @selected(old('vehicle_type', $receipt->vehicle_type) === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <small class="helper-text">Obligatorio al confirmar. Una gestión por vehículo, independientemente de los palés.</small>
+                    @error('vehicle_type')<small class="form-error">{{ $message }}</small>@enderror
+                </label>
 
                 <label class="auth-field item-form-field--full">
                     <span>

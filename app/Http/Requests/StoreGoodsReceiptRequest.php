@@ -134,6 +134,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             'has_incident' => ['boolean'],
             'incident_notes' => ['nullable', 'string', 'max:2000'],
             'camion_propio' => ['boolean'],
+            'vehicle_type' => ['nullable', 'in:rigid,trailer'],
             'document' => GoodsReceiptDocumentRules::rules(),
             'lines' => $this->expectsAiCreationFlow()
                 ? ['present', 'array']

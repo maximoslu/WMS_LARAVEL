@@ -14,6 +14,7 @@ use App\Services\DailyOperations\DailyOperationRecalculationService;
 use App\Services\DailyOperations\DailyOperationTotalsService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class DailyOperationFfBreakdownTest extends TestCase
@@ -22,6 +23,7 @@ class DailyOperationFfBreakdownTest extends TestCase
 
     public function test_daily_operations_separates_same_day_dispatches_as_ff_without_changing_the_total(): void
     {
+        $this->travelTo(Carbon::parse('2026-09-18 10:00:00'));
         $this->seed(RoleSeeder::class);
         $user = $this->makeWarehouseUser();
         $client = Client::factory()->create();

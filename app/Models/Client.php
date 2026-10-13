@@ -38,6 +38,11 @@ class Client extends Model
         ];
     }
 
+    public function requiresVehicleType(): bool
+    {
+        return strtoupper(trim((string) $this->code)) === 'TIAUTO';
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(Item::class);

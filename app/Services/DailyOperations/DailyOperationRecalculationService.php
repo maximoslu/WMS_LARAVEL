@@ -4,7 +4,6 @@ namespace App\Services\DailyOperations;
 
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
-use App\Models\GoodsDispatch;
 use App\Models\GoodsReceipt;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
@@ -113,21 +112,8 @@ class DailyOperationRecalculationService
                 }
             }
 
-            $dispatches = GoodsDispatch::query()
+            $dispatches = $this->totalsService->dispatchesForDate($date, $clientId)
                 ->with(['client', 'lines'])
-                ->where('client_id', $clientId)
-                ->whereIn('status', [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED])
-                ->where(function ($query) use ($date): void {
-                    $query
-                        ->where(function ($query) use ($date): void {
-                            $query->where('status', GoodsDispatch::STATUS_COMPLETED)
-                                ->whereDate('completed_at', $date);
-                        })
-                        ->orWhere(function ($query) use ($date): void {
-                            $query->where('status', GoodsDispatch::STATUS_SENT)
-                                ->whereDate('sent_at', $date);
-                        });
-                })
                 ->orderBy('id')
                 ->get();
 

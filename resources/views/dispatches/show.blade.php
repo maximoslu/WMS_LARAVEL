@@ -136,6 +136,7 @@
         <div>
             <span>Transporte</span>
             <strong>{{ $dispatch->camion_propio ? 'Camion propio MAXIMO' : 'Camion externo' }}</strong>
+            @if ($dispatch->client->requiresVehicleType())<span>{{ \App\Support\VehicleType::label($dispatch->vehicle_type) }}</span>@endif
             <small>{{ $sourceLabel }}</small>
         </div>
         <div>
@@ -372,7 +373,8 @@
         <form method="POST" action="{{ route('dispatches.confirm-loading', $dispatch) }}" class="dispatch-loading-form" data-dispatch-loading-editor data-client-id="{{ $dispatch->client_id }}" data-search-endpoint="{{ $searchEndpoint }}">
             @csrf
             @method('PATCH')
-            @include('dispatches._deca-transport')
+            @include('dispatches._vehicle-type')
+                    @include('dispatches._deca-transport')
 
             <div class="wms-loading-editor-list" data-dispatch-loading-rows>
                 @foreach ($dispatch->lines as $line)

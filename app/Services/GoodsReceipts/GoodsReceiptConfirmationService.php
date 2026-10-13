@@ -5,6 +5,7 @@ namespace App\Services\GoodsReceipts;
 use App\Models\GoodsReceipt;
 use App\Models\User;
 use App\Services\Audit\AuditLogService;
+use App\Support\VehicleType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -53,6 +54,8 @@ class GoodsReceiptConfirmationService
                 'lines.item',
                 'lines.location',
             ]);
+
+            VehicleType::requireForClient($receipt->client, $receipt->vehicle_type);
 
             if ($receipt->lines->isEmpty()) {
                 throw ValidationException::withMessages([

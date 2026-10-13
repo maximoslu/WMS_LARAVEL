@@ -2,18 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreDailyOperationLineRequest;
 use App\Http\Requests\AdjustDailyOperationBaseRequest;
+use App\Http\Requests\StoreDailyOperationLineRequest;
 use App\Http\Requests\UpdateDailyOperationLineRequest;
 use App\Http\Requests\UpsertDailyOperationDayRequest;
 use App\Models\Client;
 use App\Models\DailyOperationDay;
 use App\Models\DailyOperationLine;
 use App\Models\Role;
-use App\Services\DailyOperations\DailyOperationLineAutomationService;
 use App\Services\DailyOperations\DailyOperationHistoricalAdjustmentService;
+use App\Services\DailyOperations\DailyOperationLineAutomationService;
 use App\Services\DailyOperations\DailyOperationRecalculationService;
 use App\Services\DailyOperations\DailyOperationTotalsService;
+use App\Services\DailyOperations\VehicleOperationReport;
 use App\Support\WmsNavigation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -69,6 +70,7 @@ class DailyOperationController extends Controller
             'sectionOptions' => DailyOperationLine::sectionOptions(),
             'sectionTotals' => $sectionBreakdown,
             'serviceLevelBreakdown' => $serviceLevelBreakdown,
+            'vehicleReport' => $day !== null ? app(VehicleOperationReport::class)->forDay($day) : ['totals' => [], 'sources' => []],
             'billingDetails' => $day !== null ? $this->billingDetails($day, $serviceLevelBreakdown['ff_dispatch_ids']) : [],
             'canManage' => $request->user()?->canAccessRole(Role::ALMACEN) === true,
             'canAdjustHistoricalBase' => $request->user()?->canAccessRole(Role::ADMINISTRACION) === true,
@@ -331,6 +333,7 @@ class DailyOperationController extends Controller
                 return [
                     'type' => $line->section === DailyOperationLine::SECTION_DESCARGA ? 'Entrada' : 'Salida',
                     'document' => $this->billingDocumentLabel($line),
+                    'source_key' => $line->source_type.':'.$line->source_id,
                     'pallets' => (int) $line->pallets,
                     'management' => $management || $line->requiresTruckManagement(),
                     'trip' => $trip,

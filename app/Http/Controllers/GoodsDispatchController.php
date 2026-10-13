@@ -389,6 +389,16 @@ class GoodsDispatchController extends Controller
             DB::transaction(function () use ($request, $goodsDispatch, $workflowService, &$issuedDocument): void {
                 $goodsDispatch = GoodsDispatch::whereKey($goodsDispatch->id)->lockForUpdate()->firstOrFail();
                 $previousDocumentId = $goodsDispatch->deca_document_id;
+                if ($goodsDispatch->client->requiresVehicleType() && $goodsDispatch->canEditDeliveryAddress() && $previousDocumentId === null) {
+                    $vehicleUpdates = [];
+                    if ($request->has('vehicle_type')) {
+                        $vehicleUpdates['vehicle_type'] = $request->input('vehicle_type');
+                    }
+                    if ($request->has('camion_propio')) {
+                        $vehicleUpdates['camion_propio'] = $request->boolean('camion_propio');
+                    }
+                    $goodsDispatch->update($vehicleUpdates);
+                }
                 if ($request->has('transport') && config('deca.dispatch.enabled')) {
                     app(DispatchDecaService::class)->saveDraft($goodsDispatch, $request->input('transport', []));
                 }
@@ -475,9 +485,9 @@ class GoodsDispatchController extends Controller
             ]);
 
             $updates = [
-                'camion_propio' => config('deca.dispatch.enabled')
+                'camion_propio' => config('deca.dispatch.enabled') && ! $goodsDispatch->client->requiresVehicleType()
                     ? (($goodsDispatch->transport_data['carrier_key'] ?? ($goodsDispatch->camion_propio ? 'monge' : 'external')) === 'monge')
-                    : (bool) ($validated['camion_propio'] ?? false),
+                    : (bool) ($validated['camion_propio'] ?? $goodsDispatch->camion_propio),
             ];
 
             if ($request->has('delivery_address_override')) {

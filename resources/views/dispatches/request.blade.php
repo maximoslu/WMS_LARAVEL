@@ -569,6 +569,7 @@
 
         @if ($dispatch)
                 @if ($canEditLoading)
+                    @include('dispatches._vehicle-type')
                     @include('dispatches._deca-transport')
                     <div class="warehouse-request-save-row wms-load-confirmation">
                         <div class="warehouse-request-close-panel">
@@ -577,7 +578,7 @@
                                 <span>Carga: {{ $dispatch->hasConfirmedLoading() ? 'confirmada' : 'pendiente de confirmar' }}</span>
                             </div>
 
-                            @unless (config('deca.dispatch.enabled'))
+                            @unless (config('deca.dispatch.enabled') || $dispatch->client->requiresVehicleType())
                             <fieldset class="warehouse-request-transport">
                                 <legend><x-module-icon name="truck" /> Transporte</legend>
                                 <label>

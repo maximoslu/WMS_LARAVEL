@@ -92,6 +92,7 @@ class ConfirmGoodsDispatchLoadingRequest extends FormRequest
         return [
             'return_to_request' => ['nullable', 'boolean'],
             'transport' => ['sometimes', 'array'],
+            'vehicle_type' => ['nullable', 'in:rigid,trailer'],
             'finalize_dispatch' => ['nullable', 'boolean'],
             'completion_mode' => ['nullable', 'string', 'in:leave_pending,close_remainder'],
             'remainder_close_reason' => ['nullable', 'string', 'max:2000'],

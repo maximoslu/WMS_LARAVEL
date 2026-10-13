@@ -2,6 +2,11 @@
 @import 'tailwindcss';
 @import './deca.css';
 
+[data-receipt-vehicle-type][hidden],
+[data-deca-transport] [hidden] {
+    display: none !important;
+}
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';

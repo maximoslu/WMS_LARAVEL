@@ -69,6 +69,9 @@
 
             <div class="goods-receipt-toolbar-meta wms-receipt-toolbar-meta">
                 <span><strong>Cliente:</strong> {{ $receipt->client->name }}</span>
+                @if ($receipt->client->requiresVehicleType())
+                    <span><strong>Vehículo:</strong> {{ \App\Support\VehicleType::label($receipt->vehicle_type) }} · {{ $receipt->camion_propio ? 'Propio' : 'Externo' }}</span>
+                @endif
                 <span><strong>Proveedor:</strong> {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
                 <span><strong>Fecha:</strong> {{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</span>
                 <span><strong>IA:</strong> {{ $aiStatusLabel }}</span>
@@ -211,6 +214,26 @@
             @method('PUT')
 
             <input type="hidden" name="client_id" value="{{ old('client_id', $receipt->client_id) }}" data-receipt-client>
+            @if ($receipt->client->requiresVehicleType())
+                <label class="auth-field"><span>Tipo de vehículo · TI Automotive</span>
+                    <select name="vehicle_type" class="auth-input">
+                        <option value="">Selecciona rígido o tráiler</option>
+                        @foreach (\App\Support\VehicleType::OPTIONS as $value => $label)
+                            <option value="{{ $value }}" @selected(old('vehicle_type', $receipt->vehicle_type) === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <small>Guarda estos datos antes de confirmar la entrada.</small>
+                    @error('vehicle_type')<small class="form-error">{{ $message }}</small>@enderror
+                </label>
+                <label class="auth-field"><span>Camión propio</span>
+                    <select name="camion_propio" class="auth-input">
+                        <option value="1" @selected((bool) old('camion_propio', $receipt->camion_propio))>Sí</option>
+                        <option value="0" @selected(! (bool) old('camion_propio', $receipt->camion_propio))>No</option>
+                    </select>
+                </label>
+            @else
+                <input type="hidden" name="camion_propio" value="{{ $receipt->camion_propio ? 1 : 0 }}">
+            @endif
 
             <div class="goods-receipt-workbench-head">
                 <div>

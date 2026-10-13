@@ -5,6 +5,7 @@ namespace App\Services\Deca;
 use App\Models\DecaDocument;
 use App\Models\GoodsDispatch;
 use App\Models\User;
+use App\Support\VehicleType;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -73,8 +74,16 @@ class DispatchDecaService
         if (! $dispatch->canEditDeliveryAddress() || $dispatch->deca_document_id !== null) {
             throw ValidationException::withMessages(['transport' => 'El transporte de una salida enviada no se puede modificar.']);
         }
-        $data = $this->validate(array_replace($this->defaults($dispatch), $dispatch->transport_data ?? [], $input));
-        $dispatch->update(['transport_data' => $data, 'camion_propio' => ($data['carrier_key'] ?? 'monge') === 'monge']);
+        $data = array_replace($this->defaults($dispatch), $dispatch->transport_data ?? [], $input);
+        if ($dispatch->client->requiresVehicleType() && $dispatch->vehicle_type !== null) {
+            $data['articulated'] = $dispatch->vehicle_type === 'trailer' ? '1' : '0';
+        }
+        $data = $this->validate($data);
+        $updates = ['transport_data' => $data];
+        if (! $dispatch->client->requiresVehicleType()) {
+            $updates['camion_propio'] = ($data['carrier_key'] ?? 'monge') === 'monge';
+        }
+        $dispatch->update($updates);
     }
 
     public function discardRolledBackDocument(?DecaDocument $document): void
@@ -91,7 +100,12 @@ class DispatchDecaService
         if ($dispatch->deca_document_id !== null) {
             return $dispatch->decaDocument()->firstOrFail();
         }
-        $data = $this->validate(array_replace($this->defaults($dispatch), $dispatch->transport_data ?? []), true);
+        $data = array_replace($this->defaults($dispatch), $dispatch->transport_data ?? []);
+        if ($dispatch->client->requiresVehicleType()) {
+            VehicleType::requireForClient($dispatch->client, $dispatch->vehicle_type);
+            $data['articulated'] = $dispatch->vehicle_type === 'trailer' ? '1' : '0';
+        }
+        $data = $this->validate($data, true);
         foreach (['shipper_name', 'shipper_tax_id', 'shipper_address'] as $field) {
             $data[$field] = config('deca.dispatch.'.$field);
             if (blank($data[$field])) {

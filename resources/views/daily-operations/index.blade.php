@@ -243,6 +243,32 @@
                     </div>
                 @endif
 
+                @if ($selectedClient?->requiresVehicleType())
+                    <section class="surface-card compact-card">
+                        <h3>TI Automotive · Gestiones y viajes por vehículo</h3>
+                        <p>Unidades de servicio para trasladar a FactuSol. Una gestión por recepción o expedición; viaje solo con transporte propio. Los palés no multiplican las gestiones.</p>
+                        @if ($vehicleReport['totals'] !== [])
+                            <div class="wms-table-wrap">
+                                <table class="wms-data-table" aria-label="Gestiones y viajes por vehículo">
+                                    <thead><tr><th>Operación</th><th>Vehículo</th><th>Gestiones</th><th>Viajes propios</th></tr></thead>
+                                    <tbody>
+                                    @foreach ($vehicleReport['totals'] as $direction => $types)
+                                        @foreach ($types as $type => $total)
+                                            @if ($type !== 'unknown' && $direction !== 'Sin origen identificado' || $total['management'] || $total['trips'])
+                                                <tr><td>{{ $direction }}</td><td>{{ $total['label'] }}</td><td>{{ $total['management'] }}</td><td>{{ $total['trips'] }}</td></tr>
+                                            @endif
+                                        @endforeach
+                                    @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p>«Sin clasificar» indica servicios antiguos sin tipo de vehículo. Los apuntes manuales sin vínculo se muestran como «Sin origen identificado» y deben revisarse antes de facturar.</p>
+                        @else
+                            <p>Usa Recalcular para obtener el desglose de las entradas y salidas confirmadas.</p>
+                        @endif
+                    </section>
+                @endif
+
                 @if ($day === null || $billingDetails === [])
                     <article class="wms-empty-state wms-daily-ops-empty">
                         <span class="wms-status-chip wms-status-chip--neutral">Sin detalle</span>
@@ -258,6 +284,7 @@
                                 <tr>
                                     <th>Tipo</th>
                                     <th>Documento</th>
+                                    @if ($selectedClient?->requiresVehicleType())<th>Vehículo</th>@endif
                                     <th>Servicio</th>
                                     <th class="wms-table-number">Pallets/picos</th>
                                     <th>Gestion camion</th>
@@ -276,6 +303,7 @@
                                                 <span>{{ $operationDateLabel }} - {{ $selectedClient->name }}</span>
                                             </div>
                                         </td>
+                                        @if ($selectedClient?->requiresVehicleType())<td>{{ \App\Support\VehicleType::label($vehicleReport['sources'][$detail['source_key']] ?? null) }}</td>@endif
                                         <td>
                                             <span @class([
                                                 'wms-daily-ops-service-chip',
