@@ -23,7 +23,11 @@ return new class extends Migration
             $table->char('pdf_sha256', 64);
             $table->unsignedInteger('pdf_size');
             $table->timestamp('issued_at');
-            $table->timestamp('retain_until');
+            // MySQL installations that keep explicit_defaults_for_timestamp disabled
+            // assign an invalid implicit zero default to a second mandatory TIMESTAMP.
+            // This value is always set by DecaIssuanceService, so DATETIME preserves
+            // the same UTC instant without relying on that legacy MySQL behavior.
+            $table->dateTime('retain_until');
             $table->timestamps();
         });
     }
