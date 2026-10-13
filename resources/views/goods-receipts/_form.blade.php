@@ -113,7 +113,10 @@
                     @error('vehicle_type')<small class="form-error">{{ $message }}</small>@enderror
                 </label>
 
-                <label class="auth-field item-form-field--full">
+                <div data-receipt-transport-mode>
+                    @include('components.transport-mode-fields', ['movement' => $receipt])
+                </div>
+                <label class="auth-field item-form-field--full" data-legacy-own-truck>
                     <span>
                         <input type="hidden" name="camion_propio" value="0">
                         <input type="checkbox" name="camion_propio" value="1" @checked(old('camion_propio', $receipt->camion_propio))>

@@ -18,6 +18,7 @@ use App\Services\MerchandiseRequests\MerchandiseRequestCancellationService;
 use App\Services\MerchandiseRequests\MerchandiseRequestFulfillmentService;
 use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use App\Support\Stock\StockVariantCatalog;
+use App\Support\TransportMode;
 use App\Support\WmsNavigation;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -397,12 +398,20 @@ class GoodsDispatchController extends Controller
                     if ($request->has('camion_propio')) {
                         $vehicleUpdates['camion_propio'] = $request->boolean('camion_propio');
                     }
+                    if ($request->filled('transport_mode')) {
+                        $mode = $request->input('transport_mode');
+                        $vehicleUpdates['transport_mode'] = $mode;
+                        $vehicleUpdates['camion_propio'] = TransportMode::own($mode);
+                        $vehicleUpdates['transport_data'] = TransportMode::data($mode, $request->input('transport', $goodsDispatch->transport_data ?? []), $vehicleUpdates['vehicle_type'] ?? $goodsDispatch->vehicle_type);
+                    } elseif ($goodsDispatch->transport_mode !== null) {
+                        $vehicleUpdates['camion_propio'] = TransportMode::own($goodsDispatch->transport_mode);
+                    }
                     $goodsDispatch->update($vehicleUpdates);
                 }
                 if ($request->has('transport') && config('deca.dispatch.enabled')) {
                     app(DispatchDecaService::class)->saveDraft($goodsDispatch, $request->input('transport', []));
                 }
-                if ($request->has('camion_propio') && ! config('deca.dispatch.enabled')) {
+                if ($request->has('camion_propio') && ! config('deca.dispatch.enabled') && $goodsDispatch->transport_mode === null) {
                     $goodsDispatch->update(['camion_propio' => $request->boolean('camion_propio')]);
                 }
                 $workflowService->confirmLoading($goodsDispatch, $request->validatedLines(), $request->user());
@@ -489,6 +498,10 @@ class GoodsDispatchController extends Controller
                     ? (($goodsDispatch->transport_data['carrier_key'] ?? ($goodsDispatch->camion_propio ? 'monge' : 'external')) === 'monge')
                     : (bool) ($validated['camion_propio'] ?? $goodsDispatch->camion_propio),
             ];
+
+            if ($goodsDispatch->transport_mode !== null) {
+                $updates['camion_propio'] = TransportMode::own($goodsDispatch->transport_mode);
+            }
 
             if ($request->has('delivery_address_override')) {
                 $override = $request->boolean('delivery_address_override');

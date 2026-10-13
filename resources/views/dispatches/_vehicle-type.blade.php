@@ -9,13 +9,7 @@
                 @endforeach
             </select>
         </label>
-        <label class="auth-field"><span>Camión propio</span>
-            <select name="camion_propio" class="auth-input">
-                <option value="1" @selected((bool) old('camion_propio', $dispatch->camion_propio))>Sí</option>
-                <option value="0" @selected(! (bool) old('camion_propio', $dispatch->camion_propio))>No</option>
-            </select>
-        </label>
-        <p>Una gestión por vehículo. Se contabiliza un viaje adicional si el transporte es propio, independientemente de los palés.</p>
+        @include('components.transport-mode-fields', ['movement' => $dispatch])
         @error('vehicle_type')<small class="form-error">{{ $message }}</small>@enderror
     </fieldset>
 @endif

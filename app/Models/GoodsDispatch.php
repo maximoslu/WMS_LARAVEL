@@ -46,6 +46,7 @@ class GoodsDispatch extends Model
         'notes',
         'camion_propio',
         'vehicle_type',
+        'transport_mode',
         'delivery_address_override',
         'delivery_address_text',
         'transport_data',

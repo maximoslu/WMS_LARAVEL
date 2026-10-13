@@ -5,6 +5,7 @@ namespace App\Services\Deca;
 use App\Models\DecaDocument;
 use App\Models\GoodsDispatch;
 use App\Models\User;
+use App\Support\TransportMode;
 use App\Support\VehicleType;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -78,6 +79,9 @@ class DispatchDecaService
         if ($dispatch->client->requiresVehicleType() && $dispatch->vehicle_type !== null) {
             $data['articulated'] = $dispatch->vehicle_type === 'trailer' ? '1' : '0';
         }
+        if ($dispatch->transport_mode !== null) {
+            $data = TransportMode::data($dispatch->transport_mode, $data, $dispatch->vehicle_type);
+        }
         $data = $this->validate($data);
         $updates = ['transport_data' => $data];
         if (! $dispatch->client->requiresVehicleType()) {
@@ -104,6 +108,9 @@ class DispatchDecaService
         if ($dispatch->client->requiresVehicleType()) {
             VehicleType::requireForClient($dispatch->client, $dispatch->vehicle_type);
             $data['articulated'] = $dispatch->vehicle_type === 'trailer' ? '1' : '0';
+        }
+        if ($dispatch->transport_mode !== null) {
+            $data = TransportMode::data($dispatch->transport_mode, $data, $dispatch->vehicle_type, true);
         }
         $data = $this->validate($data, true);
         foreach (['shipper_name', 'shipper_tax_id', 'shipper_address'] as $field) {

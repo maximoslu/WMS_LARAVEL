@@ -170,7 +170,7 @@
                 <article class="surface-card compact-card wms-daily-ops-kpi">
                     <strong>VIAJES · NORMAL</strong>
                     <span>{{ number_format($normalOperations['truck_trips'], 0, ',', '.') }}</span>
-                    <small>Solo documentos de camion propio del cauce ordinario.</small>
+                    <small>{{ $selectedClient?->requiresVehicleType() ? 'Servicios MAXIMO con Monge o subcontratados del cauce ordinario.' : 'Solo documentos de camion propio del cauce ordinario.' }}</small>
                 </article>
             </section>
 
@@ -246,23 +246,23 @@
                 @if ($selectedClient?->requiresVehicleType())
                     <section class="surface-card compact-card">
                         <h3>TI Automotive · Gestiones y viajes por vehículo</h3>
-                        <p>Unidades de servicio para trasladar a FactuSol. Una gestión por recepción o expedición; viaje solo con transporte propio. Los palés no multiplican las gestiones.</p>
+                        <p>Unidades de servicio para trasladar a FactuSol. Una gestión por recepción o expedición; viaje si el servicio es de MAXIMO, con Monge o subcontratado. Los palés no multiplican las gestiones.</p>
                         @if ($vehicleReport['totals'] !== [])
                             <div class="wms-table-wrap">
                                 <table class="wms-data-table" aria-label="Gestiones y viajes por vehículo">
-                                    <thead><tr><th>Operación</th><th>Vehículo</th><th>Gestiones</th><th>Viajes propios</th></tr></thead>
+                                    <thead><tr><th>Operación</th><th>Vehículo</th><th>Gestiones</th><th>Viajes MAXIMO</th><th>Monge</th><th>Subcontratados</th><th>Modalidad sin clasificar</th></tr></thead>
                                     <tbody>
                                     @foreach ($vehicleReport['totals'] as $direction => $types)
                                         @foreach ($types as $type => $total)
                                             @if ($type !== 'unknown' && $direction !== 'Sin origen identificado' || $total['management'] || $total['trips'])
-                                                <tr><td>{{ $direction }}</td><td>{{ $total['label'] }}</td><td>{{ $total['management'] }}</td><td>{{ $total['trips'] }}</td></tr>
+                                                <tr><td>{{ $direction }}</td><td>{{ $total['label'] }}</td><td>{{ $total['management'] }}</td><td>{{ $total['trips'] }}</td><td>{{ $total['monge'] }}</td><td>{{ $total['subcontracted'] }}</td><td>{{ $total['unclassified'] }}</td></tr>
                                             @endif
                                         @endforeach
                                     @endforeach
                                     </tbody>
                                 </table>
                             </div>
-                            <p>«Sin clasificar» indica servicios antiguos sin tipo de vehículo. Los apuntes manuales sin vínculo se muestran como «Sin origen identificado» y deben revisarse antes de facturar.</p>
+                            <p>«Sin clasificar» conserva los servicios antiguos sin atribuirles vehículo o transportista. Los apuntes manuales sin vínculo se muestran como «Sin origen identificado» y deben revisarse antes de facturar.</p>
                         @else
                             <p>Usa Recalcular para obtener el desglose de las entradas y salidas confirmadas.</p>
                         @endif
@@ -284,7 +284,7 @@
                                 <tr>
                                     <th>Tipo</th>
                                     <th>Documento</th>
-                                    @if ($selectedClient?->requiresVehicleType())<th>Vehículo</th>@endif
+                                    @if ($selectedClient?->requiresVehicleType())<th>Vehículo</th><th>Transporte</th>@endif
                                     <th>Servicio</th>
                                     <th class="wms-table-number">Pallets/picos</th>
                                     <th>Gestion camion</th>
@@ -303,7 +303,7 @@
                                                 <span>{{ $operationDateLabel }} - {{ $selectedClient->name }}</span>
                                             </div>
                                         </td>
-                                        @if ($selectedClient?->requiresVehicleType())<td>{{ \App\Support\VehicleType::label($vehicleReport['sources'][$detail['source_key']] ?? null) }}</td>@endif
+                                        @if ($selectedClient?->requiresVehicleType())<td>{{ \App\Support\VehicleType::label($vehicleReport['sources'][$detail['source_key']] ?? null) }}</td><td>{{ \App\Support\TransportMode::label($vehicleReport['modes'][$detail['source_key']] ?? null, $detail['trip']) }}</td>@endif
                                         <td>
                                             <span @class([
                                                 'wms-daily-ops-service-chip',
@@ -312,7 +312,7 @@
                                         </td>
                                         <td class="wms-table-number">{{ number_format($detail['pallets'], 0, ',', '.') }}</td>
                                         <td>{{ $detail['management'] ? 'Si' : 'No' }}</td>
-                                        <td>{{ $detail['trip'] ? 'Camion propio' : '-' }}</td>
+                                        <td>{{ $detail['trip'] ? ($selectedClient?->requiresVehicleType() ? 'Servicio MAXIMO' : 'Camion propio') : '-' }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>

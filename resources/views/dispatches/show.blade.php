@@ -135,7 +135,7 @@
         </div>
         <div>
             <span>Transporte</span>
-            <strong>{{ $dispatch->camion_propio ? 'Camion propio MAXIMO' : 'Camion externo' }}</strong>
+            <strong>{{ $dispatch->client->requiresVehicleType() ? \App\Support\TransportMode::label($dispatch->transport_mode, (bool) $dispatch->camion_propio) : ($dispatch->camion_propio ? 'Camion propio MAXIMO' : 'Camion externo') }}</strong>
             @if ($dispatch->client->requiresVehicleType())<span>{{ \App\Support\VehicleType::label($dispatch->vehicle_type) }}</span>@endif
             <small>{{ $sourceLabel }}</small>
         </div>

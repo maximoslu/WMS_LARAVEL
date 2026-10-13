@@ -44,6 +44,8 @@ class GoodsReceipt extends Model
         'incident_notes',
         'camion_propio',
         'vehicle_type',
+        'transport_mode',
+        'transport_data',
         'document_path',
         'document_original_name',
         'document_mime',
@@ -67,6 +69,7 @@ class GoodsReceipt extends Model
             'stock_applied_at' => 'datetime',
             'ai_extracted_data' => 'array',
             'camion_propio' => 'boolean',
+            'transport_data' => 'array',
             'has_incident' => 'boolean',
         ];
     }

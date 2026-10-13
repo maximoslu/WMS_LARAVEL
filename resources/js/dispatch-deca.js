@@ -1,8 +1,25 @@
+document.querySelectorAll('[data-transport-mode-fields]').forEach((panel) => {
+    const form = panel.closest('form');
+    const mode = panel.querySelector('[data-transport-mode]');
+    const vehicle = form.querySelector('[name="vehicle_type"]');
+    const update = () => {
+        const monge = mode.value === 'monge';
+        if (monge && vehicle) vehicle.value = 'rigid';
+        panel.querySelector('[data-transport-external]').hidden = monge;
+        panel.querySelector('[data-transport-monge]').hidden = !monge;
+        panel.querySelector('[data-transport-trailer]').hidden = vehicle?.value !== 'trailer';
+        panel.querySelector('[data-transport-plate]').setAttribute('list', monge ? 'monge-vehicles' : '');
+    };
+    form.addEventListener('change', update);
+    update();
+});
+
 document.querySelectorAll('[data-deca-transport]').forEach((panel) => {
     const update = () => {
-        panel.querySelector('[data-deca-external]').hidden = panel.querySelector('[data-deca-carrier]').value !== 'external';
-        const vehicle = panel.closest('form').querySelector('[data-dispatch-vehicle-type]');
-        panel.querySelector('[data-deca-trailer]').hidden = vehicle ? vehicle.value !== 'trailer' : !panel.querySelector('[data-deca-articulated]').checked;
+        const carrier = panel.querySelector('[data-deca-carrier]');
+        if (carrier) panel.querySelector('[data-deca-external]').hidden = carrier.value !== 'external';
+        const trailer = panel.querySelector('[data-deca-trailer]');
+        if (trailer) trailer.hidden = !panel.querySelector('[data-deca-articulated]').checked;
         panel.querySelector('[data-deca-authorization]').hidden = !panel.querySelector('[data-deca-special]').checked;
     };
     panel.closest('form').addEventListener('change', update);
@@ -14,8 +31,19 @@ document.querySelectorAll('[data-goods-receipt-form]').forEach((form) => {
     const field = form.querySelector('[data-receipt-vehicle-type]');
     if (!client || !field) return;
     const update = () => {
-        field.hidden = client.selectedOptions[0]?.dataset.requiresVehicleType !== '1';
-        field.querySelector('select').disabled = field.hidden;
+        const ti = client.selectedOptions[0]?.dataset.requiresVehicleType === '1';
+        field.hidden = !ti;
+        field.querySelector('select').disabled = !ti;
+        const transport = form.querySelector('[data-receipt-transport-mode]');
+        if (transport) {
+            transport.hidden = !ti;
+            transport.querySelectorAll('input, select').forEach(input => input.disabled = !ti);
+        }
+        const legacy = form.querySelector('[data-legacy-own-truck]');
+        if (legacy) {
+            legacy.hidden = ti;
+            legacy.querySelectorAll('input').forEach(input => input.disabled = ti);
+        }
     };
     client.addEventListener('change', update);
     update();

@@ -40,7 +40,7 @@ class TiAutoVehicleOperationsTest extends TestCase
 
     private function receipt(?string $type, bool $own = false, int $pallets = 2): GoodsReceipt
     {
-        $receipt = GoodsReceipt::factory()->create(['client_id' => $this->client->id, 'supplier_id' => null, 'received_at' => today(), 'vehicle_type' => $type, 'camion_propio' => $own]);
+        $receipt = GoodsReceipt::factory()->create(['client_id' => $this->client->id, 'supplier_id' => null, 'received_at' => today(), 'vehicle_type' => $type, 'camion_propio' => $own, 'transport_mode' => $own ? 'subcontracted' : 'client', 'transport_data' => ['tractor_plate' => '1234ABC', 'trailer_plate' => 'R1234ABC', 'carrier_name' => 'Carrier Test', 'carrier_tax_id' => 'B00000000']]);
         $item = Item::factory()->create(['client_id' => $this->client->id, 'units_per_pallet' => 100]);
         GoodsReceiptLine::factory()->create(['goods_receipt_id' => $receipt->id, 'item_id' => $item->id, 'sku' => $item->sku, 'location_id' => null, 'quantity_units' => $pallets * 100, 'units_per_pallet' => 100, 'pallet_count' => $pallets, 'pico_units' => null]);
 
@@ -49,7 +49,7 @@ class TiAutoVehicleOperationsTest extends TestCase
 
     private function dispatch(?string $type, bool $own = true): GoodsDispatch
     {
-        $dispatch = GoodsDispatch::factory()->create(['client_id' => $this->client->id, 'status' => GoodsDispatch::STATUS_PREPARING, 'vehicle_type' => $type, 'camion_propio' => $own, 'delivery_address_override' => true, 'delivery_address_text' => 'Destino de prueba']);
+        $dispatch = GoodsDispatch::factory()->create(['client_id' => $this->client->id, 'status' => GoodsDispatch::STATUS_PREPARING, 'vehicle_type' => $type, 'camion_propio' => $own, 'transport_mode' => $own ? 'subcontracted' : 'client', 'transport_data' => ['tractor_plate' => '1234ABC', 'trailer_plate' => 'R1234ABC', 'carrier_name' => 'Carrier Test', 'carrier_tax_id' => 'B00000000'], 'delivery_address_override' => true, 'delivery_address_text' => 'Destino de prueba']);
         $item = Item::factory()->create(['client_id' => $this->client->id, 'units_per_pallet' => 100]);
         $stock = StockPallet::factory()->create(['client_id' => $this->client->id, 'item_id' => $item->id, 'units_per_pallet' => 100, 'quantity_units' => 1000, 'full_pallets' => 10, 'peak_1' => 0, 'peaks_count' => 0]);
         GoodsDispatchLine::factory()->create(['goods_dispatch_id' => $dispatch->id, 'item_id' => $item->id, 'stock_pallet_id' => $stock->id, 'units_per_pallet' => 100, 'loaded_pallets' => 2, 'requested_pallets' => 2, 'confirmed_at' => now(), 'confirmed_by' => $this->operator->id]);
@@ -102,7 +102,7 @@ class TiAutoVehicleOperationsTest extends TestCase
         config(['deca.dispatch.enabled' => true]);
         $dispatch = $this->dispatch(null);
         $this->actingAs($this->operator)->patch(route('dispatches.confirm-loading', $dispatch), [
-            'vehicle_type' => 'trailer', 'camion_propio' => '0', 'transport' => ['carrier_key' => 'monge', 'articulated' => '0'],
+            'vehicle_type' => 'trailer', 'transport_mode' => 'client', 'camion_propio' => '1', 'transport' => ['carrier_key' => 'monge', 'articulated' => '0'],
             'lines' => [['line_id' => $dispatch->lines->first()->id, 'loaded_quantity' => 2]],
         ])->assertSessionHasNoErrors();
         $dispatch->refresh();
@@ -116,7 +116,7 @@ class TiAutoVehicleOperationsTest extends TestCase
     {
         config(['deca.dispatch.enabled' => true, 'deca.dispatch.shipper_tax_id' => 'B00000000', 'deca.carriers.monge.tax_id' => '00000000T', 'deca.public_base_url' => 'https://wms.example.test']);
         $dispatch = $this->dispatch('trailer', false);
-        app(DispatchDecaService::class)->saveDraft($dispatch, ['carrier_key' => 'monge', 'weight_kg' => '1000', 'tractor_plate' => '1234ABC', 'transport_date' => today()->toDateString()]);
+        app(DispatchDecaService::class)->saveDraft($dispatch, ['carrier_key' => 'external', 'trailer_plate' => null, 'carrier_name' => 'Carrier Test', 'carrier_tax_id' => 'B00000000', 'weight_kg' => '1000', 'tractor_plate' => '1234ABC', 'transport_date' => today()->toDateString()]);
         $this->actingAs($this->operator)->patch(route('dispatches.update-status', $dispatch), ['status' => GoodsDispatch::STATUS_SENT])->assertSessionHasErrors('transport.trailer_plate');
         $this->assertDatabaseCount('deca_documents', 0);
         $dispatch->update(['vehicle_type' => 'rigid']);
@@ -170,5 +170,99 @@ class TiAutoVehicleOperationsTest extends TestCase
         $day = app(DailyOperationRecalculationService::class)->rebuildForDateAndClient(today()->toDateString(), $this->client->id, $this->operator->id);
         $this->assertSame([], app(VehicleOperationReport::class)->forDay($day)['totals']);
         $this->actingAs($this->operator)->get(route('daily-operations.index', ['client_id' => $this->client->id]))->assertOk()->assertDontSee('Gestiones y viajes por vehículo');
+    }
+
+    public function test_subcontracted_receipt_counts_one_maximo_trip_and_client_receipt_counts_none(): void
+    {
+        foreach (['subcontracted' => 1, 'client' => 0, 'monge' => 1] as $mode => $trips) {
+            $item = Item::factory()->create(['client_id' => $this->client->id, 'units_per_pallet' => 100]);
+            $this->actingAs($this->operator)->post(route('goods-receipts.store'), [
+                'client_id' => $this->client->id, 'received_at' => today()->toDateString(), 'vehicle_type' => 'rigid',
+                'transport_mode' => $mode, 'camion_propio' => $trips ? '0' : '1',
+                'transport' => ['tractor_plate' => $mode === 'monge' ? '1933MYN' : '1234ABC', 'carrier_name' => 'Carrier Test', 'carrier_tax_id' => 'B00000000'],
+                'lines' => [['item_id' => $item->id, 'quantity_units' => 1000, 'units_per_pallet' => 100, 'pallet_count' => 10]],
+            ])->assertSessionHasNoErrors();
+            $receipt = GoodsReceipt::latest('id')->firstOrFail();
+            $this->assertSame((bool) $trips, $receipt->camion_propio);
+            $this->assertSame($mode, $receipt->transport_mode);
+            $this->patch(route('goods-receipts.confirm', $receipt))->assertSessionHasNoErrors();
+        }
+        $day = app(DailyOperationRecalculationService::class)->rebuildForDateAndClient(today()->toDateString(), $this->client->id, $this->operator->id);
+        $row = app(VehicleOperationReport::class)->forDay($day)['totals']['Entrada']['rigid'];
+        $this->assertSame(3, $row['management']);
+        $this->assertSame(2, $row['trips']);
+        $this->assertSame(1, $row['monge']);
+        $this->assertSame(1, $row['subcontracted']);
+    }
+
+    public function test_monge_cannot_be_registered_as_trailer_or_unknown_plate(): void
+    {
+        $receipt = $this->receipt('trailer');
+        $receipt->update(['transport_mode' => 'monge', 'transport_data' => ['tractor_plate' => '1933MYN']]);
+        $this->actingAs($this->operator)->patch(route('goods-receipts.confirm', $receipt))->assertSessionHasErrors('vehicle_type');
+        $receipt->update(['vehicle_type' => 'rigid', 'transport_data' => ['tractor_plate' => 'FAKE']]);
+        $this->patch(route('goods-receipts.confirm', $receipt))->assertSessionHasErrors('transport.tractor_plate');
+        $this->assertNull($receipt->fresh()->stock_applied_at);
+        $receipt->update(['transport_data' => ['tractor_plate' => '3100KGC']]);
+        $this->patch(route('goods-receipts.confirm', $receipt))->assertSessionHasNoErrors();
+    }
+
+    public function test_missing_subcontractor_fields_block_confirmation_without_affecting_stock(): void
+    {
+        $receipt = $this->receipt('trailer', true);
+        $receipt->update(['transport_data' => []]);
+        $this->actingAs($this->operator)->patch(route('goods-receipts.confirm', $receipt))->assertSessionHasErrors(['transport.carrier_name', 'transport.carrier_tax_id', 'transport.tractor_plate', 'transport.trailer_plate']);
+        $this->assertNull($receipt->fresh()->stock_applied_at);
+        $receipt->update(['transport_mode' => null]);
+        $this->patch(route('goods-receipts.confirm', $receipt))->assertSessionHasErrors('transport_mode');
+    }
+
+    public function test_subcontracted_deca_names_actual_carrier_and_transport_is_frozen_after_sending(): void
+    {
+        config(['deca.dispatch.enabled' => true, 'deca.dispatch.shipper_tax_id' => 'B00000000', 'deca.public_base_url' => 'https://wms.example.test']);
+        $dispatch = $this->dispatch('trailer', true);
+        $this->actingAs($this->operator)->patch(route('dispatches.confirm-loading', $dispatch), [
+            'vehicle_type' => 'trailer', 'transport_mode' => 'subcontracted', 'camion_propio' => '0', 'finalize_dispatch' => '1',
+            'transport' => ['carrier_key' => 'monge', 'weight_kg' => '1000', 'tractor_plate' => '1234ABC', 'trailer_plate' => 'R1234ABC', 'carrier_name' => 'Carrier Test', 'carrier_tax_id' => 'B00000000', 'transport_date' => today()->toDateString()],
+            'lines' => [['line_id' => $dispatch->lines->first()->id, 'loaded_quantity' => 2]],
+        ])->assertSessionHasNoErrors();
+        $dispatch->refresh();
+        $this->assertTrue($dispatch->camion_propio);
+        $this->assertSame('external', $dispatch->transport_data['carrier_key']);
+        $this->assertSame('Carrier Test', $dispatch->decaDocument->snapshot['carrier_name']);
+        $this->assertSame('R1234ABC', $dispatch->decaDocument->snapshot['trailer_plate']);
+        $this->put(route('dispatches.own-truck.update', $dispatch), ['camion_propio' => '0'])->assertSessionHasErrors('transport');
+        $this->assertTrue($dispatch->fresh()->camion_propio);
+        $day = app(DailyOperationRecalculationService::class)->rebuildForDateAndClient(today()->toDateString(), $this->client->id, $this->operator->id);
+        $row = app(VehicleOperationReport::class)->forDay($day)['totals']['Salida']['trailer'];
+        $this->assertSame(1, $row['subcontracted']);
+        $this->assertSame(1, $row['trips']);
+        $this->assertSame(1, $row['management']);
+    }
+
+    public function test_legacy_own_services_remain_unclassified_and_do_not_become_monge(): void
+    {
+        $receipt = $this->receipt('rigid', true);
+        $receipt->update(['status' => GoodsReceipt::STATUS_CONFIRMED, 'transport_mode' => null]);
+        $day = app(DailyOperationRecalculationService::class)->rebuildForDateAndClient(today()->toDateString(), $this->client->id, $this->operator->id);
+        $row = app(VehicleOperationReport::class)->forDay($day)['totals']['Entrada']['rigid'];
+        $this->assertSame(1, $row['unclassified']);
+        $this->assertSame(0, $row['monge']);
+        $this->assertSame(0, $row['subcontracted']);
+        $this->assertSame(1, $row['trips']);
+    }
+
+    public function test_dispatch_without_deca_still_uses_mode_not_submitted_own_flag(): void
+    {
+        config(['deca.dispatch.enabled' => false]);
+        $dispatch = $this->dispatch('rigid', false);
+        $this->actingAs($this->operator)->patch(route('dispatches.confirm-loading', $dispatch), [
+            'vehicle_type' => 'rigid', 'transport_mode' => 'monge', 'camion_propio' => '0', 'finalize_dispatch' => '1',
+            'transport' => ['tractor_plate' => '1933MYN'],
+            'lines' => [['line_id' => $dispatch->lines->first()->id, 'loaded_quantity' => 2]],
+        ])->assertSessionHasNoErrors();
+        $this->assertTrue($dispatch->fresh()->camion_propio);
+        $this->assertSame('monge', $dispatch->fresh()->transport_mode);
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $dispatch->fresh()->status);
     }
 }

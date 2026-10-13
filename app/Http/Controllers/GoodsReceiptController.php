@@ -24,6 +24,7 @@ use App\Services\GoodsReceipts\GoodsReceiptItemResolver;
 use App\Services\GoodsReceipts\GoodsReceiptStockApplicationService;
 use App\Services\GoodsReceipts\GoodsReceiptSupplierResolver;
 use App\Services\Locations\LocationIntegrityService;
+use App\Support\TransportMode;
 use App\Support\VehicleType;
 use App\Support\WmsNavigation;
 use Illuminate\Http\JsonResponse;
@@ -201,6 +202,7 @@ class GoodsReceiptController extends Controller
                     ...$documentPayload,
                 ]);
 
+                $this->saveTransport($receipt, $validated);
                 $this->syncLines($receipt, $validated['lines']);
 
                 $this->audit->record(
@@ -353,6 +355,7 @@ class GoodsReceiptController extends Controller
                     VehicleType::requireForClient(Client::find($validated['client_id']), $payload['vehicle_type']);
                 }
                 $goodsReceipt->update($payload);
+                $this->saveTransport($goodsReceipt, $validated);
                 $this->syncLines($goodsReceipt, $validated['lines']);
 
                 if ($mustReapplyStock || $mustApplyConfirmedStock) {
@@ -421,6 +424,19 @@ class GoodsReceiptController extends Controller
         if ($goodsReceipt->isConfirmed()) {
             abort_unless($request->user()?->canAccessRole(Role::SUPERADMIN), 403);
         }
+    }
+
+    private function saveTransport(GoodsReceipt $receipt, array $validated): void
+    {
+        if (! $receipt->client->requiresVehicleType()) {
+            return;
+        }
+        $mode = $validated['transport_mode'] ?? $receipt->transport_mode;
+        if ($mode === null) {
+            return;
+        }
+        $data = TransportMode::data($mode, $validated['transport'] ?? $receipt->transport_data ?? [], $receipt->vehicle_type, $receipt->isConfirmed());
+        $receipt->update(['transport_mode' => $mode, 'transport_data' => $data, 'camion_propio' => TransportMode::own($mode)]);
     }
 
     public function confirm(GoodsReceipt $goodsReceipt, Request $request): RedirectResponse

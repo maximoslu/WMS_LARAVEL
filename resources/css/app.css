@@ -2,6 +2,9 @@
 @import 'tailwindcss';
 @import './deca.css';
 
+[data-transport-mode-fields] [hidden],
+[data-receipt-transport-mode][hidden],
+[data-legacy-own-truck][hidden],
 [data-receipt-vehicle-type][hidden],
 [data-deca-transport] [hidden] {
     display: none !important;

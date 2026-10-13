@@ -70,7 +70,7 @@
             <div class="goods-receipt-toolbar-meta wms-receipt-toolbar-meta">
                 <span><strong>Cliente:</strong> {{ $receipt->client->name }}</span>
                 @if ($receipt->client->requiresVehicleType())
-                    <span><strong>Vehículo:</strong> {{ \App\Support\VehicleType::label($receipt->vehicle_type) }} · {{ $receipt->camion_propio ? 'Propio' : 'Externo' }}</span>
+                    <span><strong>Vehículo:</strong> {{ \App\Support\VehicleType::label($receipt->vehicle_type) }} · {{ \App\Support\TransportMode::label($receipt->transport_mode, (bool) $receipt->camion_propio) }}</span>
                 @endif
                 <span><strong>Proveedor:</strong> {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
                 <span><strong>Fecha:</strong> {{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</span>
@@ -225,12 +225,7 @@
                     <small>Guarda estos datos antes de confirmar la entrada.</small>
                     @error('vehicle_type')<small class="form-error">{{ $message }}</small>@enderror
                 </label>
-                <label class="auth-field"><span>Camión propio</span>
-                    <select name="camion_propio" class="auth-input">
-                        <option value="1" @selected((bool) old('camion_propio', $receipt->camion_propio))>Sí</option>
-                        <option value="0" @selected(! (bool) old('camion_propio', $receipt->camion_propio))>No</option>
-                    </select>
-                </label>
+                @include('components.transport-mode-fields', ['movement' => $receipt])
             @else
                 <input type="hidden" name="camion_propio" value="{{ $receipt->camion_propio ? 1 : 0 }}">
             @endif

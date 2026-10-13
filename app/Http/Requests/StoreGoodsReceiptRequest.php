@@ -135,6 +135,12 @@ class StoreGoodsReceiptRequest extends FormRequest
             'incident_notes' => ['nullable', 'string', 'max:2000'],
             'camion_propio' => ['boolean'],
             'vehicle_type' => ['nullable', 'in:rigid,trailer'],
+            'transport_mode' => ['nullable', 'in:monge,subcontracted,client'],
+            'transport' => ['sometimes', 'array:tractor_plate,trailer_plate,carrier_name,carrier_tax_id'],
+            'transport.tractor_plate' => ['nullable', 'string', 'max:20'],
+            'transport.trailer_plate' => ['nullable', 'string', 'max:20'],
+            'transport.carrier_name' => ['nullable', 'string', 'max:180'],
+            'transport.carrier_tax_id' => ['nullable', 'string', 'max:30'],
             'document' => GoodsReceiptDocumentRules::rules(),
             'lines' => $this->expectsAiCreationFlow()
                 ? ['present', 'array']
