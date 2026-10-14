@@ -135,9 +135,10 @@
         </div>
         <div>
             <span>Transporte</span>
-            <strong>{{ $dispatch->client->requiresVehicleType() ? \App\Support\TransportMode::label($dispatch->transport_mode, (bool) $dispatch->camion_propio) : ($dispatch->camion_propio ? 'Camion propio MAXIMO' : 'Camion externo') }}</strong>
+            <strong>{{ \App\Support\TransportMode::label($dispatch->transport_mode, (bool) $dispatch->camion_propio) }}</strong>
             @if ($dispatch->client->requiresVehicleType())<span>{{ \App\Support\VehicleType::label($dispatch->vehicle_type) }}</span>@endif
             <small>{{ $sourceLabel }}</small>
+            <small>Equivalencia anterior: Camión propio MAXIMO / Camión externo</small>
         </div>
         <div>
             <span>Entrega</span>
@@ -257,22 +258,7 @@
                     @csrf
                     @method('PUT')
                     <strong class="wms-action-card-title"><x-module-icon name="truck" /> Transporte</strong>
-                    @unless (config('deca.dispatch.enabled'))
-                    <p>Indica si la entrega sale con camión propio de MAXIMO o transporte externo.</p>
-
-                    <fieldset class="warehouse-request-transport">
-                        <label>
-                            <input type="radio" name="camion_propio" value="1" @checked((bool) old('camion_propio', $dispatch->camion_propio))>
-                            Camión propio MAXIMO
-                        </label>
-                        <label>
-                            <input type="radio" name="camion_propio" value="0" @checked(! (bool) old('camion_propio', $dispatch->camion_propio))>
-                            Camión externo
-                        </label>
-                    </fieldset>
-                    @else
-                        <p>El transportista se indica en los datos DECA al confirmar la carga.</p>
-                    @endunless
+                    <p>Indica la modalidad y el vehículo en la preparación de la carga.</p>
 
                     <strong class="wms-action-card-title">Dirección de entrega</strong>
                     @if ($dispatch->canEditDeliveryAddress())

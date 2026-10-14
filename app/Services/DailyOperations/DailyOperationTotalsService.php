@@ -85,8 +85,13 @@ class DailyOperationTotalsService
         }
 
         return $query->where(function ($query) use ($date): void {
-            $query->where(fn ($query) => $query->where('status', GoodsDispatch::STATUS_COMPLETED)->whereDate('completed_at', $date))
-                ->orWhere(fn ($query) => $query->where('status', GoodsDispatch::STATUS_SENT)->whereDate('sent_at', $date));
+            $query->where(fn ($query) => $query->whereNotNull('transport_mode')->whereDate(DB::raw('COALESCE(sent_at, completed_at)'), $date))
+                ->orWhere(function ($query) use ($date): void {
+                    $query->whereNull('transport_mode')->where(function ($query) use ($date): void {
+                        $query->where(fn ($query) => $query->where('status', GoodsDispatch::STATUS_COMPLETED)->whereDate('completed_at', $date))
+                            ->orWhere(fn ($query) => $query->where('status', GoodsDispatch::STATUS_SENT)->whereDate('sent_at', $date));
+                    });
+                });
         });
     }
 

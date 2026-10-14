@@ -94,6 +94,8 @@ class StoreGoodsDispatchRequest extends FormRequest
             'client_id' => ['required', 'exists:clients,id'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'camion_propio' => ['boolean'],
+            'transport_mode' => [$this->has('transport_mode') ? 'required' : 'nullable', 'in:monge,subcontracted,client'],
+            'transport' => ['sometimes', 'array:tractor_plate,trailer_plate,carrier_name,carrier_tax_id'],
             'delivery_address_override' => ['boolean'],
             'delivery_address_text' => ['nullable', 'string', 'max:2000'],
             'lines' => ['required', 'array'],

@@ -109,7 +109,7 @@ class TiAutoVehicleOperationsTest extends TestCase
         $this->assertSame('trailer', $dispatch->vehicle_type);
         $this->assertFalse($dispatch->camion_propio);
         $this->assertSame('1', $dispatch->transport_data['articulated']);
-        $this->get(route('dispatches.show', $dispatch))->assertOk()->assertSee('Vehículo · TI Automotive');
+        $this->get(route('dispatches.show', $dispatch))->assertOk()->assertSee('Servicio de transporte');
     }
 
     public function test_trailer_requires_remolque_in_deca_and_rigid_does_not(): void
@@ -162,13 +162,13 @@ class TiAutoVehicleOperationsTest extends TestCase
         $this->assertSame(0, app(VehicleOperationReport::class)->forDay($nextDay)['totals']['Salida']['trailer']['management']);
     }
 
-    public function test_other_clients_have_no_vehicle_report_or_required_type(): void
+    public function test_other_clients_have_transport_totals_without_vehicle_classification(): void
     {
         $this->client->update(['code' => 'OTHER']);
         $receipt = $this->receipt(null);
         $receipt->update(['status' => GoodsReceipt::STATUS_CONFIRMED]);
         $day = app(DailyOperationRecalculationService::class)->rebuildForDateAndClient(today()->toDateString(), $this->client->id, $this->operator->id);
-        $this->assertSame([], app(VehicleOperationReport::class)->forDay($day)['totals']);
+        $this->assertSame(1, app(VehicleOperationReport::class)->forDay($day)['totals']['Entrada']['all']['management']);
         $this->actingAs($this->operator)->get(route('daily-operations.index', ['client_id' => $this->client->id]))->assertOk()->assertDontSee('Gestiones y viajes por vehículo');
     }
 
@@ -229,7 +229,7 @@ class TiAutoVehicleOperationsTest extends TestCase
         $dispatch->refresh();
         $this->assertTrue($dispatch->camion_propio);
         $this->assertSame('external', $dispatch->transport_data['carrier_key']);
-        $this->assertSame('Carrier Test', $dispatch->decaDocument->snapshot['carrier_name']);
+        $this->assertSame('Carrier Test', $dispatch->decaDocument->snapshot['carrier']['name']);
         $this->assertSame('R1234ABC', $dispatch->decaDocument->snapshot['trailer_plate']);
         $this->put(route('dispatches.own-truck.update', $dispatch), ['camion_propio' => '0'])->assertSessionHasErrors('transport');
         $this->assertTrue($dispatch->fresh()->camion_propio);

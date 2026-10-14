@@ -428,9 +428,6 @@ class GoodsReceiptController extends Controller
 
     private function saveTransport(GoodsReceipt $receipt, array $validated): void
     {
-        if (! $receipt->client->requiresVehicleType()) {
-            return;
-        }
         $mode = $validated['transport_mode'] ?? $receipt->transport_mode;
         if ($mode === null) {
             return;

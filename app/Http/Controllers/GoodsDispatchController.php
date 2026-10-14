@@ -84,6 +84,11 @@ class GoodsDispatchController extends Controller
                 'delivery_address_text' => $request->input('delivery_address_text'),
             ]);
 
+            if ($request->filled('transport_mode')) {
+                $mode = $request->input('transport_mode');
+                $dispatch->update(['transport_mode' => $mode, 'camion_propio' => TransportMode::own($mode), 'transport_data' => TransportMode::data($mode, $request->input('transport', []), null)]);
+            }
+
             foreach ($validatedLines as $line) {
                 $dispatch->lines()->create([
                     'item_id' => $line['item_id'],
@@ -390,10 +395,10 @@ class GoodsDispatchController extends Controller
             DB::transaction(function () use ($request, $goodsDispatch, $workflowService, &$issuedDocument): void {
                 $goodsDispatch = GoodsDispatch::whereKey($goodsDispatch->id)->lockForUpdate()->firstOrFail();
                 $previousDocumentId = $goodsDispatch->deca_document_id;
-                if ($goodsDispatch->client->requiresVehicleType() && $goodsDispatch->canEditDeliveryAddress() && $previousDocumentId === null) {
+                if ($goodsDispatch->canEditDeliveryAddress() && $previousDocumentId === null) {
                     $vehicleUpdates = [];
                     if ($request->has('vehicle_type')) {
-                        $vehicleUpdates['vehicle_type'] = $request->input('vehicle_type');
+                        $vehicleUpdates['vehicle_type'] = $goodsDispatch->client->requiresVehicleType() ? $request->input('vehicle_type') : null;
                     }
                     if ($request->has('camion_propio')) {
                         $vehicleUpdates['camion_propio'] = $request->boolean('camion_propio');

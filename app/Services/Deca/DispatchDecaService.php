@@ -84,7 +84,7 @@ class DispatchDecaService
         }
         $data = $this->validate($data);
         $updates = ['transport_data' => $data];
-        if (! $dispatch->client->requiresVehicleType()) {
+        if ($dispatch->transport_mode === null && ! $dispatch->client->requiresVehicleType()) {
             $updates['camion_propio'] = ($data['carrier_key'] ?? 'monge') === 'monge';
         }
         $dispatch->update($updates);

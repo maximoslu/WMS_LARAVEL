@@ -43,6 +43,9 @@ class TransportMode
             'transport.trailer_plate' => [$complete && $type === 'trailer' ? 'required' : 'nullable', 'string', 'max:20'],
         ];
         if ($mode === 'monge') {
+            if ((bool) ($data['articulated'] ?? false)) {
+                throw ValidationException::withMessages(['transport.articulated' => 'Los vehículos actuales de Monge no llevan semirremolque.']);
+            }
             $rules['transport.tractor_plate'][] = Rule::in(array_keys(config('transport.monge_vehicles', [])));
             if ($type !== null && $type !== 'rigid') {
                 throw ValidationException::withMessages(['vehicle_type' => 'Los vehículos actuales de Monge son rígidos. Para un tráiler de MAXIMO selecciona Subcontratado.']);
@@ -62,7 +65,8 @@ class TransportMode
 
     public static function requireComplete(GoodsReceipt|GoodsDispatch $movement): void
     {
-        if (! $movement->client->requiresVehicleType()) {
+        // Older non-TI movements retain their original own-transport flag until classified.
+        if ($movement->transport_mode === null && ! $movement->client->requiresVehicleType()) {
             return;
         }
         if (! isset(self::OPTIONS[$movement->transport_mode ?? ''])) {

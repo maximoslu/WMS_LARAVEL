@@ -116,17 +116,7 @@
                 <div data-receipt-transport-mode>
                     @include('components.transport-mode-fields', ['movement' => $receipt])
                 </div>
-                <label class="auth-field item-form-field--full" data-legacy-own-truck>
-                    <span>
-                        <input type="hidden" name="camion_propio" value="0">
-                        <input type="checkbox" name="camion_propio" value="1" @checked(old('camion_propio', $receipt->camion_propio))>
-                        Cami&oacute;n propio
-                    </span>
-                    <small class="helper-text">Marcar si la recogida/recepci&oacute;n se realiza con cami&oacute;n propio de MAXIMO.</small>
-                    @error('camion_propio')
-                        <small class="form-error">{{ $message }}</small>
-                    @enderror
-                </label>
+
             </div>
 
             <section class="goods-receipt-lines-card">

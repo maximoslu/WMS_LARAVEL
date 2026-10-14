@@ -4,10 +4,12 @@ document.querySelectorAll('[data-transport-mode-fields]').forEach((panel) => {
     const vehicle = form.querySelector('[name="vehicle_type"]');
     const update = () => {
         const monge = mode.value === 'monge';
-        if (monge && vehicle) vehicle.value = 'rigid';
+        if (monge && vehicle && !vehicle.disabled) vehicle.value = 'rigid';
+        const articulated = form.querySelector('[data-deca-articulated]');
+        if (monge && articulated) articulated.checked = false;
         panel.querySelector('[data-transport-external]').hidden = monge;
         panel.querySelector('[data-transport-monge]').hidden = !monge;
-        panel.querySelector('[data-transport-trailer]').hidden = vehicle?.value !== 'trailer';
+        panel.querySelector('[data-transport-trailer]').hidden = !(vehicle && !vehicle.disabled ? vehicle.value === 'trailer' : articulated?.checked);
         panel.querySelector('[data-transport-plate]').setAttribute('list', monge ? 'monge-vehicles' : '');
     };
     form.addEventListener('change', update);
@@ -34,16 +36,7 @@ document.querySelectorAll('[data-goods-receipt-form]').forEach((form) => {
         const ti = client.selectedOptions[0]?.dataset.requiresVehicleType === '1';
         field.hidden = !ti;
         field.querySelector('select').disabled = !ti;
-        const transport = form.querySelector('[data-receipt-transport-mode]');
-        if (transport) {
-            transport.hidden = !ti;
-            transport.querySelectorAll('input, select').forEach(input => input.disabled = !ti);
-        }
-        const legacy = form.querySelector('[data-legacy-own-truck]');
-        if (legacy) {
-            legacy.hidden = ti;
-            legacy.querySelectorAll('input').forEach(input => input.disabled = ti);
-        }
+
     };
     client.addEventListener('change', update);
     update();

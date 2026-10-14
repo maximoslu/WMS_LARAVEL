@@ -70,8 +70,9 @@
             <div class="goods-receipt-toolbar-meta wms-receipt-toolbar-meta">
                 <span><strong>Cliente:</strong> {{ $receipt->client->name }}</span>
                 @if ($receipt->client->requiresVehicleType())
-                    <span><strong>Vehículo:</strong> {{ \App\Support\VehicleType::label($receipt->vehicle_type) }} · {{ \App\Support\TransportMode::label($receipt->transport_mode, (bool) $receipt->camion_propio) }}</span>
+                    <span><strong>Vehículo:</strong> {{ \App\Support\VehicleType::label($receipt->vehicle_type) }}</span>
                 @endif
+                <span><strong>Transporte:</strong> {{ \App\Support\TransportMode::label($receipt->transport_mode, (bool) $receipt->camion_propio) }}</span>
                 <span><strong>Proveedor:</strong> {{ $receipt->supplier?->name ?: 'Sin proveedor' }}</span>
                 <span><strong>Fecha:</strong> {{ optional($receipt->received_at)->format('d/m/Y') ?: 'Pendiente' }}</span>
                 <span><strong>IA:</strong> {{ $aiStatusLabel }}</span>
@@ -225,10 +226,8 @@
                     <small>Guarda estos datos antes de confirmar la entrada.</small>
                     @error('vehicle_type')<small class="form-error">{{ $message }}</small>@enderror
                 </label>
-                @include('components.transport-mode-fields', ['movement' => $receipt])
-            @else
-                <input type="hidden" name="camion_propio" value="{{ $receipt->camion_propio ? 1 : 0 }}">
             @endif
+            @include('components.transport-mode-fields', ['movement' => $receipt])
 
             <div class="goods-receipt-workbench-head">
                 <div>

@@ -577,21 +577,6 @@
                                 <strong>Cerrar pedido</strong>
                                 <span>Carga: {{ $dispatch->hasConfirmedLoading() ? 'confirmada' : 'pendiente de confirmar' }}</span>
                             </div>
-
-                            @unless (config('deca.dispatch.enabled') || $dispatch->client->requiresVehicleType())
-                            <fieldset class="warehouse-request-transport">
-                                <legend><x-module-icon name="truck" /> Transporte</legend>
-                                <label>
-                                    <input type="radio" name="camion_propio" value="1" @checked((bool) old('camion_propio', $dispatch->camion_propio))>
-                                    Camión propio MAXIMO
-                                </label>
-                                <label>
-                                    <input type="radio" name="camion_propio" value="0" @checked(! (bool) old('camion_propio', $dispatch->camion_propio))>
-                                    Camión externo
-                                </label>
-                                <small>Indica si la entrega sale con camión propio de MAXIMO o transporte externo.</small>
-                            </fieldset>
-                            @endunless
                         </div>
 
                         <div class="warehouse-request-save-actions">

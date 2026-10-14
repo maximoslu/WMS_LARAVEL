@@ -13,9 +13,7 @@ class VehicleOperationReport
     public function forDay(DailyOperationDay $day): array
     {
         $day->loadMissing(['client', 'lines']);
-        if (! $day->client?->requiresVehicleType()) {
-            return ['totals' => [], 'sources' => []];
-        }
+        $byVehicle = $day->client?->requiresVehicleType() ?? false;
         $sources = [];
         $modes = [];
         foreach ([DailyOperationLine::SOURCE_GOODS_RECEIPT => GoodsReceipt::class, DailyOperationLine::SOURCE_GOODS_DISPATCH => GoodsDispatch::class] as $source => $model) {
@@ -27,7 +25,7 @@ class VehicleOperationReport
         }
         $totals = [];
         foreach (['Entrada', 'Salida', 'Sin origen identificado'] as $direction) {
-            foreach ([...VehicleType::OPTIONS, 'unknown' => 'Sin clasificar'] as $type => $label) {
+            foreach (($byVehicle ? [...VehicleType::OPTIONS, 'unknown' => 'Sin clasificar'] : ['all' => 'Todos']) as $type => $label) {
                 $totals[$direction][$type] = ['label' => $label, 'management' => 0, 'trips' => 0, 'monge' => 0, 'subcontracted' => 0, 'unclassified' => 0];
             }
         }
@@ -46,7 +44,7 @@ class VehicleOperationReport
                 default => 'Sin origen identificado',
             };
             $type = $sources[$line->source_type.':'.$line->source_id] ?? 'unknown';
-            $type = isset(VehicleType::OPTIONS[$type]) ? $type : 'unknown';
+            $type = $byVehicle ? (isset(VehicleType::OPTIONS[$type]) ? $type : 'unknown') : 'all';
             $totals[$direction][$type][$measure] += (int) $line->pallets;
             if ($measure === 'trips') {
                 $mode = $modes[$line->source_type.':'.$line->source_id] ?? null;

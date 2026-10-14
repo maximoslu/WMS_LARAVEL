@@ -4,7 +4,7 @@
 @endphp
 <div data-transport-mode-fields>
     <label class="auth-field"><span>Servicio de transporte</span>
-        <select name="transport_mode" class="auth-input" data-transport-mode>
+        <select name="transport_mode" class="auth-input" data-transport-mode required>
             <option value="">Selecciona quién realiza el servicio</option>
             @foreach (\App\Support\TransportMode::OPTIONS as $value => $label)
                 <option value="{{ $value }}" @selected($mode === $value)>{{ $label }}</option>
@@ -14,6 +14,7 @@
     </label>
     <p data-transport-monge>Vehículos Monge: 1933MYN y 3100KGC, ambos rígidos. Para un tráiler a cargo de MAXIMO selecciona Subcontratado.</p>
     <p>Monge y subcontratado por MAXIMO suman un servicio de transporte. El transporte del cliente no suma viaje de MAXIMO.</p>
+    <small class="helper-text" aria-label="Cami&oacute;n propio">Equivalencia anterior: Camión propio MAXIMO corresponde a Monge o subcontratado; Camión externo corresponde al transporte del cliente.</small>
     @if ($movement->exists && $movement->transport_mode === null)
         <p>Registro anterior: {{ \App\Support\TransportMode::label(null, (bool) $movement->camion_propio) }}. Selecciona la modalidad real antes de confirmar.</p>
     @endif

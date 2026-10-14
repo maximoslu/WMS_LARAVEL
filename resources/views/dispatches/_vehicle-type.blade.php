@@ -1,6 +1,7 @@
-@if ($dispatch->client->requiresVehicleType() && $dispatch->canEditDeliveryAddress())
+@if ($dispatch->canEditDeliveryAddress())
     <fieldset class="surface-card compact-card" data-dispatch-vehicle>
-        <legend>Vehículo · TI Automotive</legend>
+        <legend>Servicio de transporte</legend>
+        @if ($dispatch->client->requiresVehicleType())
         <label class="auth-field"><span>Tipo de vehículo</span>
             <select name="vehicle_type" class="auth-input" data-dispatch-vehicle-type>
                 <option value="">Selecciona rígido o tráiler</option>
@@ -9,6 +10,7 @@
                 @endforeach
             </select>
         </label>
+        @endif
         @include('components.transport-mode-fields', ['movement' => $dispatch])
         @error('vehicle_type')<small class="form-error">{{ $message }}</small>@enderror
     </fieldset>
