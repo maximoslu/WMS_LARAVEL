@@ -134,6 +134,7 @@ class StoreGoodsReceiptRequest extends FormRequest
             'has_incident' => ['boolean'],
             'incident_notes' => ['nullable', 'string', 'max:2000'],
             'camion_propio' => ['boolean'],
+            'confirm_after_save' => ['nullable', 'boolean'],
             'vehicle_type' => ['nullable', 'in:rigid,trailer'],
             'transport_mode' => [$this->has('transport_mode') ? 'required' : 'nullable', 'in:monge,subcontracted,client'],
             'transport' => ['sometimes', 'array:tractor_plate,trailer_plate,carrier_name,carrier_tax_id'],

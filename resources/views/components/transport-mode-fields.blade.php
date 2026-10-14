@@ -24,8 +24,8 @@
         @error('transport.tractor_plate')<small class="form-error">{{ $message }}</small>@enderror
     </label>
     <div data-transport-external>
-        <label class="auth-field"><span>Razón social del transportista</span><input name="transport[carrier_name]" maxlength="180" class="auth-input" value="{{ old('transport.carrier_name', $data['carrier_name'] ?? '') }}"></label>
-        <label class="auth-field"><span>NIF del transportista</span><input name="transport[carrier_tax_id]" maxlength="30" class="auth-input" value="{{ old('transport.carrier_tax_id', $data['carrier_tax_id'] ?? '') }}"></label>
+        <label class="auth-field"><span>Razón social del transportista</span><input name="transport[carrier_name]" maxlength="180" class="auth-input" value="{{ old('transport.carrier_name', $data['carrier_name'] ?? '') }}">@error('transport.carrier_name')<small class="form-error">{{ $message }}</small>@enderror</label>
+        <label class="auth-field"><span>NIF del transportista</span><input name="transport[carrier_tax_id]" maxlength="30" class="auth-input" value="{{ old('transport.carrier_tax_id', $data['carrier_tax_id'] ?? '') }}">@error('transport.carrier_tax_id')<small class="form-error">{{ $message }}</small>@enderror</label>
     </div>
-    <label class="auth-field" data-transport-trailer><span>Matrícula del semirremolque</span><input name="transport[trailer_plate]" maxlength="20" class="auth-input" value="{{ old('transport.trailer_plate', $data['trailer_plate'] ?? '') }}"></label>
+    <label class="auth-field" data-transport-trailer><span>Matrícula del semirremolque</span><input name="transport[trailer_plate]" maxlength="20" class="auth-input" value="{{ old('transport.trailer_plate', $data['trailer_plate'] ?? '') }}">@error('transport.trailer_plate')<small class="form-error">{{ $message }}</small>@enderror</label>
 </div>

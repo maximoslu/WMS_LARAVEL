@@ -129,11 +129,7 @@
                 <button type="submit" form="goods-receipt-update-form" class="button-primary compact-button btn-compact">Guardar</button>
 
                 @unless ($receipt->isConfirmed())
-                    <form method="POST" action="{{ route('goods-receipts.confirm', $receipt) }}">
-                        @csrf
-                        @method('PATCH')
-                        <button type="submit" class="button-primary compact-button btn-compact">Confirmar entrada</button>
-                    </form>
+                    <button type="submit" form="goods-receipt-update-form" name="confirm_after_save" value="1" class="button-primary compact-button btn-compact">Guardar y confirmar entrada</button>
                 @endunless
             @endif
 

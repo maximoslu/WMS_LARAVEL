@@ -136,4 +136,80 @@ class AllClientTransportTest extends TestCase
         $this->assertNull($dispatch->vehicle_type);
         $this->assertSame('1234ABC', $dispatch->transport_data['tractor_plate']);
     }
+
+    public function test_warehouse_user_can_save_external_carrier_and_confirm_edelvives_in_one_action(): void
+    {
+        $client = Client::factory()->create(['code' => 'EDELVIVES', 'name' => 'EDELVIVES']);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 100]);
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsReceipt::STATUS_DRAFT,
+            'created_by' => $this->operator->id,
+            'transport_mode' => null,
+            'transport_data' => null,
+        ]);
+
+        $response = $this->actingAs($this->operator)->put(route('goods-receipts.update', $receipt), [
+            'client_id' => $client->id,
+            'received_at' => today()->toDateString(),
+            'transport_mode' => 'client',
+            'transport' => [
+                'tractor_plate' => ' 1234 abc ',
+                'carrier_name' => 'Transportista de la carta de porte',
+                'carrier_tax_id' => ' b12345678 ',
+            ],
+            'confirm_after_save' => '1',
+            'lines' => [[
+                'item_id' => $item->id,
+                'quantity_units' => 1000,
+                'units_per_pallet' => 100,
+                'pallet_count' => 10,
+            ]],
+        ]);
+
+        $response->assertRedirect(route('goods-receipts.show', $receipt))->assertSessionHasNoErrors();
+        $receipt->refresh();
+        $this->assertSame(GoodsReceipt::STATUS_CONFIRMED, $receipt->status);
+        $this->assertNotNull($receipt->stock_applied_at);
+        $this->assertSame('client', $receipt->transport_mode);
+        $this->assertSame('1234 ABC', $receipt->transport_data['tractor_plate']);
+        $this->assertSame('B12345678', $receipt->transport_data['carrier_tax_id']);
+        $this->assertSame('Transportista de la carta de porte', $receipt->transport_data['carrier_name']);
+        $this->assertSame(1000, (int) StockPallet::where('goods_receipt_id', $receipt->id)->sum('quantity_units'));
+    }
+
+    public function test_save_and_confirm_keeps_external_carrier_errors_next_to_the_fields(): void
+    {
+        $client = Client::factory()->create(['code' => 'EDELVIVES']);
+        $item = Item::factory()->create(['client_id' => $client->id, 'units_per_pallet' => 100]);
+        $receipt = GoodsReceipt::factory()->create([
+            'client_id' => $client->id,
+            'status' => GoodsReceipt::STATUS_DRAFT,
+            'created_by' => $this->operator->id,
+        ]);
+
+        $response = $this->actingAs($this->operator)->from(route('goods-receipts.show', $receipt))->put(route('goods-receipts.update', $receipt), [
+            'client_id' => $client->id,
+            'received_at' => today()->toDateString(),
+            'transport_mode' => 'client',
+            'transport' => ['tractor_plate' => ''],
+            'confirm_after_save' => '1',
+            'lines' => [[
+                'item_id' => $item->id,
+                'quantity_units' => 100,
+                'units_per_pallet' => 100,
+                'pallet_count' => 1,
+            ]],
+        ]);
+
+        $response->assertRedirect(route('goods-receipts.show', $receipt))
+            ->assertSessionHasErrors(['transport.tractor_plate', 'transport.carrier_name', 'transport.carrier_tax_id']);
+        $this->assertSame(GoodsReceipt::STATUS_DRAFT, $receipt->fresh()->status);
+        $this->assertNull($receipt->fresh()->stock_applied_at);
+        $this->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertSee('Completa la matrícula para confirmar el transporte.')
+            ->assertSee('Completa el transportista para confirmar el transporte.')
+            ->assertSee('Completa el NIF del transportista para confirmar el transporte.');
+    }
 }

@@ -320,11 +320,12 @@ class GoodsReceiptController extends Controller
             ? $this->documentStorage->store($request->file('document'), $goodsReceipt)
             : [];
         $wasConfirmed = $goodsReceipt->isConfirmed();
+        $confirmAfterSave = ! $wasConfirmed && $request->boolean('confirm_after_save');
         $hadStockApplied = $goodsReceipt->hasStockApplied()
             || $goodsReceipt->stockPallets()->exists();
 
         try {
-            DB::transaction(function () use ($request, $validated, $goodsReceipt, $documentPayload, $wasConfirmed, $hadStockApplied): void {
+            DB::transaction(function () use ($request, $validated, $goodsReceipt, $documentPayload, $wasConfirmed, $confirmAfterSave, $hadStockApplied): void {
                 $correlationId = $this->audit->correlationId();
                 $oldValues = $goodsReceipt->only(['client_id', 'supplier_id', 'receipt_number', 'external_document_number', 'received_at', 'status', 'has_incident', 'incident_notes', 'camion_propio', 'vehicle_type']);
                 $mustReapplyStock = $wasConfirmed && $hadStockApplied;
@@ -386,6 +387,10 @@ class GoodsReceiptController extends Controller
                     newValues: $goodsReceipt->fresh()->only(array_keys($oldValues)),
                     correlationId: $correlationId,
                 );
+
+                if ($confirmAfterSave) {
+                    $this->confirmationService->confirm($goodsReceipt->fresh(), $request->user());
+                }
             });
         } catch (ValidationException $exception) {
             $this->documentStorage->delete($documentPayload['document_path'] ?? null);
@@ -410,11 +415,13 @@ class GoodsReceiptController extends Controller
 
         return redirect()
             ->route('goods-receipts.show', $goodsReceipt)
-            ->with('status', $wasConfirmed
+            ->with('status', $confirmAfterSave
+                ? 'Entrada guardada, confirmada y stock actualizado correctamente.'
+                : ($wasConfirmed
                 ? ($hadStockApplied
                     ? 'Entrada confirmada actualizada. El stock se ha revertido y vuelto a aplicar con los datos nuevos.'
                     : 'Entrada confirmada actualizada. El stock se ha aplicado correctamente.')
-                : 'Entrada actualizada correctamente.');
+                : 'Entrada actualizada correctamente.'));
     }
 
     private function authorizeEdit(GoodsReceipt $goodsReceipt, Request $request): void
