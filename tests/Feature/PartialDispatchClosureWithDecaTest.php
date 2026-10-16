@@ -113,6 +113,38 @@ class PartialDispatchClosureWithDecaTest extends TestCase
         $this->assertSame(5, $secondDispatch->lines()->firstOrFail()->requestedPallets());
     }
 
+    public function test_eight_pallet_partial_preparation_can_be_saved_without_deciding_the_final_closure_yet(): void
+    {
+        [$stock, $request] = $this->createEdelvivesRequest(13);
+        $dispatch = $this->generateDispatch($request);
+        $line = $dispatch->lines()->firstOrFail();
+
+        $this->actingAs($this->warehouseUser)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'return_to_request' => '1',
+                'finalize_dispatch' => '0',
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'loaded_pallets' => 8,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 8,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertRedirect(route('dispatches.requests.show', $request))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->fresh()->status);
+        $this->assertSame(MerchandiseRequest::STATUS_PREPARING, $request->fresh()->status);
+        $this->assertSame(8, $dispatch->fresh()->lines()->firstOrFail()->loadedPallets());
+        $this->assertSame(2000, (int) $stock->fresh()->quantity_units);
+    }
+
     /**
      * @return array{StockPallet, MerchandiseRequest}
      */

@@ -593,7 +593,7 @@
                                 </div>
                                 <label class="auth-field">
                                     <span>Resto del pedido</span>
-                                    <select name="completion_mode" class="auth-input" data-completion-mode @if ($pendingUnitsAfterCurrent > 0) required @endif>
+                                    <select name="completion_mode" class="auth-input" data-completion-mode>
                                         <option value="">Selecciona una opción</option>
                                         <option value="leave_pending" @selected(old('completion_mode') === 'leave_pending')>Cerrar esta carga parcial y dejar el resto para otro viaje</option>
                                         <option value="close_remainder" @selected(old('completion_mode') === 'close_remainder')>Cerrar el pedido con lo cargado y cancelar el resto</option>

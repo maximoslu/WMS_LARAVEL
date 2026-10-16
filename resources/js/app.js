@@ -2225,7 +2225,6 @@ const setupWarehouseRequestAllocations = () => {
 
         completionDecision.dataset.pendingUnits = String(pendingUnits);
         completionDecision.classList.toggle('has-pending', hasPending);
-        completionMode.required = hasPending;
 
         if (completionHelp) {
             completionHelp.textContent = hasPending
@@ -2238,7 +2237,7 @@ const setupWarehouseRequestAllocations = () => {
         }
 
         if (remainderReasonInput) {
-            remainderReasonInput.required = hasPending && closesRemainder;
+            remainderReasonInput.required = false;
         }
     };
 
@@ -2501,7 +2500,37 @@ const setupWarehouseRequestAllocations = () => {
         updateLine(line);
     });
 
-    completionMode?.addEventListener('change', updateCompletionDecision);
+    completionMode?.addEventListener('change', () => {
+        completionMode.setCustomValidity('');
+        remainderReasonInput?.setCustomValidity('');
+        updateCompletionDecision();
+    });
+    remainderReasonInput?.addEventListener('input', () => remainderReasonInput.setCustomValidity(''));
+    form.addEventListener('submit', (event) => {
+        const isFinalConfirmation = event.submitter?.matches('[name="finalize_dispatch"][value="1"]') ?? false;
+        const pendingUnits = parsePositiveInteger(completionDecision?.dataset.pendingUnits ?? '0');
+
+        if (!isFinalConfirmation || pendingUnits === 0 || !completionMode) {
+            return;
+        }
+
+        completionMode.setCustomValidity('');
+        remainderReasonInput?.setCustomValidity('');
+
+        if (completionMode.value === '') {
+            event.preventDefault();
+            completionMode.setCustomValidity('Elige si el resto se preparará en otro viaje o si debe cancelarse.');
+            completionMode.reportValidity();
+
+            return;
+        }
+
+        if (completionMode.value === 'close_remainder' && remainderReasonInput?.value.trim() === '') {
+            event.preventDefault();
+            remainderReasonInput.setCustomValidity('Indica el motivo para cancelar el resto del pedido.');
+            remainderReasonInput.reportValidity();
+        }
+    });
     updateCompletionDecision();
 
     form.dataset.allocationsBound = 'true';
