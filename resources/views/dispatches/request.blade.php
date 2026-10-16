@@ -580,20 +580,30 @@
                         </div>
 
                         <div class="warehouse-request-save-actions">
-                            @if ($pendingUnitsAfterCurrent > 0)
+                            <section class="warehouse-request-completion" data-completion-decision data-server-pending-units="{{ $pendingUnitsAfterCurrent }}">
+                                <div>
+                                    <strong>Cierre de esta carga</strong>
+                                    <small data-completion-help>
+                                        @if ($pendingUnitsAfterCurrent > 0)
+                                            Quedará mercancía pendiente. Indica si se preparará en otro viaje o si debe cerrarse el pedido.
+                                        @else
+                                            Si reduces la cantidad cargada, elige qué hacer con el resto del pedido.
+                                        @endif
+                                    </small>
+                                </div>
                                 <label class="auth-field">
                                     <span>Resto del pedido</span>
-                                    <select name="completion_mode" class="auth-input">
-                                        <option value="">Selecciona una opcion</option>
-                                        <option value="leave_pending" @selected(old('completion_mode') === 'leave_pending')>Cerrar esta carga y dejar el resto pendiente</option>
-                                        <option value="close_remainder" @selected(old('completion_mode') === 'close_remainder')>Finalizar pedido con lo cargado</option>
+                                    <select name="completion_mode" class="auth-input" data-completion-mode @if ($pendingUnitsAfterCurrent > 0) required @endif>
+                                        <option value="">Selecciona una opción</option>
+                                        <option value="leave_pending" @selected(old('completion_mode') === 'leave_pending')>Cerrar esta carga parcial y dejar el resto para otro viaje</option>
+                                        <option value="close_remainder" @selected(old('completion_mode') === 'close_remainder')>Cerrar el pedido con lo cargado y cancelar el resto</option>
                                     </select>
                                 </label>
-                                <label class="auth-field">
-                                    <span>Motivo si se finaliza con pendiente</span>
+                                <label class="auth-field" data-remainder-reason @if (old('completion_mode') !== 'close_remainder') hidden @endif>
+                                    <span>Motivo para cancelar el resto</span>
                                     <textarea name="remainder_close_reason" class="auth-input" rows="2">{{ old('remainder_close_reason') }}</textarea>
                                 </label>
-                            @endif
+                            </section>
                             <button type="submit" name="finalize_dispatch" value="0" class="button-secondary compact-button btn-compact">Guardar preparación</button>
                             <button
                                 type="submit"

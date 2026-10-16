@@ -7157,6 +7157,37 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     gap: 0.55rem;
 }
 
+.warehouse-request-completion {
+    display: grid;
+    grid-template-columns: minmax(14rem, 1fr) minmax(16rem, 1.2fr);
+    gap: 0.65rem 0.9rem;
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid rgba(24, 37, 50, 0.12);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.warehouse-request-completion.has-pending {
+    border-color: rgba(185, 111, 16, 0.35);
+    background: #fffaf0;
+}
+
+.warehouse-request-completion > div:first-child {
+    display: grid;
+    align-content: start;
+    gap: 0.25rem;
+}
+
+.warehouse-request-completion > div:first-child strong {
+    color: var(--brand-slate-dark);
+    font-size: 0.84rem;
+}
+
+.warehouse-request-completion [data-remainder-reason] {
+    grid-column: 2;
+}
+
 .warehouse-request-inline-state {
     padding-top: 0.65rem;
     border-top: 1px solid rgba(24, 37, 50, 0.08);
@@ -7227,6 +7258,14 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     .warehouse-request-transport {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .warehouse-request-completion {
+        grid-template-columns: 1fr;
+    }
+
+    .warehouse-request-completion [data-remainder-reason] {
+        grid-column: 1;
     }
 
     .warehouse-prep-line-grid,

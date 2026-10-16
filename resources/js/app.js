@@ -2207,6 +2207,41 @@ const setupWarehouseRequestAllocations = () => {
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
     };
 
+    const completionDecision = form.querySelector('[data-completion-decision]');
+    const completionMode = form.querySelector('[data-completion-mode]');
+    const completionHelp = form.querySelector('[data-completion-help]');
+    const remainderReason = form.querySelector('[data-remainder-reason]');
+    const remainderReasonInput = remainderReason?.querySelector('textarea');
+
+    const updateCompletionDecision = () => {
+        if (!completionDecision || !completionMode) {
+            return;
+        }
+
+        const pendingUnits = Array.from(form.querySelectorAll('[data-prep-line]'))
+            .reduce((total, line) => total + parsePositiveInteger(line.dataset.livePendingUnits ?? '0'), 0);
+        const hasPending = pendingUnits > 0;
+        const closesRemainder = completionMode.value === 'close_remainder';
+
+        completionDecision.dataset.pendingUnits = String(pendingUnits);
+        completionDecision.classList.toggle('has-pending', hasPending);
+        completionMode.required = hasPending;
+
+        if (completionHelp) {
+            completionHelp.textContent = hasPending
+                ? `Quedan ${formatNumber.format(pendingUnits)} uds. Elige si se prepararán en otro viaje o si se cancela el resto.`
+                : 'La carga cubre todo el pedido. No es necesario elegir una opción para el resto.';
+        }
+
+        if (remainderReason) {
+            remainderReason.hidden = !closesRemainder;
+        }
+
+        if (remainderReasonInput) {
+            remainderReasonInput.required = hasPending && closesRemainder;
+        }
+    };
+
     const updateVisiblePeakGroup = (assignment) => {
         const selectedStockId = assignment.querySelector('[data-stock-select]')?.value ?? '';
 
@@ -2343,6 +2378,8 @@ const setupWarehouseRequestAllocations = () => {
         const excessSummaryNode = line.querySelector('[data-excess-summary]');
         const stateNode = line.querySelector('[data-prep-state]');
 
+        line.dataset.livePendingUnits = String(pendingUnits);
+
         if (loadedPalletsField) {
             loadedPalletsField.value = String(totalPallets);
         }
@@ -2422,8 +2459,14 @@ const setupWarehouseRequestAllocations = () => {
     };
 
     form.querySelectorAll('[data-prep-line]').forEach((line) => {
-        line.addEventListener('input', () => updateLine(line));
-        line.addEventListener('change', () => updateLine(line));
+        line.addEventListener('input', () => {
+            updateLine(line);
+            updateCompletionDecision();
+        });
+        line.addEventListener('change', () => {
+            updateLine(line);
+            updateCompletionDecision();
+        });
 
         line.addEventListener('click', (event) => {
             const removeButton = event.target.closest('[data-remove-assignment]');
@@ -2457,6 +2500,9 @@ const setupWarehouseRequestAllocations = () => {
 
         updateLine(line);
     });
+
+    completionMode?.addEventListener('change', updateCompletionDecision);
+    updateCompletionDecision();
 
     form.dataset.allocationsBound = 'true';
 };
