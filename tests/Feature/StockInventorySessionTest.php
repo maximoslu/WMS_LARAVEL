@@ -146,7 +146,7 @@ class StockInventorySessionTest extends TestCase
         $this->assertSame([$first->id], $service->viewData($user, $session, ['status' => 'needs_review'])['locations']->pluck('model.location_id')->all());
     }
 
-    public function test_client_isolation_and_manual_session_or_line_id_tampering_are_denied(): void
+    public function test_clients_cannot_view_or_operate_inventory_sessions(): void
     {
         [$own] = $this->clientWithStock('PROPIO', '1', 'SKU-PROPIO');
         [$other] = $this->clientWithStock('AJENO', '2', 'SKU-AJENO');
@@ -155,7 +155,7 @@ class StockInventorySessionTest extends TestCase
         $otherSession = $this->start($internal, $other);
         $clientUser = $this->user(Role::CLIENTE, $own);
 
-        $this->actingAs($clientUser)->get(route('stock.inventory.show', $ownSession))->assertOk();
+        $this->actingAs($clientUser)->get(route('stock.inventory.show', $ownSession))->assertForbidden();
         $this->actingAs($clientUser)->get(route('stock.inventory.show', $otherSession))->assertForbidden();
         $this->actingAs($clientUser)
             ->patch(route('stock.inventory.locations.check', [$ownSession, $otherSession->locations()->firstOrFail()]))
@@ -328,7 +328,7 @@ class StockInventorySessionTest extends TestCase
         );
     }
 
-    public function test_client_without_location_visibility_cannot_operate_sessions_and_stock_details_keep_pallets_and_peaks(): void
+    public function test_clients_cannot_operate_sessions_regardless_of_location_visibility(): void
     {
         [$hiddenClient] = $this->clientWithStock('OCULTO', '1', 'SKU-OCULTO');
         $hiddenClient->update(['show_storage_occupancy_to_client' => false]);
@@ -340,14 +340,10 @@ class StockInventorySessionTest extends TestCase
 
         [$visibleClient] = $this->clientWithStock('VISIBLE', '4', 'SKU-VISIBLE');
         $visibleUser = $this->user(Role::CLIENTE, $visibleClient);
-        $session = $this->start($visibleUser, $visibleClient);
+        $session = $this->start($this->user(Role::ALMACEN), $visibleClient);
 
         $this->actingAs($visibleUser)->get(route('stock.inventory.show', $session))
-            ->assertOk()
-            ->assertSee('SKU-VISIBLE')
-            ->assertSee('2 pallets')
-            ->assertSee('1 picos / 50 uds')
-            ->assertSee('250 uds');
+            ->assertForbidden();
     }
 
     /** @return array{Client, StockPallet, Location} */

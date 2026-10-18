@@ -40,7 +40,7 @@
 
             <div class="wms-list-actions">
                 <a href="{{ route('stock.index', $selectedClient ? ['client_id' => $selectedClient->id] : []) }}" class="button-secondary compact-button btn-compact">Volver a stock</a>
-                @if ($openSession && $canOperateLocations)
+                @if ($openSession && $canManageInventorySessions)
                     <a href="{{ route('stock.inventory.show', $openSession) }}" class="button-primary compact-button btn-compact">Continuar inventario</a>
                 @endif
                 @if ($selectedClient)
@@ -65,10 +65,10 @@
                         <small>{{ $openSummary['needs_review'] }} para revisar de nuevo</small>
                     @endif
                 </div>
-                @if ($canOperateLocations)
+                @if ($canManageInventorySessions)
                     <a href="{{ route('stock.inventory.show', $openSession) }}" class="button-primary compact-button btn-compact">Continuar inventario</a>
                 @else
-                    <small>La visibilidad de ubicaciones está desactivada para este cliente.</small>
+                    <small>Inventario en curso gestionado por el equipo de almacén.</small>
                 @endif
             </section>
         @endif
@@ -280,7 +280,7 @@
                 </section>
             @endif
 
-            @if (! $openSession && $scopePreview->isNotEmpty())
+            @if ($canManageInventorySessions && ! $openSession && $scopePreview->isNotEmpty())
                 <section class="surface-card compact-card wms-inventory-start-card">
                     <div class="wms-section-head">
                         <div>
@@ -290,33 +290,29 @@
                         <span>{{ $scopePreview->count() }} ubicaciones disponibles</span>
                     </div>
 
-                    @if ($canOperateLocations)
-                        <form method="POST" action="{{ route('stock.inventory.start') }}" class="wms-inventory-start-form">
-                            @csrf
-                            @foreach ($sessionFilters as $name => $value)
-                                <input type="hidden" name="{{ $name }}" value="{{ $value }}">
+                    <form method="POST" action="{{ route('stock.inventory.start') }}" class="wms-inventory-start-form">
+                        @csrf
+                        @foreach ($sessionFilters as $name => $value)
+                            <input type="hidden" name="{{ $name }}" value="{{ $value }}">
+                        @endforeach
+
+                        <div class="wms-inventory-scope-grid">
+                            @foreach ($scopePreview as $scope)
+                                <label class="wms-inventory-scope-option">
+                                    <input type="checkbox" name="scope_keys[]" value="{{ $scope['scope_key'] }}" checked>
+                                    <span>
+                                        <strong>{{ $scope['location_label'] }}</strong>
+                                        <small>{{ $scope['references'] }} refs · {{ $scope['full_pallets'] }} pallets · {{ $scope['peaks'] }} picos / {{ $scope['peak_units'] }} uds</small>
+                                    </span>
+                                </label>
                             @endforeach
+                        </div>
 
-                            <div class="wms-inventory-scope-grid">
-                                @foreach ($scopePreview as $scope)
-                                    <label class="wms-inventory-scope-option">
-                                        <input type="checkbox" name="scope_keys[]" value="{{ $scope['scope_key'] }}" checked>
-                                        <span>
-                                            <strong>{{ $scope['location_label'] }}</strong>
-                                            <small>{{ $scope['references'] }} refs · {{ $scope['full_pallets'] }} pallets · {{ $scope['peaks'] }} picos / {{ $scope['peak_units'] }} uds</small>
-                                        </span>
-                                    </label>
-                                @endforeach
-                            </div>
-
-                            <div class="wms-inventory-filter-actions">
-                                <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Iniciar este inventario con las ubicaciones seleccionadas?');">Iniciar inventario</button>
-                                <span>Solo puede existir un inventario abierto por cliente.</span>
-                            </div>
-                        </form>
-                    @else
-                        <div class="alert alert-info">La operativa por ubicación no está disponible porque este cliente tiene desactivada su visibilidad.</div>
-                    @endif
+                        <div class="wms-inventory-filter-actions">
+                            <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('¿Iniciar este inventario con las ubicaciones seleccionadas?');">Iniciar inventario</button>
+                            <span>Solo puede existir un inventario abierto por cliente.</span>
+                        </div>
+                    </form>
                 </section>
             @endif
 
@@ -332,7 +328,7 @@
                 @else
                     <div class="wms-inventory-history-list">
                         @foreach ($history as $historicSession)
-                            @if ($canOperateLocations)
+                            @if ($canManageInventorySessions)
                                 <a href="{{ route('stock.inventory.show', $historicSession) }}" class="wms-inventory-history-row">
                             @else
                                 <div class="wms-inventory-history-row">
@@ -342,7 +338,7 @@
                                     <small>{{ $historicSession->starter?->name ?? 'Usuario no disponible' }} · completado por {{ $historicSession->completer?->name ?? 'Usuario no disponible' }}</small>
                                 </span>
                                 <span>{{ data_get($historicSession->final_summary, 'total', 0) }} ubicaciones · Completado</span>
-                            @if ($canOperateLocations)
+                            @if ($canManageInventorySessions)
                                 </a>
                             @else
                                 </div>

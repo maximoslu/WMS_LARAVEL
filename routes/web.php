@@ -218,19 +218,19 @@ Route::middleware('auth')->group(function (): void {
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('stock.inventory.index');
     Route::post('/stock/inventario', [StockInventoryController::class, 'start'])
-        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.inventory.start');
     Route::get('/stock/inventario/descargar', [StockInventoryController::class, 'export'])
         ->middleware('minimum.role:'.Role::CLIENTE)
         ->name('stock.inventory.export');
     Route::get('/stock/inventario/{stockInventorySession}', [StockInventoryController::class, 'show'])
-        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.inventory.show');
     Route::patch('/stock/inventario/{stockInventorySession}/ubicaciones/{stockInventoryLocation}/comprobar', [StockInventoryController::class, 'check'])
-        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.inventory.locations.check');
     Route::post('/stock/inventario/{stockInventorySession}/finalizar', [StockInventoryController::class, 'complete'])
-        ->middleware('minimum.role:'.Role::CLIENTE)
+        ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('stock.inventory.complete');
     Route::get('/stock/reubicar', [StockRelocationController::class, 'create'])
         ->middleware('minimum.role:'.Role::ALMACEN)

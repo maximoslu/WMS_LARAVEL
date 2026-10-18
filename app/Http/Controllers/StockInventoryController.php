@@ -68,11 +68,11 @@ class StockInventoryController extends Controller
             'options' => $inventory['options'],
             'clients' => $clients,
             'isClient' => $isClient,
+            'canManageInventorySessions' => $user?->canAccessRole(Role::ALMACEN) === true,
             'scopePreview' => $this->sessionService->previewScopes($inventory['rows']),
             'openSession' => $openSession,
             'openSummary' => $openSession ? $this->sessionService->summary($openSession) : null,
             'history' => $this->sessionService->historyForClient($inventory['filters']['client_id']),
-            'canOperateLocations' => ! $isClient || (bool) $user?->client?->show_storage_occupancy_to_client,
             'navigationSections' => WmsNavigation::sectionsForUser($user),
         ]);
     }
@@ -212,10 +212,6 @@ class StockInventoryController extends Controller
 
     private function authorizeLocationOperation(Request $request): void
     {
-        $user = $request->user();
-
-        if ($user?->hasRole(Role::CLIENTE)) {
-            abort_unless((bool) $user->client?->show_storage_occupancy_to_client, 403);
-        }
+        abort_unless($request->user()?->canAccessRole(Role::ALMACEN), 403);
     }
 }

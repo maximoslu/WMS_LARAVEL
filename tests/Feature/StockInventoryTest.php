@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Stock\StockInventorySessionService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use OpenSpout\Reader\XLSX\Reader as XlsxReader;
@@ -31,6 +32,70 @@ class StockInventoryTest extends TestCase
                 ->assertSee('Cliente inventario')
                 ->assertSee('Ver inventario')
                 ->assertSee('Descargar inventario');
+        }
+    }
+
+    public function test_client_cannot_start_or_operate_inventory_sessions(): void
+    {
+        $client = Client::factory()->create(['show_storage_occupancy_to_client' => true]);
+        $warehouse = Warehouse::factory()->create(['client_id' => $client->id]);
+        $location = Location::factory()->create(['warehouse_id' => $warehouse->id]);
+        $this->stock($client, $location, 'SOLO-ALMACEN');
+        $clientUser = $this->user(Role::CLIENTE, $client);
+
+        $this->actingAs($clientUser)
+            ->get(route('stock.inventory.index'))
+            ->assertOk()
+            ->assertDontSee('Iniciar inventario');
+
+        $this->actingAs($clientUser)
+            ->post(route('stock.inventory.start'), [
+                'client_id' => $client->id,
+                'scope_keys' => ['location:'.$location->id],
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('stock_inventory_sessions', 0);
+
+        $warehouseUser = $this->user(Role::ALMACEN);
+        $session = app(StockInventorySessionService::class)->start(
+            $warehouseUser,
+            ['client_id' => $client->id],
+            ['location:'.$location->id],
+        );
+        $inventoryLocation = $session->locations()->sole();
+
+        $this->actingAs($clientUser)
+            ->get(route('stock.inventory.show', $session))
+            ->assertForbidden();
+        $this->actingAs($clientUser)
+            ->patch(route('stock.inventory.locations.check', [$session, $inventoryLocation]))
+            ->assertForbidden();
+        $this->actingAs($clientUser)
+            ->post(route('stock.inventory.complete', $session), ['confirmed' => '1'])
+            ->assertForbidden();
+    }
+
+    public function test_warehouse_and_higher_roles_can_start_inventory_sessions(): void
+    {
+        foreach ([Role::ALMACEN, Role::ADMINISTRACION, Role::SUPERADMIN] as $role) {
+            $client = Client::factory()->create();
+            $warehouse = Warehouse::factory()->create(['client_id' => $client->id]);
+            $location = Location::factory()->create(['warehouse_id' => $warehouse->id]);
+            $this->stock($client, $location, 'INVENTARIO-'.strtoupper($role));
+            $user = $this->user($role);
+
+            $this->actingAs($user)
+                ->post(route('stock.inventory.start'), [
+                    'client_id' => $client->id,
+                    'scope_keys' => ['location:'.$location->id],
+                ])
+                ->assertRedirect();
+
+            $this->assertDatabaseHas('stock_inventory_sessions', [
+                'client_id' => $client->id,
+                'started_by' => $user->id,
+            ]);
         }
     }
 
