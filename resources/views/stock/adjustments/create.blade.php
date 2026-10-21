@@ -25,7 +25,13 @@
                 ->values()
             : collect();
         $summaryPeakUnits = $summaryPeakValues->sum();
-        $defaultUnitsPerPallet = old('units_per_pallet', $summaryStockPallet?->units_per_pallet ?: $selectedItem?->units_per_pallet ?: 1);
+        $usesCurrentItemUnitsPerPallet = $summaryStockPallet !== null && (int) $summaryStockPallet->quantity_units <= 0;
+        $defaultUnitsPerPallet = old(
+            'units_per_pallet',
+            $usesCurrentItemUnitsPerPallet
+                ? ($selectedItem?->units_per_pallet ?: 1)
+                : ($summaryStockPallet?->units_per_pallet ?: $selectedItem?->units_per_pallet ?: 1),
+        );
         $defaultAction = old('action', 'add');
         $defaultMode = old('mode', $isNewBatchRequest ? 'new' : ($summaryStockPallet || $stockPallets->isNotEmpty() ? 'existing' : 'new'));
         $adjustmentPeaks = collect(old('peaks', []))
@@ -158,6 +164,9 @@
                                 <span>Vas a regularizar esta partida</span>
                                 <strong>{{ $selectedItem?->sku }} · {{ number_format((int) $summaryStockPallet->full_pallets, 0, ',', '.') }} {{ (int) $summaryStockPallet->full_pallets === 1 ? 'palé' : 'palés' }}{{ $summaryStockPallet->peaks_count ? ' y '.number_format((int) $summaryStockPallet->peaks_count, 0, ',', '.').' picos' : '' }}</strong>
                                 <small>Lote {{ $summaryStockPallet->lot ?: 'NO LOTE' }} · {{ $summaryStockPallet->pickingLocationLabel() ?? 'Sin ubicación' }} · {{ number_format((int) $summaryStockPallet->quantity_units, 0, ',', '.') }} uds disponibles</small>
+                                @if ($usesCurrentItemUnitsPerPallet)
+                                    <small>La partida está vacía: se aplicará el estándar actual del artículo al añadir nuevos palés.</small>
+                                @endif
                                 <a href="{{ route('stock.adjustments.create', ['client_id' => $filters['client_id'], 'item_id' => $filters['item_id'], 'new_batch' => 1]) }}" class="wms-adjustment-new-batch-link">¿Necesitas crear una partida nueva?</a>
                             </article>
                         @else
@@ -280,7 +289,7 @@
 
                                 <label class="auth-field">
                                     <span>Unidades por palé</span>
-                                    <input type="number" name="units_per_pallet" value="{{ $defaultUnitsPerPallet }}" min="1" step="1" class="auth-input" data-adjustment-units-per-pallet required @readonly($summaryStockPallet)>
+                                    <input type="number" name="units_per_pallet" value="{{ $defaultUnitsPerPallet }}" min="1" step="1" class="auth-input" data-adjustment-units-per-pallet required @readonly($summaryStockPallet && ! $usesCurrentItemUnitsPerPallet)>
                                 </label>
 
                                 <div class="wms-adjustment-total-detail">

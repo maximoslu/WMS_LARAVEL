@@ -232,6 +232,71 @@ class StockAdjustmentTest extends TestCase
             ->assertSee('name="units_per_pallet" value="7000"', false);
     }
 
+    public function test_empty_batch_uses_the_current_item_standard_when_stock_is_added_again(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture([
+            'quantity_units' => 0,
+            'units_per_pallet' => 6500,
+            'full_pallets' => 0,
+            'warehouse_pallets' => 0,
+        ]);
+        $item->update(['units_per_pallet' => 6000]);
+        $user = $this->makeUserWithRole(Role::SUPERADMIN);
+
+        $this->actingAs($user)
+            ->get(route('stock.adjustments.create', [
+                'client_id' => $client->id,
+                'item_id' => $item->id,
+                'stock_pallet_id' => $stockPallet->id,
+            ]))
+            ->assertOk()
+            ->assertSee('La partida está vacía: se aplicará el estándar actual del artículo al añadir nuevos palés.')
+            ->assertSee('name="units_per_pallet" value="6000"', false)
+            ->assertDontSee('name="units_per_pallet" value="6000" min="1" step="1" class="auth-input" data-adjustment-units-per-pallet required readonly', false);
+
+        $this->actingAs($user)
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
+                'full_pallets' => 14,
+                'units_per_pallet' => 6000,
+                'note' => 'Regularización tras actualizar el estándar del artículo.',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $fresh = $stockPallet->fresh();
+
+        $this->assertSame(6000, $fresh->units_per_pallet);
+        $this->assertSame(84000, $fresh->quantity_units);
+        $this->assertSame(14, $fresh->full_pallets);
+        $this->assertDatabaseHas('inventory_movements', [
+            'stock_pallet_id' => $stockPallet->id,
+            'units_delta' => 84000,
+        ]);
+    }
+
+    public function test_adjustment_keeps_the_physical_units_per_pallet_for_a_batch_with_stock(): void
+    {
+        [$client, $item, $stockPallet] = $this->stockFixture([
+            'quantity_units' => 6500,
+            'units_per_pallet' => 6500,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 1,
+        ]);
+        $item->update(['units_per_pallet' => 6000]);
+
+        $this->actingAs($this->makeUserWithRole(Role::SUPERADMIN))
+            ->post(route('stock.adjustments.store'), $this->validPayload($client, $item, $stockPallet, [
+                'full_pallets' => 1,
+                'units_per_pallet' => 6000,
+                'note' => 'No debe cambiar la composición del stock existente.',
+            ]))
+            ->assertSessionHasErrors('units_per_pallet');
+
+        $fresh = $stockPallet->fresh();
+
+        $this->assertSame(6500, $fresh->units_per_pallet);
+        $this->assertSame(6500, $fresh->quantity_units);
+    }
+
     public function test_superadmin_creates_new_batch_without_goods_receipt_or_dispatch(): void
     {
         [$client, $item, , $location] = $this->stockFixture();

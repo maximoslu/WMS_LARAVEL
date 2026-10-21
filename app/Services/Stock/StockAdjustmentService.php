@@ -75,9 +75,9 @@ class StockAdjustmentService
     {
         $candidate = StockPallet::query()->findOrFail($request->stockPalletId());
         $sourceIdentity = StockBatchIdentity::fromStockPallet($candidate);
-        $futureUnitsPerPallet = (int) $candidate->units_per_pallet > 0
-            ? (int) $candidate->units_per_pallet
-            : $request->unitsPerPallet();
+        $futureUnitsPerPallet = (int) $candidate->quantity_units <= 0
+            ? $request->unitsPerPallet()
+            : ((int) $candidate->units_per_pallet > 0 ? (int) $candidate->units_per_pallet : $request->unitsPerPallet());
         $destinationIdentity = $this->identityWithUnitsPerPallet($candidate, $futureUnitsPerPallet);
         $this->batchIdentities->lockIdentities([$sourceIdentity, $destinationIdentity]);
 
@@ -89,6 +89,18 @@ class StockAdjustmentService
         if (StockBatchIdentity::fromStockPallet($stockPallet)->hash() !== $sourceIdentity->hash()) {
             throw ValidationException::withMessages([
                 'stock_pallet_id' => 'La identidad de la partida ha cambiado durante la regularizacion. Vuelve a intentarlo.',
+            ]);
+        }
+
+        $isEmptyBatch = (int) $stockPallet->quantity_units <= 0;
+
+        if (
+            ! $isEmptyBatch
+            && (int) $stockPallet->units_per_pallet > 0
+            && (int) $stockPallet->units_per_pallet !== $request->unitsPerPallet()
+        ) {
+            throw ValidationException::withMessages([
+                'units_per_pallet' => 'Las unidades por pallet deben coincidir con la partida existente.',
             ]);
         }
 
@@ -116,9 +128,9 @@ class StockAdjustmentService
         }
 
         $this->applyBreakdown($stockPallet, $request, $afterQuantity);
-        $stockPallet->units_per_pallet = (int) $stockPallet->units_per_pallet > 0
-            ? (int) $stockPallet->units_per_pallet
-            : $request->unitsPerPallet();
+        $stockPallet->units_per_pallet = $isEmptyBatch
+            ? $request->unitsPerPallet()
+            : ((int) $stockPallet->units_per_pallet > 0 ? (int) $stockPallet->units_per_pallet : $request->unitsPerPallet());
         $stockPallet->warehouse_pallets = null;
 
         $stockPallet->save();

@@ -110,7 +110,11 @@ class StoreStockAdjustmentRequest extends FormRequest
                     $validator->errors()->add('stock_pallet_id', 'La partida seleccionada no pertenece al cliente y referencia indicados.');
                 }
 
-                if ((int) $stockPallet->units_per_pallet > 0 && (int) $stockPallet->units_per_pallet !== $this->unitsPerPallet()) {
+                if (
+                    (int) $stockPallet->quantity_units > 0
+                    && (int) $stockPallet->units_per_pallet > 0
+                    && (int) $stockPallet->units_per_pallet !== $this->unitsPerPallet()
+                ) {
                     $validator->errors()->add('units_per_pallet', 'Las unidades por pallet deben coincidir con la partida existente.');
                 }
 
