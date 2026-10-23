@@ -40,7 +40,7 @@ class MerchandiseRequestNotificationService
             'dispatch.lines.stockPallet.location.warehouse',
             'dispatch.lines.allocations.stockPallet.location.warehouse',
             'dispatch.lines.sourceRequestLine',
-            'client.dispatchEmailRecipients',
+            'client.preparationEmailRecipients',
         ]);
 
         $preparationPdfContent = $this->shouldAttachPreparationPdfToClient($merchandiseRequest)
@@ -78,11 +78,11 @@ class MerchandiseRequestNotificationService
             'submitted',
             fn (array $channels) => new InternalMerchandiseRequestSubmittedNotification($merchandiseRequest, $channels),
         );
-        $additionalEmails = $this->dispatchEmailRecipients($merchandiseRequest, $clientRecipients->merge($internalRecipients));
+        $additionalEmails = $this->preparationEmailRecipients($merchandiseRequest, $clientRecipients->merge($internalRecipients));
 
         foreach ($additionalEmails as $email) {
             $this->deliveries->deliverToEmail(
-                'merchandise_request.submitted.internal',
+                'merchandise_request.submitted.preparation',
                 'merchandise_request',
                 $merchandiseRequest->id,
                 'submitted',
@@ -95,7 +95,7 @@ class MerchandiseRequestNotificationService
             'merchandise_request_id' => $merchandiseRequest->id,
             'client_user_recipients' => $clientRecipients->pluck('id')->values()->all(),
             'internal_user_recipients' => $internalRecipients->pluck('id')->values()->all(),
-            'dispatch_email_recipients' => $additionalEmails->values()->all(),
+            'preparation_email_recipients' => $additionalEmails->values()->all(),
         ]);
     }
 
@@ -259,6 +259,27 @@ class MerchandiseRequestNotificationService
             ->all();
 
         return $merchandiseRequest->client?->dispatchEmailRecipients
+            ->pluck('email')
+            ->filter(fn (?string $email) => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)
+            ->map(fn (string $email) => mb_strtolower(trim($email)))
+            ->reject(fn (string $email) => in_array($email, $userEmails, true))
+            ->unique()
+            ->values() ?? collect();
+    }
+
+    /**
+     * @param  Collection<int, User>  $userRecipients
+     * @return Collection<int, string>
+     */
+    private function preparationEmailRecipients(MerchandiseRequest $merchandiseRequest, Collection $userRecipients): Collection
+    {
+        $userEmails = $userRecipients
+            ->pluck('email')
+            ->filter()
+            ->map(fn (string $email) => mb_strtolower(trim($email)))
+            ->all();
+
+        return $merchandiseRequest->client?->preparationEmailRecipients
             ->pluck('email')
             ->filter(fn (?string $email) => filter_var($email, FILTER_VALIDATE_EMAIL) !== false)
             ->map(fn (string $email) => mb_strtolower(trim($email)))

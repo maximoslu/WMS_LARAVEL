@@ -7,6 +7,7 @@ use App\Jobs\ProcessMerchandiseRequestStatusChangedJob;
 use App\Jobs\ProcessMerchandiseRequestSubmittedNotificationsJob;
 use App\Models\Client;
 use App\Models\ClientDispatchEmailRecipient;
+use App\Models\ClientPreparationEmailRecipient;
 use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\Item;
@@ -23,8 +24,10 @@ use App\Services\MerchandiseRequests\MerchandiseRequestNotificationService;
 use Database\Seeders\ClientSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -211,36 +214,36 @@ class MerchandiseRequestNotificationTest extends TestCase
         Notification::assertNotSentTo($internalCreator, CustomerMerchandiseRequestSubmittedNotification::class);
     }
 
-    public function test_creation_hito_also_reaches_additional_dispatch_email_recipients_once(): void
+    public function test_creation_hito_reaches_only_additional_preparation_email_recipients_once(): void
     {
         Notification::fake();
+        $this->fakeBrevoNotifications();
         $this->seedBaseData();
 
         $client = Client::query()->where('code', 'EDELVIVES')->firstOrFail();
         $cliente = $this->makeUserWithRole(Role::CLIENTE, $client);
         $cliente->update(['email' => 'carretillero@edelvives.test']);
-        ClientDispatchEmailRecipient::factory()->create([
+        ClientPreparationEmailRecipient::factory()->create([
             'client_id' => $client->id,
             'email' => 'carretillero@edelvives.test',
         ]);
-        ClientDispatchEmailRecipient::factory()->create([
+        ClientPreparationEmailRecipient::factory()->create([
             'client_id' => $client->id,
             'email' => 'operaciones@edelvives.test',
+        ]);
+        ClientDispatchEmailRecipient::factory()->create([
+            'client_id' => $client->id,
+            'email' => 'salidas@edelvives.test',
         ]);
         $merchandiseRequest = $this->createMerchandiseRequestWithLine($client, $cliente);
 
         (new ProcessMerchandiseRequestSubmittedNotificationsJob($merchandiseRequest->id))
             ->handle(app(MerchandiseRequestNotificationService::class));
 
-        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 2);
-        Notification::assertSentOnDemand(
-            InternalMerchandiseRequestSubmittedNotification::class,
-            function ($notification, array $channels, object $notifiable): bool {
-                return $channels === ['mail']
-                    && $notifiable->routeNotificationFor('mail') === 'operaciones@edelvives.test';
-            }
-        );
-        Notification::assertSentOnDemandTimes(InternalMerchandiseRequestSubmittedNotification::class, 1);
+        Notification::assertSentToTimes($cliente, CustomerMerchandiseRequestSubmittedNotification::class, 1);
+        Http::assertSentCount(2);
+        Http::assertSent(fn (Request $request): bool => $request->data()['to'] === [['email' => 'operaciones@edelvives.test']]);
+        Http::assertNotSent(fn (Request $request): bool => $request->data()['to'] === [['email' => 'salidas@edelvives.test']]);
     }
 
     public function test_preparation_status_change_does_not_queue_or_send_communications(): void
@@ -532,5 +535,16 @@ class MerchandiseRequestNotificationTest extends TestCase
             'role_id' => $role->id,
             'client_id' => $client?->id,
         ]);
+    }
+
+    private function fakeBrevoNotifications(): void
+    {
+        config([
+            'services.brevo.key' => 'test-brevo-key',
+            'services.brevo.base_url' => 'https://api.brevo.com/v3',
+            'mail.from.address' => 'system@example.test',
+            'mail.from.name' => 'MAXIMO WMS',
+        ]);
+        Http::fake(['https://api.brevo.com/*' => Http::response(['messageId' => 'notification-test'], 201)]);
     }
 }

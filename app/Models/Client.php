@@ -108,6 +108,11 @@ class Client extends Model
         return $this->hasMany(ClientDispatchEmailRecipient::class);
     }
 
+    public function preparationEmailRecipients(): HasMany
+    {
+        return $this->hasMany(ClientPreparationEmailRecipient::class);
+    }
+
     public function stockAlertEmailRecipients(): HasMany
     {
         return $this->hasMany(ClientStockAlertEmailRecipient::class);

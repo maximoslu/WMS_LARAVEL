@@ -531,6 +531,12 @@ Route::middleware('auth')->group(function (): void {
     Route::delete('/clientes/{client}/emails-albaranes-salida/{clientDispatchEmailRecipient}', [ClientController::class, 'destroyDispatchEmailRecipient'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('clients.dispatch-emails.destroy');
+    Route::post('/clientes/{client}/emails-preparacion', [ClientController::class, 'storePreparationEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.preparation-emails.store');
+    Route::delete('/clientes/{client}/emails-preparacion/{clientPreparationEmailRecipient}', [ClientController::class, 'destroyPreparationEmailRecipient'])
+        ->middleware('minimum.role:'.Role::ADMINISTRACION)
+        ->name('clients.preparation-emails.destroy');
     Route::post('/clientes/{client}/emails-avisos-stock', [ClientController::class, 'storeStockAlertEmailRecipient'])
         ->middleware('minimum.role:'.Role::ADMINISTRACION)
         ->name('clients.stock-alert-emails.store');

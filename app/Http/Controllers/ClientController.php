@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreClientDispatchEmailRecipientRequest;
+use App\Http\Requests\StoreClientPreparationEmailRecipientRequest;
 use App\Http\Requests\StoreClientReceiptEmailRecipientRequest;
 use App\Http\Requests\StoreClientRequest;
 use App\Http\Requests\StoreClientStockAlertEmailRecipientRequest;
 use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
 use App\Models\ClientDispatchEmailRecipient;
+use App\Models\ClientPreparationEmailRecipient;
 use App\Models\ClientReceiptEmailRecipient;
 use App\Models\ClientStockAlertEmailRecipient;
 use App\Models\Role;
@@ -94,6 +96,7 @@ class ClientController extends Controller
             'client' => $client,
             'receiptEmailRecipients' => $client->receiptEmailRecipients()->orderBy('email')->get(),
             'dispatchEmailRecipients' => $client->dispatchEmailRecipients()->orderBy('email')->get(),
+            'preparationEmailRecipients' => $client->preparationEmailRecipients()->orderBy('email')->get(),
             'stockAlertEmailRecipients' => $client->stockAlertEmailRecipients()->orderBy('email')->get(),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
@@ -153,6 +156,34 @@ class ClientController extends Controller
         return redirect()
             ->route('clients.edit', $client)
             ->with('status', 'Email para albaranes de salida eliminado correctamente.');
+    }
+
+    public function storePreparationEmailRecipient(StoreClientPreparationEmailRecipientRequest $request, Client $client, AuditLogService $audit): RedirectResponse
+    {
+        DB::transaction(function () use ($request, $client, $audit): void {
+            $recipient = $client->preparationEmailRecipients()->create($request->validated());
+            $audit->record(event: 'preparation_email_added', module: 'clients', description: 'Destinatario de preparacion de pedidos anadido.', auditable: $client, subject: $recipient, user: $request->user(), clientId: $client->id, newValues: $recipient->toArray());
+        });
+
+        return redirect()
+            ->route('clients.edit', $client)
+            ->with('status', 'Email para preparación de pedidos añadido correctamente.');
+    }
+
+    public function destroyPreparationEmailRecipient(Request $request, Client $client, ClientPreparationEmailRecipient $clientPreparationEmailRecipient, AuditLogService $audit): RedirectResponse
+    {
+        abort_unless($request->user()?->canAccessRole(Role::ADMINISTRACION), 403);
+        abort_unless((int) $clientPreparationEmailRecipient->client_id === (int) $client->id, 404);
+
+        DB::transaction(function () use ($request, $client, $clientPreparationEmailRecipient, $audit): void {
+            $old = $clientPreparationEmailRecipient->toArray();
+            $clientPreparationEmailRecipient->delete();
+            $audit->record(event: 'preparation_email_removed', module: 'clients', description: 'Destinatario de preparacion de pedidos eliminado.', auditable: $client, user: $request->user(), clientId: $client->id, oldValues: $old);
+        });
+
+        return redirect()
+            ->route('clients.edit', $client)
+            ->with('status', 'Email para preparación de pedidos eliminado correctamente.');
     }
 
     public function storeStockAlertEmailRecipient(

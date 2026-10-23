@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\MerchandiseRequest;
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -66,10 +67,14 @@ class InternalMerchandiseRequestSubmittedNotification extends Notification
             $message->line('Comentarios del pedido: '.$request->notes);
         }
 
-        return $message
-            ->line('Lineas: '.$lines)
-            ->line('Total de pallets: '.number_format($request->requestedPalletsCount(), 0, ',', '.'))
-            ->action('Abrir solicitud', route('dispatches.requests.show', $request));
+        $message->line('Mercancía a preparar: '.$lines)
+            ->line('Total de palets: '.number_format($request->requestedPalletsCount(), 0, ',', '.'));
+
+        if ($notifiable instanceof User) {
+            $message->action('Abrir solicitud', route('dispatches.requests.show', $request));
+        }
+
+        return $message;
     }
 
     public function toArray(object $notifiable): array

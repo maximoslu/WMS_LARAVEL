@@ -297,4 +297,65 @@
             </ul>
         @endif
     </div>
+
+    <div class="surface-card item-form-card entity-form compact-card">
+        <div class="item-form-header">
+            <div class="app-copy">
+                <h2 class="ops-page-title page-title-compact">Emails de preparación</h2>
+                <p>Estos correos recibirán el detalle de la mercancía a preparar al registrar un pedido. Son útiles para carretilleros o responsables sin acceso a WMS.</p>
+            </div>
+        </div>
+
+        <form method="POST" action="{{ route('clients.preparation-emails.store', $client) }}" class="item-form">
+            @csrf
+
+            <div class="item-form-grid">
+                <label class="auth-field">
+                    <span>Email</span>
+                    <input type="email" name="email" value="{{ old('email') }}" class="auth-input" maxlength="255" placeholder="carretillero@cliente.com" required>
+                    @error('email')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                </label>
+
+                <label class="auth-field">
+                    <span>Nombre (opcional)</span>
+                    <input type="text" name="name" value="{{ old('name') }}" class="auth-input" maxlength="255">
+                    @error('name')
+                        <small class="form-error">{{ $message }}</small>
+                    @enderror
+                </label>
+            </div>
+
+            <div class="item-form-actions action-buttons">
+                <button type="submit" class="button-primary compact-button btn-compact">Añadir email de preparación</button>
+            </div>
+        </form>
+
+        @if ($preparationEmailRecipients->isEmpty())
+            <p class="helper-text">Todavía no hay destinatarios configurados para la preparación de pedidos.</p>
+        @else
+            <ul class="client-receipt-email-list">
+                @foreach ($preparationEmailRecipients as $recipient)
+                    <li class="client-receipt-email-item">
+                        <span>
+                            <strong>{{ $recipient->email }}</strong>
+                            @if ($recipient->name)
+                                <span class="users-table-email">{{ $recipient->name }}</span>
+                            @endif
+                        </span>
+                        <form
+                            method="POST"
+                            action="{{ route('clients.preparation-emails.destroy', [$client, $recipient]) }}"
+                            onsubmit="return confirm('¿Eliminar este email de la lista de preparación?');"
+                        >
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="button-secondary compact-button btn-table">Eliminar</button>
+                        </form>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </div>
 @endif
