@@ -13,6 +13,16 @@ return [
             'goods' => 'Libros — 18 palés',
             'weight_kg' => '7900',
         ],
+        'ti-auto-tauste-maximo' => [
+            'title' => 'TI Auto Tauste → MAXIMO',
+            'shipper_name' => 'TI GROUP AUTOMOTIVE SYSTEMS SA',
+            'shipper_tax_id' => 'A60012218',
+            'shipper_address' => 'POLÍGONO LAS ROZAS, CALLE B, TAUSTE',
+            'origin' => 'TI GROUP AUTOMOTIVE SYSTEMS SA, POLÍGONO LAS ROZAS, CALLE B, TAUSTE',
+            'destination' => 'MÁXIMO SERVICIOS LOGÍSTICOS S.L.U., CALLE BUENOS AIRES 23, POLÍGONO INDUSTRIAL CENTROVÍA, 50198 LA MUELA, ZARAGOZA, ESPAÑA',
+            'goods' => 'Mercancía paletizada — 18 palés',
+            'weight_kg' => '5200',
+        ],
         'insoca-sphere' => [
             'title' => 'INSOCA → Sphere Group Spain',
             'shipper_name' => 'CARTONAJES IZQUIERDO SOCIEDAD ANÓNIMA',
