@@ -417,6 +417,9 @@
                                         $pickingLocationLabel = $selectedStockPallet?->pickingLocationLabel()
                                             ?? ($allocationLocationText !== '' ? $allocationLocationText : null);
                                         $allocationUnitsPerPallet = max(0, (int) ($allocation->units_per_pallet ?? $selectedStockPallet?->units_per_pallet ?? 0));
+                                        $allocationLoadedPallets = max(0, (int) old('lines.'.$lineKey.'.allocations.'.$allocationIndex.'.loaded_pallets', $allocation->loaded_pallets ?? 0));
+                                        $allocationManualPartialUnits = max(0, (int) old('lines.'.$lineKey.'.allocations.'.$allocationIndex.'.loaded_partial_units', $manualPartialUnits));
+                                        $allocationTotalUnits = ($allocationLoadedPallets * $allocationUnitsPerPallet) + $allocationManualPartialUnits + $selectedPeakUnitsTotal;
                                         $pickingQuantityParts = [];
                                         if ((int) ($allocation->loaded_pallets ?? 0) > 0) {
                                             $allocationPallets = (int) $allocation->loaded_pallets;
@@ -461,12 +464,16 @@
 
                                         <div class="warehouse-prep-input-grid">
                                             <label>
+                                                <span>Unidades finales</span>
+                                                <input type="number" min="0" step="1" value="{{ $allocationTotalUnits }}" class="auth-input" data-loaded-final-units @disabled(! $canEditLoading)>
+                                            </label>
+                                            <label>
                                                 <span>Palets</span>
-                                                <input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $allocationIndex }}][loaded_pallets]" value="{{ old('lines.'.$lineKey.'.allocations.'.$allocationIndex.'.loaded_pallets', $allocation->loaded_pallets ?? 0) }}" class="auth-input" data-loaded-pallets @disabled(! $canEditLoading)>
+                                                <input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $allocationIndex }}][loaded_pallets]" value="{{ $allocationLoadedPallets }}" class="auth-input" data-loaded-pallets @disabled(! $canEditLoading)>
                                             </label>
                                             <label>
                                                 <span>Pico uds manual</span>
-                                                <input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $allocationIndex }}][loaded_partial_units]" value="{{ old('lines.'.$lineKey.'.allocations.'.$allocationIndex.'.loaded_partial_units', $manualPartialUnits) }}" class="auth-input" data-loaded-partial-units @disabled(! $canEditLoading)>
+                                                <input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $allocationIndex }}][loaded_partial_units]" value="{{ $allocationManualPartialUnits }}" class="auth-input" data-loaded-partial-units @disabled(! $canEditLoading)>
                                             </label>
                                             <div class="warehouse-prep-assignment-total">
                                                 <span>Total asignación</span>
@@ -527,6 +534,7 @@
                                             <small data-picking-location-quantity>Cantidad pendiente</small>
                                         </div>
                                         <div class="warehouse-prep-input-grid">
+                                            <label><span>Unidades finales</span><input type="number" min="0" step="1" value="0" class="auth-input" data-loaded-final-units></label>
                                             <label><span>Palets</span><input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $templateIndex }}][loaded_pallets]" value="0" class="auth-input" data-loaded-pallets></label>
                                             <label><span>Pico uds manual</span><input type="number" min="0" step="1" name="lines[{{ $lineKey }}][allocations][{{ $templateIndex }}][loaded_partial_units]" value="0" class="auth-input" data-loaded-partial-units></label>
                                             <div class="warehouse-prep-assignment-total"><span>Total asignación</span><strong><span data-assignment-total>0</span> uds</strong></div>

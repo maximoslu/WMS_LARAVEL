@@ -2256,6 +2256,38 @@ const setupWarehouseRequestAllocations = () => {
         });
     };
 
+    const selectedPeakUnitsForAssignment = (assignment) => Array.from(
+        assignment.querySelectorAll('[data-peak-group]:not([hidden]) input[type="checkbox"]:checked'),
+    ).reduce((total, checkbox) => total + parsePositiveInteger(checkbox.dataset.peakUnits ?? '0'), 0);
+
+    const updateBreakdownFromFinalUnits = (assignment) => {
+        const totalUnitsField = assignment.querySelector('[data-loaded-final-units]');
+        const stockSelect = assignment.querySelector('[data-stock-select]');
+        const selectedOption = stockSelect?.selectedOptions?.[0];
+        const unitsPerPallet = parsePositiveInteger(selectedOption?.dataset.unitsPerPallet ?? '0');
+        const loadedPalletsField = assignment.querySelector('[data-loaded-pallets]');
+        const manualPartialUnitsField = assignment.querySelector('[data-loaded-partial-units]');
+        const requestedUnits = Number.parseInt(totalUnitsField?.value ?? '', 10);
+
+        if (!totalUnitsField || !loadedPalletsField || !manualPartialUnitsField
+            || !Number.isFinite(requestedUnits) || requestedUnits < 0 || unitsPerPallet <= 0) {
+            return;
+        }
+
+        let selectedPeakUnits = selectedPeakUnitsForAssignment(assignment);
+
+        if (selectedPeakUnits > requestedUnits) {
+            assignment.querySelectorAll('[data-peak-group]:not([hidden]) input[type="checkbox"]:checked').forEach((checkbox) => {
+                checkbox.checked = false;
+            });
+            selectedPeakUnits = 0;
+        }
+
+        const unitsToSplit = requestedUnits - selectedPeakUnits;
+        loadedPalletsField.value = String(Math.floor(unitsToSplit / unitsPerPallet));
+        manualPartialUnitsField.value = String(unitsToSplit % unitsPerPallet);
+    };
+
     const updateAssignment = (assignment, line) => {
         updateVisiblePeakGroup(assignment);
 
@@ -2265,14 +2297,19 @@ const setupWarehouseRequestAllocations = () => {
         const loadedPallets = parsePositiveInteger(assignment.querySelector('[data-loaded-pallets]')?.value ?? '0');
         const manualPartialUnits = parsePositiveInteger(assignment.querySelector('[data-loaded-partial-units]')?.value ?? '0');
         const selectedPeakCheckboxes = Array.from(assignment.querySelectorAll('[data-peak-group]:not([hidden]) input[type="checkbox"]:checked'));
-        const selectedPeakUnits = selectedPeakCheckboxes
-            .reduce((total, checkbox) => total + parsePositiveInteger(checkbox.dataset.peakUnits ?? '0'), 0);
+        const selectedPeakUnits = selectedPeakUnitsForAssignment(assignment);
         const partialUnits = manualPartialUnits + selectedPeakUnits;
         const totalUnits = (loadedPallets * unitsPerPallet) + partialUnits;
         const totalNode = assignment.querySelector('[data-assignment-total]');
 
         if (totalNode) {
             totalNode.textContent = formatNumber.format(totalUnits);
+        }
+
+        const totalUnitsField = assignment.querySelector('[data-loaded-final-units]');
+
+        if (totalUnitsField) {
+            totalUnitsField.value = String(totalUnits);
         }
 
         const locationLabel = stockSelect?.value
@@ -2458,7 +2495,13 @@ const setupWarehouseRequestAllocations = () => {
     };
 
     form.querySelectorAll('[data-prep-line]').forEach((line) => {
-        line.addEventListener('input', () => {
+        line.addEventListener('input', (event) => {
+            const assignment = event.target.closest('[data-assignment]');
+
+            if (assignment && event.target.matches('[data-loaded-final-units]')) {
+                updateBreakdownFromFinalUnits(assignment);
+            }
+
             updateLine(line);
             updateCompletionDecision();
         });
