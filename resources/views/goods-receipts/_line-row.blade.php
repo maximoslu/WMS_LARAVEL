@@ -4,13 +4,10 @@
         ->mapWithKeys(fn (int $number): array => [$number => $row['peak_'.$number] ?? null])
         ->filter(fn (mixed $value): bool => $value !== null && $value !== '');
 
-    if ($peakValues->isEmpty() && filled($row['pico_units'] ?? null)) {
+    if ($peakValues->isEmpty() && (int) ($row['pico_units'] ?? 0) > 0) {
         $peakValues->put(1, $row['pico_units']);
     }
 
-    if ($peakValues->isEmpty()) {
-        $peakValues->put(1, null);
-    }
 @endphp
 
 <article class="surface-card compact-card goods-receipt-line-card" data-line-row data-line-index="{{ $index }}">

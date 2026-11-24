@@ -49,6 +49,7 @@ class TiAutoGoodsReceiptExcelImportTest extends TestCase
             'units_per_pallet' => 27,
             'pallet_count' => 2,
             'quantity_units' => 54,
+            'pico_units' => null,
         ]);
         $this->assertDatabaseHas('goods_receipt_lines', [
             'goods_receipt_id' => $receipt->id,
@@ -72,6 +73,11 @@ class TiAutoGoodsReceiptExcelImportTest extends TestCase
             'quantity_units' => 19,
         ]);
         $this->assertDatabaseCount('stock_pallets', 0);
+
+        $this->actingAs($user)
+            ->get(route('goods-receipts.show', $receipt))
+            ->assertOk()
+            ->assertDontSee('Pico 1');
     }
 
     public function test_client_cannot_access_ti_auto_excel_receipt_import(): void

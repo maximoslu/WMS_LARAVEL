@@ -82,7 +82,7 @@ class TiAutoGoodsReceiptExcelImportService
                     'quantity_units' => $line['quantity_units'],
                     'units_per_pallet' => $line['units_per_pallet'],
                     'pallet_count' => $line['pallet_count'],
-                    'pico_units' => 0,
+                    'pico_units' => null,
                     'notes' => $this->lineNotes($line),
                 ]);
             }
