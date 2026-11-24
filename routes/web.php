@@ -32,6 +32,7 @@ use App\Http\Controllers\StockImportController;
 use App\Http\Controllers\StockInventoryController;
 use App\Http\Controllers\StockRelocationController;
 use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\TiAutoGoodsReceiptExcelImportController;
 use App\Http\Controllers\Traceability\ActivityHeartbeatController;
 use App\Http\Controllers\Traceability\BusinessAuditLogController;
 use App\Http\Controllers\Traceability\ClientInventoryAnalyticsController;
@@ -349,6 +350,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/entradas/crear', [GoodsReceiptController::class, 'create'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.create');
+    Route::get('/entradas/excel-ti-auto', [TiAutoGoodsReceiptExcelImportController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.ti-auto-excel.create');
+    Route::post('/entradas/excel-ti-auto', [TiAutoGoodsReceiptExcelImportController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('goods-receipts.ti-auto-excel.store');
     Route::post('/entradas', [GoodsReceiptController::class, 'store'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('goods-receipts.store');

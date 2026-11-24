@@ -70,6 +70,7 @@
 
                 <div class="wms-row-actions goods-receipts-header-actions">
                     <a href="{{ route('suppliers.index') }}" class="button-secondary compact-button btn-compact">Proveedores</a>
+                    <a href="{{ route('goods-receipts.ti-auto-excel.create') }}" class="button-secondary compact-button btn-compact">Entrada desde Excel</a>
                     <a href="{{ route('goods-receipts.create') }}" class="button-primary compact-button btn-compact wms-list-primary-action">Nueva entrada</a>
                 </div>
             </div>
