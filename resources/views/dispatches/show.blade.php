@@ -327,7 +327,7 @@
                             <span class="wms-line-type-pill wms-line-type-pill--peak">PARA RELLENAR CAMION</span>
                         @endif
                         <span>{{ method_exists($requestedLine, 'unitsLabel') ? $requestedLine->unitsLabel() : number_format($requestedLine->units_per_pallet ?? 0, 0, ',', '.').' uds/pallet' }}</span>
-                        <span>{{ $requestedLine->lot ? 'Lote '.$requestedLine->lot : 'NO LOTE' }}</span>
+                        <span>{{ str_contains((string) $requestedLine->notes, 'LOTE NO DETALLADO') ? 'LOTE PENDIENTE DE IDENTIFICAR' : ($requestedLine->lot ? 'Lote '.$requestedLine->lot : 'NO LOTE') }}</span>
                         @if (filled($requestedLine->notes))
                             <span>{{ $requestedLine->notes }}</span>
                         @endif
@@ -404,7 +404,7 @@
                                 <span>{{ $line->requiredUnitsLabel() }}</span>
                             @endif
                             <span>{{ $line->unitsLabel() }}</span>
-                            <span>{{ $line->lot ? 'Lote '.$line->lot : 'NO LOTE' }}</span>
+                            <span>{{ str_contains((string) $line->notes, 'LOTE NO DETALLADO') ? 'LOTE PENDIENTE DE IDENTIFICAR' : ($line->lot ? 'Lote '.$line->lot : 'NO LOTE') }}</span>
                             @if (filled($line->notes))
                                 <span>{{ $line->notes }}</span>
                             @endif

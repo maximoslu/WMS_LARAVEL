@@ -24,7 +24,7 @@
         </section>
 
         <section class="surface-card compact-card goods-receipt-form-card">
-            <div class="wms-inline-note">El primer cuadro determina las cantidades. El segundo asigna los lotes de POPURRÍ: <strong>no se suma otra vez</strong>. Revisa las partidas de stock y la carga real antes de emitir el albarán.</div>
+            <div class="wms-inline-note">El primer cuadro determina las cantidades. El segundo detalla los lotes de la columna indicada, sin duplicar el pedido. Si faltan lotes en ese desglose, las unidades restantes quedarán marcadas para revisión en el borrador.</div>
             <form method="POST" action="{{ route('dispatches.ti-auto-word.store') }}" enctype="multipart/form-data" class="goods-receipt-form">
                 @csrf
                 <label class="auth-field">

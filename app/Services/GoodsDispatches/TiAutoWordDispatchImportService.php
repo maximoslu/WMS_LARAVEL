@@ -31,12 +31,16 @@ class TiAutoWordDispatchImportService
         }
 
         return DB::transaction(function () use ($client, $file, $user, $lines, $items): GoodsDispatch {
+            $missingLotLines = array_filter($lines, fn (array $line): bool => ! empty($line['missing_lot_detail']));
+            $reviewNotice = count($missingLotLines) > 0
+                ? ' ATENCIÓN: '.count($missingLotLines).' referencia(s) tienen '.number_format(array_sum(array_column($missingLotLines, 'units')), 0, ',', '.').' uds sin desglose de lote en el Word. Identificar antes de cargar.'
+                : '';
             $dispatch = GoodsDispatch::query()->create([
                 'client_id' => $client->id,
                 'type' => GoodsDispatch::TYPE_MANUAL,
                 'status' => GoodsDispatch::STATUS_DRAFT,
                 'created_by' => $user->id,
-                'notes' => 'Pedido TI Auto importado de '.basename($file->getClientOriginalName()).'. Revisar cantidades, lotes y partidas antes de confirmar la carga.',
+                'notes' => 'Pedido TI Auto importado de '.basename($file->getClientOriginalName()).'. Revisar cantidades, lotes y partidas antes de confirmar la carga.'.$reviewNotice,
             ]);
 
             foreach ($lines as $line) {
@@ -54,7 +58,9 @@ class TiAutoWordDispatchImportService
                     'requested_peaks' => 0,
                     'loaded_pallets' => 0,
                     'loaded_partial_units' => 0,
-                    'notes' => 'Columna del pedido: '.$line['source'],
+                    'notes' => ! empty($line['missing_lot_detail'])
+                        ? 'Columna del pedido: '.$line['source'].' · LOTE NO DETALLADO EN EL WORD: revisar '.number_format($line['units'], 0, ',', '.').' uds antes de cargar'
+                        : 'Columna del pedido: '.$line['source'],
                 ]);
             }
 
@@ -62,7 +68,7 @@ class TiAutoWordDispatchImportService
         });
     }
 
-    /** @return list<array{sku:string,source:string,lot:?string,units:int}> */
+    /** @return list<array{sku:string,source:string,lot:?string,units:int,missing_lot_detail?:bool}> */
     private function parse(string $path): array
     {
         $zip = new ZipArchive;
@@ -131,8 +137,16 @@ class TiAutoWordDispatchImportService
         $lines = [];
         $detailedTotals = [];
         $currentSku = null;
-        foreach (array_slice($detail, 1, -1) as $row) {
+        $detailFooter = null;
+        foreach (array_slice($detail, 1) as $row) {
             $label = trim($row[0] ?? '');
+            if ($label === '' && trim($row[1] ?? '') === '') {
+                continue;
+            }
+            if (mb_strtolower($label) === 'total general') {
+                $detailFooter = $this->integer($row[1] ?? '');
+                break;
+            }
             $quantity = $this->integer($row[1] ?? '');
             if (isset($requested[mb_strtoupper($label)])) {
                 $currentSku = mb_strtoupper($label);
@@ -148,8 +162,12 @@ class TiAutoWordDispatchImportService
             $detailedTotals[$currentSku] = ($detailedTotals[$currentSku] ?? 0) + $quantity;
         }
         foreach ($requested as $sku => $bySource) {
-            if (isset($bySource[$detailSource]) && ($detailedTotals[$sku] ?? 0) !== $bySource[$detailSource]) {
-                throw $this->invalid("Los lotes de {$sku} no suman la cantidad solicitada.");
+            $missing = ($bySource[$detailSource] ?? 0) - ($detailedTotals[$sku] ?? 0);
+            if ($missing < 0) {
+                throw $this->invalid("Los lotes de {$sku} superan la cantidad solicitada.");
+            }
+            if ($missing > 0) {
+                $lines[] = ['sku' => $sku, 'source' => $detailSource, 'lot' => null, 'units' => $missing, 'missing_lot_detail' => true];
             }
             foreach ($bySource as $source => $units) {
                 if ($source !== $detailSource) {
@@ -157,7 +175,7 @@ class TiAutoWordDispatchImportService
                 }
             }
         }
-        if (array_sum($detailedTotals) !== $this->integer(end($detail)[1] ?? '') || count($lines) > 500) {
+        if (($detailFooter !== null && array_sum($detailedTotals) !== $detailFooter) || count($lines) > 500) {
             throw $this->invalid('El desglose de lotes no cuadra o supera 500 líneas.');
         }
 

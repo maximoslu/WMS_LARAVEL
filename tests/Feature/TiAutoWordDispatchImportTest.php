@@ -48,7 +48,7 @@ class TiAutoWordDispatchImportTest extends TestCase
         Client::factory()->create(['code' => 'TIAUTO']);
         $file = $this->word(
             [['Etiquetas de fila', 'POPURRI', 'Total general'], ['REF1', '49', '49'], ['Total general', '49', '49']],
-            [['Etiquetas de fila', 'POPURRI', 'Total general'], ['REF1', '49', '49'], ['TR001', '28', '28'], ['Total general', '49', '49']],
+            [['Etiquetas de fila', 'POPURRI', 'Total general'], ['REF1', '49', '49'], ['TR001', '60', '60'], ['Total general', '60', '60']],
         );
 
         $this->expectException(\Illuminate\Validation\ValidationException::class);
@@ -57,6 +57,27 @@ class TiAutoWordDispatchImportTest extends TestCase
         } finally {
             $this->assertDatabaseCount('goods_dispatches', 0);
         }
+    }
+
+    public function test_missing_lot_rows_and_missing_detail_footer_create_a_flagged_draft(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $client = Client::factory()->create(['code' => 'TIAUTO']);
+        Item::factory()->create(['client_id' => $client->id, 'sku' => 'REF1']);
+        Item::factory()->create(['client_id' => $client->id, 'sku' => 'REF2']);
+        $user = $this->warehouseUser();
+
+        $dispatch = app(TiAutoWordDispatchImportService::class)->createDraft($this->word(
+            [['Etiquetas de fila', 'POPURRI', 'Total general'], ['REF1', '49', '49'], ['REF2', '320', '320'], ['Total general', '369', '369']],
+            [['Etiquetas de fila', 'POPURRI', 'Total general'], ['REF1', '49', '49'], ['TR001', '28', '28'], ['TR002', '21', '21'], ['', '', '']],
+        ), $user);
+
+        $this->assertSame(369, $dispatch->lines()->sum('requested_units'));
+        $this->assertSame(3, $dispatch->lines()->count());
+        $this->assertStringContainsString('320 uds sin desglose de lote', $dispatch->notes);
+        $this->assertDatabaseHas('goods_dispatch_lines', ['goods_dispatch_id' => $dispatch->id, 'sku' => 'REF2', 'requested_units' => 320, 'lot' => 'NO LOTE']);
+        $this->actingAs($user)->get(route('dispatches.show', $dispatch))->assertOk()->assertSee('LOTE PENDIENTE DE IDENTIFICAR');
+        $this->assertDatabaseCount('inventory_movements', 0);
     }
 
     public function test_client_cannot_open_the_import_screen(): void
