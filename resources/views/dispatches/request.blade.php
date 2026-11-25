@@ -68,6 +68,13 @@
         <div class="alert alert-error">{{ $errors->first() }}</div>
     @endif
 
+    @if ($merchandiseRequest->completed_with_shortfall)
+        <div class="dispatch-inline-help">
+            <strong>Pedido cerrado con mercancía sin cargar.</strong>
+            Motivo: {{ $merchandiseRequest->remainder_close_reason }}
+        </div>
+    @endif
+
     <section class="surface-card compact-card warehouse-request-toolbar wms-detail-header wms-load-header">
         <div class="warehouse-request-identity">
             <small>Pedido {{ $merchandiseRequest->referenceCode() }}</small>

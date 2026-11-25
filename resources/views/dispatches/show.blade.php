@@ -48,6 +48,13 @@
         <div class="alert alert-error">{{ $errors->first() }}</div>
     @endif
 
+    @if ($dispatch->merchandiseRequest?->completed_with_shortfall)
+        <div class="dispatch-inline-help">
+            <strong>Pedido cerrado con mercancía sin cargar.</strong>
+            Motivo: {{ $dispatch->merchandiseRequest->remainder_close_reason }}
+        </div>
+    @endif
+
     <section class="surface-card compact-card wms-detail-header wms-dispatch-detail-header">
         <div class="wms-detail-header-main">
             <div class="order-header-main wms-dispatch-title-block">
@@ -109,7 +116,9 @@
                     Imprimir albaran
                 </a>
             @endif
-            @if ($dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT)
+            @if ($dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT && $pendingRequestUnits > 0 && ! $dispatch->merchandiseRequest?->completed_with_shortfall)
+                <a href="#cierre-pedido" class="button-primary compact-button btn-compact">Resolver resto del pedido</a>
+            @elseif ($dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT)
                 <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}">
                     @csrf
                     @method('PATCH')
@@ -204,25 +213,52 @@
             </div>
 
             <div class="wms-action-grid">
-                <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}" class="wms-action-card">
-                    @csrf
-                    @method('PATCH')
-                    <strong>Cambiar estado</strong>
-                    <p>Solo podrás enviar o completar cuando la carga real quede confirmada.</p>
+                @if ($dispatch->status === \App\Models\GoodsDispatch::STATUS_SENT && $pendingRequestUnits > 0 && ! $dispatch->merchandiseRequest?->completed_with_shortfall)
+                    <div class="wms-action-card wms-dispatch-remainder" id="cierre-pedido">
+                        <strong>Resolver resto del pedido</strong>
+                        <p>Quedan {{ number_format($pendingRequestUnits, 0, ',', '.') }} unidades sin cargar. La salida y su albarán conservarán las cantidades realmente enviadas.</p>
 
-                    <label class="auth-field">
-                        <span>Nuevo estado</span>
-                        <select name="status" class="auth-input">
-                            @foreach (\App\Models\GoodsDispatch::statusOptions() as $status => $label)
-                                @if (! ($dispatch->merchandise_request_id && $status === \App\Models\GoodsDispatch::STATUS_DRAFT))
-                                    <option value="{{ $status }}" @selected($dispatch->status === $status)>{{ $label }}</option>
-                                @endif
-                            @endforeach
-                        </select>
-                    </label>
+                        <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}" class="wms-dispatch-remainder-form">
+                            @csrf
+                            @method('PATCH')
+                            <input type="hidden" name="status" value="{{ \App\Models\GoodsDispatch::STATUS_COMPLETED }}">
+                            <input type="hidden" name="completion_mode" value="leave_pending">
+                            <button type="submit" class="button-secondary compact-button btn-compact">Completar esta salida y dejar el resto pendiente</button>
+                        </form>
 
-                    <button type="submit" class="button-primary compact-button btn-compact">Guardar estado</button>
-                </form>
+                        <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}" class="wms-dispatch-remainder-form">
+                            @csrf
+                            @method('PATCH')
+                            <input type="hidden" name="status" value="{{ \App\Models\GoodsDispatch::STATUS_COMPLETED }}">
+                            <input type="hidden" name="completion_mode" value="close_remainder">
+                            <label class="auth-field">
+                                <span>Motivo para cancelar el resto del pedido</span>
+                                <textarea name="remainder_close_reason" class="auth-input" rows="2" maxlength="2000" required placeholder="Por ejemplo: referencia solicitada por error">{{ old('remainder_close_reason') }}</textarea>
+                            </label>
+                            <button type="submit" class="button-primary compact-button btn-compact" onclick="return confirm('Se completará la salida y se cancelará el resto del pedido con el motivo indicado. ¿Continuar?')">Completar y cancelar el resto</button>
+                        </form>
+                    </div>
+                @else
+                    <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}" class="wms-action-card" id="cierre-pedido">
+                        @csrf
+                        @method('PATCH')
+                        <strong>Cambiar estado</strong>
+                        <p>Solo podrás enviar o completar cuando la carga real quede confirmada.</p>
+
+                        <label class="auth-field">
+                            <span>Nuevo estado</span>
+                            <select name="status" class="auth-input">
+                                @foreach (\App\Models\GoodsDispatch::statusOptions() as $status => $label)
+                                    @if (! ($dispatch->merchandise_request_id && $status === \App\Models\GoodsDispatch::STATUS_DRAFT))
+                                        <option value="{{ $status }}" @selected($dispatch->status === $status)>{{ $label }}</option>
+                                    @endif
+                                @endforeach
+                            </select>
+                        </label>
+
+                        <button type="submit" class="button-primary compact-button btn-compact">Guardar estado</button>
+                    </form>
+                @endif
 
                 <div class="wms-action-card">
                     <strong>Accesos rápidos</strong>

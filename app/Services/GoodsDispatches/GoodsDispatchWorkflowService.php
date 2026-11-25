@@ -439,7 +439,11 @@ class GoodsDispatchWorkflowService
                 if (in_array($newStatus, [MerchandiseRequest::STATUS_SENT, MerchandiseRequest::STATUS_COMPLETED], true)) {
                     $fulfillment = $this->fulfillmentService->summary($merchandiseRequest, $lockedDispatch);
 
-                    if ($fulfillment['has_pending_after_current']) {
+                    if ($fulfillment['has_pending_after_current'] && ! (
+                        $newStatus === MerchandiseRequest::STATUS_COMPLETED
+                        && $merchandiseRequest->status === MerchandiseRequest::STATUS_COMPLETED
+                        && $merchandiseRequest->completed_with_shortfall
+                    )) {
                         if ($completionMode === 'leave_pending') {
                             $requestPayload['status'] = MerchandiseRequest::STATUS_PARTIALLY_FULFILLED;
                         } elseif ($completionMode === 'close_remainder') {

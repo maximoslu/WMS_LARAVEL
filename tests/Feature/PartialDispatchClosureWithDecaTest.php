@@ -145,6 +145,182 @@ class PartialDispatchClosureWithDecaTest extends TestCase
         $this->assertSame(2000, (int) $stock->fresh()->quantity_units);
     }
 
+    public function test_sent_partial_dispatch_can_close_the_mistaken_remainder_with_a_reason_without_changing_stock_or_deca(): void
+    {
+        [$stock, $request] = $this->createEdelvivesRequest(2);
+        $wrongItem = Item::factory()->create([
+            'client_id' => $request->client_id,
+            'sku' => 'REFERENCIA-PEDIDA-POR-ERROR',
+            'units_per_pallet' => 100,
+        ]);
+        $wrongStock = StockPallet::factory()->create([
+            'client_id' => $request->client_id,
+            'item_id' => $wrongItem->id,
+            'units_per_pallet' => 100,
+            'quantity_units' => 100,
+            'full_pallets' => 1,
+            'warehouse_pallets' => 1,
+            'peak_1' => 0,
+        ]);
+        $request->lines()->create([
+            'item_id' => $wrongItem->id,
+            'stock_pallet_id' => $wrongStock->id,
+            'line_type' => 'pallet',
+            'units_per_pallet' => 100,
+            'requested_pallets' => 1,
+            'requested_units' => 100,
+        ]);
+        $dispatch = $this->generateDispatch($request);
+        $line = $dispatch->lines()->where('item_id', $stock->item_id)->firstOrFail();
+        $wrongLine = $dispatch->lines()->where('item_id', $wrongItem->id)->firstOrFail();
+
+        $this->actingAs($this->warehouseUser)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'finalize_dispatch' => '1',
+                'completion_mode' => 'leave_pending',
+                'transport_mode' => 'monge',
+                'transport' => [
+                    'carrier_key' => 'monge',
+                    'weight_kg' => '1000',
+                    'tractor_plate' => '1933MYN',
+                    'transport_date' => today()->toDateString(),
+                    'articulated' => '0',
+                    'special_authorization' => '0',
+                ],
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'item_id' => $line->item_id,
+                        'line_type' => 'pallet',
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 1,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                    'line_'.$wrongLine->id => [
+                        'line_id' => $wrongLine->id,
+                        'item_id' => $wrongItem->id,
+                        'line_type' => 'pallet',
+                        'loaded_pallets' => 0,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [],
+                    ],
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $sent = $dispatch->fresh();
+        $decaId = $sent->deca_document_id;
+        $stockUnits = $stock->fresh()->quantity_units;
+        $wrongStockUnits = $wrongStock->fresh()->quantity_units;
+        $this->assertNotNull($decaId);
+        $this->assertSame(MerchandiseRequest::STATUS_PARTIALLY_FULFILLED, $request->fresh()->status);
+
+        $this->actingAs($this->warehouseUser)
+            ->get(route('dispatches.show', $sent))
+            ->assertOk()
+            ->assertSeeText('Resolver resto del pedido')
+            ->assertSeeText('Completar y cancelar el resto')
+            ->assertSee('name="completion_mode" value="close_remainder"', false);
+
+        $this->actingAs($this->warehouseUser)
+            ->patch(route('dispatches.update-status', $sent), [
+                'status' => GoodsDispatch::STATUS_COMPLETED,
+                'completion_mode' => 'close_remainder',
+            ])
+            ->assertSessionHasErrors('remainder_close_reason');
+
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $dispatch->fresh()->status);
+        $this->assertSame($stockUnits, $stock->fresh()->quantity_units);
+
+        $this->actingAs($this->warehouseUser)
+            ->patch(route('dispatches.update-status', $sent), [
+                'status' => GoodsDispatch::STATUS_COMPLETED,
+                'completion_mode' => 'close_remainder',
+                'remainder_close_reason' => 'Referencia incluida por error en el pedido.',
+            ])
+            ->assertRedirect(route('dispatches.show', $dispatch))
+            ->assertSessionHasNoErrors();
+
+        $closed = $request->fresh('lines');
+        $this->assertSame(GoodsDispatch::STATUS_COMPLETED, $dispatch->fresh()->status);
+        $this->assertSame($decaId, $dispatch->fresh()->deca_document_id);
+        $this->assertSame($stockUnits, $stock->fresh()->quantity_units);
+        $this->assertSame($wrongStockUnits, $wrongStock->fresh()->quantity_units);
+        $this->assertSame(MerchandiseRequest::STATUS_COMPLETED, $closed->status);
+        $this->assertTrue($closed->completed_with_shortfall);
+        $this->assertSame('Referencia incluida por error en el pedido.', $closed->remainder_close_reason);
+        $this->assertSame(300, $closed->remainder_close_snapshot['target_units']);
+        $this->assertSame(100, $closed->remainder_close_snapshot['served_units']);
+        $this->assertSame(200, $closed->remainder_close_snapshot['unserved_units']);
+        $this->assertSame(3, $closed->requestedPalletsCount());
+    }
+
+    public function test_completing_a_sent_dispatch_preserves_a_remainder_already_closed_when_it_was_sent(): void
+    {
+        [$stock, $request] = $this->createEdelvivesRequest(2);
+        $dispatch = $this->generateDispatch($request);
+        $line = $dispatch->lines()->firstOrFail();
+
+        $this->actingAs($this->warehouseUser)
+            ->patch(route('dispatches.confirm-loading', $dispatch), [
+                'finalize_dispatch' => '1',
+                'completion_mode' => 'close_remainder',
+                'remainder_close_reason' => 'Una referencia fue pedida por error.',
+                'transport_mode' => 'monge',
+                'transport' => [
+                    'carrier_key' => 'monge',
+                    'weight_kg' => '1000',
+                    'tractor_plate' => '1933MYN',
+                    'transport_date' => today()->toDateString(),
+                    'articulated' => '0',
+                    'special_authorization' => '0',
+                ],
+                'lines' => [
+                    'line_'.$line->id => [
+                        'line_id' => $line->id,
+                        'item_id' => $line->item_id,
+                        'line_type' => 'pallet',
+                        'loaded_pallets' => 1,
+                        'loaded_partial_units' => 0,
+                        'allocations' => [[
+                            'stock_pallet_id' => $stock->id,
+                            'loaded_pallets' => 1,
+                            'loaded_partial_units' => 0,
+                        ]],
+                    ],
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $sent = $dispatch->fresh();
+        $decaId = $sent->deca_document_id;
+        $stockUnits = $stock->fresh()->quantity_units;
+        $snapshot = $request->fresh()->remainder_close_snapshot;
+
+        $this->actingAs($this->warehouseUser)
+            ->get(route('dispatches.show', $sent))
+            ->assertOk()
+            ->assertSeeText('Pedido cerrado con mercancía sin cargar')
+            ->assertSeeText('Una referencia fue pedida por error')
+            ->assertSeeText('Marcar como completado');
+
+        $this->actingAs($this->warehouseUser)
+            ->patch(route('dispatches.update-status', $sent), ['status' => GoodsDispatch::STATUS_COMPLETED])
+            ->assertRedirect(route('dispatches.show', $sent))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(GoodsDispatch::STATUS_COMPLETED, $dispatch->fresh()->status);
+        $this->assertSame(MerchandiseRequest::STATUS_COMPLETED, $request->fresh()->status);
+        $this->assertSame('Una referencia fue pedida por error.', $request->fresh()->remainder_close_reason);
+        $this->assertSame($snapshot, $request->fresh()->remainder_close_snapshot);
+        $this->assertSame($decaId, $dispatch->fresh()->deca_document_id);
+        $this->assertSame($stockUnits, $stock->fresh()->quantity_units);
+    }
+
     /**
      * @return array{StockPallet, MerchandiseRequest}
      */

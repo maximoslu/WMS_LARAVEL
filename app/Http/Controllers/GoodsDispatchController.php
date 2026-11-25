@@ -364,8 +364,11 @@ class GoodsDispatchController extends Controller
             ->with('status', 'Salida generada desde la solicitud correctamente.');
     }
 
-    public function show(Request $request, GoodsDispatch $goodsDispatch): View
-    {
+    public function show(
+        Request $request,
+        GoodsDispatch $goodsDispatch,
+        MerchandiseRequestFulfillmentService $fulfillmentService,
+    ): View {
         $goodsDispatch->load([
             'client',
             'creator',
@@ -380,6 +383,9 @@ class GoodsDispatchController extends Controller
 
         return view('dispatches.show', [
             'dispatch' => $goodsDispatch,
+            'pendingRequestUnits' => $goodsDispatch->merchandiseRequest
+                ? $fulfillmentService->summary($goodsDispatch->merchandiseRequest, $goodsDispatch)['pending_units_after_current']
+                : 0,
             'searchEndpoint' => route('ajax.stock-variants'),
             'navigationSections' => WmsNavigation::sectionsForUser($request->user()),
         ]);
@@ -462,13 +468,21 @@ class GoodsDispatchController extends Controller
     ): RedirectResponse {
         $validated = $request->validate([
             'status' => ['required', Rule::in(GoodsDispatch::statuses())],
+            'completion_mode' => ['nullable', Rule::in(['leave_pending', 'close_remainder'])],
+            'remainder_close_reason' => ['nullable', 'string', 'max:2000'],
         ]);
 
         if ($goodsDispatch->status === $validated['status']) {
             return back()->with('status', 'La salida ya estaba en ese estado.');
         }
 
-        $warning = $workflowService->changeStatus($goodsDispatch, $validated['status'], $request->user());
+        $warning = $workflowService->changeStatus(
+            $goodsDispatch,
+            $validated['status'],
+            $request->user(),
+            $validated['completion_mode'] ?? null,
+            $validated['remainder_close_reason'] ?? null,
+        );
 
         $statusMessage = $validated['status'] === GoodsDispatch::STATUS_SENT
             ? 'Salida enviada y stock actualizado correctamente.'

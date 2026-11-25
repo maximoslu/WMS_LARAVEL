@@ -15301,6 +15301,19 @@ body.brand-body.app-shell-body .wms-dispatch-detail .wms-action-card {
     overflow: hidden;
 }
 
+body.brand-body.app-shell-body .wms-dispatch-remainder-form {
+    display: grid;
+    gap: 0.6rem;
+    min-width: 0;
+    margin: 0;
+}
+
+body.brand-body.app-shell-body .wms-dispatch-remainder-form .button-primary,
+body.brand-body.app-shell-body .wms-dispatch-remainder-form .button-secondary {
+    width: 100%;
+    white-space: normal;
+}
+
 body.brand-body.app-shell-body .wms-dispatch-detail .wms-action-card > p,
 body.brand-body.app-shell-body .wms-dispatch-detail .wms-action-card > strong,
 body.brand-body.app-shell-body .wms-dispatch-detail .wms-action-card .status-chip,
