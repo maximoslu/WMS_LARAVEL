@@ -47,6 +47,7 @@
                 <a href="{{ route('dispatches.create') }}" class="button-primary compact-button btn-compact wms-list-primary-action">
                     Crear salida manual
                 </a>
+                <a href="{{ route('dispatches.ti-auto-word.create') }}" class="button-secondary compact-button btn-compact">Salida desde Word · TI Auto</a>
             </div>
         </section>
 

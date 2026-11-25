@@ -328,6 +328,9 @@
                         @endif
                         <span>{{ method_exists($requestedLine, 'unitsLabel') ? $requestedLine->unitsLabel() : number_format($requestedLine->units_per_pallet ?? 0, 0, ',', '.').' uds/pallet' }}</span>
                         <span>{{ $requestedLine->lot ? 'Lote '.$requestedLine->lot : 'NO LOTE' }}</span>
+                        @if (filled($requestedLine->notes))
+                            <span>{{ $requestedLine->notes }}</span>
+                        @endif
                         @if ($requestedLine->stockPallet?->location_text ?? false)
                             <span>Ubicación {{ $requestedLine->stockPallet->location_text }}</span>
                         @endif
@@ -402,6 +405,9 @@
                             @endif
                             <span>{{ $line->unitsLabel() }}</span>
                             <span>{{ $line->lot ? 'Lote '.$line->lot : 'NO LOTE' }}</span>
+                            @if (filled($line->notes))
+                                <span>{{ $line->notes }}</span>
+                            @endif
                         </div>
 
                         @include('dispatches.partials.picking-locations', ['line' => $line])

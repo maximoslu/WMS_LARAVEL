@@ -33,6 +33,7 @@ use App\Http\Controllers\StockInventoryController;
 use App\Http\Controllers\StockRelocationController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\TiAutoGoodsReceiptExcelImportController;
+use App\Http\Controllers\TiAutoWordDispatchImportController;
 use App\Http\Controllers\Traceability\ActivityHeartbeatController;
 use App\Http\Controllers\Traceability\BusinessAuditLogController;
 use App\Http\Controllers\Traceability\ClientInventoryAnalyticsController;
@@ -471,6 +472,12 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/salidas/crear', [GoodsDispatchController::class, 'create'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.create');
+    Route::get('/salidas/word-ti-auto', [TiAutoWordDispatchImportController::class, 'create'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.ti-auto-word.create');
+    Route::post('/salidas/word-ti-auto', [TiAutoWordDispatchImportController::class, 'store'])
+        ->middleware('minimum.role:'.Role::ALMACEN)
+        ->name('dispatches.ti-auto-word.store');
     Route::post('/salidas', [GoodsDispatchController::class, 'store'])
         ->middleware('minimum.role:'.Role::ALMACEN)
         ->name('dispatches.store');
