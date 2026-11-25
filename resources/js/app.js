@@ -19,10 +19,15 @@ const setupAppDrawer = () => {
         return;
     }
 
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const sections = drawer.querySelectorAll('.ops-nav-section');
+
     const syncState = (isOpen) => {
+        isOpen = isOpen && !desktop.matches;
         body.classList.toggle('drawer-open', isOpen);
         drawer.classList.toggle('is-open', isOpen);
-        drawer.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        drawer.setAttribute('aria-hidden', desktop.matches || isOpen ? 'false' : 'true');
+        drawer.inert = !desktop.matches && !isOpen;
 
         if (backdrop) {
             backdrop.hidden = !isOpen;
@@ -53,14 +58,17 @@ const setupAppDrawer = () => {
         }
     });
 
-    window.addEventListener('resize', () => {
-        if (window.innerWidth >= 1280 && body.classList.contains('drawer-open')) {
-            closeDrawer();
-        }
-    });
+    const syncViewport = () => {
+        sections.forEach((section) => {
+            section.open = desktop.matches || section.classList.contains('is-active-section');
+        });
+        closeDrawer();
+    };
+
+    desktop.addEventListener('change', syncViewport);
 
     body.dataset.drawerBound = 'true';
-    syncState(false);
+    syncViewport();
 };
 
 const parseJsonNode = (selector, scope = document) => {
