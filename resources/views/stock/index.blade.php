@@ -389,7 +389,12 @@
                                         @endif
                                     </td>
                                 @endif
-                                <td class="stock-total stock-table-number">{{ number_format($row['quantity_units'], 0, ',', '.') }}</td>
+                                <td class="stock-total stock-table-number">
+                                    {{ number_format($row['quantity_units'], 0, ',', '.') }}
+                                    @if ($row['has_deficit'])
+                                        <span class="stock-deficit-badge">Déficit por revisar</span>
+                                    @endif
+                                </td>
                                 @unless ($isClient)
                                     <td class="stock-table-center">{{ number_format($row['warehouse_pallets'], 2, ',', '.') }}</td>
                                     <td class="stock-table-center">
@@ -543,7 +548,7 @@
                             <span>{{ $row['lot_label'] }}</span>
                         </div>
                         <span class="stock-mobile-summary-meta">
-                            @if ($isClient)
+                            @if ($isClient && ! $row['has_deficit'])
                                 {{ number_format($row['total_pallets'], 0, ',', '.') }} palés
                             @else
                                 {{ number_format($row['quantity_units'], 0, ',', '.') }} uds
@@ -552,6 +557,10 @@
                     </summary>
 
                     <p>{{ $row['description'] }}</p>
+
+                    @if ($row['has_deficit'])
+                        <span class="stock-deficit-badge">Déficit por revisar</span>
+                    @endif
 
                     @if ($isClient)
                         <span class="stock-client-state stock-client-state--{{ $row['client_status'] }}">{{ $row['client_status_label'] }}</span>

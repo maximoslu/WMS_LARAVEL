@@ -6,9 +6,11 @@ use App\Models\GoodsDispatch;
 use App\Models\GoodsDispatchLine;
 use App\Models\GoodsDispatchLineAllocation;
 use App\Models\InventoryMovement;
+use App\Models\Item;
 use App\Models\StockPallet;
 use App\Models\User;
 use App\Services\Inventory\InventoryMovementService;
+use App\Support\Stock\LotNormalizer;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -78,19 +80,22 @@ class StockDispatchAllocationService
         $this->guardSameClient($dispatch, $stockPallet);
         $before = $this->movements->snapshot($stockPallet);
 
+        $availablePallets = min($loadedPallets, max(0, (int) $stockPallet->full_pallets));
+        $missingPallets = $loadedPallets - $availablePallets;
+        $unitsPerPallet = (int) ($allocation->units_per_pallet ?: $stockPallet->units_per_pallet ?: $line->units_per_pallet);
+
         if ($loadedPallets > 0) {
-            if ((int) $stockPallet->full_pallets < $loadedPallets) {
-                throw $this->insufficientStockError($line);
-            }
-
-            $unitsPerPallet = (int) ($stockPallet->units_per_pallet ?: $line->units_per_pallet);
-            $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - ($loadedPallets * $unitsPerPallet));
-            $this->decrementWarehousePallets($stockPallet, $loadedPallets);
+            $this->guardUnitsPerPallet($line, $unitsPerPallet);
         }
 
-        if ($loadedPartialUnits > 0) {
-            $this->applyPartialUnitsToStockPallet($stockPallet, $line, $loadedPartialUnits, $allocation->selectedPeakUnitsByIndex(), $loadedPallets);
+        if ($availablePallets > 0) {
+            $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - ($availablePallets * $unitsPerPallet));
+            $this->decrementWarehousePallets($stockPallet, $availablePallets);
         }
+
+        $missingPartialUnits = $loadedPartialUnits > 0
+            ? $this->applyPartialUnitsToStockPallet($stockPallet, $line, $loadedPartialUnits, $allocation->selectedPeakUnitsByIndex(), $availablePallets)
+            : 0;
 
         $stockPallet->save();
         $this->recordDispatchMovement(
@@ -103,6 +108,11 @@ class StockDispatchAllocationService
             "allocation:{$allocation->id}",
             ['allocation_id' => $allocation->id],
         );
+
+        $this->recordStockDeficit(
+            $dispatch, $line, ($missingPallets * $unitsPerPallet) + $missingPartialUnits,
+            $missingPallets, $stockPallet->lot, $user, $correlationId, "allocation:{$allocation->id}:deficit",
+        );
     }
 
     private function applyPartialUnits(
@@ -113,7 +123,9 @@ class StockDispatchAllocationService
         string $correlationId,
     ): void {
         if ($line->stock_pallet_id === null) {
-            throw $this->unresolvedStockError($line);
+            $this->recordStockDeficit($dispatch, $line, $units, 0, $line->lot, $user, $correlationId, 'partial:deficit');
+
+            return;
         }
 
         $stockPallet = StockPallet::query()
@@ -128,7 +140,7 @@ class StockDispatchAllocationService
         $this->guardSameClient($dispatch, $stockPallet);
         $before = $this->movements->snapshot($stockPallet);
 
-        $this->applyPartialUnitsToStockPallet($stockPallet, $line, $units, [], 0);
+        $missingUnits = $this->applyPartialUnitsToStockPallet($stockPallet, $line, $units, [], 0);
 
         $stockPallet->save();
         $this->recordDispatchMovement(
@@ -140,6 +152,8 @@ class StockDispatchAllocationService
             $correlationId,
             'partial',
         );
+
+        $this->recordStockDeficit($dispatch, $line, $missingUnits, 0, $stockPallet->lot, $user, $correlationId, 'partial:deficit');
     }
 
     /**
@@ -151,7 +165,7 @@ class StockDispatchAllocationService
         int $units,
         array $selectedPeakUnitsByIndex = [],
         int $alreadyLoadedPallets = 0,
-    ): void {
+    ): int {
         $remaining = max(0, $units);
         $warehousePalletsRemoved = 0;
 
@@ -164,16 +178,16 @@ class StockDispatchAllocationService
             $availableUnits = max(0, (int) $stockPallet->{$peakField});
             $selectedUnits = max(0, (int) $selectedUnits);
 
-            if ($selectedUnits <= 0 || $availableUnits < $selectedUnits) {
-                throw $this->insufficientStockError($line);
+            if ($selectedUnits <= 0) {
+                continue;
             }
 
-            $take = min($remaining, $selectedUnits);
+            $take = min($remaining, $selectedUnits, $availableUnits);
             $stockPallet->{$peakField} = $availableUnits - $take;
             $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - $take);
             $remaining -= $take;
 
-            if ($take === $availableUnits) {
+            if ($take > 0 && $take === $availableUnits) {
                 $warehousePalletsRemoved++;
             }
         }
@@ -206,13 +220,13 @@ class StockDispatchAllocationService
 
         while ($remaining > 0) {
             if ($breakableFullPallets <= 0) {
-                throw $this->insufficientStockError($line);
+                break;
             }
 
             $unitsPerPallet = max(0, (int) ($stockPallet->units_per_pallet ?: $line->units_per_pallet));
 
             if ($unitsPerPallet <= 0) {
-                throw $this->insufficientStockError($line);
+                break;
             }
 
             $take = min($remaining, $unitsPerPallet);
@@ -228,6 +242,8 @@ class StockDispatchAllocationService
         }
 
         $this->decrementWarehousePallets($stockPallet, $warehousePalletsRemoved);
+
+        return $remaining;
     }
 
     private function applyPalletLine(
@@ -251,13 +267,11 @@ class StockDispatchAllocationService
             $this->guardSameClient($dispatch, $stockPallet);
             $before = $this->movements->snapshot($stockPallet);
 
-            if ((int) $stockPallet->full_pallets < $remaining) {
-                throw $this->insufficientStockError($line);
-            }
-
+            $availablePallets = min($remaining, max(0, (int) $stockPallet->full_pallets));
             $unitsPerPallet = (int) ($stockPallet->units_per_pallet ?: $line->units_per_pallet);
-            $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - ($remaining * $unitsPerPallet));
-            $this->decrementWarehousePallets($stockPallet, $remaining);
+            $this->guardUnitsPerPallet($line, $unitsPerPallet);
+            $stockPallet->quantity_units = max(0, (int) $stockPallet->quantity_units - ($availablePallets * $unitsPerPallet));
+            $this->decrementWarehousePallets($stockPallet, $availablePallets);
             $stockPallet->save();
             $this->recordDispatchMovement(
                 $dispatch,
@@ -269,6 +283,11 @@ class StockDispatchAllocationService
                 'pallet',
             );
 
+            $this->recordStockDeficit(
+                $dispatch, $line, ($remaining - $availablePallets) * $unitsPerPallet,
+                $remaining - $availablePallets, $stockPallet->lot, $user, $correlationId, 'pallet:deficit',
+            );
+
             return;
         }
 
@@ -278,14 +297,14 @@ class StockDispatchAllocationService
             ->where('active', true)
             ->where('status', StockPallet::STATUS_AVAILABLE)
             ->where('full_pallets', '>', 0)
+            ->when(
+                LotNormalizer::normalize($line->lot) !== LotNormalizer::NO_LOT,
+                fn ($query) => $query->where('lot', LotNormalizer::normalize($line->lot)),
+            )
             ->orderBy('received_at')
             ->orderBy('id')
             ->lockForUpdate()
             ->get();
-
-        if ((int) $batches->sum('full_pallets') < $remaining) {
-            throw $this->insufficientStockError($line);
-        }
 
         foreach ($batches as $batch) {
             if ($remaining <= 0) {
@@ -323,6 +342,15 @@ class StockDispatchAllocationService
             );
 
             $remaining -= $take;
+        }
+
+        if ($remaining > 0) {
+            $unitsPerPallet = (int) $line->units_per_pallet;
+            $this->guardUnitsPerPallet($line, $unitsPerPallet);
+            $this->recordStockDeficit(
+                $dispatch, $line, $remaining * $unitsPerPallet, $remaining,
+                $line->lot, $user, $correlationId, 'pallet:deficit',
+            );
         }
     }
 
@@ -467,6 +495,58 @@ class StockDispatchAllocationService
             user: $user,
             metadata: ['reason' => 'Reparacion del contador de pallets de almacen.'],
         );
+    }
+
+    private function recordStockDeficit(
+        GoodsDispatch $dispatch,
+        GoodsDispatchLine $line,
+        int $missingUnits,
+        int $missingPallets,
+        ?string $lot,
+        ?User $user,
+        string $correlationId,
+        string $segment,
+    ): void {
+        if ($missingUnits <= 0) {
+            return;
+        }
+
+        $clientId = Item::query()->whereKey($line->item_id)->value('client_id');
+
+        if ($clientId === null || (int) $clientId !== (int) $dispatch->client_id) {
+            throw $this->unresolvedStockError($line);
+        }
+
+        // Keep the physical batch nonnegative and show the discrepancy in its own audited balance.
+        $deficit = StockPallet::query()->create([
+            'client_id' => $dispatch->client_id,
+            'item_id' => $line->item_id,
+            'lot' => $lot,
+            'quantity_units' => 0,
+            'units_per_pallet' => max(0, (int) $line->units_per_pallet),
+            'warehouse_pallets' => 0,
+            'notes' => 'Déficit de stock generado por la salida '.$dispatch->dispatchNumber().'; revisar y regularizar.',
+            'active' => true,
+            'status' => StockPallet::STATUS_AVAILABLE,
+        ]);
+        $before = $this->movements->snapshot($deficit);
+        $deficit->quantity_units = -$missingUnits;
+        $deficit->warehouse_pallets = -$missingPallets;
+        $deficit->save();
+
+        $this->recordDispatchMovement(
+            $dispatch, $line, $deficit, $before, $user, $correlationId, $segment,
+            ['stock_deficit' => true, 'missing_units' => $missingUnits, 'missing_pallets' => $missingPallets],
+        );
+    }
+
+    private function guardUnitsPerPallet(GoodsDispatchLine $line, int $unitsPerPallet): void
+    {
+        if ($unitsPerPallet <= 0) {
+            throw ValidationException::withMessages([
+                'status' => sprintf('No se puede calcular el stock de %s sin unidades por pallet.', $this->lineLabel($line)),
+            ]);
+        }
     }
 
     private function decrementWarehousePallets(StockPallet $stockPallet, int $pallets): void

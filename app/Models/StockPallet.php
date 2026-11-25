@@ -297,6 +297,19 @@ class StockPallet extends Model
             });
     }
 
+    public function scopeWithStockOrDeficit(Builder $query): Builder
+    {
+        return $query
+            ->where('active', true)
+            ->where(function (Builder $query): void {
+                $query
+                    ->where('quantity_units', '<>', 0)
+                    ->orWhere('full_pallets', '>', 0)
+                    ->orWhere('peaks_count', '>', 0)
+                    ->orWhere('warehouse_pallets', '>', 0);
+            });
+    }
+
     public function scopeWithLocation(Builder $query): Builder
     {
         return $query->whereNotNull('location_id');

@@ -8227,6 +8227,19 @@ body.brand-body.app-shell-body .goods-receipt-workbench {
     border: 1px solid rgba(70, 93, 115, 0.12);
 }
 
+.stock-deficit-badge {
+    display: inline-flex;
+    margin-top: 0.2rem;
+    padding: 0.18rem 0.55rem;
+    border: 1px solid rgba(156, 58, 58, 0.22);
+    border-radius: 999px;
+    color: #943535;
+    background: #fbe8e8;
+    font-size: 0.7rem;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
 .stock-detail-row td {
     padding: 0;
     background: #f6fafc;

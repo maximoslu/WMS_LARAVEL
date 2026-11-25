@@ -76,7 +76,9 @@ class StockOverviewBuilder
             ->with(['item'])
             ->where('client_id', $clientId)
             ->whereHas('item')
-            ->official()
+            ->withStockOrDeficit()
+            ->whereIn('stock_category', [StockPallet::CATEGORY_IN_USE, StockPallet::CATEGORY_BLOCKED])
+            ->whereHas('item', fn (Builder $query) => $query->whereRaw("SUBSTR(sku, 1, 1) <> '_'"))
             ->orderBy('received_at')
             ->orderBy('lot')
             ->orderBy('id')
@@ -170,7 +172,7 @@ class StockOverviewBuilder
             'is_client' => $normalized['is_client'],
         ];
 
-        $stockRows = $this->stockQuery($baseFilters)
+        $stockRows = $this->stockQuery($baseFilters, includeDeficits: false)
             ->when($normalized['warehouse_id'] !== null, function (Builder $query) use ($normalized): void {
                 $query->whereHas(
                     'location',
@@ -190,7 +192,7 @@ class StockOverviewBuilder
         $zeroRows = collect();
 
         if ($normalized['stock_state'] === 'include_zero' && $normalized['batch_status'] === 'all') {
-            $zeroRows = $this->withoutStockQuery($baseFilters)
+            $zeroRows = $this->withoutStockQuery($baseFilters, includeDeficits: false)
                 ->when($normalized['warehouse_id'] !== null, function (Builder $query) use ($normalized): void {
                     $query->whereHas(
                         'defaultLocation',
@@ -305,7 +307,7 @@ class StockOverviewBuilder
     /**
      * @param  array<string, mixed>  $filters
      */
-    private function stockQuery(array $filters): Builder
+    private function stockQuery(array $filters, bool $includeDeficits = true): Builder
     {
         return StockPallet::query()
             ->with([
@@ -314,7 +316,9 @@ class StockOverviewBuilder
                 'item.defaultLocation.warehouse',
                 'location.warehouse',
             ])
-            ->withPhysicalStock()
+            ->when($includeDeficits,
+                fn (Builder $query) => $query->withStockOrDeficit(),
+                fn (Builder $query) => $query->withPhysicalStock())
             ->whereHas('item')
             ->when($filters['client_id'] !== null, fn (Builder $query) => $query->where('client_id', $filters['client_id']))
             ->when($filters['item_id'] !== null, fn (Builder $query) => $query->where('item_id', $filters['item_id']))
@@ -388,7 +392,7 @@ class StockOverviewBuilder
     /**
      * @param  array<string, mixed>  $filters
      */
-    private function withoutStockQuery(array $filters): Builder
+    private function withoutStockQuery(array $filters, bool $includeDeficits = true): Builder
     {
         return Item::query()
             ->with(['client', 'defaultLocation.warehouse'])
@@ -401,12 +405,12 @@ class StockOverviewBuilder
                         ->orWhere('description', 'like', '%'.$filters['search'].'%');
                 });
             })
-            ->whereDoesntHave('stockPallets', function (Builder $query): void {
+            ->whereDoesntHave('stockPallets', function (Builder $query) use ($includeDeficits): void {
                 $query
                     ->where('active', true)
-                    ->where(function (Builder $query): void {
+                    ->where(function (Builder $query) use ($includeDeficits): void {
                         $query
-                            ->where('quantity_units', '>', 0)
+                            ->where('quantity_units', $includeDeficits ? '<>' : '>', 0)
                             ->orWhere('full_pallets', '>', 0)
                             ->orWhere('peaks_count', '>', 0)
                             ->orWhere('warehouse_pallets', '>', 0);
@@ -527,6 +531,7 @@ class StockOverviewBuilder
             'location_label' => $this->locationLabel($pallet) ?: 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($defaultLocation),
             'quantity_units' => (int) $pallet->quantity_units,
+            'has_deficit' => (int) $pallet->quantity_units < 0,
             'units_per_pallet' => $pallet->units_per_pallet !== null
                 ? (int) $pallet->units_per_pallet
                 : (int) ($item?->units_per_pallet ?? 0),
@@ -603,6 +608,7 @@ class StockOverviewBuilder
             'location_label' => $item->defaultLocation?->code ?? 'Sin ubicacion',
             'default_location_label' => $this->defaultLocationLabel($item->defaultLocation),
             'quantity_units' => 0,
+            'has_deficit' => false,
             'units_per_pallet' => (int) $item->units_per_pallet,
             'units_per_pallet_label' => $this->unitsPerPalletLabel((int) $item->units_per_pallet),
             'full_pallets' => 0,
@@ -892,6 +898,7 @@ class StockOverviewBuilder
         return array_replace($first, [
             'id' => 'client-'.$first['item_id'].'-'.substr(sha1(($first['lot'] ?? '').'|'.$first['stock_category']), 0, 10),
             'quantity_units' => (int) $rows->sum('quantity_units'),
+            'has_deficit' => $rows->contains(fn (array $row): bool => $row['has_deficit']),
             'full_pallets' => (int) $rows->sum('full_pallets'),
             'peaks_count' => (int) $rows->sum('peaks_count'),
             'total_pallets' => (int) $rows->sum('total_pallets'),

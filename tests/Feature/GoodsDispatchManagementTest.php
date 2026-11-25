@@ -3030,7 +3030,7 @@ class GoodsDispatchManagementTest extends TestCase
         $this->assertSame(8, $stockExtra->fresh()->full_pallets);
     }
 
-    public function test_no_permite_enviar_si_no_hay_stock_suficiente(): void
+    public function test_permite_enviar_con_deficit_de_stock_trazado(): void
     {
         Bus::fake();
         $this->seedBaseData();
@@ -3067,13 +3067,15 @@ class GoodsDispatchManagementTest extends TestCase
             ->from(route('dispatches.show', $dispatch))
             ->patch(route('dispatches.update-status', $dispatch), ['status' => GoodsDispatch::STATUS_SENT])
             ->assertRedirect(route('dispatches.show', $dispatch))
-            ->assertSessionHasErrors('status');
+            ->assertSessionDoesntHaveErrors();
 
         $freshDispatch = $dispatch->fresh();
-        $this->assertSame(GoodsDispatch::STATUS_PREPARING, $freshDispatch->status);
-        $this->assertNull($freshDispatch->sent_at);
-        $this->assertNull($freshDispatch->stock_applied_at);
-        $this->assertSame(40, $stock->fresh()->quantity_units, 'Stock must not be partially deducted.');
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $freshDispatch->status);
+        $this->assertNotNull($freshDispatch->sent_at);
+        $this->assertNotNull($freshDispatch->stock_applied_at);
+        $this->assertSame(0, $stock->fresh()->quantity_units);
+        $this->assertSame(-160, StockPallet::query()->where('item_id', $item->id)
+            ->where('quantity_units', '<', 0)->sole()->quantity_units);
     }
 
     public function test_no_descuenta_stock_de_otro_cliente(): void
