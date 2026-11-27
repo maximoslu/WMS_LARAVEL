@@ -11,12 +11,41 @@ use App\Services\GoodsDispatches\TiAutoWordDispatchImportService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 use ZipArchive;
 
 class TiAutoWordDispatchImportTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_single_table_word_sums_locations_into_one_reviewable_line_per_reference(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $client = Client::factory()->create(['code' => 'TIAUTO']);
+        Item::factory()->create(['client_id' => $client->id, 'sku' => 'PMBE0001ACF73']);
+        Item::factory()->create(['client_id' => $client->id, 'sku' => 'PMBE0015ABF73']);
+        $user = $this->warehouseUser();
+
+        $file = $this->word(
+            [['Etiquetas de fila', 'POPURRI', 'R2999BDN', 'R-8046-BDG', 'Total general'],
+                ['PMBE0001ACF73', '', '480', '', '471'],
+                ['PMBE0015ABF73', '', '1.050', '672', '1722'],
+                ['', '', '', '', '2193']],
+        );
+        $this->actingAs($user)->post(route('dispatches.ti-auto-word.store'), ['word' => $file])->assertRedirect();
+        $dispatch = GoodsDispatch::query()->sole();
+
+        $this->assertSame(GoodsDispatch::STATUS_DRAFT, $dispatch->status);
+        $this->assertSame(2, $dispatch->lines()->count());
+        $this->assertSame(2202, $dispatch->lines()->sum('requested_units'));
+        $this->assertDatabaseHas('goods_dispatch_lines', ['goods_dispatch_id' => $dispatch->id, 'sku' => 'PMBE0001ACF73', 'requested_units' => 480, 'lot' => 'NO LOTE']);
+        $this->assertDatabaseHas('goods_dispatch_lines', ['goods_dispatch_id' => $dispatch->id, 'sku' => 'PMBE0015ABF73', 'requested_units' => 1722, 'lot' => 'NO LOTE']);
+        $this->assertStringContainsString('PMBE0001ACF73', $dispatch->notes);
+        $this->assertStringContainsString('total general impreso', mb_strtolower($dispatch->notes));
+        $this->assertDatabaseCount('inventory_movements', 0);
+        $this->actingAs($user)->get(route('dispatches.show', $dispatch))->assertOk()->assertSee('480 uds')->assertSee('1.722 uds');
+    }
 
     public function test_word_creates_reviewable_draft_without_duplicating_the_lot_breakdown(): void
     {
@@ -51,7 +80,7 @@ class TiAutoWordDispatchImportTest extends TestCase
             [['Etiquetas de fila', 'POPURRI', 'Total general'], ['REF1', '49', '49'], ['TR001', '60', '60'], ['Total general', '60', '60']],
         );
 
-        $this->expectException(\Illuminate\Validation\ValidationException::class);
+        $this->expectException(ValidationException::class);
         try {
             app(TiAutoWordDispatchImportService::class)->createDraft($file, $this->warehouseUser());
         } finally {
@@ -94,8 +123,8 @@ class TiAutoWordDispatchImportTest extends TestCase
         return User::factory()->create(['role_id' => Role::query()->where('slug', Role::ALMACEN)->value('id')]);
     }
 
-    /** @param list<list<string>> $general @param list<list<string>> $detail */
-    private function word(array $general, array $detail): UploadedFile
+    /** @param list<list<string>> $general @param list<list<string>>|null $detail */
+    private function word(array $general, ?array $detail = null): UploadedFile
     {
         $path = tempnam(sys_get_temp_dir(), 'ti-auto-word-');
         $zip = new ZipArchive;
@@ -103,7 +132,7 @@ class TiAutoWordDispatchImportTest extends TestCase
         $table = static function (array $rows): string {
             return '<w:tbl>'.implode('', array_map(static fn (array $row): string => '<w:tr>'.implode('', array_map(static fn (string $cell): string => '<w:tc><w:p><w:r><w:t>'.htmlspecialchars($cell, ENT_XML1).'</w:t></w:r></w:p></w:tc>', $row)).'</w:tr>', $rows)).'</w:tbl>';
         };
-        $zip->addFromString('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'.$table($general).$table($detail).'</w:body></w:document>');
+        $zip->addFromString('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'.$table($general).($detail === null ? '' : $table($detail)).'</w:body></w:document>');
         $zip->close();
         $file = UploadedFile::fake()->createWithContent('pedido.docx', file_get_contents($path));
         unlink($path);

@@ -17,14 +17,14 @@
                 <div class="goods-receipt-toolbar-main">
                     <span class="wms-list-kicker">Operaciones / Salidas</span>
                     <h2 class="goods-receipt-title">Salida desde Word · TI Auto</h2>
-                    <p>Sube el pedido de TI Auto con el cuadro general y el desglose de lotes. Se crea una salida en borrador para revisar en pantalla.</p>
+                    <p>Sube el pedido de TI Auto en Word. Se crea una salida en borrador, con una referencia y la suma de sus ubicaciones por línea, para revisarla en pantalla.</p>
                 </div>
                 <a href="{{ route('dispatches.index') }}" class="button-secondary compact-button">Volver a salidas</a>
             </div>
         </section>
 
         <section class="surface-card compact-card goods-receipt-form-card">
-            <div class="wms-inline-note">El primer cuadro determina las cantidades. El segundo detalla los lotes de la columna indicada, sin duplicar el pedido. Si faltan lotes en ese desglose, las unidades restantes quedarán marcadas para revisión en el borrador.</div>
+            <div class="wms-inline-note">Si el Word tiene un solo cuadro, se suman las cantidades de todas las ubicaciones de cada referencia. Las matrículas no se tratan como lotes ni crean líneas adicionales. Si hay un segundo cuadro con lotes, se conserva su desglose. Cualquier diferencia con los totales impresos queda señalada para revisión.</div>
             <form method="POST" action="{{ route('dispatches.ti-auto-word.store') }}" enctype="multipart/form-data" class="goods-receipt-form">
                 @csrf
                 <label class="auth-field">

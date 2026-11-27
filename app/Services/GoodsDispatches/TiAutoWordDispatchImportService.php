@@ -22,7 +22,7 @@ class TiAutoWordDispatchImportService
             throw $this->invalid('No existe un cliente TI Auto activo.');
         }
 
-        $lines = $this->parse((string) $file->getRealPath());
+        ['lines' => $lines, 'warnings' => $warnings] = $this->parse((string) $file->getRealPath());
         $items = Item::query()->where('client_id', $client->id)->whereIn('sku', array_unique(array_column($lines, 'sku')))->get()->keyBy('sku');
         foreach ($lines as $line) {
             if (! $items->get($line['sku'])?->isOperational()) {
@@ -30,21 +30,39 @@ class TiAutoWordDispatchImportService
             }
         }
 
-        return DB::transaction(function () use ($client, $file, $user, $lines, $items): GoodsDispatch {
+        return DB::transaction(function () use ($client, $file, $user, $lines, $items, $warnings): GoodsDispatch {
+            $aggregatedByReference = ($lines[0]['source'] ?? null) === 'Suma de ubicaciones del Word';
             $missingLotLines = array_filter($lines, fn (array $line): bool => ! empty($line['missing_lot_detail']));
             $reviewNotice = count($missingLotLines) > 0
                 ? ' ATENCIÓN: '.count($missingLotLines).' referencia(s) tienen '.number_format(array_sum(array_column($missingLotLines, 'units')), 0, ',', '.').' uds sin desglose de lote en el Word. Identificar antes de cargar.'
                 : '';
+            if ($warnings !== []) {
+                $reviewNotice .= ' ATENCIÓN: '.implode(' ', $warnings);
+            }
             $dispatch = GoodsDispatch::query()->create([
                 'client_id' => $client->id,
                 'type' => GoodsDispatch::TYPE_MANUAL,
                 'status' => GoodsDispatch::STATUS_DRAFT,
                 'created_by' => $user->id,
-                'notes' => 'Pedido TI Auto importado de '.basename($file->getClientOriginalName()).'. Revisar cantidades, lotes y partidas antes de confirmar la carga.'.$reviewNotice,
+                'notes' => 'Pedido TI Auto importado de '.basename($file->getClientOriginalName()).'. '
+                    .($aggregatedByReference
+                        ? 'Las cantidades son unidades totales por referencia; la distribución en palés y partidas es provisional y debe confirmarse durante la carga.'
+                        : 'Revisar cantidades, lotes y partidas antes de confirmar la carga.')
+                    .$reviewNotice,
             ]);
 
             foreach ($lines as $line) {
                 $item = $items->get($line['sku']);
+                if (isset($line['reported_units'])) {
+                    $lineNotes = 'Suma de ubicaciones del Word: '.number_format($line['units'], 0, ',', '.').' uds. Total impreso: '.number_format($line['reported_units'], 0, ',', '.').' uds; revisar discrepancia.';
+                } elseif (! empty($line['missing_lot_detail'])) {
+                    $lineNotes = 'Columna del pedido: '.$line['source'].' · LOTE NO DETALLADO EN EL WORD: revisar '.number_format($line['units'], 0, ',', '.').' uds antes de cargar';
+                } elseif ($aggregatedByReference) {
+                    $lineNotes = 'Cantidad solicitada: suma de todas las ubicaciones del Word.';
+                } else {
+                    $lineNotes = 'Columna del pedido: '.$line['source'];
+                }
+
                 $dispatch->lines()->create([
                     'item_id' => $item->id,
                     'line_type' => 'pallet',
@@ -58,9 +76,7 @@ class TiAutoWordDispatchImportService
                     'requested_peaks' => 0,
                     'loaded_pallets' => 0,
                     'loaded_partial_units' => 0,
-                    'notes' => ! empty($line['missing_lot_detail'])
-                        ? 'Columna del pedido: '.$line['source'].' · LOTE NO DETALLADO EN EL WORD: revisar '.number_format($line['units'], 0, ',', '.').' uds antes de cargar'
-                        : 'Columna del pedido: '.$line['source'],
+                    'notes' => $lineNotes,
                 ]);
             }
 
@@ -68,7 +84,7 @@ class TiAutoWordDispatchImportService
         });
     }
 
-    /** @return list<array{sku:string,source:string,lot:?string,units:int,missing_lot_detail?:bool}> */
+    /** @return array{lines:list<array{sku:string,source:string,lot:?string,units:int,missing_lot_detail?:bool,reported_units?:int}>,warnings:list<string>} */
     private function parse(string $path): array
     {
         $zip = new ZipArchive;
@@ -91,10 +107,14 @@ class TiAutoWordDispatchImportService
         $xpath = new DOMXPath($document);
         $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
         $tables = $xpath->query('/w:document/w:body/w:tbl');
-        if ($tables === false || $tables->length !== 2) {
-            throw $this->invalid('El Word debe contener el cuadro general y el desglose de lotes.');
+        if ($tables === false || ! in_array($tables->length, [1, 2], true)) {
+            throw $this->invalid('El Word debe contener un cuadro general y, opcionalmente, un desglose de lotes.');
         }
         $general = $this->rows($xpath, $tables->item(0));
+        if ($tables->length === 1) {
+            return $this->parseGeneralOnly($general);
+        }
+
         $detail = $this->rows($xpath, $tables->item(1));
         if (count($general) < 3 || count($detail) < 2 || mb_strtolower($general[0][0] ?? '') !== 'etiquetas de fila') {
             throw $this->invalid('No se reconoce el formato del pedido de TI Auto.');
@@ -153,6 +173,7 @@ class TiAutoWordDispatchImportService
                 if (($requested[$currentSku][$detailSource] ?? 0) !== $quantity) {
                     throw $this->invalid("El subtotal de {$currentSku} no coincide con el cuadro general.");
                 }
+
                 continue;
             }
             if ($currentSku === null || $label === '') {
@@ -179,7 +200,63 @@ class TiAutoWordDispatchImportService
             throw $this->invalid('El desglose de lotes no cuadra o supera 500 líneas.');
         }
 
-        return $lines;
+        return ['lines' => $lines, 'warnings' => []];
+    }
+
+    /** @param list<list<string>> $general
+     * @return array{lines:list<array{sku:string,source:string,lot:null,units:int,reported_units?:int}>,warnings:list<string>}
+     */
+    private function parseGeneralOnly(array $general): array
+    {
+        $headers = $general[0] ?? [];
+        if (count($headers) < 3 || mb_strtolower(trim($headers[0])) !== 'etiquetas de fila'
+            || mb_strtolower(trim(end($headers))) !== 'total general') {
+            throw $this->invalid('No se reconoce el cuadro general del pedido de TI Auto.');
+        }
+
+        $lines = [];
+        $warnings = [];
+        $seen = [];
+        $sum = 0;
+        $lastColumn = count($headers) - 1;
+        foreach (array_slice($general, 1) as $row) {
+            $sku = mb_strtoupper(trim($row[0] ?? ''));
+            if ($sku === '' || $sku === 'TOTAL GENERAL') {
+                $printedTotal = $this->integer($row[$lastColumn] ?? '', true);
+                if ($printedTotal > 0 && $printedTotal !== $sum) {
+                    $warnings[] = 'El total general impreso ('.number_format($printedTotal, 0, ',', '.').' uds) difiere de la suma de las ubicaciones ('.number_format($sum, 0, ',', '.').' uds).';
+                }
+
+                continue;
+            }
+            if (isset($seen[$sku])) {
+                throw $this->invalid("La referencia {$sku} aparece más de una vez en el Word.");
+            }
+            $seen[$sku] = true;
+            $units = 0;
+            for ($column = 1; $column < $lastColumn; $column++) {
+                $units += $this->integer($row[$column] ?? '', true);
+            }
+            if ($units <= 0) {
+                throw $this->invalid("La referencia {$sku} no tiene unidades en las columnas de ubicaciones.");
+            }
+            $sum += $units;
+            $line = ['sku' => $sku, 'source' => 'Suma de ubicaciones del Word', 'lot' => null, 'units' => $units];
+            $printedTotal = $this->integer($row[$lastColumn] ?? '', true);
+            if ($printedTotal !== $units) {
+                $line['reported_units'] = $printedTotal;
+                $warnings[] = "{$sku}: el total impreso (".number_format($printedTotal, 0, ',', '.').' uds) difiere de la suma de ubicaciones ('.number_format($units, 0, ',', '.').' uds).';
+            }
+            $lines[] = $line;
+            if (count($lines) > 500) {
+                throw $this->invalid('El pedido supera 500 referencias.');
+            }
+        }
+        if ($lines === []) {
+            throw $this->invalid('El Word no contiene referencias con cantidades.');
+        }
+
+        return ['lines' => $lines, 'warnings' => $warnings];
     }
 
     /** @return list<list<string>> */

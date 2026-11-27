@@ -33,6 +33,6 @@ class TiAutoWordDispatchImportController extends Controller
         );
 
         return redirect()->route('dispatches.show', $dispatch)
-            ->with('status', 'Borrador creado desde Word. Revisa cada lote, partida y cantidad antes de confirmar la carga.');
+            ->with('status', 'Borrador creado desde Word. Revisa las referencias y cantidades antes de confirmar la carga.');
     }
 }
