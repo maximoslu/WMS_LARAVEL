@@ -23,14 +23,33 @@ class TiAutoWordDispatchImportService
         }
 
         ['lines' => $lines, 'warnings' => $warnings] = $this->parse((string) $file->getRealPath());
-        $items = Item::query()->where('client_id', $client->id)->whereIn('sku', array_unique(array_column($lines, 'sku')))->get()->keyBy('sku');
-        foreach ($lines as $line) {
-            if (! $items->get($line['sku'])?->isOperational()) {
-                throw $this->invalid("La referencia {$line['sku']} no existe o no está activa para TI Auto. Revisa el Word antes de importar.");
-            }
-        }
 
-        return DB::transaction(function () use ($client, $file, $user, $lines, $items, $warnings): GoodsDispatch {
+        return DB::transaction(function () use ($client, $file, $user, $lines, $warnings): GoodsDispatch {
+            $skus = array_unique(array_column($lines, 'sku'));
+            $items = Item::query()->where('client_id', $client->id)->whereIn('sku', $skus)->get()
+                ->keyBy(fn (Item $item): string => mb_strtoupper(trim($item->sku)));
+            $createdSkus = [];
+            foreach ($skus as $sku) {
+                $item = $items->get($sku);
+                if (! $item) {
+                    $item = Item::query()->create([
+                        'client_id' => $client->id,
+                        'sku' => $sku,
+                        'description' => $sku,
+                        'lot' => null,
+                        'lot_key' => '',
+                        'units_per_pallet' => 1,
+                        'status' => Item::STATUS_ACTIVE,
+                        'stock_category' => Item::CATEGORY_IN_USE,
+                    ]);
+                    $items->put($sku, $item);
+                    $createdSkus[] = $sku;
+                }
+                if (! $item->isOperational()) {
+                    throw $this->invalid("La referencia {$sku} está bloqueada u obsoleta para TI Auto. Revisa su ficha antes de importar.");
+                }
+            }
+
             $aggregatedByReference = ($lines[0]['source'] ?? null) === 'Suma de ubicaciones del Word';
             $missingLotLines = array_filter($lines, fn (array $line): bool => ! empty($line['missing_lot_detail']));
             $reviewNotice = count($missingLotLines) > 0
@@ -38,6 +57,9 @@ class TiAutoWordDispatchImportService
                 : '';
             if ($warnings !== []) {
                 $reviewNotice .= ' ATENCIÓN: '.implode(' ', $warnings);
+            }
+            if ($createdSkus !== []) {
+                $reviewNotice .= ' ATENCIÓN: referencias creadas en el catálogo de TI Auto: '.implode(', ', $createdSkus).'. Revisar descripción y unidades por palé (valor provisional: 1) antes de confirmar la carga.';
             }
             $dispatch = GoodsDispatch::query()->create([
                 'client_id' => $client->id,

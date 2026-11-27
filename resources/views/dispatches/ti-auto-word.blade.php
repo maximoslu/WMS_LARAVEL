@@ -24,7 +24,7 @@
         </section>
 
         <section class="surface-card compact-card goods-receipt-form-card">
-            <div class="wms-inline-note">Si el Word tiene un solo cuadro, se suman las cantidades de todas las ubicaciones de cada referencia. Las matrículas no se tratan como lotes ni crean líneas adicionales. Si hay un segundo cuadro con lotes, se conserva su desglose. Cualquier diferencia con los totales impresos queda señalada para revisión.</div>
+            <div class="wms-inline-note">Si el Word tiene un solo cuadro, se suman las cantidades de todas las ubicaciones de cada referencia. Las matrículas no se tratan como lotes ni crean líneas adicionales. Si hay un segundo cuadro con lotes, se conserva su desglose. Cualquier diferencia con los totales impresos queda señalada para revisión. Las referencias nuevas se crean para TI Auto con descripción y unidades por palé provisionales; revisa su ficha antes de confirmar la carga.</div>
             <form method="POST" action="{{ route('dispatches.ti-auto-word.store') }}" enctype="multipart/form-data" class="goods-receipt-form">
                 @csrf
                 <label class="auth-field">

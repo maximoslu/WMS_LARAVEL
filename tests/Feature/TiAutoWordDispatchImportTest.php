@@ -47,6 +47,55 @@ class TiAutoWordDispatchImportTest extends TestCase
         $this->actingAs($user)->get(route('dispatches.show', $dispatch))->assertOk()->assertSee('480 uds')->assertSee('1.722 uds');
     }
 
+    public function test_missing_reference_is_created_for_ti_auto_with_provisional_catalog_details(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $client = Client::factory()->create(['code' => 'TIAUTO']);
+        $otherClient = Client::factory()->create();
+        Item::factory()->create(['client_id' => $otherClient->id, 'sku' => 'PMCB2300AAF74']);
+        $user = $this->warehouseUser();
+        $word = fn (): UploadedFile => $this->word([
+            ['Etiquetas de fila', 'R2999BDN', 'Total general'],
+            ['PMCB2300AAF74', '108', '108'],
+            ['Total general', '108', '108'],
+        ]);
+
+        $this->actingAs($user)->post(route('dispatches.ti-auto-word.store'), ['word' => $word()])->assertRedirect();
+        $item = Item::query()->where('client_id', $client->id)->where('sku', 'PMCB2300AAF74')->sole();
+        $dispatch = GoodsDispatch::query()->sole();
+
+        $this->assertTrue($item->isOperational());
+        $this->assertSame('PMCB2300AAF74', $item->description);
+        $this->assertSame(1, $item->units_per_pallet);
+        $this->assertDatabaseHas('goods_dispatch_lines', ['goods_dispatch_id' => $dispatch->id, 'item_id' => $item->id, 'requested_units' => 108]);
+        $this->assertStringContainsString('PMCB2300AAF74', $dispatch->notes);
+        $this->assertStringContainsString('valor provisional: 1', $dispatch->notes);
+        $this->assertDatabaseCount('inventory_movements', 0);
+
+        $this->actingAs($user)->post(route('dispatches.ti-auto-word.store'), ['word' => $word()])->assertRedirect();
+        $this->assertSame(1, Item::query()->where('client_id', $client->id)->where('sku', 'PMCB2300AAF74')->count());
+    }
+
+    public function test_blocked_reference_rejects_import_and_rolls_back_new_catalog_items(): void
+    {
+        $this->seed(RoleSeeder::class);
+        $client = Client::factory()->create(['code' => 'TIAUTO']);
+        $blocked = Item::factory()->create(['client_id' => $client->id, 'sku' => 'BLOCKED', 'status' => Item::STATUS_BLOCKED]);
+        $word = $this->word([
+            ['Etiquetas de fila', 'R2999BDN', 'Total general'],
+            ['NEWREF', '50', '50'],
+            ['BLOCKED', '25', '25'],
+            ['Total general', '75', '75'],
+        ]);
+
+        $this->actingAs($this->warehouseUser())->post(route('dispatches.ti-auto-word.store'), ['word' => $word])
+            ->assertRedirect()->assertSessionHasErrors('word');
+
+        $this->assertDatabaseMissing('items', ['client_id' => $client->id, 'sku' => 'NEWREF']);
+        $this->assertFalse($blocked->fresh()->isOperational());
+        $this->assertDatabaseCount('goods_dispatches', 0);
+    }
+
     public function test_word_creates_reviewable_draft_without_duplicating_the_lot_breakdown(): void
     {
         $this->seed(RoleSeeder::class);
