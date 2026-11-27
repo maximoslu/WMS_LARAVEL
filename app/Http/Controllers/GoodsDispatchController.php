@@ -470,19 +470,42 @@ class GoodsDispatchController extends Controller
             'status' => ['required', Rule::in(GoodsDispatch::statuses())],
             'completion_mode' => ['nullable', Rule::in(['leave_pending', 'close_remainder'])],
             'remainder_close_reason' => ['nullable', 'string', 'max:2000'],
+            'vehicle_type' => ['sometimes', 'nullable', Rule::in(['rigid', 'trailer'])],
+            'transport_mode' => ['sometimes', 'required', Rule::in(array_keys(TransportMode::OPTIONS))],
+            'transport' => ['sometimes', 'array'],
         ]);
 
         if ($goodsDispatch->status === $validated['status']) {
             return back()->with('status', 'La salida ya estaba en ese estado.');
         }
 
-        $warning = $workflowService->changeStatus(
-            $goodsDispatch,
-            $validated['status'],
-            $request->user(),
-            $validated['completion_mode'] ?? null,
-            $validated['remainder_close_reason'] ?? null,
-        );
+        $warning = DB::transaction(function () use ($request, $goodsDispatch, $validated, $workflowService): ?string {
+            $goodsDispatch = GoodsDispatch::query()->whereKey($goodsDispatch->id)->lockForUpdate()->firstOrFail();
+            if (in_array($validated['status'], [GoodsDispatch::STATUS_SENT, GoodsDispatch::STATUS_COMPLETED], true)
+                && $request->has('transport')) {
+                $mode = $validated['transport_mode'] ?? $goodsDispatch->transport_mode;
+                $vehicleType = $validated['vehicle_type'] ?? $goodsDispatch->vehicle_type;
+                if ($mode !== null) {
+                    $goodsDispatch->update([
+                        'vehicle_type' => $goodsDispatch->client->requiresVehicleType() ? $vehicleType : null,
+                        'transport_mode' => $mode,
+                        'camion_propio' => TransportMode::own($mode),
+                        'transport_data' => TransportMode::data($mode, $request->input('transport', []), $vehicleType),
+                    ]);
+                }
+                if (config('deca.dispatch.enabled')) {
+                    app(DispatchDecaService::class)->saveDraft($goodsDispatch, $request->input('transport', []));
+                }
+            }
+
+            return $workflowService->changeStatus(
+                $goodsDispatch,
+                $validated['status'],
+                $request->user(),
+                $validated['completion_mode'] ?? null,
+                $validated['remainder_close_reason'] ?? null,
+            );
+        });
 
         $statusMessage = $validated['status'] === GoodsDispatch::STATUS_SENT
             ? 'Salida enviada y stock actualizado correctamente.'

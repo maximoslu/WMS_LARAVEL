@@ -2587,6 +2587,36 @@ const setupWarehouseRequestAllocations = () => {
     form.dataset.allocationsBound = 'true';
 };
 
+const setupDispatchStatusTransport = () => {
+    const statusForm = document.querySelector('[data-dispatch-status-form]');
+    const loadingForm = document.querySelector('[data-dispatch-loading-editor]');
+
+    if (!statusForm || !loadingForm) {
+        return;
+    }
+
+    statusForm.addEventListener('submit', () => {
+        statusForm.querySelectorAll('[data-dispatch-transport-mirror]').forEach((input) => input.remove());
+
+        if (!['sent', 'completed'].includes(statusForm.elements.status.value)) {
+            return;
+        }
+
+        for (const [name, value] of new FormData(loadingForm)) {
+            if (name !== 'vehicle_type' && name !== 'transport_mode' && !name.startsWith('transport[')) {
+                continue;
+            }
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            input.dataset.dispatchTransportMirror = 'true';
+            statusForm.appendChild(input);
+        }
+    });
+};
+
 const boot = () => {
     setupAppDrawer();
     setupStockFilters();
@@ -2599,6 +2629,7 @@ const boot = () => {
     setupMerchandiseRequestBuilder();
     setupGoodsDispatchBuilder();
     setupDispatchLoadingEditor();
+    setupDispatchStatusTransport();
     setupWarehouseRequestAllocations();
 };
 

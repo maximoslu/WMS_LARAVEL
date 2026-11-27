@@ -126,6 +126,42 @@ class TiAutoVehicleOperationsTest extends TestCase
         $this->assertFalse($dispatch->fresh()->camion_propio);
     }
 
+    public function test_status_form_saves_visible_transport_before_sending_a_confirmed_load(): void
+    {
+        config(['deca.dispatch.enabled' => true, 'deca.dispatch.shipper_tax_id' => 'B00000000', 'deca.public_base_url' => 'https://wms.example.test']);
+        $dispatch = $this->dispatch('trailer');
+        $dispatch->update(['transport_data' => ['tractor_plate' => '2994LBW', 'carrier_name' => 'COOPERATIVA PETRU', 'carrier_tax_id' => 'B02899680']]);
+
+        $this->actingAs($this->operator)->get(route('dispatches.show', $dispatch))
+            ->assertOk()->assertSee('data-dispatch-status-form', false)->assertSee('data-dispatch-loading-editor', false);
+
+        $transport = [
+            'status' => GoodsDispatch::STATUS_SENT,
+            'vehicle_type' => 'trailer',
+            'transport_mode' => 'subcontracted',
+            'transport' => [
+                'tractor_plate' => '2994LBW', 'trailer_plate' => 'R2994LBW',
+                'carrier_name' => 'COOPERATIVA PETRU', 'carrier_tax_id' => 'B02899680',
+                'weight_kg' => '5200', 'transport_date' => today()->toDateString(),
+                'special_authorization' => '0',
+            ],
+        ];
+        $missingTrailer = $transport;
+        $missingTrailer['transport']['trailer_plate'] = '';
+        $this->patch(route('dispatches.update-status', $dispatch), $missingTrailer)
+            ->assertSessionHasErrors('transport.trailer_plate');
+        $this->assertSame(GoodsDispatch::STATUS_PREPARING, $dispatch->fresh()->status);
+        $this->assertNull($dispatch->fresh()->stock_applied_at);
+
+        $this->patch(route('dispatches.update-status', $dispatch), $transport)->assertSessionHasNoErrors();
+
+        $dispatch->refresh();
+        $this->assertSame(GoodsDispatch::STATUS_SENT, $dispatch->status);
+        $this->assertSame('R2994LBW', $dispatch->transport_data['trailer_plate']);
+        $this->assertSame('R2994LBW', $dispatch->decaDocument->snapshot['trailer_plate']);
+        $this->assertNotNull($dispatch->stock_applied_at);
+    }
+
     public function test_recalculation_counts_vehicles_not_pallets_and_is_repeatable_with_unknown_history(): void
     {
         foreach ([['rigid', true, 2], ['rigid', false, 10], ['trailer', true, 33], [null, false, 5]] as [$type, $own, $pallets]) {

@@ -239,11 +239,11 @@
                         </form>
                     </div>
                 @else
-                    <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}" class="wms-action-card" id="cierre-pedido">
+                    <form method="POST" action="{{ route('dispatches.update-status', $dispatch) }}" class="wms-action-card" id="cierre-pedido" data-dispatch-status-form>
                         @csrf
                         @method('PATCH')
                         <strong>Cambiar estado</strong>
-                        <p>Solo podrás enviar o completar cuando la carga real quede confirmada.</p>
+                        <p>Solo podrás enviar o completar cuando la carga real quede confirmada. Al enviar se guardarán también los datos de transporte que aparecen en «Carga real».</p>
 
                         <label class="auth-field">
                             <span>Nuevo estado</span>
